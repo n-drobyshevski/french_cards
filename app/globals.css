@@ -1,0 +1,126 @@
+@import "tailwindcss";
+
+/* Design tokens from mockups/SPEC.md (v3, index-card style).
+   Light by default; dark via prefers-color-scheme unless data-theme="light", or forced with data-theme="dark". */
+:root {
+  --paper: #f1f1ee;
+  --surface: #ffffff;
+  --surface-2: #e8e8e4;
+  --ink: #111111;
+  --muted: #5a5a57;
+  --rule: #d6d6d1;
+  --red: #c8331f;
+  --again: #b3261e;
+  --good: #1d6b45;
+  --warn: #8a5a00;
+  --warn-bg: #fbf3df;
+  --warn-edge: #c99a2e;
+  --card-lines: #dfe6f3;
+  --scrim: rgba(17, 17, 17, 0.4);
+  --on-ink: #ffffff;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #121212;
+    --surface: #1b1b1a;
+    --surface-2: #262624;
+    --ink: #ececea;
+    --muted: #a3a39e;
+    --rule: #33332f;
+    --red: #ff6a52;
+    --again: #ff7b70;
+    --good: #5cc58f;
+    --warn: #e7b85a;
+    --warn-bg: #2e2512;
+    --warn-edge: #5c4a1f;
+    --card-lines: #22252c;
+    --scrim: rgba(0, 0, 0, 0.55);
+    --on-ink: #121212;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper: #121212;
+  --surface: #1b1b1a;
+  --surface-2: #262624;
+  --ink: #ececea;
+  --muted: #a3a39e;
+  --rule: #33332f;
+  --red: #ff6a52;
+  --again: #ff7b70;
+  --good: #5cc58f;
+  --warn: #e7b85a;
+  --warn-bg: #2e2512;
+  --warn-edge: #5c4a1f;
+  --card-lines: #22252c;
+  --scrim: rgba(0, 0, 0, 0.55);
+  --on-ink: #121212;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-rule: var(--rule);
+  --color-red: var(--red);
+  --color-again: var(--again);
+  --color-good: var(--good);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-warn-edge: var(--warn-edge);
+  --color-on-ink: var(--on-ink);
+  --font-sans: var(--font-plex-sans), system-ui, sans-serif;
+  --font-mono: var(--font-plex-mono), ui-monospace, monospace;
+  --font-serif: var(--font-newsreader), Georgia, serif;
+  --radius-card: 6px;
+  --radius-btn: 6px;
+  --radius-chip: 4px;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+}
+
+/* Mono meta labels: `23 К ПОВТОРЕНИЮ`, `FR → RU`, `07 / 30` */
+.meta {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Dictionary abbreviations: *v. pron. · arg.* */
+.abbr {
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--muted);
+}
+
+:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
