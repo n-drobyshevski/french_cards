@@ -128,7 +128,7 @@ Words (fr — ru — note — register — folder):
 - une blague — шутка — neutral (no badge) — Повседневное
 - dépêche-toi — поторапливайся — neutral — Повседневное
 - vas-y — давай — familier — Повседневное
-Folder counts: Повседневное 42 / 6 due · Деньги 18 / 3 · Еда 15 / 0 · Полиция 9 / 2 · Тусовка 21 / 4 · Эмоции 27 / 5 · Люди 19 / 1 · Входящие 7 (shown first, amber).
+Folder counts: Повседневное 42 / 6 due · Деньги 18 / 3 · Еда 15 / 2 · Полиция 9 / 2 · Тусовка 21 / 4 · Эмоции 27 / 5 · Люди 19 / 1 · Входящие 7 (shown first, amber).
 Totals: 158 слов, today 23 к повторению, 12 новых.
 Intervals under grade buttons (FSRS): Не знаю «<1 мин», Сложно «6 мин», Знаю «1 д»; for a mature card: «10 мин» / «3 д» / «9 д».
 
