@@ -9,85 +9,122 @@
 <x-dc>
 <helmet>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,500&amp;family=Manrope:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
 <style>
 body{margin:0}
-a{color:#2a46c9}a:hover{color:#1d3399}
+a{color:#111111}a:hover{color:#c8331f}
 button{font:inherit}
-input,textarea{font:inherit}
-::placeholder{color:#5d6278;opacity:1}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #f3f4f8; color: #161a2b; font-family: Manrope, system-ui, sans-serif; display: flex; flex-direction: column">
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #f1f1ee; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif; display: flex; flex-direction: column">
 
-  <main style="flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 72px 16px 120px; box-sizing: border-box">
+  <main style="flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 16px 104px; box-sizing: border-box">
 
-    <div style="display: flex; flex-direction: column; align-items: center; text-align: center">
-      <div aria-hidden="true" style="width: 64px; height: 64px; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: #e6eafb; color: #2a46c9">
-        <svg aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>
+    <header style="height: 44px; display: flex; align-items: center">
+      <div style="display: flex; align-items: center; gap: 8px">
+        <svg aria-hidden="true" width="10" height="14" viewBox="0 0 10 14" fill="none"><rect x="0.5" y="0.5" width="9" height="13" rx="1" stroke="#111111" stroke-width="1"></rect><path d="M0.5 3.5h9" stroke="#c8331f" stroke-width="1.5"></path></svg>
+        <span style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 22px; line-height: 28px; letter-spacing: -0.01em; color: #111111">Карточки</span>
       </div>
-      <h1 lang="fr" style="margin: 24px 0 0; font-family: Newsreader, Georgia, serif; font-style: italic; font-weight: 500; font-size: 40px; line-height: 1.1; letter-spacing: -0.01em; color: #161a2b">Bravo !</h1>
-      <p style="margin: 8px 0 0; font-size: 15px; line-height: 1.5; color: #5d6278">На сегодня всё</p>
-    </div>
+      <div style="flex: 1"></div>
+      <a href="Settings.dc.html" aria-label="Настройки" style="width: 44px; height: 44px; margin-right: -12px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #111111; text-decoration: none">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+      </a>
+    </header>
 
-    <section aria-label="Итоги сессии" style="margin-top: 32px; box-sizing: border-box; padding: 20px; background: #ffffff; border: 1px solid #e2e4ee; border-radius: 20px">
-      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))">
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 4px">
-            <span style="font-family: Newsreader, Georgia, serif; font-size: 32px; font-weight: 500; line-height: 1.1; color: #161a2b; font-variant-numeric: tabular-nums">30</span>
-            <span style="font-size: 12px; font-weight: 500; color: #5d6278">повторено</span>
-          </div>
-        <div style="border-left: 1px solid #e2e4ee; border-right: 1px solid #e2e4ee">
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 4px">
-            <span style="font-family: Newsreader, Georgia, serif; font-size: 32px; font-weight: 500; line-height: 1.1; color: #161a2b; font-variant-numeric: tabular-nums">4</span>
-            <span style="font-size: 12px; font-weight: 500; color: #5d6278">новых</span>
-          </div>
+    <span style="margin-top: 32px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57">Сессия · 21 октября</span>
+    <h1 style="margin: 8px 0 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 34px; line-height: 40px; letter-spacing: -0.015em; color: #111111">Готово на сегодня</h1>
+
+    <section aria-label="Итоги сессии" style="margin-top: 24px; border-top: 1px solid #111111; border-bottom: 1px solid #111111">
+      <div style="height: 40px; display: flex; align-items: center; gap: 8px">
+        <span style="font-size: 15px; color: #111111">Повторено</span>
+        <span aria-hidden="true" style="flex: 1; height: 0; margin-top: 6px; border-bottom: 1px dotted #5a5a57"></span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 15px; font-weight: 500; color: #111111; text-align: right; min-width: 48px">30</span>
+      </div>
+      <div style="height: 40px; display: flex; align-items: center; gap: 8px">
+        <span style="font-size: 15px; color: #111111">Новых</span>
+        <span aria-hidden="true" style="flex: 1; height: 0; margin-top: 6px; border-bottom: 1px dotted #5a5a57"></span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 15px; font-weight: 500; color: #111111; text-align: right; min-width: 48px">4</span>
+      </div>
+      <div style="height: 40px; display: flex; align-items: center; gap: 8px">
+        <span style="font-size: 15px; color: #111111">Верно</span>
+        <span aria-hidden="true" style="flex: 1; height: 0; margin-top: 6px; border-bottom: 1px dotted #5a5a57"></span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 15px; font-weight: 500; color: #111111; text-align: right; min-width: 48px">92&#160;%</span>
+      </div>
+    </section>
+    <span style="margin-top: 8px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57">Следующие 18 слов — завтра</span>
+
+    <section aria-label="Трудные" style="margin-top: 32px">
+      <div style="height: 16px; display: flex; align-items: baseline; justify-content: space-between; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase">
+        <h2 style="margin: 0; font-size: 11px; font-weight: 400; color: #5a5a57">Трудные</h2>
+        <span style="color: #c8331f; font-weight: 500">3</span>
+      </div>
+      <div style="margin-top: 8px; border-top: 1px solid #d6d6d1">
+        <div style="height: 44px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #d6d6d1">
+          <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; color: #111111">chelou</span>
+          <span style="flex: 1; min-width: 0; font-size: 14px; color: #5a5a57; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">стрёмный</span>
+          <span style="display: inline-flex; align-items: center; gap: 8px">
+            <span role="img" aria-label="Уровень сленга: фамильярный, 2 из 4, верлан" style="display: inline-flex; align-items: center; gap: 2px">
+              <span style="width: 10px; height: 3px; background: #111111"></span>
+              <span style="width: 10px; height: 3px; background: #111111"></span>
+              <span style="width: 10px; height: 3px; background: #d6d6d1"></span>
+              <span style="width: 10px; height: 3px; background: #d6d6d1"></span>
+            </span>
+            <span lang="fr" style="width: 84px; white-space: nowrap; font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; line-height: 20px; color: #5a5a57">fam. · verl.</span>
+          </span>
         </div>
-          <div style="display: flex; flex-direction: column; align-items: center; gap: 4px">
-            <span style="font-family: Newsreader, Georgia, serif; font-size: 32px; font-weight: 500; line-height: 1.1; color: #17734b; font-variant-numeric: tabular-nums">92%</span>
-            <span style="font-size: 12px; font-weight: 500; color: #5d6278">верно</span>
-          </div>
-      </div>
-      <div style="height: 1px; margin: 20px 0 16px; background: #e2e4ee"></div>
-      <div style="display: flex; flex-direction: column; gap: 8px">
-        <h2 style="margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #5d6278">Трудные</h2>
-        <div style="display: flex; flex-wrap: wrap; gap: 8px">
-          <span lang="fr" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; border-radius: 999px; background: #fbe9ea; color: #c0303a; font-family: Newsreader, Georgia, serif; font-size: 16px; font-weight: 500; white-space: nowrap">chelou</span>
-          <span lang="fr" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; border-radius: 999px; background: #fbe9ea; color: #c0303a; font-family: Newsreader, Georgia, serif; font-size: 16px; font-weight: 500; white-space: nowrap">la galère</span>
-          <span lang="fr" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; border-radius: 999px; background: #fbe9ea; color: #c0303a; font-family: Newsreader, Georgia, serif; font-size: 16px; font-weight: 500; white-space: nowrap">se tirer</span>
+        <div style="height: 44px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #d6d6d1">
+          <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; color: #111111">la galère</span>
+          <span style="flex: 1; min-width: 0; font-size: 14px; color: #5a5a57; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">засада, мучение</span>
+          <span style="display: inline-flex; align-items: center; gap: 8px">
+            <span role="img" aria-label="Уровень сленга: фамильярный, 2 из 4" style="display: inline-flex; align-items: center; gap: 2px">
+              <span style="width: 10px; height: 3px; background: #111111"></span>
+              <span style="width: 10px; height: 3px; background: #111111"></span>
+              <span style="width: 10px; height: 3px; background: #d6d6d1"></span>
+              <span style="width: 10px; height: 3px; background: #d6d6d1"></span>
+            </span>
+            <span lang="fr" style="width: 84px; white-space: nowrap; font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; line-height: 20px; color: #5a5a57">fam.</span>
+          </span>
+        </div>
+        <div style="height: 44px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #d6d6d1">
+          <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; color: #111111">se tirer</span>
+          <span style="flex: 1; min-width: 0; font-size: 14px; color: #5a5a57; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">свалить</span>
+          <span style="display: inline-flex; align-items: center; gap: 8px">
+            <span role="img" aria-label="Уровень сленга: арго, 3 из 4" style="display: inline-flex; align-items: center; gap: 2px">
+              <span style="width: 10px; height: 3px; background: #111111"></span>
+              <span style="width: 10px; height: 3px; background: #111111"></span>
+              <span style="width: 10px; height: 3px; background: #111111"></span>
+              <span style="width: 10px; height: 3px; background: #d6d6d1"></span>
+            </span>
+            <span lang="fr" style="width: 84px; white-space: nowrap; font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; line-height: 20px; color: #5a5a57">arg.</span>
+          </span>
         </div>
       </div>
     </section>
 
-    <div style="margin-top: 24px; display: flex; flex-direction: column; gap: 12px">
-      <a href="Main.dc.html" style="height: 52px; display: flex; align-items: center; justify-content: center; border-radius: 14px; background: #2a46c9; color: #ffffff; font-size: 15px; font-weight: 600; text-decoration: none">Повторить ошибки (3)</a>
-      <a href="Main.dc.html" style="height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; box-sizing: border-box; border-radius: 14px; background: #ffffff; border: 1px solid #e2e4ee; color: #161a2b; text-decoration: none">
-        <span style="font-size: 15px; font-weight: 600; line-height: 1.3">Ещё практика</span>
-        <span style="font-size: 12px; font-weight: 500; line-height: 1.3; color: #5d6278">не влияет на расписание</span>
-      </a>
-      <a href="Add-Empty.dc.html" style="height: 44px; margin-top: -4px; display: flex; align-items: center; justify-content: center; gap: 6px; color: #2a46c9; font-size: 15px; font-weight: 600; text-decoration: none">
-        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
-        <span>Добавить слова</span>
-      </a>
-    </div>
+    <div style="flex: 1; min-height: 16px"></div>
 
-    <p style="margin: 16px 0 0; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px; line-height: 20px; color: #5d6278">
-      <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2.5"></rect><path d="M3 10h18"></path><path d="M8 3v4"></path><path d="M16 3v4"></path></svg>
-      <span>Следующие 18 слов — завтра</span>
-    </p>
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <a href="Main.dc.html" style="height: 52px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: #111111; color: #ffffff; font-size: 15px; font-weight: 500; text-decoration: none">Повторить ошибки (3)</a>
+      <a href="Main.dc.html" style="height: 56px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 6px; background: #ffffff; border: 1px solid #111111; color: #111111; text-decoration: none">
+        <span style="font-size: 15px; font-weight: 500; line-height: 20px">Ещё практика</span>
+        <span style="font-size: 12px; line-height: 16px; color: #5a5a57">не влияет на расписание</span>
+      </a>
+      <a href="Add-Empty.dc.html" style="height: 44px; display: flex; align-items: center; justify-content: center; color: #111111; font-size: 15px; font-weight: 500; text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1px">Добавить слова</a>
+    </div>
   </main>
 
-  <nav aria-label="Основная навигация" style="position: absolute; left: 0; right: 0; bottom: 0; height: 92px; box-sizing: border-box; padding-bottom: 28px; background: #ffffff; border-top: 1px solid #e2e4ee; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))">
-    <a href="Main.dc.html" aria-current="page" style="height: 63px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #2a46c9; text-decoration: none; font-size: 11px; font-weight: 600">
-      <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="13" height="14" rx="2.5"></rect><path d="M8 7V5.5A2.5 2.5 0 0 1 10.5 3h8A2.5 2.5 0 0 1 21 5.5v9a2.5 2.5 0 0 1-2.5 2.5H16"></path></svg>
+  <nav aria-label="Основная навигация" style="position: absolute; left: 0; right: 0; bottom: 0; height: 88px; box-sizing: border-box; padding-bottom: 28px; background: #ffffff; border-top: 1px solid #d6d6d1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))">
+    <a href="Main.dc.html" aria-current="page" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #111111; text-decoration: none; font-size: 12px; font-weight: 600">
+      <span aria-hidden="true" style="position: absolute; top: -1px; left: 0; right: 0; height: 2px; background: #c8331f"></span>
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="14" height="13" rx="1"></rect><path d="M3.5 11h14"></path><path d="M7 4.5h12.5a1 1 0 0 1 1 1V17"></path></svg>
       <span>Повторение</span>
     </a>
-    <div style="display: flex; justify-content: center; align-items: flex-start">
-      <a href="Add-Empty.dc.html" aria-label="Добавить слово" style="width: 56px; height: 56px; margin-top: -13px; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: #2a46c9; color: #ffffff; text-decoration: none">
-        <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
-      </a>
-    </div>
-    <a href="Library.dc.html" style="height: 63px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5d6278; text-decoration: none; font-size: 11px; font-weight: 600">
-      <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"></path></svg>
+    <a href="Add-Empty.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #111111; text-decoration: none; font-size: 12px; font-weight: 500">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+      <span>Добавить</span>
+    </a>
+    <a href="Library.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; text-decoration: none; font-size: 12px; font-weight: 500">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="1"></rect><path d="M3.5 12h17"></path><path d="M10 8h4"></path><path d="M10 16h4"></path></svg>
       <span>Библиотека</span>
     </a>
   </nav>

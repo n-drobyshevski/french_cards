@@ -1,8 +1,20 @@
-# Petit Argot v2 — mockup spec (shared by every designer agent)
+# «Карточки» — mockup spec v3 (shared by every designer agent)
 
-Product: mobile-first PWA for learning French slang/colloquial vocabulary with Russian translations.
-Single user. UI copy is **Russian**; card words are **French**. Successor of a one-file prototype
-"Petit Argot" whose look we keep: calm, editorial, lots of air, serif for French words, clean sans for UI.
+Product: mobile-first PWA of vocabulary flashcards, French → Russian (it is NOT a "slang app" — slang is
+just one dimension: every word gets a detected slang level). App name everywhere: **Карточки**
+(plain, no tagline about slang). Single user. UI copy is **Russian**; card words are **French**.
+
+## v3 DIRECTION — read this first, it overrides any older habit
+The user said the previous mockups looked "AI-styled". v3 must NOT look like a generic AI-generated app:
+- NO sparkle/magic icons anywhere. NO «ИИ» / «AI» labels in the UI, except one privacy line in Settings.
+  Automatic features just work quietly and are described by what they do: «Варианты», «подобрано автоматически»,
+  «догадка» (translation not visible on screenshot), «Разложить по темам».
+- NO pastel pill soup, no tinted icon chips, no soft drop shadows, no big rounded "bubbly" cards, no gradient, no shimmer.
+- Concept: **a paper index card / library card catalog**. Ink on paper, hairline rules, dictionary typography.
+  Square-ish geometry (radius 4–8px), 1px rules, black primary buttons, ONE red ink accent used sparingly
+  (the index-card red rule line, active states, counts that need attention).
+- Metadata reads like a dictionary entry: part of speech and register as italic abbreviations
+  (*n. f.*, *v. pron.*, *fam.*, *arg.*, *verl.*, *vulg.*), small caps / mono for counts and labels.
 
 ## Canvas file format (MUST follow — files fail silently otherwise)
 
@@ -20,13 +32,13 @@ Every artboard is one file `project/<Name>.dc.html`, fixed root 390×844 (phone)
 <x-dc>
 <helmet>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,500&amp;family=Manrope:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
 <style>
 body{margin:0}
-a{color:#2a46c9}a:hover{color:#1d3399}
+a{color:#111111}a:hover{color:#c8331f}
 </style>
 </helmet>
-<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #f3f4f8; color: #161a2b; font-family: Manrope, system-ui, sans-serif; display: flex; flex-direction: column">
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #f1f1ee; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif; display: flex; flex-direction: column">
   ... screen ...
 </div>
 </x-dc>
@@ -52,44 +64,51 @@ Rules that bite:
 - Touch targets ≥44px. Text contrast ≥4.5:1 (the tokens below pass).
 - Safe areas: top padding 16px (no status bar drawn); bottom tab bar has 28px extra bottom padding (home indicator area).
 
-## Tokens (light)
-- bg `#f3f4f8`, surface `#ffffff`, surface-2 `#eceef5`, fg `#161a2b`, muted `#5d6278`, line `#e2e4ee`
-- accent `#2a46c9`, accent-soft `#e6eafb`, on-accent `#ffffff`
-- again (Не знаю) `#c0303a` / soft `#fbe9ea`
-- hard (Сложно) — NEUTRAL on purpose: text `#161a2b` on `#eceef5` (so it doesn't read as failure)
-- good (Знаю) `#17734b` / soft `#e3f3ea`
-- warn/amber (low confidence) `#8a5a00` text, `#fff4dc` soft, `#e9b949` edge
-- register badges (small pill, 11px, 600, uppercase letter-spacing .04em): argot `#6a3fb5` on `#efe8fb`; verlan `#0f6e7a` on `#e2f3f5`; familier `#2a46c9` on `#e6eafb`; vulgaire `#c0303a` on `#fbe9ea`
+## Tokens (light) — v3
+- paper bg `#f1f1ee` (neutral light grey, NOT cream), card/surface `#ffffff`, surface-2 `#e8e8e4`, ink fg `#111111`, muted `#5a5a57`, rule `#d6d6d1`, strong rule `#111111`
+- red ink accent `#c8331f` (index-card top rule, active tab marker, attention counts, links on hover). Use sparingly.
+- primary button: ink `#111111` bg, white text. Secondary: white bg, 1px `#111111` border, ink text. Tertiary: text only, underlined on press.
+- Не знаю (again) `#b3261e` text, bg white with 1px `#b3261e` border. Сложно: neutral ink text, 1px `#d6d6d1` border. Знаю (good) `#1d6b45` text, 1px `#1d6b45` border. Buttons are outlined, not tinted blobs.
+- low-confidence / warning: `#8a5a00` text, `#fbf3df` bg, 1px dashed `#c99a2e` border.
+- blue index-card ruled lines (optional, only on the review card): `#dfe6f3` 1px every 32px.
 ## Tokens (dark — only for the *-Dark boards)
-- bg `#0f1220`, surface `#181c2e`, surface-2 `#20253a`, fg `#e9ebf5`, muted `#9a9fb8`, line `#2a2f48`
-- accent `#8ea2ff`, accent-soft `#232a4d`, on-accent `#0f1220`
-- again `#ff7a82` / soft `#3a1d24`; good `#5fd39c` / soft `#173327`; hard text `#e9ebf5` on `#262b42`
-- badges: same hues, lighter text on darker soft fills (argot `#c7adff` on `#2c2346`, verlan `#7fd6df` on `#163338`, familier `#8ea2ff` on `#232a4d`, vulgaire `#ff7a82` on `#3a1d24`)
+- bg `#121212`, surface `#1b1b1a`, surface-2 `#262624`, fg `#ececea`, muted `#a3a39e`, rule `#33332f`, strong rule `#ececea`
+- red ink `#ff6a52`; primary button ececea bg / 121212 text; again `#ff7b70`; good `#5cc58f`; card ruled lines `#22252c`.
 
-## Type
-- French words: `Newsreader, Georgia, serif`, weight 500. Card prompt 38px/1.15; list rows 18px; italic for the brand.
-- UI: `Manrope`, 15px base; labels 13px; captions 12px; section titles 13px 600 uppercase letter-spacing .06em muted.
-- Russian translation on card back: Manrope 20px 500.
-- Brand mark (where a header shows it): "Petit Argot" Newsreader italic 22px.
+## Type — v3
+- French words: `Newsreader, Georgia, serif` 500 — card prompt 40px/1.1; list rows 19px.
+- UI: `'IBM Plex Sans'` 15px base, 13px labels, 12px captions.
+- Meta / counts / section labels: `'IBM Plex Mono'` 11–12px, uppercase, letter-spacing .06em, muted (e.g. `23 К ПОВТОРЕНИЮ`, `FR → RU`, `07 / 30`).
+- Dictionary abbreviations (part of speech, register): Newsreader italic 15px muted, e.g. *v. pron. · arg.*
+- App mark: «Карточки» in Newsreader 500 22px, no italic, preceded by a tiny 10×14 outlined card glyph with a red top line.
 
 ## Shape & spacing
-- Side gutter 16px. Cards radius 20px, sheets radius 24px top, chips 999px, buttons 14px, inputs 14px.
-- 1px borders in `line`. Shadows only on sheets: `0 -8px 32px rgba(22,26,43,.12)`. Sheet scrim: `rgba(22,26,43,.35)` over a dimmed underlying screen (you may draw a simplified underlying screen or just the bg).
+- Side gutter 16px. Radius: cards 6px, sheets 12px top, buttons 6px, inputs 4px, chips 4px (NOT pills). No shadows except the sheet: a single 1px rule on its top edge plus scrim `rgba(17,17,17,.4)`.
+- Separate list items with 1px hairline rules, not boxed cards. Grids use rule lines.
+
+## Slang level (the feature the user likes — make it visible but quiet)
+Every word has a detected level on a 4-step scale: нейтр. → fam. → arg. → vulg. (verlan is a flag shown as *verl.* next to it).
+- Draw it as a tiny 4-segment meter (each segment 10×3px, 2px gap, filled ink up to the level, rule color after) followed by the italic abbreviation: `▮▮▯▯ arg.` In vulg. the filled segments are red ink.
+- Shown: on the card back, in Add-Filled (editable as a 4-option segmented control labelled «Уровень сленга» with an extra «verl.» toggle), in Import rows, in Folder rows (meter only), in Word-Detail. Library has a filter chip «Сленг: все ▾».
 
 ## Shared components (draw identically on every board that has them)
-**Bottom tab bar** (Review, Library, Folder, Settings, Session-Done boards; NOT on sheets-only/full-screen flows):
-absolute bottom, height 64px + 28px bottom padding, surface bg, top border line. Three slots in a grid:
-1. «Повторение» — cards icon (two stacked rounded rects) + label 11px; link `Main.dc.html`
-2. center raised circular "+" button 56px, accent bg, white plus icon, sits 12px above the bar top edge, `aria-label="Добавить слово"`; link `Add-Empty.dc.html`
-3. «Библиотека» — folder/grid icon + label; link `Library.dc.html`
-Active tab: accent color icon+label; inactive muted.
+**Bottom tab bar** (Review, Library, Folder, Settings, Session-Done boards): absolute bottom, white bg, 1px top rule `#d6d6d1`, height 60px + 28px bottom padding. Three equal columns:
+1. «Повторение» (link Main.dc.html) 2. «Добавить» with a plus glyph (link Add-Empty.dc.html) — NOT a raised floating circle; same row as the others, label + 20px icon, ink color 3. «Библиотека» (link Library.dc.html).
+Active tab: ink text 600 + a 2px red-ink bar across the top of that column; inactive: muted.
+Icons: simple 1.5px-stroke line icons, 20px.
 
-**Chips**: 32px tall, 12px horizontal padding, 13px 500, surface bg + line border; selected = accent-soft bg, accent text, no border.
+**Chips/filters**: 30px tall, 10px padding, radius 4, 13px, 1px rule border, white bg; selected = ink bg, white text.
 
-**Folder colors** (themes have a color + line icon, NEVER emoji):
-- Деньги (thune) `#17734b` coin icon · Еда (bouffe) `#b4531a` fork icon · Полиция (keufs) `#2a46c9` shield icon · Тусовка (soirée) `#6a3fb5` music-note icon
-- Эмоции `#c0303a` heart icon · Люди `#0f6e7a` user icon · Повседневное `#5d6278` sun icon · Входящие (Inbox, AI-unsure/unsorted) `#8a5a00` tray icon
-Folder tile = surface card, 16px padding, 36px rounded-square icon chip tinted (color at ~12% bg, color stroke), name 15px 600, "24 слова · 5 к повторению" 12px muted, 4px mastery bar (line track, folder color fill).
+**Folder ("тема") presentation**: like card-catalog drawer labels — NO colored icon chips. Each theme = a white tile with 1px rule border, radius 6, a thin 3px top band in the theme color, name Newsreader 19px, counts in Plex Mono 11px muted (`42 · 6 К ПОВТ.`), and a 2px progress line at the bottom.
+Theme colors (muted inks, used only for that top band and progress): Повседневное `#5a5a57`, Деньги `#2f6b4f`, Еда `#a0522d`, Полиция `#2f4b8a`, Тусовка `#6b4a8a`, Эмоции `#a33a3a`, Люди `#2f6f74`. «Входящие» (unsorted) uses a dashed border and no band, count in red ink.
+
+## Copy rules
+- Never «ИИ» / «AI» / «умный» / «магия» in UI, except Settings privacy line.
+- Suggestions come in two quiet sections: «Словарь» (instant) and «Варианты» (richer, may load) — loading = 2 grey hairline skeleton rows, no "думает…".
+- Theme picked automatically: chip selected + tiny muted caption «подобрано автоматически».
+- Screenshot translation not present in image: italic text + mono tag `ДОГАДКА`.
+- Re-sort button/screen: «Разложить по темам» / «Предлагаемые перемещения».
+- Regenerate in word detail: «Обновить перевод и заметку».
 
 ## Sample data (use these, consistently)
 Words (fr — ru — note — register — folder):
@@ -112,6 +131,20 @@ Words (fr — ru — note — register — folder):
 Folder counts: Повседневное 42 / 6 due · Деньги 18 / 3 · Еда 15 / 0 · Полиция 9 / 2 · Тусовка 21 / 4 · Эмоции 27 / 5 · Люди 19 / 1 · Входящие 7 (shown first, amber).
 Totals: 158 слов, today 23 к повторению, 12 новых.
 Intervals under grade buttons (FSRS): Не знаю «<1 мин», Сложно «6 мин», Знаю «1 д»; for a mature card: «10 мин» / «3 д» / «9 д».
+
+## v3 screen overrides (apply on top of the per-screen requirements below; where they conflict, v3 wins)
+- Everywhere: badges like «ARGOT» pills → the slang meter + italic abbreviation. Folder chips → plain text «тема: Повседневное» in mono-label style or a 4px-radius outlined chip. Accent-blue `#2a46c9` no longer exists.
+- Main / Review-Back / Swipe: the card is a real index card: white, radius 6, 1px rule border, a 2px red-ink line 44px from the top (the classic index-card header rule) with the «FR» meta label and the slang meter (on the back only) sitting above it; faint ruled lines below are optional. Top row: «Карточки» mark left, then mono `FR → RU` toggle chip, theme filter chip, undo + settings icon buttons. Progress = mono text `07 / 30` plus a 1px ink progress line. «Показать ответ» = full-width primary black button. Grade buttons outlined per tokens.
+- Swipe stamp: outlined rectangle stamp «ЗНАЮ» in good green, like an ink rubber stamp (slight rotation, 2px border, mono caps). Snackbar: ink bg, white text, «Отменить» underlined.
+- Session-Done: replace «Bravo !» italic hero with a plain receipt-like summary: Newsreader 34 «Готово на сегодня», then a ruled table (Повторено 30 / Новых 4 / Верно 92 %) in mono numbers right-aligned, «Трудные» list as text with hairlines.
+- Add-* sheets: sections «Словарь» / «Варианты»; no sparkle, no «ИИ». Add-Filled: «Тема» chips with caption «подобрано автоматически» under the selected one; «+ новая тема: Побег» as an outlined dashed chip; «Уровень сленга» segmented control (нейтр. / fam. / arg. / vulg.) + «verl.» toggle; buttons «Добавить и ещё» (secondary) + «Добавить» (primary black).
+- Import: rows separated by hairlines (not boxed cards), checkbox squares radius 2; «предложено ИИ» → mono tag `ДОГАДКА`; low-confidence row uses the warning tokens; header title «Найдено 9 слов».
+- Library: title «Библиотека», subline mono `158 СЛОВ · 23 К ПОВТОРЕНИЮ`; search input radius 4; filter chips Все / К повторению 23 / Трудные 9 / Сленг: все ▾; the re-sort entry is a plain full-width secondary row button «Разложить по темам  ›» with caption «7 слов без темы» — no banner, no sparkle; theme tiles per the catalog-label spec.
+- Sort-Plan: title «Предлагаемые перемещения», sub «12 перемещений · 1 новая тема · слова, разложенные вручную, не трогаются». IMPORTANT data fix: the words moved to Деньги must NOT appear in the Folder board. Use → Деньги (3): le pognon, les ronds, être raide; → Эмоции (2): avoir la haine, être vénère; → новая тема «Транспорт» (3): la caisse, le tromé, la bécane; → Люди (2, toggle off): le daron, la daronne. Folder board lists Деньги words: la thune, le fric, l'oseille, le blé, raquer, être fauché, le flouze.
+- Word-Detail: «Перегенерировать с ИИ» → «Обновить перевод и заметку»; history squares outlined/filled ink-style.
+- Settings: section «Подсказки» instead of «ИИ»: toggle «Автоподсказки при вводе», toggle «Раскладывать по темам автоматически»; one privacy line: «Слова и скриншоты отправляются в Anthropic (Claude) для подсказок и не хранятся там.» Remove the «Модель» row. «Импорт из Petit Argot v1» → «Импорт из старой версии (HTML)».
+- Login: big «Карточки» mark (Newsreader 40) with the card glyph; tagline «Слова, которые хочется запомнить.» — nothing about slang. OTP boxes radius 4, 1px rule border, focused = 2px ink border.
+- Dark boards: same structure with dark tokens.
 
 ## Screen-by-screen requirements
 (Each board 390×844. Links in parentheses.)
