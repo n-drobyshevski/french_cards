@@ -1,0 +1,46 @@
+{
+  "v": 3,
+  "createdOnFiles": {"v": 1, "at": "2026-10-21T22:05:00Z"},
+  "title": "Petit Argot mockups",
+  "launch": {"view": "canvas"},
+  "pages": [],
+  "boards": {
+    "Main.dc.html":            {"x": 0,    "y": 0,    "w": 390, "h": 844, "title": "Повторение · вопрос", "is_interactive": true, "radius": 28},
+    "Review-Back.dc.html":     {"x": 470,  "y": 0,    "w": 390, "h": 844, "title": "Повторение · ответ", "is_interactive": true, "radius": 28},
+    "Review-Swipe.dc.html":    {"x": 940,  "y": 0,    "w": 390, "h": 844, "title": "Повторение · свайп + отмена", "is_interactive": true, "radius": 28},
+    "Session-Done.dc.html":    {"x": 1410, "y": 0,    "w": 390, "h": 844, "title": "Сессия завершена", "is_interactive": true, "radius": 28},
+
+    "Add-Empty.dc.html":       {"x": 0,    "y": 1164, "w": 390, "h": 844, "title": "Добавление · пусто", "is_interactive": true, "radius": 28},
+    "Add-Suggest.dc.html":     {"x": 470,  "y": 1164, "w": 390, "h": 844, "title": "Добавление · подсказки", "is_interactive": true, "radius": 28},
+    "Add-Filled.dc.html":      {"x": 940,  "y": 1164, "w": 390, "h": 844, "title": "Добавление · заполнено", "is_interactive": true, "radius": 28},
+    "Add-Duplicate.dc.html":   {"x": 1410, "y": 1164, "w": 390, "h": 844, "title": "Добавление · дубликат / офлайн", "is_interactive": true, "radius": 28},
+
+    "Import-Processing.dc.html": {"x": 0,   "y": 2328, "w": 390, "h": 844, "title": "Скриншот · распознавание", "is_interactive": true, "radius": 28},
+    "Import-Review.dc.html":     {"x": 470, "y": 2328, "w": 390, "h": 844, "title": "Скриншот · проверка", "is_interactive": true, "radius": 28},
+
+    "Library.dc.html":         {"x": 0,    "y": 3492, "w": 390, "h": 844, "title": "Библиотека", "is_interactive": true, "radius": 28},
+    "Sort-Plan.dc.html":       {"x": 470,  "y": 3492, "w": 390, "h": 844, "title": "План сортировки ИИ", "is_interactive": true, "radius": 28},
+    "Folder.dc.html":          {"x": 940,  "y": 3492, "w": 390, "h": 844, "title": "Папка · слова", "is_interactive": true, "radius": 28},
+    "Word-Detail.dc.html":     {"x": 1410, "y": 3492, "w": 390, "h": 844, "title": "Карточка слова", "is_interactive": true, "radius": 28},
+
+    "Settings.dc.html":        {"x": 0,    "y": 4656, "w": 390, "h": 844, "title": "Настройки", "is_interactive": true, "radius": 28},
+    "Login.dc.html":           {"x": 470,  "y": 4656, "w": 390, "h": 844, "title": "Вход по коду", "is_interactive": true, "radius": 28},
+    "Review-Back-Dark.dc.html": {"x": 940, "y": 4656, "w": 390, "h": 844, "title": "Ответ · тёмная тема", "is_interactive": true, "radius": 28},
+    "Library-Dark.dc.html":    {"x": 1410, "y": 4656, "w": 390, "h": 844, "title": "Библиотека · тёмная тема", "is_interactive": true, "radius": 28}
+  },
+  "order": [
+    "Main.dc.html", "Review-Back.dc.html", "Review-Swipe.dc.html", "Session-Done.dc.html",
+    "Add-Empty.dc.html", "Add-Suggest.dc.html", "Add-Filled.dc.html", "Add-Duplicate.dc.html",
+    "Import-Processing.dc.html", "Import-Review.dc.html",
+    "Library.dc.html", "Sort-Plan.dc.html", "Folder.dc.html", "Word-Detail.dc.html",
+    "Settings.dc.html", "Login.dc.html", "Review-Back-Dark.dc.html", "Library-Dark.dc.html"
+  ],
+  "notes": {
+    "row1": {"x": 0, "y": -280, "text": "1 · Повторение", "kind": "title1", "maxW": 1800},
+    "row2": {"x": 0, "y": 884,  "text": "2 · Быстрое добавление с ИИ", "kind": "title1", "maxW": 1800},
+    "row3": {"x": 0, "y": 2048, "text": "3 · Импорт со скриншота", "kind": "title1", "maxW": 860},
+    "row4": {"x": 0, "y": 3212, "text": "4 · Библиотека и темы", "kind": "title1", "maxW": 1800},
+    "row5": {"x": 0, "y": 4376, "text": "5 · Настройки, вход, тёмная тема", "kind": "title1", "maxW": 1800}
+  },
+  "designSystems": []
+}

@@ -1,0 +1,255 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Petit Argot</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,500;1,6..72,500&family=Manrope:wght@400;500;700&display=swap">
+<style>
+/* Layout: one-screen app, header / card / rating row, sheet for word list */
+:root{
+  --bg:#f3f4f8; --surface:#ffffff; --fg:#161a2b; --muted:#6b7085; --line:#e2e4ee;
+  --accent:#2a46c9; --accent-soft:#e6eafb;
+  --again:#c8323c; --hard:#c28a12; --good:#1f8a5b;
+  --f-word:"Newsreader", Georgia, "Times New Roman", serif;
+  --f-ui:"Manrope", system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1220; --surface:#181c2e; --fg:#e9ebf5; --muted:#8d92aa; --line:#272c44;
+  --accent:#8ea2ff; --accent-soft:#232a4d;
+  --again:#ff6b73; --hard:#f0b84a; --good:#4cc98f; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1220; --surface:#181c2e; --fg:#e9ebf5; --muted:#8d92aa; --line:#272c44;
+  --accent:#8ea2ff; --accent-soft:#232a4d;
+  --again:#ff6b73; --hard:#f0b84a; --good:#4cc98f; color-scheme:dark}
+
+html{box-sizing:border-box;height:100%}
+*,*::before,*::after{box-sizing:inherit}
+body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-ui);font-size:15px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  -webkit-tap-highlight-color:transparent}
+.app{height:100%;max-width:440px;margin:0 auto;display:flex;flex-direction:column;gap:12px;padding-block:12px}
+
+header{display:flex;align-items:center;gap:8px}
+.brand{font-family:var(--f-word);font-style:italic;font-size:22px;margin-right:auto;letter-spacing:-.01em}
+.chip{font:inherit;font-size:13px;font-weight:500;color:var(--fg);background:var(--surface);border:1px solid var(--line);
+  border-radius:999px;padding:6px 12px;cursor:pointer}
+.chip:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+.meta{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+.bar{flex:1;height:3px;background:var(--line);border-radius:3px;margin:0 10px;overflow:hidden}
+.bar>i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s}
+
+.card{flex:1 1 0;min-height:0;background:var(--surface);border:1px solid var(--line);border-radius:18px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;
+  padding:40px 22px;cursor:pointer;position:relative;user-select:none;overflow:hidden}
+.lang{position:absolute;top:14px;left:16px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.lvl{position:absolute;top:14px;right:16px;display:flex;gap:3px}
+.lvl i{width:6px;height:6px;border-radius:50%;background:var(--line)}
+.lvl i.on{background:var(--accent)}
+.front{font-family:var(--f-word);font-size:clamp(30px,9vw,40px);line-height:1.15;text-wrap:balance}
+.divider{width:28px;height:1px;background:var(--line);margin:18px 0}
+.back{font-size:19px;font-weight:500;line-height:1.4;text-wrap:balance}
+.note{margin-top:8px;font-size:13px;color:var(--muted);line-height:1.45;max-width:30ch}
+.hint{position:absolute;bottom:14px;font-size:12px;color:var(--muted)}
+
+.rate{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;flex:none}
+.rate button{font:inherit;font-weight:700;font-size:14px;border:0;border-radius:14px;padding:12px 6px;cursor:pointer;
+  background:var(--surface);color:var(--fg);border:1px solid var(--line);display:flex;flex-direction:column;gap:2px;align-items:center}
+.rate button small{font-weight:400;font-size:11px;color:var(--muted)}
+.rate .again{color:var(--again)} .rate .hard{color:var(--hard)} .rate .good{color:var(--good)}
+.rate button:disabled{opacity:.35;cursor:default}
+.rate button:not(:disabled):active{transform:scale(.97)}
+
+/* sheet */
+.sheet{position:fixed;inset:0;background:color-mix(in srgb,var(--fg) 30%,transparent);display:flex;align-items:flex-end;justify-content:center;z-index:20}
+.panel{background:var(--surface);width:100%;max-width:480px;max-height:80%;border-radius:20px 20px 0 0;display:flex;flex-direction:column;
+  padding:18px max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+.panel h2{font-family:var(--f-word);font-weight:500;font-size:22px;margin:0 0 4px}
+.panel p.sub{margin:0 0 12px;font-size:13px;color:var(--muted)}
+.list{overflow:auto;display:flex;flex-direction:column;margin:0 -4px;padding:0 4px}
+.row{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:10px 0;border-bottom:1px solid var(--line);align-items:center}
+.row b{font-family:var(--f-word);font-weight:500;font-size:17px;min-width:0}
+.row span{font-size:13px;color:var(--muted);min-width:0}
+.row .m{grid-row:span 2;display:flex;gap:3px}
+.row .m i{width:6px;height:14px;border-radius:2px;background:var(--line)}
+.row .m i.on{background:var(--accent)}
+.row.weak b{color:var(--again)}
+.foot{display:flex;gap:8px;margin-top:14px}
+.foot button{flex:1;font:inherit;font-weight:500;border-radius:12px;padding:12px;cursor:pointer;border:1px solid var(--line);background:var(--bg);color:var(--fg)}
+.foot .danger{color:var(--again)}
+.foot .primary{background:var(--accent);color:var(--surface);border-color:var(--accent)}
+
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="app">
+  <header>
+    <div class="brand">Petit Argot</div>
+    <button class="chip" id="dirBtn" type="button">FR → RU</button>
+    <button class="chip" id="listBtn" type="button">Слова</button>
+  </header>
+
+  <div class="meta">
+    <span id="seen">0 повторено</span>
+    <div class="bar"><i id="mastery"></i></div>
+    <span id="known">0/11 выучено</span>
+  </div>
+
+  <div class="card" id="card" role="button" tabindex="0" aria-label="Перевернуть карточку">
+    <div class="lang" id="lang">français</div>
+    <div class="lvl" id="lvl"></div>
+    <div class="front" id="front"></div>
+    <div id="backWrap" hidden>
+      <div class="divider" style="margin-inline:auto"></div>
+      <div class="back" id="back"></div>
+      <div class="note" id="note"></div>
+    </div>
+    <div class="hint" id="hint">тапни, чтобы увидеть перевод</div>
+  </div>
+
+  <div class="rate">
+    <button class="again" id="r0" type="button" disabled>Не знаю<small>скоро снова</small></button>
+    <button class="hard" id="r1" type="button" disabled>Сложно<small>ещё раз</small></button>
+    <button class="good" id="r2" type="button" disabled>Знаю<small>реже</small></button>
+  </div>
+</div>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="panel" role="dialog" aria-label="Список слов">
+    <h2>Слова</h2>
+    <p class="sub">Красным то, что даётся тяжелее всего. Они выпадают чаще.</p>
+    <div class="list" id="list"></div>
+    <div class="foot">
+      <button class="danger" id="resetBtn" type="button">Сбросить прогресс</button>
+      <button class="primary" id="closeBtn" type="button">Готово</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const WORDS = [
+  {fr:"Blague", ru:"шутка"},
+  {fr:"Gras", ru:"жир", note:"Как прилагательное ещё и «жирный»"},
+  {fr:"Dépêche-toi", ru:"поторапливайся"},
+  {fr:"Arrête", ru:"прекрати"},
+  {fr:"Se casser", ru:"сбегать, свалить (сленг)", note:"Ещё значит «сломаться». Casse-toi = грубое «свали»"},
+  {fr:"Flics", ru:"копы"},
+  {fr:"Je vais me tuer", ru:"я сейчас сдохну", note:"Когда навалилось много дел, не буквально"},
+  {fr:"C'est dur", ru:"это тяжело", note:"Дословно «это твёрдо»"},
+  {fr:"Être dehors", ru:"быть вне дома, на улице"},
+  {fr:"Qu'est-ce qui se passe ?", ru:"что происходит?"},
+  {fr:"Vas-y", ru:"давай"}
+];
+const MAX = 5, KEY = "petit-argot-v1";
+
+let state = load();
+let dir = state.dir || "fr";
+let current = null, flipped = false, recent = [];
+
+function load(){
+  try{ const s = JSON.parse(localStorage.getItem(KEY)); if(s && s.cards) return s; }catch(e){}
+  return {cards:{}, reviews:0, dir:"fr"};
+}
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+function stat(w){ return state.cards[w.fr] || (state.cards[w.fr] = {box:0, lapses:0, seen:0}); }
+
+/* Weight: lower box and more misses → shown more often. Unseen words get a boost so everything comes up early. */
+function weight(w){
+  const s = stat(w);
+  let wt = Math.pow(2, MAX - s.box) * (1 + s.lapses * 0.6);
+  if(s.seen === 0) wt *= 1.5;
+  if(recent.includes(w.fr)) wt *= 0.05;
+  return wt;
+}
+function pick(){
+  const ws = WORDS.map(weight), total = ws.reduce((a,b)=>a+b,0);
+  let r = Math.random() * total;
+  for(let i=0;i<WORDS.length;i++){ r -= ws[i]; if(r <= 0) return WORDS[i]; }
+  return WORDS[WORDS.length-1];
+}
+
+const $ = id => document.getElementById(id);
+function render(){
+  const s = stat(current);
+  const fr = dir === "fr";
+  $("lang").textContent = fr ? "français" : "русский";
+  $("front").textContent = fr ? current.fr : current.ru;
+  $("front").style.fontFamily = fr ? "" : "var(--f-ui)";
+  $("front").style.fontWeight = fr ? "" : "500";
+  $("back").textContent = fr ? current.ru : current.fr;
+  $("back").style.fontFamily = fr ? "" : "var(--f-word)";
+  $("back").style.fontSize = fr ? "" : "24px";
+  $("note").textContent = current.note || "";
+  $("note").hidden = !current.note;
+  $("lvl").innerHTML = Array.from({length:MAX},(_,i)=>`<i class="${i<s.box?'on':''}"></i>`).join("");
+  $("backWrap").hidden = !flipped;
+  $("hint").hidden = flipped;
+  ["r0","r1","r2"].forEach(id => $(id).disabled = !flipped);
+  updateMeta();
+}
+function updateMeta(){
+  const known = WORDS.filter(w => stat(w).box >= 4).length;
+  const pct = WORDS.reduce((a,w)=>a+stat(w).box,0) / (WORDS.length*MAX) * 100;
+  $("known").textContent = `${known}/${WORDS.length} выучено`;
+  $("seen").textContent = `${state.reviews} повторено`;
+  $("mastery").style.width = pct + "%";
+}
+function next(){
+  current = pick(); flipped = false;
+  recent.push(current.fr); if(recent.length > 2) recent.shift();
+  render();
+}
+function flip(){ if(!flipped){ flipped = true; render(); } }
+function rate(g){
+  if(!flipped) return;
+  const s = stat(current);
+  s.seen++; state.reviews++;
+  if(g === 0){ s.box = 0; s.lapses++; }
+  else if(g === 1){ s.box = Math.max(0, s.box - (s.box > 2 ? 1 : 0)); s.lapses = Math.max(0, s.lapses - 0.25); }
+  else { s.box = Math.min(MAX, s.box + 1); s.lapses = Math.max(0, s.lapses - 0.5); }
+  save(); next();
+}
+
+function openList(){
+  const rows = WORDS.map(w => ({w, s:stat(w), wt:weight(w)}))
+    .sort((a,b) => a.s.box - b.s.box || b.s.lapses - a.s.lapses);
+  $("list").innerHTML = rows.map(({w,s}) => `
+    <div class="row ${s.seen && s.box<=1 && s.lapses>=1 ? 'weak':''}">
+      <b>${w.fr}</b>
+      <div class="m">${Array.from({length:MAX},(_,i)=>`<i class="${i<s.box?'on':''}"></i>`).join("")}</div>
+      <span>${w.ru}${s.lapses?` · ошибок ${Math.round(s.lapses)}`:''}</span>
+    </div>`).join("");
+  resetArmed = false; $("resetBtn").textContent = "Сбросить прогресс";
+  $("sheet").hidden = false;
+}
+let resetArmed = false;
+$("resetBtn").onclick = () => {
+  if(!resetArmed){ resetArmed = true; $("resetBtn").textContent = "Точно? Тапни ещё раз"; return; }
+  state = {cards:{}, reviews:0, dir}; save(); $("sheet").hidden = true; next();
+};
+$("closeBtn").onclick = () => $("sheet").hidden = true;
+$("sheet").onclick = e => { if(e.target.id === "sheet") $("sheet").hidden = true; };
+$("listBtn").onclick = openList;
+$("dirBtn").onclick = () => {
+  dir = dir === "fr" ? "ru" : "fr"; state.dir = dir; save();
+  $("dirBtn").textContent = dir === "fr" ? "FR → RU" : "RU → FR";
+  flipped = false; render();
+};
+$("card").onclick = flip;
+$("r0").onclick = () => rate(0);
+$("r1").onclick = () => rate(1);
+$("r2").onclick = () => rate(2);
+document.addEventListener("keydown", e => {
+  if(!$("sheet").hidden){ if(e.key === "Escape") $("sheet").hidden = true; return; }
+  if(e.key === " " || e.key === "Enter"){ e.preventDefault(); flip(); }
+  else if(e.key === "1") rate(0);
+  else if(e.key === "2") rate(1);
+  else if(e.key === "3") rate(2);
+});
+
+$("dirBtn").textContent = dir === "fr" ? "FR → RU" : "RU → FR";
+next();
+</script>
+
+</body></html>

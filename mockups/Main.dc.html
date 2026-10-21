@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Повторение — вопрос</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,500&amp;family=Manrope:wght@400;500;600;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#2a46c9}a:hover{color:#1d3399}
+button{font:inherit}
+input,textarea{font:inherit}
+::placeholder{color:#5d6278;opacity:1}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #f3f4f8; color: #161a2b; font-family: Manrope, system-ui, sans-serif; display: flex; flex-direction: column">
+
+  <main style="flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 16px 120px; box-sizing: border-box">
+
+    <div style="display: flex; align-items: center; gap: 8px; height: 44px">
+      <button type="button" aria-label="FR → RU, сменить направление" style="height: 32px; padding: 0 12px; display: inline-flex; align-items: center; gap: 8px; border-radius: 999px; background: #ffffff; border: 1px solid #e2e4ee; color: #161a2b; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap">
+        <span>FR → RU</span>
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5d6278" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3 4 7l4 4"></path><path d="M4 7h16"></path><path d="m16 21 4-4-4-4"></path><path d="M20 17H4"></path></svg>
+      </button>
+      <button type="button" aria-haspopup="listbox" style="height: 32px; padding: 0 10px 0 12px; display: inline-flex; align-items: center; gap: 4px; border-radius: 999px; background: #ffffff; border: 1px solid #e2e4ee; color: #161a2b; font-size: 13px; font-weight: 500; cursor: pointer; white-space: nowrap">
+        <span>Все темы</span>
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5d6278" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+      </button>
+      <div style="flex: 1"></div>
+      <div style="display: flex; align-items: center; margin-right: -10px">
+        <button type="button" aria-label="Отменить последний ответ" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 999px; background: transparent; color: #5d6278; cursor: pointer; padding: 0">
+          <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"></path></svg>
+        </button>
+        <a href="Settings.dc.html" aria-label="Настройки" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 999px; color: #5d6278; text-decoration: none">
+          <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+        </a>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; gap: 12px; height: 20px; margin-top: 12px">
+      <span style="font-size: 13px; color: #5d6278; white-space: nowrap"><span style="color: #161a2b; font-weight: 600">23</span> к повторению · 4 новых</span>
+      <div style="flex: 1; height: 4px; border-radius: 999px; background: #e2e4ee; overflow: hidden">
+        <div style="width: 23.3%; height: 100%; border-radius: 999px; background: #2a46c9"></div>
+      </div>
+      <span style="font-size: 12px; font-weight: 600; color: #5d6278; font-variant-numeric: tabular-nums">7/30</span>
+    </div>
+
+    <a href="Review-Back.dc.html" style="flex: 1; min-height: 0; margin-top: 16px; display: flex; flex-direction: column; box-sizing: border-box; padding: 20px 24px 24px; background: #ffffff; border: 1px solid #e2e4ee; border-radius: 20px; color: #161a2b; text-decoration: none">
+      <div style="display: flex; align-items: center; justify-content: space-between; height: 24px">
+        <span style="font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: #5d6278" lang="fr">français</span>
+        <span></span>
+      </div>
+      <div style="flex: 1; display: flex; align-items: center; justify-content: center; text-align: center">
+        <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 38px; line-height: 1.15; letter-spacing: -0.01em; color: #161a2b">se casser</span>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: center; gap: 8px; height: 24px; font-size: 13px; color: #5d6278">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path d="M3 3v5h5"></path></svg>
+        <span>тапни, чтобы перевернуть</span>
+      </div>
+    </a>
+
+    <a href="Review-Back.dc.html" style="margin-top: 16px; height: 52px; display: flex; align-items: center; justify-content: center; border-radius: 14px; background: #2a46c9; color: #ffffff; font-size: 15px; font-weight: 600; text-decoration: none">Показать ответ</a>
+  </main>
+
+  <nav aria-label="Основная навигация" style="position: absolute; left: 0; right: 0; bottom: 0; height: 92px; box-sizing: border-box; padding-bottom: 28px; background: #ffffff; border-top: 1px solid #e2e4ee; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))">
+    <a href="Main.dc.html" aria-current="page" style="height: 63px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #2a46c9; text-decoration: none; font-size: 11px; font-weight: 600">
+      <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="13" height="14" rx="2.5"></rect><path d="M8 7V5.5A2.5 2.5 0 0 1 10.5 3h8A2.5 2.5 0 0 1 21 5.5v9a2.5 2.5 0 0 1-2.5 2.5H16"></path></svg>
+      <span>Повторение</span>
+    </a>
+    <div style="display: flex; justify-content: center; align-items: flex-start">
+      <a href="Add-Empty.dc.html" aria-label="Добавить слово" style="width: 56px; height: 56px; margin-top: -13px; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: #2a46c9; color: #ffffff; text-decoration: none">
+        <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+      </a>
+    </div>
+    <a href="Library.dc.html" style="height: 63px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5d6278; text-decoration: none; font-size: 11px; font-weight: 600">
+      <svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"></path></svg>
+      <span>Библиотека</span>
+    </a>
+  </nav>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
