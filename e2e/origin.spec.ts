@@ -104,6 +104,11 @@ test("the conjugation is edited by hand in the word card and goes back to the di
   const card = page.getByRole("dialog", { name: "Карточка слова" });
   await expect(card.getByText("je me casse · tu te casses · il se casse…")).toBeVisible();
   await expect(card.getByText("из словаря · être")).toBeVisible();
+  // «Все формы»: a card per tense, the endings apart.
+  await card.getByRole("button", { name: "Все формы — 4 времени" }).click();
+  await expect(card.getByRole("article", { name: "Futur" })).toContainText("ils se casseront");
+  await card.getByRole("button", { name: "Свернуть" }).click();
+  await expect(card.getByRole("article", { name: "Futur" })).toHaveCount(0);
 
   await card.getByRole("button", { name: "Изменить спряжение" }).click();
   const first = card.getByRole("textbox", { name: "Présent, je" });

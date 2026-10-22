@@ -130,8 +130,20 @@ test("kiffer: translations, the meaning chips filter the examples, synonyms, con
   await expect(page.getByText("je kiffe · tu kiffes · il kiffe…")).toBeVisible();
   await conj.click();
   await expect(conj).toHaveAttribute("aria-expanded", "true");
-  await expect(page.getByRole("heading", { name: "Passé composé" })).toBeVisible();
-  await expect(page.getByText("ai kiffé", { exact: true })).toBeVisible();
+  // A card per tense: when it is used, an example found among the sentences, the forms.
+  const pc = page.getByRole("article", { name: "Passé composé" });
+  await expect(pc.getByRole("heading", { name: "Passé composé" })).toBeVisible();
+  await expect(pc).toContainText("один раз в прошлом");
+  await expect(pc).toContainText("j'ai kiffé");
+  await expect(pc).toContainText("On a kiffé la soirée");
+  // «Проверь себя»: the forms hide behind blanks (and the example with them); a tap shows one.
+  await page.getByRole("button", { name: "Проверь себя" }).click();
+  await expect(pc.getByRole("button", { name: /^Показать форму/ })).toHaveCount(6);
+  await expect(pc).not.toContainText("On a kiffé la soirée");
+  await pc.getByRole("button", { name: "Показать форму: nous" }).click();
+  await expect(pc).toContainText("nous avons kiffé");
+  await expect(page.getByText("открыто 1 из 24", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Проверь себя" }).click();
 
   // A synonym opens in «Контекст»; Back returns to kiffer from the saved results.
   await page.getByRole("button", { name: "triper — тащиться" }).click();

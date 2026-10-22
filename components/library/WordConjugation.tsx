@@ -3,13 +3,15 @@
 // «Спряжение» in the word's view (the phone sheet and the desktop pane): a one-line présent preview
 // with where it comes from («своё» — saved on the word by hand or from the chat; «из словаря» —
 // built on the device from Lexique), and the form that edits the four tenses.
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { TENSE_NAMES } from "@/components/context/data";
+import { ConjugationBrief, ConjugationCards } from "@/components/conjugation/ConjugationViews";
 import { useUndoSnackbar } from "@/components/library/undo";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import { autofillConjugation } from "@/lib/autofill";
 import { loadConjData } from "@/lib/conjugation";
+import { wordExamples } from "@/lib/examples";
 import { cleanConjugation, conjugate } from "@/lib/core/conjugate";
 import type { Conjugation, Word } from "@/lib/types";
 import { updateWord } from "@/lib/words";
@@ -59,6 +61,48 @@ export function ConjugationPreview({ saved, builtin, size }: { saved: Conjugatio
       </span>
       <span className="meta">{saved ? "своё" : "из словаря"} · {conj.auxiliary}</span>
     </span>
+  );
+}
+
+/**
+ * The field's view. Phone sheet: the one-line preview and «Все формы» opening a card per tense
+ * (ConjugationCards). Desktop pane: «своё / из словаря · aux», then ConjugationBrief (the présent
+ * and the full table in a dialog).
+ */
+export function ConjugationShown({ word, builtin, size, onEdit }: { word: Word; builtin: Conjugation | null | undefined; size: "sheet" | "pane"; onEdit?: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  const saved = cleanConjugation(word.conjugation);
+  const conj = saved ?? builtin ?? null;
+  const sentences = wordExamples(word);
+  if (size === "pane") {
+    return (
+      <div className="flex flex-col">
+        <div className="flex items-center gap-2">
+          <span className="meta shrink-0">Спряжение</span>
+          <span className="min-w-0 flex-1 truncate text-[12px] leading-4 text-muted">
+            {conj ? `${saved ? "своё" : "из словаря"} · ${conj.auxiliary}` : builtin === undefined ? "…" : "Нет спряжения — можно заполнить"}
+          </span>
+          {onEdit}
+        </div>
+        {conj && <ConjugationBrief conj={conj} sentences={sentences} word={word.fr} className="mt-1" />}
+      </div>
+    );
+  }
+  return (
+    <>
+      <ConjugationPreview saved={saved} builtin={builtin} size="sheet" />
+      {conj && (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((o) => !o)}
+          className="-my-1 inline-flex h-11 items-center gap-1 self-start bg-transparent p-0 text-[14px] font-medium text-ink underline decoration-1 underline-offset-4"
+        >
+          {open ? "Свернуть" : "Все формы — 4 времени"}
+        </button>
+      )}
+      {open && conj && <ConjugationCards conj={conj} sentences={sentences} className="mt-1" />}
+    </>
   );
 }
 

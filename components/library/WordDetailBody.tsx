@@ -68,7 +68,7 @@ import { examplesPatch, wordExamples } from "@/lib/examples";
 import { conjDraftError, draftOf, isDirty, patchFor, undoFor, withConjugationDraft, type Draft, type Editing } from "./word-editor";
 import { AddFieldButton, type FieldKind } from "./AddFieldButton";
 import { AutoFillButton } from "./AutoFill";
-import { conjugationShown, ConjugationForm, ConjugationPreview, offersConjugation, useBuiltinConjugation } from "./WordConjugation";
+import { conjugationShown, ConjugationForm, ConjugationShown, offersConjugation, useBuiltinConjugation } from "./WordConjugation";
 import { cleanConjugation, cleanOrigin } from "@/lib/core/conjugate";
 import { canAddField, fieldRows, fieldRowsError, newFieldRow, type FieldRow } from "./word-fields";
 
@@ -606,7 +606,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
               )
             }
           >
-            <ConjugationPreview saved={cleanConjugation(w.conjugation)} builtin={builtin} size="sheet" />
+            <ConjugationShown word={w} builtin={builtin} size="sheet" />
           </SheetField>
         )}
         <SheetField
@@ -1250,12 +1250,13 @@ function PaneContent({
                     {formActions}
                   </form>
                 ) : (
-                  <div data-edited="conjugation" className="flex items-start gap-2">
-                    <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
-                      <span className="meta shrink-0">Спряжение</span>
-                      <ConjugationPreview saved={cleanConjugation(w.conjugation)} builtin={builtin} size="pane" />
-                    </div>
-                    {!editing && pencil("Изменить спряжение", () => editor.start("conjugation", withConjugationDraft(draftOf(w, defs), cleanConjugation(w.conjugation) ?? builtin)))}
+                  <div data-edited="conjugation">
+                    <ConjugationShown
+                      word={w}
+                      builtin={builtin}
+                      size="pane"
+                      onEdit={!editing && pencil("Изменить спряжение", () => editor.start("conjugation", withConjugationDraft(draftOf(w, defs), cleanConjugation(w.conjugation) ?? builtin)))}
+                    />
                   </div>
                 ))}
               {editing === "example" && draft ? (
