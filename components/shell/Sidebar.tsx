@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useRef, useState } from "react";
 import { FolderFormSheet } from "@/components/library/FolderFormSheet";
+import { ThemeActions, type ThemeActionsTarget } from "@/components/library/ThemeActions";
+import { useLongPress } from "@/components/library/use-long-press";
 import { nWords } from "@/components/library/format";
 import { useAddSheet } from "@/components/providers/AddSheetContext";
 import { AppMark } from "@/components/ui/AppMark";
@@ -58,16 +60,24 @@ function NavLink({
   );
 }
 
-function ThemeRow({ theme, active }: { theme: ShellTheme; active: boolean }) {
+/** A theme in the sidebar: a right click, a long press or the context-menu key opens its actions (`onMenu`). */
+function ThemeRow({ theme, active, onMenu }: { theme: ShellTheme; active: boolean; onMenu?: (element: HTMLElement) => void }) {
   const drop = useThemeDrop({ id: theme.id, name: theme.name });
   const inbox = theme.id === null;
+  const ref = useRef<HTMLAnchorElement>(null);
+  const press = useLongPress(() => {
+    if (ref.current) onMenu?.(ref.current);
+  });
   return (
     <Link
+      ref={ref}
       href={theme.href}
       aria-current={active ? "page" : undefined}
       aria-label={`${theme.name}, ${nWords(theme.count)}`}
+      aria-haspopup={onMenu ? "menu" : undefined}
       {...drop.dropProps}
-      className={cx(rowClass, "h-11 gap-2.5", dropClasses(drop.dragging, drop.over))}
+      {...(onMenu ? press : {})}
+      className={cx(rowClass, "h-11 gap-2.5", onMenu && "select-none [-webkit-touch-callout:none]", dropClasses(drop.dragging, drop.over))}
     >
       {active && <ActiveBar edge="sidebar" />}
       <span
@@ -123,6 +133,7 @@ function SidebarView({ data, active }: { data: ShellData | undefined; active: Na
   const router = useRouter();
   const layout = useLayoutClass();
   const [newTheme, setNewTheme] = useState(false);
+  const [themeMenu, setThemeMenu] = useState<ThemeActionsTarget | null>(null);
   const key = resolveNavKey(active, data?.themes);
 
   return (
@@ -173,7 +184,11 @@ function SidebarView({ data, active }: { data: ShellData | undefined; active: Na
         {data &&
           [data.inbox, ...data.themes].map((theme) => (
             <li key={theme.id ?? "inbox"}>
-              <ThemeRow theme={theme} active={theme.id === null ? key === "inbox" : key === `theme:${theme.id}`} />
+              <ThemeRow
+                theme={theme}
+                active={theme.id === null ? key === "inbox" : key === `theme:${theme.id}`}
+                onMenu={theme.id === null ? undefined : (element) => setThemeMenu({ folderId: theme.id!, anchor: { element } })}
+              />
             </li>
           ))}
       </ul>
@@ -183,6 +198,8 @@ function SidebarView({ data, active }: { data: ShellData | undefined; active: Na
         {layout === "expanded" && <SyncButton />}
         <NavLink href="/settings" label="Настройки" active={key === "settings"} />
       </div>
+
+      <ThemeActions target={themeMenu} onClose={() => setThemeMenu(null)} />
 
       <FolderFormSheet
         open={newTheme}

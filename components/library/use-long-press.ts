@@ -37,6 +37,8 @@ function swallowNextClick() {
 export function useLongPress(onLongPress: () => void) {
   const press = useRef<{ id: number; x: number; y: number; timer: ReturnType<typeof setTimeout> } | null>(null);
   const fired = useRef(0);
+  /** Until when the click after a finger press is swallowed (not after a right click or the menu key). */
+  const swallowUntil = useRef(0);
   const latest = useRef(onLongPress);
   useEffect(() => {
     latest.current = onLongPress;
@@ -49,11 +51,16 @@ export function useLongPress(onLongPress: () => void) {
     if (press.current) clearTimeout(press.current.timer);
     press.current = null;
   };
-  const fire = () => {
+  const fire = (touch: boolean) => {
     press.current = null;
     if (Date.now() - fired.current < GUARD_MS) return;
     fired.current = Date.now();
-    swallowNextClick();
+    // Only a finger lifting produces a stray click; after a mouse right click the next click is the
+    // user's own (often on an item of the menu that just opened).
+    if (touch) {
+      swallowUntil.current = fired.current + GUARD_MS;
+      swallowNextClick();
+    }
     latest.current();
   };
 
@@ -61,7 +68,7 @@ export function useLongPress(onLongPress: () => void) {
     onPointerDown(e: PointerEvent) {
       if (e.pointerType === "mouse" || !e.isPrimary) return;
       cancel();
-      press.current = { id: e.pointerId, x: e.clientX, y: e.clientY, timer: setTimeout(fire, LONG_PRESS_MS) };
+      press.current = { id: e.pointerId, x: e.clientX, y: e.clientY, timer: setTimeout(() => fire(true), LONG_PRESS_MS) };
     },
     onPointerMove(e: PointerEvent) {
       const p = press.current;
@@ -71,11 +78,13 @@ export function useLongPress(onLongPress: () => void) {
     onPointerCancel: cancel,
     onContextMenu(e: MouseEvent) {
       e.preventDefault();
+      // Android sends `contextmenu` for a held finger: a press is under way then.
+      const touch = press.current !== null;
       cancel();
-      fire();
+      fire(touch);
     },
     onClickCapture(e: MouseEvent) {
-      if (Date.now() - fired.current < GUARD_MS) {
+      if (Date.now() < swallowUntil.current) {
         e.preventDefault();
         e.stopPropagation();
       }

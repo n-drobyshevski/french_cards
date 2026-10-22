@@ -563,7 +563,9 @@ export function ReviewScreen() {
         canUndo={canUndo}
         onUndo={() => void undo()}
         letters={letters}
-        hideOnDesktop={done || emptyLibrary}
+        // «Готово на сегодня» keeps the running head (without counts): what to review next, the
+        // direction and undo stay one click away, as on phones.
+        hideOnDesktop={emptyLibrary}
         progress={loading ? PENDING_PROGRESS : cardsShown ? progress : null}
         heading={cardsShown ? <h1 className="sr-only">Повторение</h1> : null}
       >
@@ -642,6 +644,7 @@ export function ReviewScreen() {
               number={ordinal ? cardNumber(ordinal) : undefined}
               remaining={remaining}
               enter={writeInKey === cardKey}
+              editKey={desktop && letters}
               onEdit={() => {
                 if (!holding) setEditId(cardWord.id);
               }}

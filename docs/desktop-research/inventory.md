@@ -183,7 +183,7 @@ Header «Настройки». Sections = mono label with ink rule, rows with ha
 
 - Login: AppMark (card glyph) + «Карточки» Newsreader 40, tagline italic «Слова, которые хочется запомнить.» Index-card panel with mono header «ВХОД» / «НОВЫЙ АККАУНТ» / «СБРОС ПАРОЛЯ» and red rule; fields email + «Пароль» / «Пароль (от N символов)» / «Повторите пароль»; buttons «Войти» / «Создать аккаунт» / «Отправить ссылку» (loading «Входим…» / «Отправляем…»); links «Забыли пароль?», «Создать аккаунт», «← Уже есть пароль — войти»; footnote «Вход по паролю работает и в приложении на главном экране iPhone.» Notices: «Аккаунт создан. Подтвердите почту…», «Письмо со ссылкой для сброса отправлено на …». Local-only mode: panel «ВХОД НЕ НУЖЕН» / «Синхронизация выключена: все слова и прогресс хранятся только на этом устройстве.» + link into app. Errors in components/auth/messages.ts (e.g. «Неверная почта или пароль.», «С этого адреса войти нельзя.»).
 - Reset: «НОВЫЙ ПАРОЛЬ», «Проверяем ссылку…», «Новый пароль (от N символов)», «Сохранить пароль» / «Сохраняем…», «Открыть карточки» / «Ко входу».
-- Offline page `/~offline`: index card «Нет сети», FR word «hors ligne» *loc. adj.*, «Эта страница ещё не сохранена на телефоне», body, «Проверь подключение и попробуй ещё раз», retry + «Открыть повторение».
+- Offline page `/~offline`: index card «Нет сети», FR word «hors ligne» *loc. adj.*, «Эта страница ещё не сохранена на устройстве», body, «Проверь подключение и попробуй ещё раз», retry + «Открыть повторение».
 - AuthGate: no session → /login; offline on a previously signed-in device keeps working.
 
 ---

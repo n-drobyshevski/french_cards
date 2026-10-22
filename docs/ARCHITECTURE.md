@@ -76,4 +76,5 @@ If `NEXT_PUBLIC_SUPABASE_URL` is unset, the app runs fully local: there is no lo
 - IndexedDB tests use `fake-indexeddb/auto`.
 - Playwright e2e lives in `e2e/` at a mobile viewport (390×844), using the preinstalled Chromium (`PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`; never run `playwright install`).
 - Desktop e2e (`e2e/desktop-*.spec.ts`) runs only in the `desktop-chromium` project (1440×800); everything else runs in `mobile-chromium`.
+- Phone ↔ desktop parity: a feature added to one layout is added to the other (DESKTOP-SPEC §8 lists the 2026-10-22 audit); `e2e/desktop-parity.spec.ts` covers the desktop side of each. Theme actions on desktop share `ThemeMenuItems` (`components/library/ThemeActions.tsx`) between the theme page's «⋯» and the sidebar's right-click menu.
 - Before pushing: `npm run lint && npm run typecheck && npm test && npm run build`.

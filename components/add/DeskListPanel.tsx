@@ -97,7 +97,14 @@ export function DeskListPanel({
           <ul className="m-0 list-none p-0">
             {rows.map((row, i) => (
               <li key={row.key}>
-                <ParseRow row={row} folders={folders} showSlang={show.slang} last={i === rows.length - 1} onToggle={() => onToggle(row.key)} />
+                <ParseRow
+                  row={row}
+                  folders={folders}
+                  showSlang={show.slang}
+                  showExample={show.examples}
+                  last={i === rows.length - 1}
+                  onToggle={() => onToggle(row.key)}
+                />
               </li>
             ))}
           </ul>
@@ -111,12 +118,15 @@ function ParseRow({
   row,
   folders,
   showSlang,
+  showExample,
   last,
   onToggle,
 }: {
   row: ListRow;
   folders: readonly Folder[];
   showSlang: boolean;
+  /** The example found for the row, after the translation on the same line (rows keep their 40px). */
+  showExample: boolean;
   last: boolean;
   onToggle: () => void;
 }) {
@@ -160,6 +170,14 @@ function ParseRow({
             {" "}
             · {existing.folderName ?? "Входящие"}, <span className="font-mono text-[11px] tabular-nums">{cardNumber(existing.ordinal)}</span>
           </span>
+        )}
+        {!existing && showExample && row.enrich?.example_fr && (
+          <>
+            {" · "}
+            <span lang="fr" className="font-serif text-[14px] italic">
+              {row.enrich.example_fr}
+            </span>
+          </>
         )}
       </span>
       <span className="flex items-center gap-3 self-center justify-self-end">

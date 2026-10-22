@@ -158,27 +158,47 @@ export function DeskSearchPanel({ inputRef, ...props }: DeskSearchPanelProps) {
 
   return (
     <DeskFrame footer={footer} bodyClassName={showVariants ? "pb-2" : "pb-6"}>
-      <input
-        ref={inputRef}
-        type="text"
-        role="combobox"
-        aria-label="Слово или выражение — FR или RU"
-        aria-autocomplete="list"
-        aria-expanded={listboxIds.length > 0}
-        aria-controls={listboxIds.join(" ") || undefined}
-        aria-activedescendant={activeId}
-        value={value}
-        onChange={(e) => props.onValueChange(e.target.value)}
-        onKeyDown={onKeyDown}
-        onPaste={onPaste}
-        placeholder="Слово или выражение — FR или RU"
-        lang={trimmed ? (direction === "ru" ? "ru" : "fr") : undefined}
-        autoComplete="off"
-        autoCorrect="off"
-        autoCapitalize="none"
-        spellCheck={false}
-        className="block h-14 w-full rounded-[4px] border border-boundary bg-surface px-[15px] font-serif text-[22px] leading-7 text-ink outline-none! placeholder:text-muted focus:border-ink focus:shadow-[inset_0_0_0_1px_var(--ink)]"
-      />
+      <div className="relative">
+        <input
+          ref={inputRef}
+          type="text"
+          role="combobox"
+          aria-label="Слово или выражение — FR или RU"
+          aria-autocomplete="list"
+          aria-expanded={listboxIds.length > 0}
+          aria-controls={listboxIds.join(" ") || undefined}
+          aria-activedescendant={activeId}
+          value={value}
+          onChange={(e) => props.onValueChange(e.target.value)}
+          onKeyDown={onKeyDown}
+          onPaste={onPaste}
+          placeholder="Слово или выражение — FR или RU"
+          lang={trimmed ? (direction === "ru" ? "ru" : "fr") : undefined}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          className={cx(
+            "block h-14 w-full rounded-[4px] border border-boundary bg-surface pl-[15px] font-serif text-[22px] leading-7 text-ink outline-none! placeholder:text-muted focus:border-ink focus:shadow-[inset_0_0_0_1px_var(--ink)]",
+            value ? "pr-12" : "pr-[15px]",
+          )}
+        />
+        {/* «Стереть», as on phones: clears the headword and keeps the focus in it. */}
+        {value && (
+          <button
+            type="button"
+            aria-label="Стереть"
+            title="Стереть"
+            onClick={(e) => {
+              props.onValueChange("");
+              e.currentTarget.parentElement?.querySelector("input")?.focus();
+            }}
+            className="absolute top-1/2 right-2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-[4px] bg-transparent text-muted hoverable:bg-hover-surface hoverable:text-ink"
+          >
+            <Icon name="close" size={16} />
+          </button>
+        )}
+      </div>
 
       {!trimmed ? (
         <EmptyState {...props} listboxId={`${base}-recent`} optionProps={optionProps} active={active} />
@@ -202,7 +222,7 @@ export function DeskSearchPanel({ inputRef, ...props }: DeskSearchPanelProps) {
               </div>
             </section>
           )}
-          {props.duplicate && !quick && (
+          {props.duplicate && (
             <DuplicateBox info={props.duplicate} onOpen={() => props.onOpenWord(props.duplicate!.word.id)} onAddAnyway={props.onAddAnyway} />
           )}
           {showVariants && (

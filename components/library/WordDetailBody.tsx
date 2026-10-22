@@ -19,7 +19,7 @@ import { Segmented } from "@/components/ui/Segmented";
 import { SheetCloseButton } from "@/components/ui/Sheet";
 import { SkeletonBar } from "@/components/ui/Skeleton";
 import { AbbrHint } from "@/components/ui/AbbrHint";
-import { SlangMeter, slangAbbr } from "@/components/ui/SlangMeter";
+import { SlangMeter } from "@/components/ui/SlangMeter";
 import { Toggle } from "@/components/ui/Toggle";
 import { cx } from "@/components/ui/cx";
 import { readNdjson } from "@/lib/ai/ndjson";
@@ -29,7 +29,7 @@ import { listFolders } from "@/lib/folders";
 import { useFormatKeys } from "@/lib/key-names";
 import { formatDueIn, formatStability, wordStatus, type CardStatus } from "@/lib/scheduler";
 import { findDuplicate, normalizeLemma } from "@/lib/text";
-import type { Direction, Folder, ReviewLog, SlangLevel, Word } from "@/lib/types";
+import { SLANG_LABELS, type Direction, type Folder, type ReviewLog, type SlangLevel, type Word } from "@/lib/types";
 import {
   getWordHistory,
   getWordStates,
@@ -724,7 +724,8 @@ function PaneContent({
   const { folder } = actions;
   const { editing, draft, set } = editor;
   const abbr = posAbbr(w);
-  const grammar = coarse ? abbr : [abbr, slangAbbr(w.slang_level, w.verlan)].filter(Boolean).join(" · ");
+  // The grammar line: part of speech, then (fine pointer) the slang level; each explains itself.
+  const showGrammar = !!abbr || !coarse;
 
   const submit = async (event?: FormEvent) => {
     event?.preventDefault();
@@ -857,7 +858,7 @@ function PaneContent({
       >
         <div className="flex h-10 items-center justify-between px-5">
           <span className="font-mono text-[11px] text-muted tabular-nums">FR · {cardNumber(data.number ?? 1)}</span>
-          <SlangMeter level={w.slang_level} verlan={false} />
+          <SlangMeter level={w.slang_level} verlan={false} hints hintAlign="end" />
         </div>
         <div aria-hidden="true" className="h-0.5 bg-red" />
         <div className="flex flex-col p-5">
@@ -930,9 +931,19 @@ function PaneContent({
                 </h2>
                 <span className="mt-1.5">{pencil("Изменить слово и перевод", () => editor.start("entry"), "E")}</span>
               </div>
-              {grammar && (
-                <p lang="fr" className="abbr m-0 mt-1 text-[15px] leading-5">
-                  {grammar}
+              {showGrammar && (
+                <p className="m-0 mt-1 flex flex-wrap items-baseline gap-x-1 text-[15px] leading-5">
+                  {abbr && <AbbrHint abbr={abbr} />}
+                  {!coarse && (
+                    <>
+                      {abbr && (
+                        <span aria-hidden="true" className="abbr">
+                          ·
+                        </span>
+                      )}
+                      <SlangHints word={w} />
+                    </>
+                  )}
                 </p>
               )}
               <p className="m-0 mt-2 text-[18px] leading-6 font-medium">{w.ru}</p>
@@ -991,11 +1002,8 @@ function PaneContent({
           {coarse && (
             <p className="m-0 mt-5 flex gap-4 border-t border-rule pt-4 text-[13px] leading-5 text-muted">
               <span>1. {folder?.name ?? "Входящие"}</span>
-              <span>
-                2.{" "}
-                <span lang="fr" className="font-serif italic">
-                  {slangAbbr(w.slang_level, w.verlan)}
-                </span>
+              <span className="inline-flex items-baseline gap-1">
+                2. <SlangHints word={w} />
               </span>
             </p>
           )}
@@ -1104,6 +1112,23 @@ function PaneContent({
         onNewTheme={onNewTheme ? () => onNewTheme([w.id]) : undefined}
       />
     </div>
+  );
+}
+
+/** «arg.» and «verl.» as hints (the slang level without the meter). */
+function SlangHints({ word }: { word: Pick<Word, "slang_level" | "verlan"> }) {
+  return (
+    <>
+      <AbbrHint abbr={SLANG_LABELS[word.slang_level]} lang={word.slang_level === 0 ? "ru" : "fr"} />
+      {word.verlan && (
+        <>
+          <span aria-hidden="true" className="abbr">
+            ·
+          </span>
+          <AbbrHint abbr="verl." />
+        </>
+      )}
+    </>
   );
 }
 
