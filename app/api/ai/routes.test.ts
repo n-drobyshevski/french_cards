@@ -9,6 +9,7 @@ vi.mock("ai", async (importOriginal) => ({ ...(await importOriginal<typeof impor
 import { resetRateLimits } from "@/lib/ai/rate-limit";
 import { POST as classify } from "./classify/route";
 import { POST as enrich } from "./enrich/route";
+import { POST as example } from "./example/route";
 import { POST as extract } from "./extract/route";
 import { POST as suggest } from "./suggest/route";
 
@@ -362,6 +363,40 @@ describe("POST /api/ai/enrich", () => {
     ai.generateText.mockRejectedValue(new Error("down"));
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const res = await enrich(json({ words: [{ id: "a", fr: "chelou", ru: "стрёмный" }] }));
+    spy.mockRestore();
+    expect(res.status).toBe(502);
+  });
+});
+
+describe("POST /api/ai/example", () => {
+  it("400 on invalid input", async () => {
+    expect((await example(json({ fr: "chelou", ru: "" }))).status).toBe(400);
+    expect((await example(json({ fr: "chelou", ru: "стрёмный", avoid: Array(7).fill("x") }))).status).toBe(400);
+    expect(ai.generateText).not.toHaveBeenCalled();
+  });
+
+  it("returns a new example and lists the existing ones in the prompt", async () => {
+    ai.generateText.mockResolvedValue({ output: { example_fr: "  J'ai reçu un message chelou. ", example_ru: "Мне пришло стрёмное сообщение." } });
+    const res = await example(json({ fr: "chelou", ru: "стрёмный", note: "верлан от louche", avoid: ["Il est chelou, ton pote."] }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ example: { fr: "J'ai reçu un message chelou.", ru: "Мне пришло стрёмное сообщение." } });
+    const call = ai.generateText.mock.calls[0][0] as { prompt: string; temperature?: number };
+    expect(call.prompt).toContain("French: chelou\nRussian: стрёмный\nNote: верлан от louche");
+    expect(call.prompt).toContain("- Il est chelou, ton pote.");
+    expect(call.temperature).toBeUndefined();
+  });
+
+  it("null when the model repeats an existing example or gives none", async () => {
+    ai.generateText.mockResolvedValue({ output: { example_fr: "il est CHELOU ton pote !", example_ru: "x" } });
+    expect(await (await example(json({ fr: "chelou", ru: "стрёмный", avoid: ["Il est chelou, ton pote."] }))).json()).toEqual({ example: null });
+    ai.generateText.mockResolvedValue({ output: { example_fr: null, example_ru: null } });
+    expect(await (await example(json({ fr: "chelou", ru: "стрёмный" }))).json()).toEqual({ example: null });
+  });
+
+  it("502 when the model call fails", async () => {
+    ai.generateText.mockRejectedValue(new Error("down"));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await example(json({ fr: "chelou", ru: "стрёмный" }));
     spy.mockRestore();
     expect(res.status).toBe(502);
   });

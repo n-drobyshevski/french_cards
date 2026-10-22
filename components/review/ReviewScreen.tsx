@@ -14,7 +14,8 @@ import { useSnackbar } from "@/components/ui/Snackbar";
 import { cardNumber } from "@/components/add/match";
 import { listFolders } from "@/lib/folders";
 import { previewIntervals, reviewStateId, type Rating } from "@/lib/scheduler";
-import { advancePractice, buildPracticeQueue, startOfStudyDay, type QueueItem, type SessionFilter } from "@/lib/session";
+import { advancePractice, buildPracticeQueue, sessionFilterKey, startOfStudyDay, type QueueItem, type SessionFilter } from "@/lib/session";
+import { normalizeReviewSets, setIdOf, setSessionFilter } from "@/lib/review-sets";
 import { getSettings } from "@/lib/settings";
 import { useFinePointer, useLayoutClass } from "@/lib/use-media";
 import { getLastReview, getWord, gradeCard, undoLastReview } from "@/lib/words";
@@ -65,8 +66,8 @@ interface Awaiting {
 }
 
 interface Practice {
-  /** mistakes: «Повторить ошибки»; extra: «Ещё практика»; theme: «Тренировка всей темы». */
-  kind: "mistakes" | "extra" | "theme";
+  /** mistakes: «Повторить ошибки»; extra: «Ещё практика»; theme: «Тренировка всей темы»; set: a practice-mode set. */
+  kind: "mistakes" | "extra" | "theme" | "set";
   queue: QueueItem[];
   total: number;
   history: QueueItem[][];
@@ -130,15 +131,27 @@ export function ReviewScreen() {
   };
 
   const direction = effectiveDirection(stored, settings?.default_direction ?? "fr_ru");
+  // «Мои наборы»: the filter may name a saved set (`set:<id>`) instead of a theme.
+  const sets = useMemo(() => normalizeReviewSets(settings?.review_sets), [settings?.review_sets]);
+  const storedSetId = setIdOf(stored.folder);
+  const storedSet = storedSetId ? (sets.find((s) => s.id === storedSetId) ?? null) : null;
   const folderKnown =
-    stored.folder === "all" || stored.folder === "inbox" || !folders || folders.some((f) => f.id === stored.folder);
+    stored.folder === "all" ||
+    stored.folder === "inbox" ||
+    (storedSetId ? !settings || !!storedSet : !folders || folders.some((f) => f.id === stored.folder));
   const folder: FolderChoice = folderKnown ? stored.folder : "all";
-  const filter = useMemo(() => toSessionFilter(direction, folder), [direction, folder]);
+  const set = folderKnown ? storedSet : null;
+  const liveFolderIds = useMemo(() => (folders ? new Set(folders.map((f) => f.id)) : undefined), [folders]);
+  const filter = useMemo(
+    () => (set ? setSessionFilter(set, direction === "both" ? undefined : direction, liveFolderIds) : toSessionFilter(direction, folder)),
+    [set, direction, folder, liveFolderIds],
+  );
+  const filterKey = sessionFilterKey(filter);
   const loaded = ready && settings !== undefined;
 
   const data = useLiveQuery(
     () => (loaded ? loadReviewScreen(filter) : undefined),
-    [loaded, filter.direction, filter.folderId, tick],
+    [loaded, filterKey, tick],
   );
   const lastToday = useLiveQuery(async () => {
     const last = await getLastReview();
@@ -202,7 +215,13 @@ export function ReviewScreen() {
   );
 
   const folderNames = useMemo(() => new Map((folders ?? []).map((f) => [f.id, f.name])), [folders]);
-  const folderLabel = folder === "all" ? "Все темы" : folder === "inbox" ? "Входящие" : (folderNames.get(folder) ?? "Тема");
+  const folderLabel = set
+    ? set.name
+    : folder === "all"
+      ? "Все темы"
+      : folder === "inbox"
+        ? "Входящие"
+        : (folderNames.get(folder) ?? "Тема");
 
   const resetCard = () => {
     setPinned(null);
@@ -297,7 +316,7 @@ export function ReviewScreen() {
     if (practiceLoading) return;
     setPracticeLoading(true);
     try {
-      const scope = kind === "mistakes" ? "today" : kind === "theme" ? "all" : "recent";
+      const scope = kind === "mistakes" ? "today" : kind === "theme" || kind === "set" ? "all" : "recent";
       const items = await buildPracticeQueue({ ...over, scope });
       if (items.length === 0) {
         toast.show({
@@ -306,6 +325,8 @@ export function ReviewScreen() {
               ? "Сегодня ошибок не было"
               : kind === "theme"
                 ? "В теме пока нет карточек"
+                : kind === "set"
+                  ? "В наборе нет карточек — измените условия"
                 : "Пока нечего повторять — сначала ответьте на несколько карточек",
         });
         return;
@@ -355,8 +376,22 @@ export function ReviewScreen() {
 
   const setFolder = (value: FolderChoice) => {
     setStored({ ...stored, folder: value });
+    // Picking a practice set (again) starts a fresh round.
+    autoPracticeSet.current = null;
     resetCard();
   };
+
+  // A practice-mode set opens straight into a practice round over the set, once per pick.
+  const autoPracticeSet = useRef<string | null>(null);
+  const startSetPractice = useEffectEvent(() => {
+    if (!loaded || !set || set.mode !== "practice" || practice || practiceLoading) return;
+    if (autoPracticeSet.current === set.id) return;
+    autoPracticeSet.current = set.id;
+    void startPractice("set", filter);
+  });
+  useEffect(() => {
+    queueMicrotask(() => startSetPractice());
+  }, [loaded, set?.id, set?.mode, stored.folder]);
 
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
     if (event.defaultPrevented || isTypingTarget(event.target)) return;
@@ -435,7 +470,12 @@ export function ReviewScreen() {
     const remaining = new Set(practice.queue.map((i) => i.key)).size;
     const cleared = practice.total - remaining;
     progress = {
-      left: practice.kind === "theme" ? "Тренировка темы · не влияет на расписание" : "Практика · не влияет на расписание",
+      left:
+        practice.kind === "theme"
+          ? "Тренировка темы · не влияет на расписание"
+          : practice.kind === "set"
+            ? "Тренировка набора · не влияет на расписание"
+            : "Практика · не влияет на расписание",
       right: formatProgress(cleared, practice.total),
       ratio: progressRatio(cleared, practice.total),
     };
@@ -581,7 +621,14 @@ export function ReviewScreen() {
         </div>
       )}
 
-      <FolderPickerSheet open={pickerOpen} onOpenChange={setPickerOpen} value={folder} onChange={setFolder} />
+      <FolderPickerSheet
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        value={folder}
+        onChange={setFolder}
+        sets={sets}
+        direction={direction === "both" ? undefined : direction}
+      />
     </main>
   );
 }

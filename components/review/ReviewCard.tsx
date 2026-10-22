@@ -314,6 +314,15 @@ export function ReviewCard({
                   </span>
                 )}
                 {word.example_ru && <span className="text-[13px] leading-5 text-muted md:text-[14px]">{word.example_ru}</span>}
+                {/* One more example fits the card; the rest are in the word's detail. */}
+                {word.extra_examples?.[0] && (
+                  <>
+                    <span lang="fr" className="mt-2 font-serif text-[17px] leading-6 italic md:text-[18px]">
+                      {word.extra_examples[0].fr}
+                    </span>
+                    {word.extra_examples[0].ru && <span className="text-[13px] leading-5 text-muted md:text-[14px]">{word.extra_examples[0].ru}</span>}
+                  </>
+                )}
               </div>
             )}
           </div>

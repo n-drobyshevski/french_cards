@@ -49,6 +49,8 @@ import { alphaNeighbours, type Neighbour } from "./table";
 import { folderOptions, TargetPickerSheet } from "./TargetPickerSheet";
 import { TextOptions } from "./TextOptions";
 import { useUndoSnackbar } from "./undo";
+import { ExampleList, toDrafts, type ExampleDraft } from "@/components/examples/ExampleList";
+import { examplesPatch, wordExamples } from "@/lib/examples";
 
 // A word's entry, editable fields, schedule, history and actions. One body, two layouts: the
 // phone sheet (WordDetailSheet) and the desktop detail pane (DESKTOP-SPEC §5 #6–8). Data, editing,
@@ -73,8 +75,7 @@ interface Draft {
   slang_level: SlangLevel;
   verlan: boolean;
   note: string;
-  example_fr: string;
-  example_ru: string;
+  examples: ExampleDraft[];
 }
 
 const draftOf = (w: Word): Draft => ({
@@ -83,14 +84,13 @@ const draftOf = (w: Word): Draft => ({
   slang_level: w.slang_level,
   verlan: w.verlan,
   note: w.note ?? "",
-  example_fr: w.example_fr ?? "",
-  example_ru: w.example_ru ?? "",
+  examples: toDrafts(wordExamples(w)),
 });
 
 function patchFor(editing: Exclude<Editing, null>, draft: Draft): WordPatch {
   if (editing === "entry") return { fr: draft.fr, ru: draft.ru, slang_level: draft.slang_level, verlan: draft.verlan };
   if (editing === "note") return { note: draft.note };
-  return { example_fr: draft.example_fr, example_ru: draft.example_fr.trim() ? draft.example_ru : "" };
+  return examplesPatch(draft.examples);
 }
 
 /** The word's current values of the fields a patch touches (to undo it). */
@@ -100,11 +100,23 @@ function undoFor(word: Word, patch: WordPatch): WordPatch {
   return undo as WordPatch;
 }
 
-const norm = (v: unknown) => (typeof v === "string" ? v.trim() : v ?? "");
+const norm = (v: unknown) => (Array.isArray(v) ? JSON.stringify(v) : typeof v === "string" ? v.trim() : v ?? "");
 function isDirty(word: Word, editing: Editing, draft: Draft | null): boolean {
   if (!editing || !draft) return false;
   const patch = patchFor(editing, draft);
-  return Object.entries(patch).some(([k, v]) => norm(v) !== norm(word[k as keyof Word]));
+  const current = { ...word, extra_examples: word.extra_examples ?? [] };
+  return Object.entries(patch).some(([k, v]) => norm(v) !== norm(current[k as keyof Word]));
+}
+
+/** ↻ and «+ Ещё пример» in the word's view: saved at once, with «Отменить». */
+function useExampleSaver(word: Word | null) {
+  const showUndo = useUndoSnackbar();
+  return async (next: ExampleDraft[], change: { kind: string }) => {
+    if (!word) return;
+    const undo: WordPatch = { example_fr: word.example_fr, example_ru: word.example_ru, extra_examples: word.extra_examples ?? [] };
+    await updateWord(word.id, examplesPatch(next));
+    showUndo({ message: change.kind === "add" ? "Пример добавлен" : "Пример заменён", undo: () => void updateWord(word.id, undo) });
+  };
 }
 
 interface ScheduleRow {
@@ -300,6 +312,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
   const folders = data && "folders" in data ? data.folders : [];
   const editor = useWordEditor(word, folders);
   const actions = useWordActions(word, folders, onClose);
+  const saveExamples = useExampleSaver(word);
   const [pickerOpen, setPickerOpen] = useState(false);
   useCloseWhenGone(data, onClose);
 
@@ -454,20 +467,13 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
           form={
             draft && (
               <form onSubmit={save} className="flex flex-col" aria-label="Изменить пример">
-                <input
-                  aria-label="Пример по-французски"
-                  lang="fr"
-                  value={draft.example_fr}
-                  onChange={(e) => set("example_fr", e.target.value)}
-                  placeholder="Phrase en français"
-                  className="mt-1 h-11 rounded-chip border border-rule bg-surface px-3 font-serif text-[17px] text-ink italic outline-none placeholder:text-muted focus:border-ink"
-                />
-                <input
-                  aria-label="Перевод примера"
-                  value={draft.example_ru}
-                  onChange={(e) => set("example_ru", e.target.value)}
-                  placeholder="Перевод"
-                  className="mt-2 h-11 rounded-chip border border-rule bg-surface px-3 text-[15px] text-ink outline-none placeholder:text-muted focus:border-ink pointer-coarse:text-[16px]"
+                <ExampleList
+                  editable
+                  card={w}
+                  examples={draft.examples.length ? draft.examples : [{ fr: "", ru: "" }]}
+                  onChange={(next) => set("examples", next)}
+                  frInputClass="mt-1 h-11 rounded-chip border border-rule bg-surface px-3 font-serif text-[17px] text-ink italic outline-none placeholder:text-muted focus:border-ink"
+                  ruInputClass="mt-2 h-11 rounded-chip border border-rule bg-surface px-3 text-[15px] text-ink outline-none placeholder:text-muted focus:border-ink pointer-coarse:text-[16px]"
                 />
                 {errorLine}
                 {editActions}
@@ -475,16 +481,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             )
           }
         >
-          {w.example_fr ? (
-            <>
-              <span lang="fr" className="font-serif text-[17px] leading-6 italic">
-                {w.example_fr}
-              </span>
-              {w.example_ru && <span className="-mt-1 text-[14px] leading-5 text-muted">{w.example_ru}</span>}
-            </>
-          ) : (
-            <span className="text-[15px] leading-[22px] text-muted">Нет примера</span>
-          )}
+          <ExampleList card={w} examples={toDrafts(wordExamples(w))} onChange={(next, change) => void saveExamples(next, change)} />
         </SheetField>
       </div>
 
@@ -623,6 +620,7 @@ function PaneBody({ wordId, onClose, onPrev, onNext, onOpenWord, onNewTheme, edi
   const actions = useWordActions(word, folders, onClose);
   const refresh = useRefresh(word);
   const showUndo = useUndoSnackbar();
+  const saveExamples = useExampleSaver(word);
   const [themeMenu, setThemeMenu] = useState<HTMLElement | null>(null);
   const ruRef = useRef<HTMLInputElement>(null);
   useCloseWhenGone(data, onClose);
@@ -754,18 +752,13 @@ function PaneBody({ wordId, onClose, onPrev, onNext, onOpenWord, onNewTheme, edi
   );
   const example = (
     <div className="flex items-start gap-2">
-      <div className="flex min-w-0 flex-1 flex-col">
-        {w.example_fr ? (
-          <>
-            <span lang="fr" className="font-serif text-[16px] leading-6 italic">
-              {w.example_fr}
-            </span>
-            {w.example_ru && <span className="text-[13px] leading-5 text-muted">— {w.example_ru}</span>}
-          </>
-        ) : (
-          <span className="text-[14px] leading-5 text-muted">Нет примера</span>
-        )}
-      </div>
+      <ExampleList
+        size="pane"
+        card={w}
+        examples={toDrafts(wordExamples(w))}
+        onChange={(next, change) => void saveExamples(next, change)}
+        className="min-w-0 flex-1"
+      />
       {!editing && pencil("Изменить пример", () => editor.start("example"))}
     </div>
   );
@@ -890,14 +883,14 @@ function PaneBody({ wordId, onClose, onPrev, onNext, onOpenWord, onNewTheme, edi
           {editing === "entry" ? (
             <div className="mt-5 flex flex-col gap-3 border-t border-rule pt-4">
               {w.note && <p className="m-0 text-[14px] leading-5 whitespace-pre-line">{w.note}</p>}
-              {w.example_fr && (
-                <div className="flex flex-col">
+              {wordExamples(w).map((e, i) => (
+                <div key={i} className="flex flex-col">
                   <span lang="fr" className="font-serif text-[16px] leading-6 italic">
-                    {w.example_fr}
+                    {e.fr}
                   </span>
-                  {w.example_ru && <span className="text-[13px] leading-5 text-muted">— {w.example_ru}</span>}
+                  {e.ru && <span className="text-[13px] leading-5 text-muted">— {e.ru}</span>}
                 </div>
-              )}
+              ))}
             </div>
           ) : (
             <div className="mt-3 flex flex-col gap-3">
@@ -918,21 +911,14 @@ function PaneBody({ wordId, onClose, onPrev, onNext, onOpenWord, onNewTheme, edi
               )}
               {editing === "example" && draft ? (
                 <form onSubmit={(e) => void submit(e)} onKeyDown={formKeys} aria-label="Изменить пример" className="flex flex-col">
-                  <input
-                    aria-label="Пример по-французски"
-                    lang="fr"
-                    value={draft.example_fr}
-                    onChange={(e) => set("example_fr", e.target.value)}
-                    placeholder="Phrase en français"
-                    autoFocus
-                    className={cx(fieldInput, "font-serif text-[16px] italic")}
-                  />
-                  <input
-                    aria-label="Перевод примера"
-                    value={draft.example_ru}
-                    onChange={(e) => set("example_ru", e.target.value)}
-                    placeholder="Перевод"
-                    className={cx(fieldInput, "mt-2 text-[14px]")}
+                  <ExampleList
+                    editable
+                    size="pane"
+                    card={w}
+                    examples={draft.examples.length ? draft.examples : [{ fr: "", ru: "" }]}
+                    onChange={(next) => set("examples", next)}
+                    frInputClass={cx(fieldInput, "font-serif text-[16px] italic")}
+                    ruInputClass={cx(fieldInput, "mt-2 text-[14px]")}
                   />
                   {formActions}
                 </form>
@@ -1030,7 +1016,7 @@ function PaneBody({ wordId, onClose, onPrev, onNext, onOpenWord, onNewTheme, edi
           onClick={() => void refresh.run()}
           className={cx(paneAction(coarse), "disabled:cursor-default")}
         >
-          <Icon name="refresh" size={14} />
+          <Icon name="spark" size={16} strokeWidth={1.5} />
           {refresh.state.status === "loading" ? "Подбираем…" : "Обновить перевод и заметку"}
         </button>
         <div className="flex items-center gap-5">
@@ -1328,7 +1314,7 @@ function SheetRefresh({ word }: { word: Word }) {
 
   return (
     <div className="mt-6 flex flex-col">
-      <Button variant="secondary" block icon="refresh" loading={state.status === "loading"} onClick={() => void refresh.run()}>
+      <Button variant="secondary" block icon="spark" loading={state.status === "loading"} onClick={() => void refresh.run()}>
         {state.status === "loading" ? "Подбираем…" : "Обновить перевод и заметку"}
       </Button>
       {state.status === "error" && (

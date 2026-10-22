@@ -151,6 +151,29 @@ w3 chelou «стрёмный» → pos adj, gender none, slang_level arg, verlan
 w4 ferme ta gueule «заткнись» → pos expression, gender none, slang_level vulg, example_fr "Ferme ta gueule, tu me saoules !", example_ru "Заткнись, ты меня достал!", confidence high
 With themes dengi «Деньги» and povsednevnoe «Повседневное»: w1 la caisse «тачка» → folder NEW, new_folder {slug "transport", name "Транспорт", description "Машины, метро, поездки и всё, на чём ездят."}; w5 la thune «бабки» → folder dengi, folder_alternatives []; w6 laisse tomber «забей» → folder povsednevnoe.`;
 
+/** /api/ai/example: one more example sentence for a card («другой пример», «+ Ещё пример»). */
+export const EXAMPLE_SYSTEM = `${APP_CONTEXT}
+
+TASK. Write ONE new example sentence for a card the learner already has, and its Russian translation, as JSON matching the schema. The user message gives the French side, the Russian side (it tells you which sense is meant), an optional note, and the examples the card already has.
+- The new example must be clearly different from every existing one: another situation, other words around the card's word, another sentence shape. A paraphrase or a sentence that only swaps a pronoun or a name does not count.
+- Use the word exactly in the sense of the Russian side, in a form a French speaker would really say. Keep the register of the word: an argot word gets an argot sentence, a neutral word a neutral one. Never sanitise a vulgar word into a polite sentence.
+- One sentence, short (usually 4–12 words), everyday and concrete: things people say in chats, at work, with friends, in films and songs. No dictionary-style or textbook sentences, no definitions, no quotes from real people.
+- The Russian translation matches the register: fam → разговорный, arg → жаргон, vulg → грубый мат where needed. It translates the sentence, not the word.
+- If no new natural sentence is possible (the word is too narrow, or every reasonable use is already taken), return null for both fields rather than repeating one.
+
+${SLANG_RUBRIC}
+
+EXAMPLES.
+Card la thune «бабки» with existing "J'ai plus une thune." → example_fr "Il se fait une thune de ouf avec ses vidéos.", example_ru "Он зашибает кучу бабок на своих видео."
+Card se casser «свалить» with existing "Bon, je me casse." → example_fr "On se casse avant que les keufs débarquent.", example_ru "Валим, пока менты не нагрянули."
+Card une blague «шутка» with existing "C'est une blague ?" → example_fr "Il raconte toujours la même blague à chaque dîner.", example_ru "Он на каждом ужине рассказывает одну и ту же шутку."
+Card chelou «стрёмный» with existing "Il est chelou, ton pote." and "C'est chelou, ce bruit." → example_fr "J'ai reçu un message chelou d'un numéro inconnu.", example_ru "Мне пришло стрёмное сообщение с незнакомого номера."`;
+
+export function exampleUserPrompt(input: { fr: string; ru: string; note: string | null; avoid: readonly string[] }): string {
+  const existing = input.avoid.length ? input.avoid.map((e) => `- ${oneLine(e)}`).join("\n") : "(none)";
+  return `French: ${oneLine(input.fr)}\nRussian: ${oneLine(input.ru)}\nNote: ${input.note ? oneLine(input.note) : "-"}\n\nExamples it already has:\n${existing}`;
+}
+
 function folderLines(folders: readonly FolderInput[]): string {
   if (folders.length === 0) return "(no themes yet: use INBOX or NEW)";
   return folders.map((f) => `- ${f.slug}: ${f.name}${f.description ? ` — ${f.description}` : ""}`).join("\n");
@@ -251,4 +274,5 @@ export const SYSTEM_PROMPTS = {
   taxonomy: TAXONOMY_SYSTEM,
   assign: ASSIGN_SYSTEM,
   enrich: ENRICH_SYSTEM,
+  example: EXAMPLE_SYSTEM,
 } as const;

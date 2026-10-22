@@ -169,8 +169,9 @@ export function ReviewView({
             <button
               type="button"
               onClick={onRestart}
-              className="relative h-5 shrink-0 bg-transparent p-0 text-[13px] font-medium text-ink underline decoration-1 underline-offset-[3px] before:absolute before:-inset-3 before:content-['']"
+              className="relative inline-flex h-5 shrink-0 items-center gap-1 bg-transparent p-0 text-[13px] font-medium text-ink underline decoration-1 underline-offset-[3px] before:absolute before:-inset-3 before:content-['']"
             >
+              <Icon name="spark" size={14} strokeWidth={1.5} className="shrink-0" />
               Распознать заново
             </button>
           </div>

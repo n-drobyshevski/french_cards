@@ -1,5 +1,6 @@
 // JSON export of every table, and import that merges by updated_at (newer row wins).
 import { db } from "./db";
+import { normalizeReviewSets } from "./review-sets";
 import { DEFAULT_SETTINGS, SYNC_TABLES, type Settings, type SyncTable, type Syncable } from "./types";
 
 export const BACKUP_FORMAT = "kartochki-backup";
@@ -237,6 +238,10 @@ function pickSettings(s: Record<string, unknown>): Partial<Settings> {
   const out: Record<string, unknown> = {};
   for (const [k, def] of Object.entries(DEFAULT_SETTINGS)) {
     if (k === "id" || k === "last_sync_at") continue;
+    if (k === "review_sets") {
+      if (k in s) out[k] = normalizeReviewSets(s[k]);
+      continue;
+    }
     if (k in s && typeof s[k] === typeof def) out[k] = s[k];
   }
   return out as Partial<Settings>;

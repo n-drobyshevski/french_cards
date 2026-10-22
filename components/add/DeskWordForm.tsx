@@ -4,6 +4,7 @@ import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { cx } from "@/components/ui/cx";
 import { SLANG_NAMES_RU } from "@/components/ui/SlangMeter";
 import { Icon } from "@/components/ui/Icons";
+import { ExampleList } from "@/components/examples/ExampleList";
 import { SLANG_LABELS, type Folder, type SlangLevel } from "@/lib/types";
 import type { DuplicateInfo } from "./data";
 import type { WordFormProps } from "./WordForm";
@@ -153,26 +154,25 @@ export function DeskWordForm({
         <span id={ids.example} className={cx(FIELD_LABEL, "mt-4")}>
           Пример
         </span>
-        <div role="group" aria-labelledby={ids.example} className="grid grid-cols-2 gap-x-4">
-          <input
-            type="text"
-            lang="fr"
-            aria-label="Пример по-французски"
-            value={draft.example_fr}
-            onChange={(e) => onChange({ example_fr: e.target.value, example_touched: true, example_auto: false })}
-            placeholder="Фраза по-французски"
-            autoComplete="off"
-            className={cx(DESK_INPUT, "font-serif text-[17px] italic placeholder:font-sans placeholder:text-[15px] placeholder:not-italic")}
-          />
-          <input
-            type="text"
-            lang="ru"
-            aria-label="Перевод примера"
-            value={draft.example_ru}
-            onChange={(e) => onChange({ example_ru: e.target.value, example_touched: true, example_auto: false })}
-            placeholder="Перевод примера"
-            autoComplete="off"
-            className={DESK_INPUT}
+        <div role="group" aria-labelledby={ids.example}>
+          <ExampleList
+            editable
+            layout="row"
+            size="pane"
+            card={{ fr: draft.fr, ru: draft.ru, note: draft.note }}
+            examples={[{ fr: draft.example_fr, ru: draft.example_ru }, ...draft.extra_examples]}
+            onChange={(next, change) => {
+              const [first = { fr: "", ru: "" }, ...rest] = next;
+              const firstChanged = change.index === 0 || change.kind === "remove";
+              onChange({
+                example_fr: first.fr,
+                example_ru: first.ru,
+                extra_examples: rest,
+                ...(firstChanged && { example_touched: true, example_auto: change.kind === "retry" }),
+              });
+            }}
+            frInputClass={cx(DESK_INPUT, "font-serif text-[17px] italic placeholder:font-sans placeholder:text-[15px] placeholder:not-italic")}
+            ruInputClass={DESK_INPUT}
           />
         </div>
         {draft.example_auto && hasExample && <span className="mt-1 text-[12px] leading-4 text-muted">подобран автоматически</span>}
