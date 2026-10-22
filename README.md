@@ -32,6 +32,7 @@ The e2e suite starts `next start` on port 3100 and mocks `/api/ai/*`. It uses th
 3. Auth → URL Configuration: Site URL = the production URL, Redirect URLs = `<production URL>/**`.
 4. Create the account in the app («Создать аккаунт»), then turn off «Allow new users to sign up». RLS keeps other accounts' data apart and `ALLOWED_EMAIL` keeps them off the AI routes, but there is no reason to let them in.
 5. Set in Vercel: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `ALLOWED_EMAIL`, `NEXT_PUBLIC_ALLOWED_EMAIL` (optional), `ANTHROPIC_API_KEY`, `AI_MODEL_EXTRACT` (optional), `CRON_SECRET`.
+6. Another person (each account has its own library): turn «Allow new users to sign up» back on, clear `NEXT_PUBLIC_ALLOWED_EMAIL` if it is set (it makes the login screen refuse other addresses) and redeploy; they create their account in the app; turn sign-up off again. Then add their address to `ALLOWED_EMAIL` (comma-separated, e.g. `a@x.io,b@x.io`; the same list may go back into `NEXT_PUBLIC_ALLOWED_EMAIL`) and redeploy, so the AI routes answer them too.
 
 ## Attribution
 
