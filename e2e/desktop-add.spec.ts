@@ -13,12 +13,19 @@ async function search(page: Page, text: string) {
   await expect(option(page, "Выбрать: la thune — бабки, деньги")).toBeVisible();
 }
 
+/** N opens the dialog; global keys may stay off until settings have loaded, so retry until it opens. */
+async function pressN(page: Page) {
+  await expect(async () => {
+    if (!(await addSheet(page).isVisible())) await page.keyboard.press("n");
+    await expect(addSheet(page)).toBeVisible({ timeout: 1000 });
+  }).toPass();
+}
+
 async function openDialog(page: Page) {
   await mockSuggest(page, [LA_THUNE, SE_CASSER_LA_TETE]);
   await mockEnrich(page, () => null);
   await openReview(page);
-  await page.keyboard.press("n");
-  await expect(addSheet(page)).toBeVisible();
+  await pressN(page);
   await expect(headword(page)).toBeFocused();
 }
 
@@ -86,7 +93,7 @@ test("Esc from the form goes back to the search and keeps the draft; Ctrl/⌘+En
   await expect(page.getByText("Добавлено · se casser la tête")).toBeVisible();
 
   // Saved as edited: it heads «Недавние» next time.
-  await page.keyboard.press("n");
+  await pressN(page);
   await expect(option(page, "Открыть: se casser la tête — ломать себе голову")).toBeVisible();
 });
 
@@ -118,8 +125,7 @@ test("Esc: one layer per press; typed text keeps the dialog open on a scrim clic
   await expect(addSheet(page)).toBeHidden();
 
   // Empty: the scrim closes it.
-  await page.keyboard.press("n");
-  await expect(addSheet(page)).toBeVisible();
+  await pressN(page);
   await page.mouse.click(1300, 400);
   await expect(addSheet(page)).toBeHidden();
 });
