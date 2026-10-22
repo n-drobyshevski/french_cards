@@ -332,6 +332,21 @@ body {
   animation: fade-in var(--dur-quick) var(--ease-enter) var(--loading-delay) both;
 }
 
+/* A navigation pending mark (§3.1, L6, D10): mounted while a Link is pending, painted only once the
+   wait passes --link-pending-delay, so a prefetched route never shows it. */
+.link-pending {
+  animation: fade-in var(--dur-instant) var(--ease-enter) var(--link-pending-delay) both;
+}
+
+/* Hover tints (D11): colour and background only, --dur-quick; never the outline, so focus rings
+   don't animate. Pair with `hoverable:` tints; elements with press / press-sm / press-tint already
+   transition their colours and don't need it. */
+@utility hover-fade {
+  transition-property: color, background-color;
+  transition-duration: var(--dur-quick);
+  transition-timing-function: var(--ease-standard);
+}
+
 /* Press feedback (§5.1, K7): in --dur-instant --ease-press, release --dur-quick, never below .95.
    `press` (.98): cards, grade and primary/secondary buttons. `press-sm` (.96): icon buttons, chips,
    checkboxes, toggles, stepper. `press-tint`: full-width rows, --surface-2 tint only, no scale.
@@ -499,6 +514,61 @@ body {
   animation-timing-function: var(--ease-exit);
 }
 
+/* Library ⇄ theme page (L6, components/library/NavSlide.tsx): the old page leaves 24px the way it
+   goes, fading over --dur-exit; then the new one arrives from 24px the other side over --dur-enter
+   (§2.6: the entrance starts after the exit). `nav-back` mirrors it. Clicks pass through the overlay. */
+@keyframes nav-slide-out {
+  to {
+    opacity: 0;
+    translate: var(--nav-slide) 0;
+  }
+}
+
+@keyframes nav-slide-in {
+  from {
+    opacity: 0;
+    translate: var(--nav-slide) 0;
+  }
+}
+
+::view-transition {
+  pointer-events: none;
+}
+
+/* The tab bar stays put above the sliding pages (TabBar names itself `tab-bar`). */
+::view-transition-group(tab-bar) {
+  z-index: 1;
+  animation: none;
+}
+
+::view-transition-old(tab-bar) {
+  display: none;
+}
+
+::view-transition-new(tab-bar) {
+  animation: none;
+}
+
+::view-transition-old(.nav-forward),
+::view-transition-old(.nav-back) {
+  animation: nav-slide-out var(--dur-exit) var(--ease-exit) both;
+}
+
+::view-transition-new(.nav-forward),
+::view-transition-new(.nav-back) {
+  animation: nav-slide-in var(--dur-enter) var(--ease-enter) var(--dur-exit) both;
+}
+
+::view-transition-old(.nav-forward),
+::view-transition-new(.nav-back) {
+  --nav-slide: -24px;
+}
+
+::view-transition-new(.nav-forward),
+::view-transition-old(.nav-back) {
+  --nav-slide: 24px;
+}
+
 /* Reduced motion: movement becomes opacity, fades stay short, loops stop (§2.7). Durations shrink
    rather than vanish, so transitionend still fires. */
 @media (prefers-reduced-motion: reduce) {
@@ -531,5 +601,13 @@ body {
 
   ::view-transition-group(*) {
     animation-duration: 0s;
+  }
+
+  /* No route slide: the pages swap at once. */
+  ::view-transition-old(.nav-forward),
+  ::view-transition-old(.nav-back),
+  ::view-transition-new(.nav-forward),
+  ::view-transition-new(.nav-back) {
+    animation: none;
   }
 }

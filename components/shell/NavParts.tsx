@@ -1,7 +1,9 @@
 "use client";
 
 import { useLiveQuery } from "dexie-react-hooks";
+import { useLinkStatus } from "next/link";
 import { useSyncLine } from "@/components/settings/useSyncLine";
+import { cx } from "@/components/ui/cx";
 import { useLayoutClass } from "@/lib/use-media";
 import { loadShellData, sidebarSyncLine, type ShellData, type SidebarSyncLine } from "./data";
 
@@ -27,6 +29,24 @@ export function ActiveBar({ edge }: { edge: "sidebar" | "rail" }) {
     <span
       aria-hidden="true"
       className={edge === "sidebar" ? "absolute inset-y-0 -left-3 w-0.5 bg-red" : "absolute inset-y-0 -left-1 w-0.5 bg-red"}
+    />
+  );
+}
+
+/**
+ * Navigation pending cue (D10): a 2px ink tick at the right end of the pressed row while its route
+ * loads, shown only once the wait passes --link-pending-delay (100 ms), so a prefetched route never
+ * paints it. Render inside the row's <Link> (useLinkStatus reads the nearest one); the row must be
+ * `relative`. `edge` = how far the row's right end sits from the tick.
+ */
+export function PendingTick({ edge = "sidebar" }: { edge?: "sidebar" | "rail" }) {
+  const { pending } = useLinkStatus();
+  if (!pending) return null;
+  return (
+    <span
+      aria-hidden="true"
+      data-link-pending=""
+      className={cx("link-pending pointer-events-none absolute inset-y-2 right-0 w-0.5 bg-ink", edge === "rail" && "inset-y-3")}
     />
   );
 }

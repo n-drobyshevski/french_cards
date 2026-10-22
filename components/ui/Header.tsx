@@ -19,6 +19,8 @@ export interface HeaderProps {
   fallbackHref?: string;
   /** «Назад» by default. */
   backLabel?: string;
+  /** View-transition types for a path `back` link, e.g. ["nav-back"] (L6). */
+  backTransitionTypes?: string[];
   /** Hide the back arrow. */
   noBack?: boolean;
   /** Right-side actions (IconButton, tertiary Button). */
@@ -36,6 +38,7 @@ export function Header({
   back,
   fallbackHref = "/",
   backLabel = "Назад",
+  backTransitionTypes,
   noBack = false,
   actions,
   className,
@@ -47,7 +50,7 @@ export function Header({
   if (!noBack) {
     backEl =
       typeof back === "string" ? (
-        <Link href={back} aria-label={backLabel} className={backClass}>
+        <Link href={back} aria-label={backLabel} transitionTypes={backTransitionTypes} className={backClass}>
           {arrow}
         </Link>
       ) : (

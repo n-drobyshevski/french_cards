@@ -27,7 +27,7 @@ import { EnrichPlanSheet } from "./EnrichPlanSheet";
 import { rememberLibrary, rememberLibraryShape, useLibraryShape, useRevealClass, type LibraryShape } from "./first-paint";
 import { FolderFormSheet } from "./FolderFormSheet";
 import { FolderMenuSheet } from "./FolderMenuSheet";
-import { FolderTile, NewFolderTile, TileSkeleton } from "./FolderTile";
+import { FolderTile, NAV_FORWARD, NewFolderTile, TileSkeleton } from "./FolderTile";
 import { folderHref, nWords, plural } from "./format";
 import { LibraryDesk } from "./LibraryDesk";
 import { LibraryFilterSheet } from "./LibraryFilterSheet";
@@ -63,7 +63,8 @@ export function LibraryScreen() {
   if (layout !== "compact") return <LibraryDesk scope={{ kind: "all" }} />;
   return (
     <>
-      <div className="contents md:hidden">
+      {/* A real box, not `contents`: the library ⇄ theme slide (NavSlide, L6) snapshots it. */}
+      <div className="flex min-w-0 flex-1 flex-col md:hidden">
         <PhoneLibrary />
       </div>
       <DeskPlaceholder title="Библиотека" />
@@ -359,6 +360,7 @@ function PhoneLibrary() {
             <div className={cx("mt-2 flex h-12 shrink-0 items-center gap-2 rounded-card border border-dashed border-muted pr-1 pl-3", tilesReveal)}>
               <Link
                 href={folderHref(null)}
+                transitionTypes={NAV_FORWARD}
                 aria-label={`Входящие: ${nWords(inbox.total)} без темы, нужно разобрать`}
                 className="flex h-full min-w-0 flex-1 items-center gap-2 text-[14px] leading-5 text-ink no-underline"
               >
