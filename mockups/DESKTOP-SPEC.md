@@ -986,3 +986,20 @@ Everything phones can do, desktop can do too. Where the boards above differ, thi
 - «Вибрация при свайпах» stays phone-only (§5 #20); the offline page is 560px wide from 768 and says
   «…не сохранена на устройстве».
 
+## 9. Свои поля (added 2026-10-22; see SPEC.md «Свои поля» for the feature)
+
+- **Settings**: section «Свои поля» after «ИИ» (nav entry `set-fields`, scroll-spy as the others). Rows of 44+:
+  name 15 in a 180px column, the hint 13 muted (or «Без подсказки»), «АВТО» mono 11; the row is one button
+  (hover fill) opening the dialog; at its right two 32px ghost icon buttons ↑ «Поднять поле «X»» / ↓ «Опустить
+  поле «X»» (disabled at the ends). «+ Добавить поле» is a `DeskButtonRow`; the footnote is 12 muted.
+- **Field dialog** (480 wide, `DialogChrome` label «Свои поля», title «Новое поле» / «Изменить поле»): «Название»
+  (focused), «Что писать», the checkbox row «Заполнять автоматически» with its caption, «Удалить поле» (14, again,
+  trash glyph) with the caption, footer «Отмена Esc» / «Сохранить ⌘↵». Reordering lives on the rows, not here.
+- **Review card**: the same block as phones after the examples, inside the card's scroller («ещё ↓» when clipped).
+- **Library pane**: «Свои поля» after the examples inside the index card (hairline above): rows with a 100px
+  name column, «Добавить» for empty shared fields, «+ Поле», the pencil; the editor uses the pane inputs and
+  the usual footer (Esc / ⌘↵; leaving the word with unsaved changes saves them, «Сохранено · Отменить»). While
+  the entry is edited the card shows the filled fields read-only. The footer wraps when the pane is narrow.
+- **Add dialog**: a small disclosure «Свои поля · Синонимы, Род ⌄» under «Пример» opens the inputs two to a
+  row (name as the 12px label, hint as placeholder).
+

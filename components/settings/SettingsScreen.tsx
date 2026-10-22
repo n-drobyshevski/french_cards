@@ -16,6 +16,7 @@ import { updateSettings } from "@/lib/settings";
 import { DEFAULT_SETTINGS, type Direction, type Settings } from "@/lib/types";
 import { useLayoutClass } from "@/lib/use-media";
 import { useSettings } from "@/lib/use-settings";
+import { CustomFieldsSection } from "./CustomFieldsSection";
 import { DataSection } from "./DataSection";
 import { DesktopSettings } from "./DesktopSettings";
 import { DirectionSheet } from "./DirectionSheet";
@@ -53,7 +54,7 @@ const GRADE_OPTIONS = [
 ] as const;
 
 /**
- * «Настройки»: review preferences, theme, «ИИ» (what is filled in automatically, and how) and data
+ * «Настройки»: review preferences, theme, «ИИ» (what is filled in automatically, and how), «Свои поля» and data
  * (sync, backup, sign-out). Phones get today's list; from 768 up the desktop layout
  * (DesktopSettings). The server and hydration render the phone list, hidden from 768 up by CSS,
  * so a wide window never flashes the phone layout.
@@ -257,6 +258,8 @@ function PhoneSettings({ settings, known, save, onTheme, onDirection }: ScreenPr
             </SettingsRow>
           </SettingsSection>
         </Valued>
+
+        <CustomFieldsSection />
 
         <DataSection />
 
