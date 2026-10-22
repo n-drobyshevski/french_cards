@@ -366,6 +366,37 @@ describe("SuggestController", () => {
     await vi.waitFor(() => expect(c.getSnapshot().status).toBe("done"));
   });
 
+  it("decides offline before the wait: going offline during the debounce or the request shows the notice at once", async () => {
+    let online = true;
+    const held: AbortSignal[] = [];
+    const fetchImpl = vi.fn(
+      (_url: string | URL | Request, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          held.push(init!.signal!);
+          init!.signal!.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+        }),
+    );
+    const c = new SuggestController({ fetch: fetchImpl as unknown as typeof fetch, isOnline: () => online });
+    // Lost during the debounce: no request, the notice instead of a wait.
+    c.setQuery("thune");
+    online = false;
+    vi.advanceTimersByTime(300);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(c.getSnapshot()).toMatchObject({ status: "error", error: "offline", requesting: false });
+
+    // Lost while the request is in flight (the window's `offline` event): aborted, notice at once.
+    online = true;
+    c.retry();
+    expect(c.getSnapshot()).toMatchObject({ status: "loading", requesting: true });
+    online = false;
+    c.goOffline();
+    expect(held[0].aborted).toBe(true);
+    expect(c.getSnapshot()).toMatchObject({ status: "error", error: "offline" });
+    // Not waiting: nothing to turn into a notice.
+    c.goOffline();
+    expect(c.getSnapshot().error).toBe("offline");
+  });
+
   it("does nothing while disabled and picks the query up when enabled", async () => {
     const { c, calls } = setup(() => streamed([THUNE]));
     c.setEnabled(false);

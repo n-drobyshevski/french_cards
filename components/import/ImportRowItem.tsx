@@ -24,7 +24,12 @@ export function Tag({ children, title, className }: { children: string; title?: 
   );
 }
 
-/** 20px square checkbox (radius 2) inside a 44px hit area. */
+/**
+ * 20px square checkbox (radius 2) inside a 44px hit area (MOTION-SPEC I6, §5.9): presses to .96;
+ * checking fills it with ink in --dur-instant and then draws the tick (--dur-quick); unchecking
+ * fades the fill in --dur-quick. Only a toggle draws: boxes checked from the start just fade in
+ * with the review (no haptic: there are many of them, §5.13).
+ */
 function RowCheckbox({
   checked,
   disabled,
@@ -38,6 +43,7 @@ function RowCheckbox({
   onToggle: () => void;
   className?: string;
 }) {
+  const [toggled, setToggled] = useState(false);
   return (
     <button
       type="button"
@@ -46,22 +52,39 @@ function RowCheckbox({
       aria-disabled={disabled || undefined}
       aria-label={label}
       onClick={() => {
-        if (!disabled) onToggle();
+        if (disabled) return;
+        setToggled(true);
+        onToggle();
       }}
       className={cx(
-        "flex size-11 shrink-0 items-center justify-center bg-transparent p-0",
+        "press-sm flex size-11 shrink-0 items-center justify-center bg-transparent p-0",
         disabled ? "cursor-default" : "cursor-pointer",
         className,
       )}
     >
       <span
         aria-hidden="true"
+        data-checkbox-box=""
         className={cx(
-          "box-border flex size-5 items-center justify-center rounded-[2px]",
-          checked ? "bg-ink text-on-ink" : disabled ? "border border-rule bg-surface-2" : "border border-ink bg-surface",
+          "box-border flex size-5 animate-[fade-in_var(--dur-quick)_var(--ease-enter)] items-center justify-center rounded-[2px] border transition-[background-color,border-color] ease-press",
+          checked ? "border-ink bg-ink text-on-ink duration-(--dur-instant)" : "duration-(--dur-quick)",
+          !checked && (disabled ? "border-rule bg-surface-2" : "border-ink bg-surface"),
         )}
       >
-        {checked && <Icon name="check" size={14} strokeWidth={2.25} />}
+        {checked && (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round">
+            <path
+              d="M20 6 9 17l-5-5"
+              pathLength={1}
+              strokeDasharray={1}
+              className={cx(
+                "[stroke-dashoffset:0]",
+                toggled &&
+                  "transition-[stroke-dashoffset] delay-(--dur-instant) duration-(--dur-quick) ease-standard starting:[stroke-dashoffset:1]",
+              )}
+            />
+          </svg>
+        )}
       </span>
     </button>
   );
@@ -166,14 +189,23 @@ export function ImportRowItem({ row, folders, onToggle, onEdit, onPickFolder }: 
 
   const existingFolder = dup ? (folders.find((f) => f.id === dup.folder_id)?.name ?? "Входящие") : null;
 
+  // An addable row left unchecked dims to .5 (--dur-quick); the box itself stays clear.
+  const dim = addable && !row.checked;
   return (
-    <li className="flex min-h-16 items-center gap-1 border-b border-rule">
+    <li className="flex min-h-14 items-center gap-1 border-b border-rule">
       <RowCheckbox checked={row.checked} disabled={!addable} label={checkboxLabel} onToggle={onToggle} className="-ml-3" />
-      <button type="button" onClick={onEdit} className="flex min-w-0 flex-1 flex-col bg-transparent py-2 text-left">
+      <button
+        type="button"
+        onClick={onEdit}
+        className={cx(
+          "flex min-w-0 flex-1 flex-col bg-transparent py-1.25 text-left transition-opacity duration-(--dur-quick) ease-standard",
+          dim && "opacity-50",
+        )}
+      >
         {words}
         <span className="sr-only">Изменить</span>
       </button>
-      <span className="flex shrink-0 flex-col items-end">
+      <span className={cx("flex shrink-0 flex-col items-end transition-opacity duration-(--dur-quick) ease-standard", dim && "opacity-50")}>
         {dup ? (
           <span className="inline-flex h-6 items-center">
             <Tag className="border-rule bg-surface text-muted">УЖЕ ЕСТЬ</Tag>

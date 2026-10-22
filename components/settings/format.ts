@@ -24,32 +24,79 @@ export function relativeTime(iso: string, nowMs: number): string {
   return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" }).format(new Date(then));
 }
 
-export type SyncTone = "good" | "again" | "muted";
+export type SyncTone = "good" | "ink" | "again" | "muted";
+
+/** Why the last sync failed (lib/sync.ts SyncStatus.errorKind). */
+export type SyncErrorKind = "server" | "auth" | "rejected";
 
 export interface SyncLineInput {
   auth: { status: "local" | "loading" | "signed_in" | "signed_out" | "offline"; email: string | null };
-  sync: { state: "idle" | "syncing" | "error" | "offline" | "disabled"; lastSyncAt: string | null };
+  sync: {
+    state: "idle" | "syncing" | "error" | "offline" | "disabled";
+    lastSyncAt: string | null;
+    errorKind?: SyncErrorKind | null;
+    errorAt?: string | null;
+  };
   nowMs: number;
 }
 
 export interface SyncLine {
+  /** «Синхронизировано · 14:02»; empty while not known yet (the slot stays reserved). */
   text: string;
+  /** The status dot: good = in sync, ink = syncing, muted = offline / nothing yet, again = failed. */
   tone: SyncTone;
+  /** A failed sync: «Повторить» after the text (the row starts a sync). */
+  retry: boolean;
+  /** Second muted line for a failure: «Сервер не ответил · 14:05». */
+  detail: string | null;
   /** A tap can start a sync now. */
   canSync: boolean;
 }
 
-/** Right side of «Синхронизация · n.d…@pm.me · только что». */
+/** Every rest text of the line, for the width lock: the slot is as wide as the widest of them. */
+export const SYNC_LINE_TEXTS = [
+  "Синхронизировано · 00:00",
+  "Синхронизация…",
+  "Нет сети · изменения сохранятся",
+  "Не синхронизировано · Повторить",
+] as const;
+
+const SYNC_ERRORS: Record<SyncErrorKind, string> = {
+  server: "Сервер не ответил",
+  auth: "Нужно войти заново",
+  rejected: "Сервер не принял изменения",
+};
+
+/** «14:02» today, «21 окт.» on an earlier day. */
+export function syncTime(iso: string, nowMs: number): string {
+  const then = new Date(iso);
+  if (!Number.isFinite(then.getTime())) return "";
+  const now = new Date(nowMs);
+  if (then.toDateString() === now.toDateString() || nowMs === 0) {
+    return new Intl.DateTimeFormat("ru-RU", { hour: "2-digit", minute: "2-digit" }).format(then);
+  }
+  return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "short" }).format(then);
+}
+
+/**
+ * The sync status line (MOTION-SPEC T5): «Синхронизировано · 14:02» at rest, «Синхронизация…»,
+ * «Нет сети · изменения сохранятся» (neutral, not an error), «Не синхронизировано · Повторить» with
+ * the reason on a second line. `syncing` is shown as is: callers delay it (useSyncLine).
+ */
 export function syncLine({ auth, sync, nowMs }: SyncLineInput): SyncLine {
-  if (auth.status === "local") return { text: "только на этом устройстве", tone: "muted", canSync: false };
-  if (auth.status === "loading") return { text: "…", tone: "muted", canSync: false };
-  if (auth.status === "signed_out") return { text: "вход не выполнен", tone: "muted", canSync: false };
-  const prefix = auth.email ? `${shortEmail(auth.email)} · ` : "";
-  if (sync.state === "syncing") return { text: `${prefix}синхронизация…`, tone: "muted", canSync: false };
-  if (auth.status === "offline" || sync.state === "offline") return { text: `${prefix}нет сети`, tone: "muted", canSync: true };
-  if (sync.state === "error") return { text: `${prefix}ошибка`, tone: "again", canSync: true };
-  if (sync.lastSyncAt) return { text: `${prefix}${relativeTime(sync.lastSyncAt, nowMs)}`, tone: "good", canSync: true };
-  return { text: `${prefix}ещё не было`, tone: "muted", canSync: true };
+  const line = (text: string, tone: SyncTone, canSync: boolean): SyncLine => ({ text, tone, retry: false, detail: null, canSync });
+  if (auth.status === "local") return line("Только на этом устройстве", "muted", false);
+  if (auth.status === "loading") return line("", "muted", false);
+  if (auth.status === "signed_out") return line("Вход не выполнен", "muted", false);
+  if (sync.state === "syncing") return line("Синхронизация…", "ink", false);
+  if (auth.status === "offline" || sync.state === "offline") return line("Нет сети · изменения сохранятся", "muted", true);
+  if (sync.state === "error") {
+    const reason = SYNC_ERRORS[sync.errorKind ?? "server"];
+    const at = sync.errorAt ? syncTime(sync.errorAt, nowMs) : "";
+    return { text: "Не синхронизировано", tone: "again", retry: true, detail: at ? `${reason} · ${at}` : reason, canSync: true };
+  }
+  if (sync.lastSyncAt) return line(`Синхронизировано · ${syncTime(sync.lastSyncAt, nowMs)}`, "good", true);
+  return line("Ещё не синхронизировано", "muted", true);
 }
 
 export const NEW_PER_DAY_MAX = 999;

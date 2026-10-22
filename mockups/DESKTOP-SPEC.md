@@ -956,3 +956,32 @@ unintentionally, no text clipped mid-word inside fixed boxes, everything inside 
 24. **Dark current row `#242422`** (was `#1b1b1a`, fainter than the `#222220` hover). Dark theme squares get a 1px
     inset ring `rgba(236,236,234,.24)` and dark unfilled meter segments are `#44443f` (were 1.48:1) — applied on
     D-Library-Dark; other dark boards should match.
+
+## 8. Phone parity (added 2026-10-22, after a phone → desktop feature audit)
+
+Everything phones can do, desktop can do too. Where the boards above differ, this section wins.
+- **«Готово на сегодня» keeps the running head** (supersedes «No running head» in §5 #4): direction chip,
+  «Что повторять» (with «Мои наборы»), undo and «?»; no counts or progress fill.
+- **Help hints**: every dictionary abbreviation that explains itself on phones (`AbbrHint`: part of speech, slang
+  level, «verl.») does so on desktop too, and with a mouse it opens on hover after 250 ms (a click pins it;
+  Esc / a click outside closes). Shown in the detail pane's grammar line and header meter, the coarse tracings,
+  the review card's tracings, and next to «Французский» in the add form. Icon-only buttons name themselves in
+  a hover tooltip (`IconButton` sets `title`); keyed ones add the key («Изменить карточку (E)» only while
+  single-letter keys are on). The review hint line adds «E изменить» on the answer side.
+- **Library filter strip**: «Все · К повторению N · Трудные N · Новые N · Сленг ▾ · ⇅». «Новые» = never
+  reviewed. ⇅ is a 36px icon button (tooltip and name «Порядок: …») opening a menu with the phone's orders —
+  «Сначала новые», «По следующему показу», «По алфавиту», «Сначала трудные»; a column head click still sorts by
+  that column (the tooltip then names it, e.g. «По переводу»). The search is 220–300px wide; a list too narrow
+  for search + strip puts the strip on a second row.
+- **Theme actions from the sidebar**: a right click, a long press or the menu key on a sidebar theme opens the
+  theme menu with «Открыть тему» and «Повторить тему N» on top (same items as the theme page's «⋯»).
+- **Medium (rail)**: the «Тема:» menu ends with «Новая тема…».
+- **Theme / «Входящие» header**: with nothing to review, «Повторить тему N» becomes the secondary «Тренировка всей
+  темы N» (as on phones), so «Входящие» can be practised too. An empty «Входящие» offers «Добавить слово».
+- **Add dialog**: the headword has «Стереть» (×); the back arrow and Esc step back from «Несколько слов» to the
+  search (the pasted text stays); «Скриншот · Список» stay in the chrome while the form is open; the duplicate
+  notice also shows above the quick form; «Несколько слов» rows show the example found, after the translation.
+- **Import review**: rows show the example after the translation, as on phones.
+- «Вибрация при свайпах» stays phone-only (§5 #20); the offline page is 560px wide from 768 and says
+  «…не сохранена на устройстве».
+

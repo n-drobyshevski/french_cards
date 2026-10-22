@@ -36,6 +36,11 @@ export interface ExtractError {
   message: string;
   /** Seconds, for rate_limited. */
   retryAfter?: number;
+  /**
+   * Rate limited: the one automatic retry happens at this time (ms, Date.now); the screen counts
+   * down to it. Unset once that retry has been used or cancelled.
+   */
+  retryAt?: number;
   /** Worth offering «Повторить» with the same screenshots. */
   retryable: boolean;
 }
@@ -199,6 +204,14 @@ export async function* streamExtract(
   yield* readNdjson<ExtractLine>(res, signal);
 }
 
+/** Wait before the automatic retry when a 429 carries no Retry-After (seconds). */
+export const RATE_LIMIT_DEFAULT_WAIT = 10;
+
+function clearTimer(timer: { current: number | undefined }): void {
+  window.clearTimeout(timer.current);
+  timer.current = undefined;
+}
+
 const isAbort = (e: unknown) =>
   (e instanceof DOMException && e.name === "AbortError") || (e instanceof ImagePrepError && e.code === "aborted");
 
@@ -208,6 +221,8 @@ export interface UseExtract {
   start: (files: readonly File[], folders: readonly FolderInput[], prefs?: ExtractPreferences) => Promise<void>;
   /** «Стоп»: aborts; keeps received rows (phase "stopped"), or goes back to idle when there are none. */
   stop: () => void;
+  /** Rate limited: drops the scheduled automatic retry; the error stays with «Повторить». */
+  cancelRetry: () => void;
   /** Back to idle, dropping rows and errors. */
   reset: () => void;
 }
@@ -217,16 +232,25 @@ export function useExtract({ fetchImpl }: { fetchImpl?: typeof fetch } = {}): Us
   const controller = useRef<AbortController | null>(null);
   const run = useRef(0);
   const itemsRef = useRef<VocabItem[]>([]);
+  const retryTimer = useRef<number | undefined>(undefined);
 
   useEffect(
     () => () => {
       controller.current?.abort();
+      window.clearTimeout(retryTimer.current);
     },
     [],
   );
 
-  const start = useCallback(
-    async (files: readonly File[], folders: readonly FolderInput[], prefs?: ExtractPreferences) => {
+  const runExtract = useCallback(
+    async function attempt(
+      files: readonly File[],
+      folders: readonly FolderInput[],
+      prefs: ExtractPreferences | undefined,
+      /** The automatic retry after a 429: reuses the prepared tiles (the bar never goes back). */
+      retry?: { batch: PreparedBatch; level: number },
+    ): Promise<void> {
+      clearTimer(retryTimer);
       controller.current?.abort();
       const ctrl = new AbortController();
       controller.current = ctrl;
@@ -238,12 +262,16 @@ export function useExtract({ fetchImpl }: { fetchImpl?: typeof fetch } = {}): Us
       };
 
       itemsRef.current = [];
-      setState({ ...INITIAL_EXTRACT_STATE, phase: "preparing", images: files.length });
+      setState(
+        retry
+          ? { ...INITIAL_EXTRACT_STATE, phase: "uploading", images: files.length, tiles: retry.batch.tiles.length, level: retry.level }
+          : { ...INITIAL_EXTRACT_STATE, phase: "preparing", images: files.length },
+      );
 
-      for (let level = 0; level < PREP_LEVELS.length; level++) {
+      for (let level = retry?.level ?? 0; level < PREP_LEVELS.length; level++) {
         let batch: PreparedBatch;
         try {
-          batch = await prepareImages(files, { level, signal: ctrl.signal });
+          batch = retry && level === retry.level ? retry.batch : await prepareImages(files, { level, signal: ctrl.signal });
         } catch (e) {
           if (!live() || isAbort(e)) return;
           update({ phase: "error", error: e instanceof ImagePrepError ? errorFromPrep(e) : errorFromPrep(new ImagePrepError("decode")) });
@@ -276,7 +304,18 @@ export function useExtract({ fetchImpl }: { fetchImpl?: typeof fetch } = {}): Us
           if (!live() || isAbort(e)) return;
           if (e instanceof ExtractHttpError) {
             if (e.status === 413 && level < PREP_LEVELS.length - 1) continue;
-            update({ phase: "error", error: errorFromResponse(e.status, e.body, e.retryAfter) });
+            const error = errorFromResponse(e.status, e.body, e.retryAfter);
+            if (error.code === "rate_limited" && !retry) {
+              // No silent wait (MOTION-SPEC §3.8): the screen counts down, then one automatic retry.
+              const wait = (error.retryAfter ?? RATE_LIMIT_DEFAULT_WAIT) * 1000;
+              update({ phase: "error", error: { ...error, retryAt: Date.now() + wait } });
+              retryTimer.current = window.setTimeout(() => {
+                retryTimer.current = undefined;
+                if (run.current === id) void attempt(files, folders, prefs, { batch, level });
+              }, wait);
+              return;
+            }
+            update({ phase: "error", error });
             return;
           }
           // Network failure: before any row it is an error; after some rows keep them.
@@ -299,7 +338,19 @@ export function useExtract({ fetchImpl }: { fetchImpl?: typeof fetch } = {}): Us
     [fetchImpl],
   );
 
+  const start = useCallback(
+    (files: readonly File[], folders: readonly FolderInput[], prefs?: ExtractPreferences) => runExtract(files, folders, prefs),
+    [runExtract],
+  );
+
+  const cancelRetry = useCallback(() => {
+    if (retryTimer.current === undefined) return;
+    clearTimer(retryTimer);
+    setState((s) => (s.error?.retryAt ? { ...s, error: { ...s.error, retryAt: undefined } } : s));
+  }, []);
+
   const stop = useCallback(() => {
+    clearTimer(retryTimer);
     run.current++;
     controller.current?.abort();
     controller.current = null;
@@ -312,6 +363,7 @@ export function useExtract({ fetchImpl }: { fetchImpl?: typeof fetch } = {}): Us
   }, []);
 
   const reset = useCallback(() => {
+    clearTimer(retryTimer);
     run.current++;
     controller.current?.abort();
     controller.current = null;
@@ -319,5 +371,5 @@ export function useExtract({ fetchImpl }: { fetchImpl?: typeof fetch } = {}): Us
     setState(INITIAL_EXTRACT_STATE);
   }, []);
 
-  return { state, start, stop, reset };
+  return { state, start, stop, cancelRetry, reset };
 }

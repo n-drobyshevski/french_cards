@@ -2,10 +2,14 @@
 
 // Login gate for the app shell. Local-only mode: renders children as is. With Supabase:
 // no session -> /login, except when offline on a device that was signed in before, where the
-// app keeps working and sync resumes once the session can be refreshed.
+// app keeps working and sync resumes once the session can be refreshed. A device with no cached
+// session at all never gets here: the (app) layout's pre-paint script (auth-init.ts) goes to
+// /login first. A cached session that turns out invalid is replaced by the login screen in one
+// frame, fading in over the app (--dur-quick), while the router moves to /login (MOTION-SPEC U3).
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { LoginScreen } from "./LoginScreen";
 import { checkSession, forgetSignedIn, passesEmailHint, rememberSignedIn } from "./session";
 
 export function AuthGate({ children }: { children: ReactNode }) {
@@ -52,6 +56,15 @@ export function AuthGate({ children }: { children: ReactNode }) {
     };
   }, [router]);
 
-  if (redirecting) return null;
-  return children;
+  // The app stays mounted under the login screen (no blank frame, nothing remounts) until /login takes over.
+  return (
+    <>
+      {children}
+      {redirecting && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-paper animate-[fade-in_var(--dur-quick)_var(--ease-enter)]">
+          <LoginScreen />
+        </div>
+      )}
+    </>
+  );
 }

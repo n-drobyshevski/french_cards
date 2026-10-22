@@ -13,7 +13,7 @@ import type { EnrichResult, Suggestion } from "@/lib/ai/schemas";
 import { fillSavedWords, type EnrichInput } from "@/lib/enrich";
 import { listFolders } from "@/lib/folders";
 import { isLexiqueLoaded, loadLexique, prefixSearch, type LexiqueHit } from "@/lib/lexique";
-import { exitMs, sheetCloseMs } from "@/lib/motion";
+import { exitMs, sheetCloseMs, tokenMs } from "@/lib/motion";
 import { getSettings } from "@/lib/settings";
 import { normalizeLemma } from "@/lib/text";
 import type { Folder } from "@/lib/types";
@@ -24,6 +24,8 @@ import { loadAddContext, loadDuplicate, loadListDuplicates, type DuplicateInfo }
 import {
   applyEnrichment,
   draftFromSuggestion,
+  filledByDetection,
+  filledByPick,
   draftToSaveRequest,
   enrichKey,
   enrichScope,
@@ -38,10 +40,10 @@ import { DeskChrome, UndoLine } from "./desk-parts";
 import { DeskListPanel } from "./DeskListPanel";
 import { DeskSearchPanel } from "./DeskSearchPanel";
 import { DeskWordForm } from "./DeskWordForm";
-import { ListPanel, type ListRow } from "./ListPanel";
+import { ListPanel, type ListDetection, type ListRow } from "./ListPanel";
 import { cardNumber, nWords, plural } from "./match";
 import { parseWordList } from "./parse-list";
-import { AddSheetChrome, ToolButton, ToolLink } from "./parts";
+import { AddSheetChrome, DICTIONARY_ROWS, ToolButton, ToolLink, type FieldSpot, type FormDetection, type SpotField } from "./parts";
 import { saveWordGroups, undoSave, type SaveRequest, type SaveResult } from "./save";
 import { SearchPanel, type QuickFields } from "./SearchPanel";
 import { FORM_ENRICH_DEBOUNCE_MS, LIST_ENRICH_DEBOUNCE_MS, useAutoEnrich } from "./use-auto-enrich";
@@ -55,7 +57,6 @@ const FULL_SCOPE = { slang: true, example: true, pos: true } as const;
 
 type ListEnrichInput = EnrichInput & { rowKey: string };
 const EMPTY_QUICK: QuickFields = { other: "", folder: INBOX_CHOICE, error: null };
-const DICTIONARY_ROWS = 3;
 /** How long the in-sheet «Отменить» bar stays after «Добавить и ещё». */
 const UNDO_BAR_MS = 7000;
 
@@ -147,7 +148,16 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
   const [leaving, setLeaving] = useState(false);
   const [freshId, setFreshId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [lexReady, setLexReady] = useState(isLexiqueLoaded);
+  const [lex, setLex] = useState<"loading" | "ready" | "failed">(() => (isLexiqueLoaded() ? "ready" : "loading"));
+  // The fields a pick or a detection just filled (A5, A6), and the «Вариант» ink-filled on its pick.
+  const [spot, setSpot] = useState<FieldSpot | null>(null);
+  const spotSeq = useRef(0);
+  const [picked, setPicked] = useState<string | null>(null);
+  const pickTimer = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (pickTimer.current !== null) window.clearTimeout(pickTimer.current);
+  }, []);
+  const light = (fields: readonly SpotField[]) => setSpot(fields.length > 0 ? { seq: ++spotSeq.current, fields } : null);
   const [focusRequest, setFocusRequest] = useState<{ target: FocusTarget } | null>(null);
   // After «Добавить и ещё» the undo bar lives in the sheet footer, which stays above the
   // on-screen keyboard (the page snackbar would sit under it).
@@ -159,18 +169,19 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
   const ruRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLTextAreaElement>(null);
 
-  // Local dictionary: load once when the sheet opens; rows appear as soon as it is in memory.
+  // Local dictionary: load once when the sheet opens; while it loads «Словарь» holds its slots (A4)
+  // and the rows fill them as soon as it is in memory. A failed load lets the slots go.
   useEffect(() => {
-    if (lexReady || !open) return;
+    if (lex !== "loading" || !open) return;
     let live = true;
     loadLexique().then(
-      () => live && setLexReady(true),
-      () => {},
+      () => live && setLex("ready"),
+      () => live && setLex("failed"),
     );
     return () => {
       live = false;
     };
-  }, [lexReady, open]);
+  }, [lex, open]);
 
   // Prefill from useAddSheet().open({fr}).
   useEffect(() => {
@@ -197,9 +208,10 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
   const direction = detectDirection(trimmed);
 
   const dictionary = useMemo<LexiqueHit[]>(
-    () => (lexReady && mode === "search" && trimmed && direction === "fr" ? prefixSearch(query, DICTIONARY_ROWS) : []),
-    [lexReady, mode, query, trimmed, direction],
+    () => (lex === "ready" && mode === "search" && trimmed && direction === "fr" ? prefixSearch(query, DICTIONARY_ROWS) : []),
+    [lex, mode, query, trimmed, direction],
   );
+  const dictionaryLoading = lex === "loading" && trimmed !== "" && direction === "fr";
 
   // Duplicate check: the typed French headword, or the form's French field.
   // Stopped once «Добавить» is pressed: the word just saved must not flag itself as a duplicate.
@@ -262,23 +274,32 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
     const [fr, ru] = formKey.split("\u0001");
     return [{ id: "w1", fr, ru }];
   }, [formKey]);
-  const formEnriching = useAutoEnrich(
+  const formEnrich = useAutoEnrich(
     formEnrichWords,
     { folders: autoSort ? folderInputs : undefined, model },
     (results, [sent]) => {
       const result = results.get(sent.id);
-      if (!result) return;
-      const sentKey = `${sent.fr}\u0001${sent.ru}`;
-      setDraft((d) => (d && enrichKey(d) === sentKey ? applyEnrichment(d, result, folders, detectPrefs) : d));
+      if (!result || !draft || enrichKey(draft) !== `${sent.fr}\u0001${sent.ru}`) return;
+      // What lands is lit, field by field as one detection (A6); what the user set stays.
+      const next = applyEnrichment(draft, result, folders, detectPrefs);
+      setDraft(next);
+      light(filledByDetection(draft, next));
     },
     FORM_ENRICH_DEBOUNCE_MS,
   );
+  const detection: FormDetection = {
+    waiting: formEnrich.waiting,
+    failed: formEnrich.failed,
+    slang: slangDetect,
+    examples: examplesOn,
+    themes: autoSort,
+  };
   const listEnrichWords = useMemo<ListEnrichInput[] | null>(() => {
     if (mode !== "list" || !detect) return null;
     const missing = listRows.filter((r) => r.status !== "invalid" && (!r.enrich || (listAuto && r.enrich.folder === null)));
     return missing.length > 0 ? missing.map((r, i) => ({ id: `l${i + 1}`, fr: r.fr, ru: r.ru, rowKey: r.key })) : null;
   }, [mode, detect, listRows, listAuto]);
-  useAutoEnrich(
+  const listEnrich = useAutoEnrich(
     listEnrichWords,
     { folders: listAuto ? folderInputs : undefined, model },
     (results, sent) =>
@@ -292,6 +313,9 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
       }),
     LIST_ENRICH_DEBOUNCE_MS,
   );
+  const listDetection: ListDetection | undefined = detect
+    ? { pending: listEnrich.pending, waiting: listEnrich.waiting, failed: listEnrich.failed, progress: listEnrich.progress, themes: listAuto }
+    : undefined;
 
   // ---------------------------------------------------------------------------------------
   // Actions
@@ -329,16 +353,32 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
     return true;
   };
 
-  const pickSuggestion = (s: Suggestion) => {
-    if (reopenDraft(variantKey(s))) return;
-    setDraft(draftFromSuggestion(s, folders, { autoSort, slang: slangDetect, examples: examplesOn }));
+  const openPicked = (s: Suggestion) => {
+    const next = draftFromSuggestion(s, folders, { autoSort, slang: slangDetect, examples: examplesOn });
+    setDraft(next);
     setDraftOrigin({ query, key: variantKey(s) });
     setErrors({});
     setSaveError(null);
     setMode("form");
-    // Phones: hide the keyboard to show the card. Desktop: focus the first field (Tab order, ⌘↵).
+    // The fields the pick filled are lit together as the form opens (A5).
+    light(filledByPick(next));
     if (desk) setFocusRequest({ target: "fr" });
-    else if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  };
+
+  const pickSuggestion = (s: Suggestion) => {
+    if (reopenDraft(variantKey(s))) return;
+    // Desktop: at once, focus in the first field (Tab order, ⌘↵).
+    if (desk) return openPicked(s);
+    // Phones: the row ink-fills (--dur-instant) and holds for --dur-flash before the form replaces
+    // it (A5); the keyboard goes down at once to show the card.
+    if (picked !== null) return;
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    setPicked(variantKey(s));
+    pickTimer.current = window.setTimeout(() => {
+      pickTimer.current = null;
+      setPicked(null);
+      openPicked(s);
+    }, tokenMs("--dur-flash", 120));
   };
 
   const openManual = () => {
@@ -350,6 +390,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
         : manualDraft({ fr: trimmed, ru: other, folder: quick.folder });
     setDraft(next);
     setDraftOrigin({ query, key: MANUAL_KEY });
+    setSpot(null);
     setErrors({});
     setSaveError(null);
     setMode("form");
@@ -357,6 +398,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
   };
 
   const backToSearch = () => {
+    setSpot(null);
     setMode("search");
     if (!desk) {
       setDraft(null);
@@ -375,6 +417,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
   };
 
   const startOver = () => {
+    setSpot(null);
     setLeaving(false);
     setMode("search");
     setQuery("");
@@ -461,7 +504,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
       return;
     }
     // Saved before detection came back: fill what the user has not set once it does.
-    const fillLater = formEnriching ? enrichScope(draft) : null;
+    const fillLater = formEnrich.pending ? enrichScope(draft) : null;
     void commit(draftToSaveRequest(draft), `Добавлено · ${draft.fr.trim()}`, andMore).then((result) => {
       if (result && fillLater) void fillSavedWords(result.words.map((word) => ({ word, scope: fillLater })));
     });
@@ -545,14 +588,16 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
     });
 
   // Desktop keys (DESKTOP-SPEC §4 «Add dialog»): ⌘↵ «Добавить», ⇧⌘↵ «Добавить и ещё»; Esc from
-  // the form goes back to the search (draft kept), else closes. Anything typed makes the dialog
-  // ignore scrim clicks and Radix's own Esc, so Esc is handled here, one layer per press.
+  // the form or «Несколько слов» goes back to the search (draft and list kept), else closes.
+  // Anything typed makes the dialog ignore scrim clicks and Radix's own Esc, so Esc is handled
+  // here, one layer per press.
   const dirty = mode === "form" || draft !== null || (mode === "search" ? trimmed !== "" : listText.trim() !== "");
   const onDeskKey = useEffectEvent((e: KeyboardEvent) => {
     if (e.isComposing || e.keyCode === 229) return;
     if (e.key === "Escape") {
       if (e.repeat) return;
-      if (mode === "form") {
+      if (mode !== "search") {
+        // Form and «Несколько слов» step back to the search (what was typed stays); then Esc closes.
         e.preventDefault();
         backToSearch();
       } else if (dirty) {
@@ -681,7 +726,8 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
         onOpenChange={handleOpenChange}
         height="large"
         dialogWidth={640}
-        dismissible={!dirty}
+        // In «Несколько слов» Esc steps back to the search (handled above), even with nothing pasted.
+        dismissible={!dirty && mode !== "list"}
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           inputRef.current?.focus();
@@ -690,9 +736,9 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
           <DeskChrome
             label={label}
             title={mode === "list" ? "Несколько слов" : "Новое слово"}
-            onBack={mode === "form" ? backToSearch : undefined}
-            onScreenshot={() => handleOpenChange(false)}
-            onList={mode === "search" ? () => openList() : undefined}
+            onBack={mode === "search" ? undefined : backToSearch}
+            onScreenshot={mode === "list" ? undefined : () => handleOpenChange(false)}
+            onList={mode === "list" ? undefined : () => openList()}
           />
         }
       >
@@ -710,6 +756,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
             folders={folders}
             context={context}
             dictionary={dictionary}
+            dictionaryLoading={dictionaryLoading}
             onPickHit={pickHit}
             onPickSuggestion={pickSuggestion}
             onManual={openManual}
@@ -736,7 +783,8 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
             ruRef={ruRef}
             duplicate={duplicate}
             onOpenWord={openWord}
-            enriching={formEnriching}
+            detection={detection}
+            spot={spot}
             onSave={saveForm}
             saving={saving}
             leaving={leaving}
@@ -756,6 +804,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
             auto={autoSort ? { selected: listFolder === null, onSelect: () => setListFolder(null) } : undefined}
             folders={folders}
             show={detectPrefs}
+            detection={listDetection}
             onSave={saveList}
             saving={saving !== null}
             saveError={saveError}
@@ -806,8 +855,10 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
           folders={folders}
           context={context}
           dictionary={dictionary}
+          dictionaryLoading={dictionaryLoading}
           onPickHit={pickHit}
           onPickSuggestion={pickSuggestion}
+          pickedKey={picked}
           onManual={openManual}
           duplicate={duplicate}
           onOpenWord={openWord}
@@ -835,7 +886,8 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
             onOpenWord={openWord}
             onAddAnyway={() => setAckDuplicate(dupKey)}
             onSubmit={() => saveForm(false)}
-            enriching={formEnriching}
+            detection={detection}
+            spot={spot}
           />
         </div>
       )}
@@ -852,6 +904,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
           auto={autoSort ? { selected: listFolder === null, onSelect: () => setListFolder(null) } : undefined}
           folders={folders}
           show={detectPrefs}
+          detection={listDetection}
         />
       )}
     </Sheet>

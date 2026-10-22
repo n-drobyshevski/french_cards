@@ -4,7 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAddSheet } from "@/components/providers/AddSheetContext";
-import { useAppReady } from "@/components/providers/AppProviders";
+import { useAppReady, useBootFailure } from "@/components/providers/AppProviders";
 import { Button, IconButton } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
@@ -12,12 +12,15 @@ import { KEYBOARD_MIN, useVisualViewport } from "@/components/ui/Sheet";
 import { SkeletonRow } from "@/components/ui/Skeleton";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { countEnrichCandidates, enrichPreferences } from "@/lib/enrich";
+import { useFolderSpotlight } from "@/lib/folder-spotlight";
 import { deleteFolder, getLibraryStats, restoreFolder, type FolderWithStats } from "@/lib/folders";
 import { getSettings, updateSettings } from "@/lib/settings";
 import type { Settings } from "@/lib/types";
 import { getUndoableRun, undoReorgRun } from "@/lib/reorg";
 import { useLayoutClass } from "@/lib/use-media";
+import { useOnline } from "@/lib/use-online";
 import { useSettings } from "@/lib/use-settings";
+import { BootNotice } from "./BootNotice";
 import { DeskPlaceholder } from "./DeskPlaceholder";
 import { DisbandSheet, disbandMessage } from "./DisbandSheet";
 import { EnrichPlanSheet } from "./EnrichPlanSheet";
@@ -80,6 +83,7 @@ async function getLibraryOverview() {
 
 function PhoneLibrary() {
   const ready = useAppReady();
+  const bootFailed = useBootFailure().failed;
   const snackbar = useSnackbar();
   const addSheet = useAddSheet();
   const overview = useLiveQuery(getLibraryOverview, []);
@@ -117,10 +121,18 @@ function PhoneLibrary() {
   const shown = page.key === listKey ? page.size : PAGE_SIZE;
 
   const results = useMemo(() => (words ? filterPhoneWords(words.words, filter, deferredQuery) : null), [words, filter, deferredQuery]);
+  const pageItems = useMemo(() => results?.slice(0, shown), [results, shown]);
+  // «Все слова»: the rows fade in over the reserved blank, or replace the skeleton at once (L4).
+  const listReveal = useRevealClass(!!results);
 
   const totals = stats?.totals;
   const inbox = stats?.inbox;
   const tilesReveal = useRevealClass(!!stats);
+  // Themes that just received words (sort plan applied, import added) are lit once (S5).
+  const tilesRef = useRef<HTMLDivElement>(null);
+  useFolderSpotlight(tilesRef, tileSelector, stats);
+  // «Разложить по темам» needs the network: offline it is disabled with the reason (B4).
+  const online = useOnline();
 
   const undoLastRun = async () => {
     if (!lastRun) return;
@@ -131,7 +143,16 @@ function PhoneLibrary() {
   const upkeep: ReactNode[] = [];
   if (totals && totals.total > 0) {
     if (inbox && inbox.total === 0) {
-      upkeep.push(<UpkeepRow key="sort" ai caption="Все слова разложены" action="Разложить по темам" onClick={() => setSortOpen(true)} />);
+      upkeep.push(
+        <UpkeepRow
+          key="sort"
+          ai
+          caption={online ? "Все слова разложены" : "Нужна сеть: раскладка работает онлайн"}
+          action="Разложить по темам"
+          disabled={!online}
+          onClick={() => setSortOpen(true)}
+        />,
+      );
     }
     if (toEnrich && toEnrich.total > 0) {
       upkeep.push(
@@ -254,7 +275,7 @@ function PhoneLibrary() {
       </div>
 
       {listMode ? (
-        <section aria-label="Слова" className="mt-5 flex flex-col">
+        <section aria-label="Слова" aria-busy={!results || undefined} className="mt-5 flex flex-col">
           <div className="meta flex h-8 items-center justify-between border-b border-ink">
             <span className="font-medium text-ink" role="status">
               {!results
@@ -287,9 +308,10 @@ function PhoneLibrary() {
               ))}
             </div>
           )}
-          {results && words && (
+          {results && pageItems && words && (
             <WordList
-              items={results.slice(0, shown)}
+              className={listReveal}
+              items={pageItems}
               folders={words.folders}
               showFolder={filter.theme === ALL_THEMES}
               label={filtered ? "Найденные слова" : "Все слова"}
@@ -326,6 +348,9 @@ function PhoneLibrary() {
             </div>
           )}
         </section>
+      ) : bootFailed ? (
+        // First-run setup failed: say so where the tiles would be (B1).
+        <BootNotice />
       ) : view === "themes" ? (
         <>
           {/* «Входящие»: only while something is unsorted (reserved blank if it was there last time) */}
@@ -343,17 +368,23 @@ function PhoneLibrary() {
                 </span>
                 <span className="meta font-medium text-red">{inbox.total} без темы</span>
               </Link>
-              <Button variant="tertiary" size="sm" className="gap-1.5 text-[13px] no-underline" onClick={() => setSortOpen(true)}>
-                <Icon name="spark" size={15} strokeWidth={1.5} />
-                Разложить
-                <Icon name="chevron-right" size={16} />
+              <Button
+                variant="tertiary"
+                size="sm"
+                className="gap-1.5 text-[13px] no-underline disabled:text-muted disabled:opacity-100!"
+                disabled={!online}
+                onClick={() => setSortOpen(true)}
+              >
+                <Icon name={online ? "spark" : "cloud-off"} size={15} strokeWidth={1.5} />
+                {online ? "Разложить" : "Нужна сеть"}
+                {online && <Icon name="chevron-right" size={16} />}
               </Button>
             </div>
           )}
 
           {/* Themes: the last known number of tiles is reserved blank; skeletons only if the read is
               still pending at 300 ms (cold start, first-run seed) — L3 */}
-          <div aria-busy={!stats || undefined} className={cx("mt-3 grid grid-cols-2 gap-2", tilesReveal)}>
+          <div ref={tilesRef} aria-busy={!stats || undefined} className={cx("mt-3 grid grid-cols-2 gap-2", tilesReveal)}>
             {!stats ? (
               <>
                 <TileSkeleton wide className="delayed-in" />
@@ -548,11 +579,26 @@ function UpkeepBlock({ rows, reserve, reveal }: { rows: ReactNode[] | null; rese
 }
 
 /** `ai`: the action asks Claude (a spark before it). */
-function UpkeepRow({ caption, action, onClick, ai = false }: { caption: string; action: string; onClick: () => void; ai?: boolean }) {
+/** Theme tiles are their links: lit by the spotlight after a bulk change (S5). */
+const tileSelector = (id: string) => `a[href="${folderHref(id)}"]`;
+
+function UpkeepRow({
+  caption,
+  action,
+  onClick,
+  ai = false,
+  disabled = false,
+}: {
+  caption: string;
+  action: string;
+  onClick: () => void;
+  ai?: boolean;
+  disabled?: boolean;
+}) {
   return (
     <p className="m-0 flex min-h-11 items-center justify-between gap-3 border-b border-rule text-[13px] leading-[18px] text-muted">
       <span className="min-w-0">{caption}</span>
-      <Button variant="tertiary" size="sm" className="shrink-0 gap-1.5 text-[13px]" onClick={onClick}>
+      <Button variant="tertiary" size="sm" className="shrink-0 gap-1.5 text-[13px]" disabled={disabled} onClick={onClick}>
         {ai && <Icon name="spark" size={15} strokeWidth={1.5} className="shrink-0" />}
         {action}
       </Button>

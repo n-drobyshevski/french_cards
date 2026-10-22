@@ -1,4 +1,5 @@
-// Keyboard shortcuts for the review screen: Space/Enter flip (both ways), 1/2/3 grade, ←/→ = Не знаю/Знаю, Z undo.
+// Keyboard shortcuts for the review screen: Space/Enter flip (both ways), 1/2/3 grade, ←/→ = Не знаю/Знаю, Z undo,
+// E «Изменить карточку» on the answer side.
 // Desktop adds P «Ещё практика» on «Готово на сегодня» and Esc «Закончить практику» (DESKTOP-SPEC §4).
 import type { Rating } from "@/lib/scheduler";
 
@@ -7,6 +8,7 @@ export type ReviewKeyAction =
   | { type: "unflip" }
   | { type: "grade"; rating: Rating }
   | { type: "undo" }
+  | { type: "edit" }
   | { type: "practice" }
   | { type: "end-practice" };
 
@@ -51,6 +53,7 @@ export function reviewKeyAction(ev: KeyLike, ctx: ReviewKeyContext): ReviewKeyAc
     if (ev.key === "Escape") return ctx.practice ? { type: "end-practice" } : null;
   }
   if (ctx.done) return null;
+  if (ev.code === "KeyE") return letters && ctx.revealed && !ev.shiftKey ? { type: "edit" } : null;
   if (ev.key === " " || ev.code === "Space" || ev.key === "Enter" || ev.code === "NumpadEnter") {
     return ctx.revealed ? { type: "unflip" } : { type: "flip" };
   }

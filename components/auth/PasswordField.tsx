@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { cx } from "@/components/ui/cx";
 
 interface Props {
   id: string;
@@ -11,17 +12,28 @@ interface Props {
   enterKeyHint?: "next" | "go" | "done";
   disabled?: boolean;
   describedBy?: string;
+  /** Its error is showing: 1px again-red border (U2). */
+  invalid?: boolean;
+  /** The error under the field (FieldError). */
+  children?: ReactNode;
 }
 
 /** Password input with a show/hide toggle; 17px text so iOS does not zoom on focus. */
-export function PasswordField({ id, label, value, onChange, autoComplete, enterKeyHint, disabled, describedBy }: Props) {
+export function PasswordField({ id, label, value, onChange, autoComplete, enterKeyHint, disabled, describedBy, invalid = false, children }: Props) {
   const [visible, setVisible] = useState(false);
   return (
     <div>
       <label htmlFor={id} className="block text-[13px] leading-[18px] text-muted md:text-[12px] md:leading-4 md:font-medium">
         {label}
       </label>
-      <div className="mt-2 flex h-12 items-center rounded-[4px] border border-rule bg-surface focus-within:border-ink focus-within:shadow-[inset_0_0_0_1px_var(--ink)] md:h-11 md:border-boundary">
+      <div
+        className={cx(
+          "mt-2 flex h-12 items-center rounded-[4px] border bg-surface md:h-11",
+          invalid
+            ? "border-again focus-within:shadow-[inset_0_0_0_1px_var(--again)]"
+            : "border-rule focus-within:border-ink focus-within:shadow-[inset_0_0_0_1px_var(--ink)] md:border-boundary",
+        )}
+      >
         <input
           id={id}
           name={id}
@@ -35,6 +47,7 @@ export function PasswordField({ id, label, value, onChange, autoComplete, enterK
           onChange={(e) => onChange(e.target.value)}
           disabled={disabled}
           aria-describedby={describedBy}
+          aria-invalid={invalid || undefined}
           className="h-full min-w-0 flex-1 bg-transparent px-3 text-[17px] text-ink caret-ink outline-none focus-visible:outline-none disabled:opacity-60 md:px-[11px] md:text-[15px]"
         />
         <button
@@ -51,6 +64,7 @@ export function PasswordField({ id, label, value, onChange, autoComplete, enterK
           </svg>
         </button>
       </div>
+      {children}
     </div>
   );
 }

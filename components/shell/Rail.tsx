@@ -11,7 +11,7 @@ import { Icon, type IconName } from "@/components/ui/Icons";
 import { useLayoutClass } from "@/lib/use-media";
 import { INBOX_NAME, navKeyForPath, themeHref, type NavKey, type ShellData } from "./data";
 import { useThemeDrop } from "./dnd";
-import { ActiveBar, dropClasses, useSidebarSyncLine } from "./NavParts";
+import { ActiveBar, DropLight, dropClasses, useSidebarSyncLine } from "./NavParts";
 import { useShortcutsEnabled } from "./ShellContext";
 
 // Medium rail (768–1199, DESKTOP-SPEC §2 «Medium rail»): 72px, icons with 11px labels.
@@ -80,9 +80,11 @@ function InboxLink({ count, active }: { count: number | null; active: boolean })
       href={themeHref(null)}
       aria-current={active ? "page" : undefined}
       aria-label={count == null ? INBOX_NAME : `${INBOX_NAME}, ${nWords(count)}`}
+      data-theme-target="inbox"
       {...drop.dropProps}
-      className={cx(itemClass, "h-16", active ? "font-semibold" : "font-medium", dropClasses(drop.dragging, drop.over))}
+      className={cx(itemClass, "isolate h-16", active ? "font-semibold" : "font-medium", dropClasses(drop.dragging, drop.over))}
     >
+      <DropLight />
       {active && <ActiveBar edge="rail" />}
       {drop.over ? (
         <span className="flex h-5 items-center font-mono text-[12px] text-ink">+{drop.count || ""}</span>
@@ -111,8 +113,8 @@ function SettingsLink({ active, dot = null, status }: { active: boolean; dot?: "
 
 /** «Настройки» with a 6px dot over the gear for «нет сети» / «ошибка» (nothing at rest). */
 function SyncedSettingsLink({ active }: { active: boolean }) {
-  const line = useSidebarSyncLine();
-  return <SettingsLink active={active} dot={line?.dot} status={line?.text} />;
+  const { line } = useSidebarSyncLine();
+  return <SettingsLink active={active} dot={line?.dot} status={line ? [line.text, line.detail].filter(Boolean).join(". ") : undefined} />;
 }
 
 function RailView({ data, active }: { data: ShellData | undefined; active: NavKey | null }) {

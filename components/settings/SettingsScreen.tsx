@@ -145,12 +145,13 @@ function PhoneSettings({ settings, known, save, onTheme, onDirection }: ScreenPr
                 onCheckedChange={(checked) => save({ swipe_grading: checked })}
               />
             </SettingsRow>
-            <SettingsRow label="Вибрация при свайпах" labelId="haptics-label">
+            {/* «Вибрация» covers more than swipes now: grades, toggles, long presses (T8, §5.13). */}
+            <SettingsRow label="Вибрация" labelId="haptics-label" caption="При оценке, свайпах и переключателях">
               <Button
                 variant="tertiary"
                 size="sm"
                 className="text-[13px]"
-                disabled={!settings.haptics || !settings.swipe_grading}
+                disabled={!settings.haptics}
                 onClick={() => {
                   if (hapticSupport() === "none") toast.show({ message: "Этот браузер не умеет вибрировать" });
                   else haptic("again");
@@ -161,7 +162,6 @@ function PhoneSettings({ settings, known, save, onTheme, onDirection }: ScreenPr
               <Toggle
                 aria-labelledby="haptics-label"
                 checked={settings.haptics}
-                disabled={!settings.swipe_grading}
                 onCheckedChange={(checked) => save({ haptics: checked })}
               />
             </SettingsRow>

@@ -5,25 +5,27 @@ import { bottomBarRef } from "@/components/ui/bottom-clearance";
 import { Button } from "@/components/ui/Button";
 import { Header } from "@/components/ui/Header";
 import { Icon } from "@/components/ui/Icons";
+import { StatusLine } from "@/components/ui/StatusLine";
 import { cx } from "@/components/ui/cx";
 import type { NewFolderProposal } from "@/lib/ai/schemas";
 import { findDuplicate } from "@/lib/text";
 import type { Folder } from "@/lib/types";
 import { FolderPicker } from "./FolderPicker";
 import { ImportRowItem, RowEditor } from "./ImportRowItem";
+import { importStage, ShotSummary } from "./ProcessingView";
 import {
   allAddableChecked,
   applyFolderToChecked,
   canAdd,
   checkedRows,
   commonChoice,
-  fragmentsRu,
   setAllChecked,
   updateRow,
   wordsRu,
   type FolderChoice,
   type ImportRow,
 } from "./rows";
+import { CrossfadeText } from "./SwapLabel";
 
 export interface ReviewViewProps {
   rows: ImportRow[];
@@ -31,6 +33,8 @@ export interface ReviewViewProps {
   folders: readonly Folder[];
   proposals: readonly NewFolderProposal[];
   thumbs: readonly string[];
+  /** Screenshots picked and the tiles they were cut into. */
+  images: number;
   tiles: number;
   /** The stream did not finish: stopped, or the connection dropped. */
   incomplete: "stopped" | "cut" | null;
@@ -40,38 +44,19 @@ export interface ReviewViewProps {
   onRestart: () => void;
 }
 
-function ScreenshotStrip({ thumbs, tiles }: { thumbs: readonly string[]; tiles: number }) {
-  const [open, setOpen] = useState(false);
-  if (thumbs.length === 0) return null;
+/** The screenshots at full width under the summary, opened from its thumbnail. */
+function ScreenshotGallery({ thumbs }: { thumbs: readonly string[] }) {
   return (
-    <div className="shrink-0 border-y border-rule">
-      <button
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-        className="flex h-14 w-full items-center gap-3 bg-transparent p-0 text-left text-ink"
-      >
-        <span aria-hidden="true" className="h-10 w-7 shrink-0 overflow-hidden rounded-[2px] border border-rule bg-surface">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={thumbs[0]} alt="" className="size-full object-cover object-top" />
-        </span>
-        <span className="text-[15px] leading-5 font-medium">{thumbs.length > 1 ? "Скриншоты" : "Скриншот"}</span>
-        <Icon name={open ? "chevron" : "chevron-right"} size={14} strokeWidth={2} className="-ml-1.5 text-muted" />
-        {tiles > 1 && <span className="meta ml-auto leading-4 whitespace-nowrap">{fragmentsRu(tiles)}</span>}
-      </button>
-      {open && (
-        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-3">
-          {thumbs.map((src, i) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={src}
-              src={src}
-              alt={thumbs.length > 1 ? `Скриншот ${i + 1}` : "Скриншот"}
-              className="max-h-[360px] w-auto max-w-[240px] shrink-0 rounded-chip border border-rule bg-surface object-contain object-top"
-            />
-          ))}
-        </div>
-      )}
+    <div className="-mx-4 mt-3 flex gap-2 overflow-x-auto px-4 pb-1">
+      {thumbs.map((src, i) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={src}
+          src={src}
+          alt={thumbs.length > 1 ? `Скриншот ${i + 1}` : "Скриншот"}
+          className="max-h-[360px] w-auto max-w-[240px] shrink-0 rounded-chip border border-rule bg-surface object-contain object-top"
+        />
+      ))}
     </div>
   );
 }
@@ -109,6 +94,7 @@ export function ReviewView({
   folders,
   proposals,
   thumbs,
+  images,
   tiles,
   incomplete,
   saving,
@@ -118,6 +104,7 @@ export function ReviewView({
   const [editing, setEditing] = useState<string | null>(null);
   const [picker, setPicker] = useState<PickerTarget>(null);
   const [lastPicker, setLastPicker] = useState<Exclude<PickerTarget, null>>({ kind: "all" });
+  const [gallery, setGallery] = useState(false);
 
   const selected = checkedRows(rows).length;
   const allChecked = allAddableChecked(rows);
@@ -140,7 +127,13 @@ export function ReviewView({
     await saveRowEdit(row, patch, onRowsChange);
   };
 
-  const notice = incompleteNotice(incomplete);
+  const stage = importStage({
+    phase: incomplete === "stopped" ? "stopped" : "done",
+    rows: rows.length,
+    complete: true,
+    incomplete: incomplete === "cut",
+    tiles,
+  });
 
   return (
     <>
@@ -152,7 +145,7 @@ export function ReviewView({
             <button
               type="button"
               onClick={() => onRowsChange((rs) => setAllChecked(rs, !allChecked))}
-              className="h-11 bg-transparent px-2 text-[15px] font-medium whitespace-nowrap text-ink active:text-muted"
+              className="h-11 animate-[fade-in_var(--dur-quick)_var(--ease-enter)] bg-transparent px-2 text-[15px] font-medium whitespace-nowrap text-ink active:text-muted"
             >
               {allChecked ? "Снять все" : "Выбрать все"}
             </button>
@@ -160,24 +153,26 @@ export function ReviewView({
         }
       />
 
+      {/* The same top as while the words were read (I3): the list below keeps its place. */}
       <main className="flex flex-1 flex-col px-4 pt-2 pb-4">
-        <ScreenshotStrip thumbs={thumbs} tiles={tiles} />
+        <ShotSummary stage={stage} thumbs={thumbs} images={images} tiles={tiles} onThumb={() => setGallery((v) => !v)} thumbOpen={gallery} />
+        {gallery && <ScreenshotGallery thumbs={thumbs} />}
 
-        {notice && (
-          <div className="mt-4 flex items-start justify-between gap-3 text-[13px] leading-5 text-muted">
-            <p className="m-0">{notice}</p>
+        <div className="relative mt-3">
+          <StatusLine text={stage.status} active={false} announce={stage.announce} />
+          {incomplete && (
             <button
               type="button"
               onClick={onRestart}
-              className="relative inline-flex h-5 shrink-0 items-center gap-1 bg-transparent p-0 text-[13px] font-medium text-ink underline decoration-1 underline-offset-[3px] before:absolute before:-inset-3 before:content-['']"
+              className="absolute top-0 right-0 inline-flex h-5 items-center gap-1 bg-paper p-0 pl-2 text-[13px] leading-5 font-medium text-ink underline decoration-1 underline-offset-[3px] before:absolute before:-inset-3 before:content-['']"
             >
               <Icon name="spark" size={14} strokeWidth={1.5} className="shrink-0" />
               Распознать заново
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
-        <div className="mt-6 flex items-baseline justify-between border-b border-ink pb-2 font-mono text-[11px] leading-4 tracking-[.06em] text-muted">
+        <div className="meta mt-4 flex items-baseline justify-between border-b border-ink pb-2 leading-4">
           <span aria-live="polite">
             ОТМЕЧЕНО <span className="font-medium text-ink">{selected}</span> ИЗ {rows.length}
           </span>
@@ -207,10 +202,11 @@ export function ReviewView({
         </ul>
       </main>
 
+      {/* The footer rises in as the review takes over from the stream (I3). */}
       <div
         ref={bottomBarRef}
         className={cx(
-          "sticky bottom-(--shell-bottom) z-10 flex items-center gap-3 border-t border-rule bg-surface px-4 pt-3 pb-3",
+          "sticky bottom-(--shell-bottom) z-10 flex animate-[enter-pop_var(--dur-enter)_var(--ease-enter)] items-center gap-3 border-t border-rule bg-surface px-4 pt-3 pb-3",
           // Extend the bar's background under the home indicator.
           "after:absolute after:inset-x-0 after:top-full after:h-(--shell-bottom) after:bg-surface after:content-['']",
         )}
@@ -230,7 +226,7 @@ export function ReviewView({
           </span>
         </button>
         <Button className="min-w-0 flex-1" disabled={selected === 0} pending={saving} pendingLabel="Добавляем…" onClick={onAdd}>
-          {selected === 0 ? "Ничего не отмечено" : `Добавить ${wordsRu(selected)}`}
+          <CrossfadeText text={selected === 0 ? "Ничего не отмечено" : `Добавить ${wordsRu(selected)}`} />
         </Button>
       </div>
 

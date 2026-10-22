@@ -37,6 +37,22 @@ export function authErrorMessage(error: unknown, phase: AuthPhase, online = true
   }
 }
 
+/** The field an error opens under (MOTION-SPEC U2). */
+export type AuthField = "email" | "password" | "repeat";
+
+const EMAIL_ERRORS = new Set([
+  NOT_ALLOWED,
+  EXISTING_ACCOUNT,
+  "Проверьте адрес почты.",
+  "Почта не подтверждена. Откройте ссылку из письма и войдите снова.",
+]);
+
+/** Where an error from authErrorMessage() is shown: under the address, or under the password. */
+export function authErrorField(message: string, phase: AuthPhase): AuthField {
+  if (phase === "reset" || EMAIL_ERRORS.has(message)) return "email";
+  return "password";
+}
+
 /** Returns an error message for a new password (and its repeat), or null when it is fine. */
 export function newPasswordProblem(password: string, repeat: string): string | null {
   if (password.length < MIN_PASSWORD_LENGTH) return `Пароль — не меньше ${MIN_PASSWORD_LENGTH} символов.`;

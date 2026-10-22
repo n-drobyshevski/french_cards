@@ -26,6 +26,7 @@ import { returnSide, type CardArrival, type CardExit, type ReturnSide } from "./
 import { loadDoneScreen, loadReviewScreen, type ReviewScreenData } from "./data";
 import { EmptyFolder, EmptyLibrary } from "./EmptyStates";
 import { effectiveDirection, nextDirection, toSessionFilter, type FolderChoice } from "./filter";
+import { WordDetailSheet } from "@/components/library/WordDetailSheet";
 import { FolderPickerSheet } from "./FolderPickerSheet";
 import { DIRECTION_LABELS, DIRECTION_NAMES, GRADE_LABELS, formatProgress, progressRatio, queueSummary } from "./format";
 import { GradeBar } from "./GradeBar";
@@ -133,6 +134,8 @@ export function ReviewScreen() {
   const folders = useLiveQuery(() => listFolders(), []);
   const [tick, setTick] = useState(0);
   const [pickerOpen, setPickerOpen] = useState(false);
+  /** «Изменить карточку»: the word whose sheet is open over the card. */
+  const [editId, setEditId] = useState<string | null>(null);
   const [pinned, setPinned] = useState<Pinned | null>(null);
   const [awaiting, setAwaiting] = useState<Awaiting | null>(null);
   const [instance, setInstance] = useState(0);
@@ -240,6 +243,9 @@ export function ReviewScreen() {
   const current = queue ? ((pinned && queue.find((i) => i.key === pinned.key)) ?? queue[0]) : undefined;
   const nextItem = queue && current ? queue.find((i) => i.key !== current.key) : undefined;
   const revealed = !!current && pinned?.key === current.key && pinned.revealed;
+  // The current word as stored now: an edit shows on the card at once (practice rounds keep their own copies).
+  const currentWordId = current?.word.id;
+  const storedWord = useLiveQuery(() => (currentWordId ? getWord(currentWordId) : undefined), [currentWordId]);
   const gradeButtons = settings?.grade_buttons ?? 3;
   const swipeEnabled = settings?.swipe_grading ?? true;
   // With a mouse or trackpad a drag does not grade: a click flips, keys and buttons grade.
@@ -311,11 +317,16 @@ export function ReviewScreen() {
         ? "Входящие"
         : (folderNames.get(folder) ?? "Тема");
   const ordinals = (live ?? awaiting?.data)?.ordinals;
+  /** The item's word, edited copy included. */
+  const wordOf = (item: QueueItem) => (storedWord?.id === item.word.id ? storedWord : item.word);
   const faceOf = (item: QueueItem): CardFace => {
     const ordinal = ordinals?.get(item.word.id);
-    return { word: item.word, direction: item.direction, number: ordinal ? cardNumber(ordinal) : undefined };
+    return { word: wordOf(item), direction: item.direction, number: ordinal ? cardNumber(ordinal) : undefined };
   };
-  const folderOf = (item: QueueItem) => (item.word.folder_id && folderNames.get(item.word.folder_id)) || "Входящие";
+  const folderOf = (item: QueueItem) => {
+    const word = wordOf(item);
+    return (word.folder_id && folderNames.get(word.folder_id)) || "Входящие";
+  };
 
   const resetCard = () => {
     setPinned(null);
@@ -570,6 +581,12 @@ export function ReviewScreen() {
       endPractice();
       return;
     }
+    if (action.type === "edit") {
+      if (!current || holding) return;
+      event.preventDefault();
+      setEditId(current.word.id);
+      return;
+    }
     if (action.type === "undo") {
       // Right after a grade the log read may lag behind it; the undo then waits for the save.
       if (!canUndo && !busy.current && !holding) return;
@@ -690,7 +707,9 @@ export function ReviewScreen() {
         canUndo={canUndo}
         onUndo={() => requestUndo()}
         letters={letters}
-        hideOnDesktop={doneShown || emptyLibrary}
+        // «Готово на сегодня» keeps the running head (without counts): what to review next, the
+        // direction and undo stay one click away, as on phones.
+        hideOnDesktop={emptyLibrary}
         progress={loading ? PENDING_PROGRESS : cardsShown ? progress : null}
         heading={cardsShown ? <h1 className="sr-only">Повторение</h1> : null}
       >
@@ -777,6 +796,10 @@ export function ReviewScreen() {
                   next={nextItem ? faceOf(nextItem) : null}
                   enter={writeInKey === cardKey}
                   arrive={arrival?.key === cardKey ? arrival.arrive : undefined}
+                  editKey={desktop && letters}
+                  onEdit={() => {
+                    if (!holding) setEditId(card.word.id);
+                  }}
                 />
               )}
               {leaving.map((l) => (
@@ -814,6 +837,9 @@ export function ReviewScreen() {
           )}
         </div>
       )}
+
+      {/* Editing never grades: the sheet closes back onto the same card, still unanswered. */}
+      <WordDetailSheet wordId={editId} onClose={() => setEditId(null)} />
 
       <FolderPickerSheet
         open={pickerOpen}

@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Карточка слова поверх повторения</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#111111}a:hover{color:#c8331f}
+button{font:inherit}
+input{font:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #f1f1ee; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif">
+
+  <div aria-hidden="true" style="position: absolute; inset: 0; padding: 16px; box-sizing: border-box">
+    <div style="height: 44px; display: flex; align-items: center; font-family: Newsreader, Georgia, serif; font-size: 22px; font-weight: 500">Карточки для Лизи</div>
+    <div style="margin-top: 100px; height: 520px; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px"></div>
+  </div>
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(17,17,17,.4)"></div>
+
+  <section role="dialog" aria-label="Карточка слова" style="position: absolute; left: 0; right: 0; top: 40px; bottom: 0; background: #f1f1ee; border-top: 1px solid #111111; border-radius: 12px 12px 0 0; display: flex; flex-direction: column; overflow: hidden">
+    <div aria-hidden="true" style="height: 20px; display: flex; align-items: center; justify-content: center"><span style="width: 36px; height: 4px; border-radius: 2px; background: #d6d6d1"></span></div>
+
+    <div style="padding: 0 4px 0 16px; height: 44px; display: flex; align-items: center; gap: 8px">
+      <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57">Из повторения · 07 / 30</span>
+      <div style="flex: 1"></div>
+      <a href="Review-Edit.dc.html" aria-label="Закрыть и вернуться к карточке" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #111111; text-decoration: none">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+      </a>
+    </div>
+
+    <div style="flex: 1; min-height: 0; overflow: hidden; padding: 4px 16px 0; display: flex; flex-direction: column">
+      <form aria-label="Изменить слово" style="background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; padding: 16px; display: flex; flex-direction: column">
+        <label for="a-fr" style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57">Французский</label>
+        <input id="a-fr" lang="fr" value="se casser" style="margin-top: 6px; height: 48px; box-sizing: border-box; padding: 0 12px; border: 2px solid #111111; border-radius: 4px; background: #ffffff; font-family: Newsreader, Georgia, serif; font-size: 22px; font-weight: 500; color: #111111">
+        <label for="a-ru" style="margin-top: 14px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57">Русский</label>
+        <input id="a-ru" value="сломаться" style="margin-top: 6px; height: 44px; box-sizing: border-box; padding: 0 12px; border: 1px solid #d6d6d1; border-radius: 4px; background: #ffffff; font-size: 15px; color: #111111">
+        <div role="status" style="margin-top: 8px; min-height: 32px; display: flex; align-items: center; gap: 12px">
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57">Вариант</span>
+          <span style="flex: 1; min-width: 0; font-size: 15px; line-height: 20px; color: #111111">свалить, сбежать</span>
+          <button type="button" style="height: 32px; padding: 0 10px; border: 1px solid #111111; border-radius: 6px; background: #ffffff; color: #111111; font-size: 13px; font-weight: 500">Подставить</button>
+        </div>
+        <span style="margin-top: 14px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57">Уровень сленга</span>
+        <div style="margin-top: 6px; display: flex; gap: 8px; align-items: center">
+          <div role="radiogroup" aria-label="Уровень сленга" style="flex: 1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid #d6d6d1; border-radius: 4px; overflow: hidden">
+            <button type="button" role="radio" aria-checked="false" style="height: 36px; border: 0; border-right: 1px solid #d6d6d1; background: #ffffff; font-size: 13px; color: #111111">нейтр.</button>
+            <button type="button" role="radio" aria-checked="false" lang="fr" style="height: 36px; border: 0; border-right: 1px solid #d6d6d1; background: #ffffff; font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; color: #111111">fam.</button>
+            <button type="button" role="radio" aria-checked="true" lang="fr" style="height: 36px; border: 0; border-right: 1px solid #d6d6d1; background: #111111; font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; color: #ffffff">arg.</button>
+            <button type="button" role="radio" aria-checked="false" lang="fr" style="height: 36px; border: 0; background: #ffffff; font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; color: #111111">vulg.</button>
+          </div>
+          <button type="button" aria-pressed="false" lang="fr" style="height: 38px; padding: 0 10px; border: 1px solid #d6d6d1; border-radius: 4px; background: #ffffff; font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; color: #111111">verl.</button>
+        </div>
+        <div style="margin-top: 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+          <button type="button" style="height: 44px; border: 1px solid #111111; border-radius: 6px; background: #ffffff; color: #111111; font-size: 15px; font-weight: 500">Отмена</button>
+          <a href="Review-Edit.dc.html" style="height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: #111111; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 500">Сохранить</a>
+        </div>
+      </form>
+
+      <div style="margin-top: 16px; display: flex; align-items: center; justify-content: space-between; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57">
+        <span>тема: <span style="color: #111111">Повседневное</span> ▾</span>
+      </div>
+
+      <div style="margin-top: 12px; border-top: 1px solid #d6d6d1; padding-top: 10px; display: flex; align-items: flex-start; gap: 8px">
+        <div style="flex: 1">
+          <div style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57">Заметка</div>
+          <p style="margin: 4px 0 0; font-size: 14px; line-height: 20px; color: #111111"><span lang="fr" style="font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px">Casse-toi</span> — грубое «свали». Ещё значит «сломаться».</p>
+        </div>
+        <button type="button" aria-label="Изменить заметку" style="width: 44px; height: 44px; margin: -10px -12px 0 0; border: 0; background: transparent; color: #5a5a57; display: flex; align-items: center; justify-content: center">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg>
+        </button>
+      </div>
+
+      <div style="margin-top: 12px; border-top: 1px solid #d6d6d1; padding-top: 10px; display: flex; align-items: flex-start; gap: 8px">
+        <div style="flex: 1">
+          <div style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57">Пример</div>
+          <p lang="fr" style="margin: 4px 0 0; font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 17px; line-height: 24px">Allez, on se casse d'ici.</p>
+          <p style="margin: 0; font-size: 13px; line-height: 20px; color: #5a5a57">Ладно, сваливаем отсюда.</p>
+        </div>
+        <button type="button" aria-label="Изменить пример" style="width: 44px; height: 44px; margin: -10px -12px 0 0; border: 0; background: transparent; color: #5a5a57; display: flex; align-items: center; justify-content: center">
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path></svg>
+        </button>
+      </div>
+
+      <button type="button" style="margin-top: 14px; height: 44px; border: 1px solid #111111; border-radius: 6px; background: #ffffff; color: #111111; font-size: 14px; font-weight: 500; display: flex; align-items: center; justify-content: center; gap: 8px">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M12 3c.6 4.6 2.4 6.4 7 7-4.6.6-6.4 2.4-7 7-.6-4.6-2.4-6.4-7-7 4.6-.6 6.4-2.4 7-7Z"></path></svg>
+        Обновить перевод и заметку
+      </button>
+
+      <div style="margin-top: 18px; border-top: 1px solid #d6d6d1; padding-top: 10px; display: flex; flex-direction: column; gap: 8px; color: #5a5a57">
+        <div style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase">Расписание</div>
+        <div style="display: flex; justify-content: space-between; font-size: 13px"><span>Следующий показ</span><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; color: #111111">сегодня</span></div>
+        <div style="display: flex; justify-content: space-between; font-size: 13px"><span>Повторений</span><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; color: #111111">6</span></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

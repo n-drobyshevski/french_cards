@@ -33,32 +33,40 @@ describe("relativeTime", () => {
 });
 
 describe("syncLine", () => {
+  const local = (h: number, m: number, day = 21) => new Date(2026, 9, day, h, m).getTime();
   const base: SyncLineInput = {
     auth: { status: "signed_in", email: "n.drobyshevski@pm.me" },
-    sync: { state: "idle", lastSyncAt: ago(10_000) },
-    nowMs: NOW,
+    sync: { state: "idle", lastSyncAt: new Date(local(14, 2)).toISOString() },
+    nowMs: local(14, 10),
   };
 
-  it("shows account and last sync", () => {
-    expect(syncLine(base)).toEqual({ text: "n.d…@pm.me · только что", tone: "good", canSync: true });
+  it("rests on the time of the last sync: «Синхронизировано · 14:02», an earlier day as a date", () => {
+    expect(syncLine(base)).toEqual({ text: "Синхронизировано · 14:02", tone: "good", retry: false, detail: null, canSync: true });
+    expect(syncLine({ ...base, nowMs: local(9, 0, 23) }).text).toMatch(/^Синхронизировано · 21 окт/);
   });
 
-  it("covers the other states", () => {
+  it("covers the other states; offline is neutral, a failure says why and when", () => {
     expect(syncLine({ ...base, auth: { status: "local", email: null } })).toMatchObject({
-      text: "только на этом устройстве",
+      text: "Только на этом устройстве",
       canSync: false,
     });
-    expect(syncLine({ ...base, auth: { status: "signed_out", email: null } })).toMatchObject({ text: "вход не выполнен" });
+    expect(syncLine({ ...base, auth: { status: "loading", email: null } })).toMatchObject({ text: "" });
+    expect(syncLine({ ...base, auth: { status: "signed_out", email: null } })).toMatchObject({ text: "Вход не выполнен" });
     expect(syncLine({ ...base, sync: { state: "syncing", lastSyncAt: null } })).toMatchObject({
-      text: "n.d…@pm.me · синхронизация…",
+      text: "Синхронизация…",
+      tone: "ink",
       canSync: false,
     });
     expect(syncLine({ ...base, sync: { state: "offline", lastSyncAt: null } })).toMatchObject({
-      text: "n.d…@pm.me · нет сети",
+      text: "Нет сети · изменения сохранятся",
       tone: "muted",
+      retry: false,
     });
-    expect(syncLine({ ...base, sync: { state: "error", lastSyncAt: null } })).toMatchObject({ tone: "again" });
-    expect(syncLine({ ...base, sync: { state: "idle", lastSyncAt: null } })).toMatchObject({ text: "n.d…@pm.me · ещё не было" });
+    expect(
+      syncLine({ ...base, sync: { state: "error", lastSyncAt: null, errorKind: "server", errorAt: new Date(local(14, 5)).toISOString() } }),
+    ).toEqual({ text: "Не синхронизировано", tone: "again", retry: true, detail: "Сервер не ответил · 14:05", canSync: true });
+    expect(syncLine({ ...base, sync: { state: "error", lastSyncAt: null, errorKind: "auth" } }).detail).toBe("Нужно войти заново");
+    expect(syncLine({ ...base, sync: { state: "idle", lastSyncAt: null } })).toMatchObject({ text: "Ещё не синхронизировано" });
   });
 });
 

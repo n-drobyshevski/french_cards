@@ -30,7 +30,7 @@ export interface ReviewTopBarProps {
   progress?: ReviewProgress | null;
   /** Rendered between the bar and the progress row (the screen's sr-only h1). */
   heading?: ReactNode;
-  /** No running head from 768 up («Готово на сегодня», empty library). */
+  /** No running head from 768 up (empty library). */
   hideOnDesktop?: boolean;
   /** Chips on the left of the row (direction + theme, or the practice exit). */
   children?: ReactNode;

@@ -13,7 +13,11 @@ import { dictionaryKey, MANUAL_KEY, moveActive, recentKey, resolveActive, varian
 import { cardNumber, posAbbr, splitTypedPrefix } from "./match";
 import { choiceName, foldersForSuggestion } from "./folder-choice";
 import { DESK_INPUT, DeskFieldError, DeskFrame, DeskSection, FIELD_LABEL, HintLine, KeyButton, ThemeSelect, type Hint } from "./desk-parts";
+import { Collapse } from "@/components/ui/Collapse";
 import {
+  DICTIONARY_ROWS,
+  DictionarySlot,
+  useDictionaryReserved,
   useVariantsRegion,
   VARIANT_ENTER,
   VARIANT_ROW_HEIGHT,
@@ -62,7 +66,10 @@ export function DeskSearchPanel({ inputRef, ...props }: DeskSearchPanelProps) {
   const base = useId();
   const trimmed = value.trim();
   const direction = detectDirection(trimmed);
-  const showDictionary = trimmed !== "" && direction === "fr" && dictionary.length > 0;
+  // While the lexique loads «Словарь» holds 3 row slots (A4); the words fill them in place.
+  const dictionaryLoading = !!props.dictionaryLoading && trimmed !== "" && direction === "fr";
+  const reserved = useDictionaryReserved(dictionaryLoading);
+  const showDictionary = trimmed !== "" && direction === "fr" && (dictionary.length > 0 || reserved);
   // «Варианты» keep their slots whenever there is a headword, also while failed (A2, A3).
   const showVariants = trimmed !== "" && suggestionsEnabled;
   const recent = trimmed ? [] : (context?.recent ?? []);
@@ -124,7 +131,7 @@ export function DeskSearchPanel({ inputRef, ...props }: DeskSearchPanelProps) {
 
   const listboxIds = [
     recent.length > 0 && `${base}-recent`,
-    showDictionary && `${base}-dict`,
+    showDictionary && dictionary.length > 0 && `${base}-dict`,
     results.length > 0 && `${base}-var`,
     trimmed && !quick && `${base}-manual`,
   ].filter(Boolean);
@@ -158,51 +165,77 @@ export function DeskSearchPanel({ inputRef, ...props }: DeskSearchPanelProps) {
 
   return (
     <DeskFrame footer={footer} bodyClassName={showVariants ? "pb-2" : "pb-6"}>
-      <input
-        ref={inputRef}
-        type="text"
-        role="combobox"
-        aria-label="Слово или выражение — FR или RU"
-        aria-autocomplete="list"
-        aria-expanded={listboxIds.length > 0}
-        aria-controls={listboxIds.join(" ") || undefined}
-        aria-activedescendant={activeId}
-        value={value}
-        onChange={(e) => props.onValueChange(e.target.value)}
-        onKeyDown={onKeyDown}
-        onPaste={onPaste}
-        placeholder="Слово или выражение — FR или RU"
-        lang={trimmed ? (direction === "ru" ? "ru" : "fr") : undefined}
-        autoComplete="off"
-        autoCorrect="off"
-        autoCapitalize="none"
-        spellCheck={false}
-        className="block h-14 w-full rounded-[4px] border border-boundary bg-surface px-[15px] font-serif text-[22px] leading-7 text-ink outline-none! placeholder:text-muted focus:border-ink focus:shadow-[inset_0_0_0_1px_var(--ink)]"
-      />
+      <div className="relative">
+        <input
+          ref={inputRef}
+          type="text"
+          role="combobox"
+          aria-label="Слово или выражение — FR или RU"
+          aria-autocomplete="list"
+          aria-expanded={listboxIds.length > 0}
+          aria-controls={listboxIds.join(" ") || undefined}
+          aria-activedescendant={activeId}
+          value={value}
+          onChange={(e) => props.onValueChange(e.target.value)}
+          onKeyDown={onKeyDown}
+          onPaste={onPaste}
+          placeholder="Слово или выражение — FR или RU"
+          lang={trimmed ? (direction === "ru" ? "ru" : "fr") : undefined}
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          className={cx(
+            "block h-14 w-full rounded-[4px] border border-boundary bg-surface pl-[15px] font-serif text-[22px] leading-7 text-ink outline-none! placeholder:text-muted focus:border-ink focus:shadow-[inset_0_0_0_1px_var(--ink)]",
+            value ? "pr-12" : "pr-[15px]",
+          )}
+        />
+        {/* «Стереть», as on phones: clears the headword and keeps the focus in it. */}
+        {value && (
+          <button
+            type="button"
+            aria-label="Стереть"
+            title="Стереть"
+            onClick={(e) => {
+              props.onValueChange("");
+              e.currentTarget.parentElement?.querySelector("input")?.focus();
+            }}
+            className="absolute top-1/2 right-2 inline-flex size-8 -translate-y-1/2 items-center justify-center rounded-[4px] bg-transparent text-muted hoverable:bg-hover-surface hoverable:text-ink"
+          >
+            <Icon name="close" size={16} />
+          </button>
+        )}
+      </div>
 
       {!trimmed ? (
         <EmptyState {...props} listboxId={`${base}-recent`} optionProps={optionProps} active={active} />
       ) : (
         <>
           {showDictionary && (
-            <section aria-labelledby={`${base}-dict-title`} className="mt-4">
-              <DeskSection id={`${base}-dict-title`} title="Словарь" aside="работает без сети" />
-              <div role="listbox" id={`${base}-dict`} aria-labelledby={`${base}-dict-title`}>
-                {dictionary.map((hit, i) => (
-                  <DictionaryRow
-                    key={hit.fr}
-                    hit={hit}
-                    query={value}
-                    last={i === dictionary.length - 1}
-                    active={active === dictionaryKey(hit.fr)}
-                    optionProps={optionProps(dictionaryKey(hit.fr))}
-                    onPick={() => props.onPickHit(hit)}
-                  />
-                ))}
-              </div>
-            </section>
+            <Collapse open={dictionaryLoading || dictionary.length > 0}>
+              <section aria-labelledby={`${base}-dict-title`} aria-busy={dictionaryLoading || undefined} data-dictionary="" className="mt-4">
+                <DeskSection id={`${base}-dict-title`} title="Словарь" aside="работает без сети" />
+                <div role="listbox" id={`${base}-dict`} aria-labelledby={`${base}-dict-title`}>
+                  {dictionary.map((hit, i) => (
+                    <DictionaryRow
+                      key={hit.fr}
+                      hit={hit}
+                      query={value}
+                      last={i === dictionary.length - 1 && !dictionaryLoading}
+                      active={active === dictionaryKey(hit.fr)}
+                      optionProps={optionProps(dictionaryKey(hit.fr))}
+                      onPick={() => props.onPickHit(hit)}
+                    />
+                  ))}
+                </div>
+                {reserved &&
+                  Array.from({ length: Math.max(0, DICTIONARY_ROWS - dictionary.length) }, (_, i) => (
+                    <DictionarySlot key={`slot-${dictionary.length + i}`} height={40} index={dictionary.length + i} loaded={!dictionaryLoading} />
+                  ))}
+              </section>
+            </Collapse>
           )}
-          {props.duplicate && !quick && (
+          {props.duplicate && (
             <DuplicateBox info={props.duplicate} onOpen={() => props.onOpenWord(props.duplicate!.word.id)} onAddAnyway={props.onAddAnyway} />
           )}
           {showVariants && (
