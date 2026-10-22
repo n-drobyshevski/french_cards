@@ -161,6 +161,13 @@ describe("import", () => {
     expect(s.last_sync_at).toBe("x");
   });
 
+  it("leaves the device's sync bookkeeping out of the export", async () => {
+    await sampleData();
+    await db.table("settings").put({ id: "sync", last_sync_at: "x", sync_cursors: { words: "x" } });
+    const file = await exportBackup(later(30));
+    expect(file.tables.settings.map((s) => s.id)).toEqual(["settings"]);
+  });
+
   it("round-trips the shortcuts setting and defaults it for old backups", async () => {
     await sampleData();
     await updateSettings({ shortcuts: false });

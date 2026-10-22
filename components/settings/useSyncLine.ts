@@ -1,10 +1,10 @@
 "use client";
 
+import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
 import { useAuthUser, type AuthStatus } from "@/components/auth/session";
-import { syncNow, useSyncStatus, type SyncStatus } from "@/lib/sync";
+import { readSyncMeta, syncNow, useSyncStatus, type SyncStatus } from "@/lib/sync";
 import { useDelayedFlag } from "@/lib/use-delayed-flag";
-import { useSettings } from "@/lib/use-settings";
 import { syncLine, type SyncLine } from "./format";
 import { useClock } from "./useClock";
 
@@ -28,7 +28,8 @@ export function useSyncLine(): SyncLineState {
   const status = useSyncStatus();
   const nowMs = useClock();
   // The time of the last sync before the loop has read it back (first frames after a start).
-  const stored = useSettings().settings?.last_sync_at ?? null;
+  // It lives in the "sync" row, not in the settings the screens watch.
+  const stored = useLiveQuery(() => readSyncMeta(), [])?.last_sync_at ?? null;
 
   // The last state that was not «syncing»: what the line shows during a short background cycle.
   const [rest, setRest] = useState<SyncStatus>(() => (status.state === "syncing" ? { ...status, state: "idle" } : status));
