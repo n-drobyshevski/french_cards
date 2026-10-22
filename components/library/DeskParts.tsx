@@ -16,7 +16,7 @@ import { DEFAULT_SORT, ORDER_MENU, orderLabel, type SortKey, type SortState } fr
 // Pieces of the desktop library (DESKTOP-SPEC §5 #6–10): the text filter strip with its «Сленг ▾»
 // popover, the bulk bar, the selection summary and the empty detail pane.
 
-export type StatusFilter = "all" | "due" | "difficult" | "new";
+export type StatusFilter = "all" | "due" | "difficult" | "new" | "paused";
 
 /** Tertiary text link-button: 13px 500 underlined. */
 export function TextLink({ onClick, children, className, ...rest }: { onClick: () => void; children: ReactNode; className?: string; "aria-haspopup"?: "dialog" }) {
@@ -80,6 +80,7 @@ export function FilterStrip({
   dueCount,
   difficultCount,
   newCount,
+  pausedCount = 0,
   sort,
   onOrder,
 }: {
@@ -90,6 +91,8 @@ export function FilterStrip({
   dueCount: number;
   difficultCount: number;
   newCount: number;
+  /** Words «на паузе»: the item shows only when there are some (or it is on). */
+  pausedCount?: number;
   /** null: not read yet (the first frame), the label keeps its place blank. */
   sort: SortState | null;
   onOrder: (key: SortKey) => void;
@@ -120,6 +123,11 @@ export function FilterStrip({
       <StripItem active={status === "new"} count={newCount} onClick={() => onStatus(status === "new" ? "all" : "new")}>
         Новые
       </StripItem>
+      {(pausedCount > 0 || status === "paused") && (
+        <StripItem active={status === "paused"} count={pausedCount} onClick={() => onStatus(status === "paused" ? "all" : "paused")}>
+          На паузе
+        </StripItem>
+      )}
       <div ref={wrap} className="relative">
         <StripItem active={slang.length > 0} aria-expanded={open} aria-haspopup="dialog" aria-controls={popId} onClick={() => setOpen(!open)}>
           <span className="inline-flex items-center gap-1">

@@ -57,7 +57,7 @@ export const STATUS_DOT: Record<CardStatus, string> = {
   difficult: "bg-again",
 };
 
-export type DueTone = "due" | "new" | "later";
+export type DueTone = "due" | "new" | "later" | "paused";
 
 export interface WordSchedule {
   status: CardStatus;
@@ -71,8 +71,12 @@ export interface WordSchedule {
 }
 
 /** Row status for a word from its live review cards. Call inside a live query, not in render. */
-export function wordSchedule(states: readonly ReviewState[], now: Date): WordSchedule {
+export function wordSchedule(states: readonly ReviewState[], now: Date, muted = false): WordSchedule {
   const status = wordStatus(states);
+  if (muted) {
+    const seen = states.filter((s) => s.state !== 0);
+    return { status, dueLabel: "на паузе", tone: "paused", due: false, nextDue: seen.length ? Math.min(...seen.map((s) => Date.parse(s.due))) : null };
+  }
   const due = states.some((s) => isDueToday(s, now));
   const seen = states.filter((s) => s.state !== 0);
   const nextDue = seen.length ? Math.min(...seen.map((s) => Date.parse(s.due))) : null;

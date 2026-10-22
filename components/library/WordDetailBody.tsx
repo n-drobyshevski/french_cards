@@ -313,7 +313,40 @@ function useWordActions(word: Word | null, folders: readonly Folder[], onDeleted
     });
   };
 
-  return { folder, changeFolder, reset, remove };
+  /** «На паузу» / «Вернуть в повторения»: the word stays, its cards leave review (or come back). */
+  const setMuted = async (muted: boolean) => {
+    if (!word) return;
+    const wid = word.id;
+    await updateWord(wid, { muted });
+    showUndo({
+      message: muted ? "На паузе — в повторениях не появится" : "Снова в повторениях",
+      undo: () => void updateWord(wid, { muted: !muted }).catch(() => {}),
+    });
+  };
+
+  return { folder, changeFolder, reset, remove, setMuted };
+}
+
+/** Under «Повторение» while the word is «на паузе»: what that means and the way back. */
+function MutedNotice({ onUnmute, size }: { onUnmute: () => void; size: "sheet" | "pane" }) {
+  return (
+    <div className={cx("flex items-center justify-between gap-3 border-b border-rule", size === "sheet" ? "min-h-11 py-1" : "min-h-9 py-1")}>
+      <span className={cx("flex min-w-0 items-center gap-2 text-muted", size === "sheet" ? "text-[14px]" : "text-[13px]")}>
+        <Icon name="mute" size={16} strokeWidth={1.5} className="shrink-0" />
+        На паузе — не показывается в повторениях
+      </span>
+      <button
+        type="button"
+        onClick={onUnmute}
+        className={cx(
+          "-mx-1 inline-flex shrink-0 items-center gap-1.5 rounded-[4px] bg-transparent px-1 font-medium text-ink underline decoration-1 underline-offset-4 hoverable:bg-hover",
+          size === "sheet" ? "h-11 text-[14px]" : "h-8 text-[13px] pointer-coarse:h-11",
+        )}
+      >
+        Вернуть
+      </button>
+    </div>
+  );
 }
 
 export interface PaneOptions {
@@ -633,6 +666,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
         </span>
       </div>
       <div className="mt-1 flex flex-col">
+        {w.muted && <MutedNotice size="sheet" onUnmute={() => void actions.setMuted(false)} />}
         {schedule.map((s) => (
           <div
             key={s.direction}
@@ -649,10 +683,15 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
 
       {/* Actions */}
       <SheetRefresh word={w} />
-      <div className="mt-2 flex justify-between">
+      <div className="mt-2 flex flex-wrap justify-between gap-x-2">
         <Button variant="tertiary" size="md" className="-ml-1 px-1 text-[14px] font-normal no-underline" onClick={() => void actions.reset()}>
           Сбросить прогресс
         </Button>
+        {!w.muted && (
+          <Button variant="tertiary" size="md" className="px-1 text-[14px] font-normal no-underline" onClick={() => void actions.setMuted(true)}>
+            На паузу
+          </Button>
+        )}
         <Button variant="danger" size="md" className="-mr-1 px-1 text-[14px]" onClick={() => void actions.remove()}>
           Удалить слово
         </Button>
@@ -1260,6 +1299,7 @@ function PaneContent({
             {STATUS_LABELS[data.status]} · {data.reviews} {plural(data.reviews, ["показ", "показа", "показов"])}
           </span>
         </div>
+        {w.muted && <MutedNotice size="pane" onUnmute={() => void actions.setMuted(false)} />}
         {data.schedule.map((s) => (
           <div key={s.direction} className="flex h-9 items-center gap-4 border-b border-rule">
             <span className="w-14 shrink-0 font-mono text-[12px]">{DIRECTION_LABEL[s.direction]}</span>
@@ -1351,6 +1391,12 @@ function PaneContent({
           <button type="button" onClick={() => void actions.reset()} className={paneAction(coarse)}>
             Сбросить прогресс
           </button>
+          {!w.muted && (
+            <button type="button" onClick={() => void actions.setMuted(true)} className={paneAction(coarse)}>
+              <Icon name="mute" size={14} />
+              На паузу
+            </button>
+          )}
           <button type="button" onClick={() => void actions.remove()} className={paneAction(coarse)}>
             <Icon name="trash" size={14} />
             Удалить слово

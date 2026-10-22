@@ -300,6 +300,8 @@ const AnswerFace = memo(function AnswerFace({
   write,
   swipeEnabled,
   onEdit,
+  onMute,
+  onDelete,
   editKey = false,
 }: CardFace & {
   folderName: string;
@@ -309,10 +311,30 @@ const AnswerFace = memo(function AnswerFace({
   swipeEnabled?: boolean;
   /** Pencil in the header: «Изменить карточку» (opens the word's sheet). */
   onEdit?: () => void;
+  /** Before the pencil: «На паузу» (the word stays in the library, out of review). */
+  onMute?: () => void;
+  /** Before the pencil: «Удалить слово». */
+  onDelete?: () => void;
   /** `E` opens it too (single-letter keys on); named in the pencil's tooltip. */
   editKey?: boolean;
 }) {
   const [bodyRef, clipped] = useClippedBelow<HTMLDivElement>();
+  // Their own taps: neither a flip back nor the start of a swipe.
+  const headerButton = (icon: "mute" | "trash" | "pencil", label: string, run: () => void, extra: { title?: string; keys?: string; last?: boolean } = {}) => (
+    <IconButton
+      icon={icon}
+      label={label}
+      title={extra.title ?? label}
+      aria-keyshortcuts={extra.keys}
+      iconSize={18}
+      onPointerDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation();
+        run();
+      }}
+      className={cx("text-muted md:size-9 hoverable:bg-hover-surface hoverable:text-ink", extra.last ? "-mr-3 md:-mr-2" : "-mr-1 md:mr-0")}
+    />
+  );
   const pos = posAbbr(word);
   const step = headwordStep(direction === "fr_ru" ? word.fr : word.ru, word.fr);
   const origin = useShowOrigin() ? word.origin : null;
@@ -321,25 +343,15 @@ const AnswerFace = memo(function AnswerFace({
       <CardHeader label={<CallNumber side={direction === "fr_ru" ? "FR" : "RU"} number={number} />}>
         <span className={cx("flex items-center gap-1", write)}>
           <SlangMeter level={word.slang_level} verlan={word.verlan} hints hintAlign="end" />
-          {onEdit && (
-            <>
-              <span aria-hidden="true" className="ml-2 h-5 w-px bg-rule" />
-              {/* Its own tap: neither a flip back nor the start of a swipe. */}
-              <IconButton
-                icon="pencil"
-                label="Изменить карточку"
-                title={editKey ? "Изменить карточку (E)" : "Изменить карточку"}
-                aria-keyshortcuts={editKey ? "E" : undefined}
-                iconSize={18}
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEdit();
-                }}
-                className="-mr-3 text-muted md:-mr-2 md:size-9 hoverable:bg-hover-surface hoverable:text-ink"
-              />
-            </>
-          )}
+          {(onEdit || onMute || onDelete) && <span aria-hidden="true" className="ml-2 h-5 w-px bg-rule" />}
+          {onMute && headerButton("mute", "На паузу", onMute, { title: "На паузу — слово останется в библиотеке, но не будет в повторениях" })}
+          {onDelete && headerButton("trash", "Удалить слово", onDelete)}
+          {onEdit &&
+            headerButton("pencil", "Изменить карточку", onEdit, {
+              title: editKey ? "Изменить карточку (E)" : "Изменить карточку",
+              keys: editKey ? "E" : undefined,
+              last: true,
+            })}
         </span>
       </CardHeader>
 
@@ -500,6 +512,9 @@ export interface ReviewCardProps extends CardFace {
   arrive?: CardArrival;
   /** Pencil in the answer side's header: «Изменить карточку» (opens the word's sheet). */
   onEdit?: () => void;
+  /** «На паузу» and «Удалить слово» before the pencil. */
+  onMute?: () => void;
+  onDelete?: () => void;
   /** `E` opens it too (single-letter keys on); named in the pencil's tooltip. */
   editKey?: boolean;
 }
@@ -531,6 +546,8 @@ export function ReviewCard({
   enter = false,
   arrive,
   onEdit,
+  onMute,
+  onDelete,
   editKey = false,
 }: ReviewCardProps) {
   const reduced = useMediaQuery(REDUCED_MOTION_QUERY);
@@ -663,6 +680,8 @@ export function ReviewCard({
                 write={flip === "up" && ANSWER_WRITE}
                 swipeEnabled={swipeEnabled}
                 onEdit={onEdit}
+                onMute={onMute}
+                onDelete={onDelete}
                 editKey={editKey}
               />
             </article>

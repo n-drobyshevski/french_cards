@@ -49,7 +49,7 @@ export function useLibraryWords(folderId?: string | null, enabled = true): Libra
       if (word.deleted_at !== null) continue;
       const folder = word.folder_id !== null ? byId.get(word.folder_id) : undefined;
       if (folderId === null && folder) continue;
-      rows.push({ word, folder, schedule: wordSchedule(statesByWord.get(word.id) ?? [], now) });
+      rows.push({ word, folder, schedule: wordSchedule(statesByWord.get(word.id) ?? [], now, !!word.muted) });
     }
     rows.sort((a, b) => b.word.created_at.localeCompare(a.word.created_at));
     const result = shareLibraryWords(last.current, { folders, words: rows });

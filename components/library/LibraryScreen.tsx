@@ -240,6 +240,8 @@ function PhoneLibrary() {
         ? "Трудных слов нет."
         : filter.status === "new"
           ? "Новых слов нет."
+          : filter.status === "paused"
+            ? "Слов на паузе нет."
           : filter.slang.length > 0
             ? "С таким уровнем сленга слов нет."
             : "В этой теме таких слов нет.";
@@ -288,7 +290,7 @@ function PhoneLibrary() {
         </div>
         {/* Progress KPIs: counts only, not filters */}
         <div className="grid grid-cols-2 border-t border-rule">
-          <KpiCell value={totals && totals.total - totals.fresh} label="повторено" />
+          <KpiCell value={totals?.reviewed} label="повторено" />
           <KpiCell value={totals?.reviewedToday} label="сегодня" />
         </div>
       </div>
@@ -454,7 +456,7 @@ function PhoneLibrary() {
         value={filter}
         onChange={setFilter}
         folders={stats?.folders ?? []}
-        counts={{ due: totals?.due, difficult: totals?.difficult, fresh: totals?.fresh }}
+        counts={{ due: totals?.due, difficult: totals?.difficult, fresh: totals?.fresh, paused: totals?.paused }}
         resultCount={results ? results.length : null}
         onShow={() => {
           if (!filtered) setView("words");

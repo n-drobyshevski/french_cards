@@ -173,7 +173,8 @@ function wordView(w: Word, ctx: ViewContext) {
     folder_source: w.folder_source,
     both_directions: w.both_directions,
     status: wordStatus(states),
-    due_today: states.some((s) => isDueToday(s, ctx.dayEnd)),
+    ...(w.muted ? { muted: true } : {}),
+    due_today: !w.muted && states.some((s) => isDueToday(s, ctx.dayEnd)),
     created_at: w.created_at,
   };
 }
@@ -414,7 +415,7 @@ export const searchWords = tool({
   name: "search_words",
   title: "Search words",
   description:
-    "Search the user's saved French words. Every term of `query` must match the French, the Russian, the note, a tag or a custom field's value, ignoring accents and case; an empty query lists words. Filter by theme and learning status. Newest first; `total` counts all matches, and `next_offset` (when not null) fetches the next page. A word's custom fields («Свои поля») come as `custom_fields` (name → value), only when it has any; `origin` when it has one; for verbs, the saved `conjugation`, or `conjugation_builtin` (true when the app builds it on the device, false when it has none). Use it before add_words to avoid duplicates, and to find ids for update_word, move_words and delete_words.",
+    "Search the user's saved French words. Every term of `query` must match the French, the Russian, the note, a tag or a custom field's value, ignoring accents and case; an empty query lists words. Filter by theme and learning status. Newest first; `total` counts all matches, and `next_offset` (when not null) fetches the next page. A word's custom fields («Свои поля») come as `custom_fields` (name → value), only when it has any; `origin` when it has one; `muted: true` for a word «на паузе» (kept, but never in review); for verbs, the saved `conjugation`, or `conjugation_builtin` (true when the app builds it on the device, false when it has none). Use it before add_words to avoid duplicates, and to find ids for update_word, move_words and delete_words.",
   input: z.object({
     query: z.string().max(200).optional().describe("Words to look for (French or Russian). Empty = all."),
     folder: folderSelector.optional(),
@@ -467,7 +468,7 @@ export const listFolders = tool({
       if (w.deleted_at !== null) continue;
       const key = placeOf(w, ctx.live)?.id ?? null;
       const c = counts.get(key) ?? { words: 0, due: 0 };
-      const due = (ctx.statesByWord.get(w.id) ?? []).some((s) => isDueToday(s, ctx.dayEnd)) ? 1 : 0;
+      const due = !w.muted && (ctx.statesByWord.get(w.id) ?? []).some((s) => isDueToday(s, ctx.dayEnd)) ? 1 : 0;
       c.words++;
       c.due += due;
       total.words++;
@@ -673,6 +674,8 @@ export const studySummary = tool({
     const wordsById = new Map(words.filter((w) => w.deleted_at === null).map((w) => [w.id, w]));
     const cards = states.filter((s) => s.deleted_at === null && wordsById.has(s.word_id));
     const byKey = new Map(cards.map((s) => [s.id, s]));
+    // Words «на паузе» are never shown in review: not due, not new.
+    const inReview = cards.filter((s) => !wordsById.get(s.word_id)!.muted);
     // As in loadSession: the daily new-card allowance counts every review of the day, also of words
     // deleted since; «reviewed today» counts only live words' reviews.
     const dayLogs = logs.filter((l) => l.deleted_at === null && Date.parse(l.review) < dayEnd);
@@ -680,9 +683,9 @@ export const studySummary = tool({
     const introduced = new Set(dayLogs.filter((l) => l.state === 0).map((l) => reviewStateId(l.word_id, l.direction)));
     const reviewed = new Set(dayLogs.map((l) => reviewStateId(l.word_id, l.direction)));
 
-    const due = cards.filter((s) => isDueToday(s, dayEnd)).sort((a, b) => Date.parse(a.due) - Date.parse(b.due));
+    const due = inReview.filter((s) => isDueToday(s, dayEnd)).sort((a, b) => Date.parse(a.due) - Date.parse(b.due));
     // Same rule as loadSession: a new RU→FR card waits until its FR→RU card was learned on an earlier day.
-    const fresh = cards.filter((s) => {
+    const fresh = inReview.filter((s) => {
       if (s.state !== 0) return false;
       if (s.direction !== "ru_fr") return true;
       const siblingKey = reviewStateId(s.word_id, "fr_ru");
@@ -831,7 +834,7 @@ export const updateWord = tool({
   name: "update_word",
   title: "Edit a word",
   description:
-    "Edit one word: French, Russian, note, example, tags, part of speech, gender, slang level, verlan, both_directions, custom fields, origin («Происхождение») or a verb's conjugation. Only the fields in `patch` change; null clears note or example. `custom_fields` changes only the fields it names (null clears one) and keeps the others. both_directions false removes the RU→FR card, true brings it back with its progress. Use move_words to change the theme.",
+    "Edit one word: French, Russian, note, example, tags, part of speech, gender, slang level, verlan, both_directions, custom fields, origin («Происхождение»), a verb's conjugation, or muted («на паузе»: kept but out of review). Only the fields in `patch` change; null clears note or example. `custom_fields` changes only the fields it names (null clears one) and keeps the others. both_directions false removes the RU→FR card, true brings it back with its progress. Use move_words to change the theme.",
   input: z.object({
     id: z.string().trim().min(1).max(64).describe("Word id from search_words."),
     patch: z
@@ -850,6 +853,10 @@ export const updateWord = tool({
         origin: originInput,
         conjugation: conjugationInput,
         both_directions: z.boolean().optional(),
+        muted: z
+          .boolean()
+          .optional()
+          .describe("true puts the word «на паузе»: it stays in the library but never comes up in review; false brings it back."),
       })
       .describe("Fields to change."),
   }),
@@ -870,6 +877,7 @@ export const updateWord = tool({
     if (p.verlan !== undefined) next.verlan = p.verlan;
     if (p.tags !== undefined) next.tags = [...new Set(p.tags.map((t) => t.trim()).filter(Boolean))];
     if (p.both_directions !== undefined) next.both_directions = p.both_directions;
+    if (p.muted !== undefined) next.muted = p.muted;
     if (p.origin !== undefined) next.origin = cleanOrigin(p.origin);
     const conjugation = conjugationOf(p.conjugation);
     if (conjugation !== undefined) next.conjugation = conjugation;
@@ -887,6 +895,7 @@ export const updateWord = tool({
     }
     // Columns missing on older rows read as no value, so «not set» never counts as a change.
     if ((next.origin ?? null) === (current.origin ?? null)) next.origin = current.origin;
+    if (!!next.muted === !!current.muted) next.muted = current.muted;
     if (JSON.stringify(next.conjugation ?? null) === JSON.stringify(current.conjugation ?? null)) next.conjugation = current.conjugation;
 
     const changed = JSON.stringify(next) !== JSON.stringify(current);

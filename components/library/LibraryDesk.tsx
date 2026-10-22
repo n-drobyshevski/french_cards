@@ -181,8 +181,9 @@ function Desk({ scope }: { scope: LibraryScope }) {
     return sortedRows.filter(
       (item) =>
         (status !== "due" || item.schedule.due) &&
-        (status !== "difficult" || item.schedule.status === "difficult") &&
+        (status !== "difficult" || (item.schedule.status === "difficult" && !item.word.muted)) &&
         (status !== "new" || item.schedule.tone === "new") &&
+        (status !== "paused" || !!item.word.muted) &&
         matchesSlang(item.word, slang) &&
         (!q || matchesSearch(item.word, q)),
     );
@@ -198,12 +199,14 @@ function Desk({ scope }: { scope: LibraryScope }) {
     let due = 0;
     let difficult = 0;
     let fresh = 0;
+    let paused = 0;
     for (const r of scopeRows ?? []) {
       if (r.schedule.due) due++;
-      if (r.schedule.status === "difficult") difficult++;
+      if (r.word.muted) paused++;
+      else if (r.schedule.status === "difficult") difficult++;
       if (r.schedule.tone === "new") fresh++;
     }
-    return { due, difficult, fresh };
+    return { due, difficult, fresh, paused };
   }, [scopeRows]);
 
   // ----- Cursor (the current row) and selection
@@ -637,7 +640,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
             {scopeStats.total > 0 && (
               <span className="tabular-nums">
                 {" · "}
-                {scopeStats.total - scopeStats.fresh} повторено
+                {scopeStats.reviewed} повторено
                 {scopeStats.reviewedToday > 0 && ` · ${scopeStats.reviewedToday} сегодня`}
               </span>
             )}
@@ -864,6 +867,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
                 dueCount={counts.due}
                 difficultCount={counts.difficult}
                 newCount={counts.fresh}
+                pausedCount={counts.paused}
                 sort={sort}
                 onOrder={(key) => setSort(key, true)}
               />
@@ -924,6 +928,8 @@ function Desk({ scope }: { scope: LibraryScope }) {
                             ? "Трудных слов нет."
                             : status === "new"
                               ? "Новых слов нет."
+                              : status === "paused"
+                                ? "Слов на паузе нет."
                             : "С таким уровнем сленга слов нет."}
                     </p>
                     {query.trim() && (

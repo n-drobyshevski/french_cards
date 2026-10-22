@@ -84,6 +84,20 @@ describe("loadSession", () => {
     expect(c).toBeDefined();
   });
 
+  it("leaves words «на паузе» out of the session, its counts and practice rounds", async () => {
+    await updateSettings({ new_per_day: 5 });
+    const a = await word("a", { both_directions: false });
+    const muted = await word("muted", { both_directions: false, muted: true });
+    const mutedDue = await word("muted-due", { both_directions: false, muted: true });
+    await setReview(mutedDue, "fr_ru", at(-DAY));
+
+    const { queue, counts } = await loadSession({}, NOON);
+    expect(keys(queue)).toEqual([`${a.id}:fr_ru`]);
+    expect(counts).toEqual({ due: 0, new: 1, done: 0, total: 1 });
+    expect(keys(await buildPracticeQueue({ scope: "all" }, NOON))).toEqual([`${a.id}:fr_ru`]);
+    expect(muted.muted).toBe(true);
+  });
+
   it("orders due cards by due date and includes review cards due later today", async () => {
     const x = await word("x", { both_directions: false });
     const y = await word("y", { both_directions: false });

@@ -78,6 +78,8 @@ export interface Word extends Syncable {
   origin?: string | null;
   /** «Спряжение» saved on the word (from the chat); wins over the one built on the device. Missing on older rows. */
   conjugation?: Conjugation | null;
+  /** «На паузе»: kept in the library but left out of every review and practice round. Missing on older rows (= false). */
+  muted?: boolean;
   pos: PartOfSpeech;
   gender: Gender;
   slang_level: SlangLevel;

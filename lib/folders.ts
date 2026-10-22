@@ -229,8 +229,12 @@ export interface FolderStats {
   due: number;
   /** Words whose status is "difficult". */
   difficult: number;
-  /** Words never reviewed. */
+  /** Words never reviewed (and not «на паузе»). */
   fresh: number;
+  /** Words «на паузе» (Word.muted): out of review, so not in due, fresh or difficult either. */
+  paused: number;
+  /** Words with at least one card past «new», paused or not (library KPI «повторено»). */
+  reviewed: number;
   /** Words with a card graded since the study day began (library KPI «сегодня»). */
   reviewedToday: number;
   /** 0..1 mean card mastery (stability / 21 d, new = 0). */
@@ -254,7 +258,7 @@ export interface LibraryStats {
   folders: FolderWithStats[];
 }
 
-const emptyStats = (): FolderStats => ({ total: 0, due: 0, difficult: 0, fresh: 0, reviewedToday: 0, mastery: 0, samples: [] });
+const emptyStats = (): FolderStats => ({ total: 0, due: 0, difficult: 0, fresh: 0, paused: 0, reviewed: 0, reviewedToday: 0, mastery: 0, samples: [] });
 
 interface Acc {
   stats: FolderStats;
@@ -301,15 +305,18 @@ export function libraryStatsFrom(
     const key = w.folder_id !== null && folderIds.has(w.folder_id) ? w.folder_id : null;
     const ws = statesByWord.get(w.id) ?? [];
     const status = wordStatus(ws);
-    const due = ws.some((s) => isDueToday(s, now));
+    const due = !w.muted && ws.some((s) => isDueToday(s, now));
     const m = ws.reduce((sum, s) => sum + cardMastery(s), 0);
+    const neverReviewed = ws.every((s) => cardStatus(s) === "new");
     const today = ws.some((s) => s.last_review !== null && Date.parse(s.last_review) >= dayStart);
     for (const a of [acc(key), total]) {
       a.stats.total++;
       if (a.stats.samples.length < SAMPLE_WORDS) a.stats.samples.push(w.fr);
       if (due) a.stats.due++;
-      if (status === "difficult") a.stats.difficult++;
-      if (ws.every((s) => cardStatus(s) === "new")) a.stats.fresh++;
+      if (w.muted) a.stats.paused++;
+      else if (status === "difficult") a.stats.difficult++;
+      if (!w.muted && neverReviewed) a.stats.fresh++;
+      if (!neverReviewed) a.stats.reviewed++;
       if (today) a.stats.reviewedToday++;
       a.masterySum += m;
       a.cards += ws.length;

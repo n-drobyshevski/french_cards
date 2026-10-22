@@ -123,7 +123,8 @@ export function matchWords(
   }
   const slang = filter.slang ?? [];
   const since = filter.addedSince;
-  let words = all.filter((w) => w.deleted_at === null && inFolder(w) && matchesSlangKeys(w, slang) && (!since || w.created_at >= since));
+  // Words «на паузе» never reach a session, a practice round or the counts.
+  let words = all.filter((w) => w.deleted_at === null && !w.muted && inFolder(w) && matchesSlangKeys(w, slang) && (!since || w.created_at >= since));
   if (filter.statuses && filter.statuses.length > 0) {
     const wanted = new Set(filter.statuses);
     const ids = new Set(words.map((w) => w.id));
