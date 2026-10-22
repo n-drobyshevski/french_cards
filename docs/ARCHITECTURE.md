@@ -1,4 +1,4 @@
-# Карточки: architecture and conventions
+# Карточки для Лизи: architecture and conventions
 
 Read with `docs/plan.md` (scope and phases), `mockups/SPEC.md` (the v3 visual design: tokens, components, copy rules and every screen) and the mockup sources in `mockups/*.dc.html`. The mockups are the visual source of truth: match their layout, spacing, copy and states.
 

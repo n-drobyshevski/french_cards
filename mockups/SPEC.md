@@ -1,7 +1,7 @@
 # «Карточки» — mockup spec v3 (shared by every designer agent)
 
 Product: mobile-first PWA of vocabulary flashcards, French → Russian (it is NOT a "slang app" — slang is
-just one dimension: every word gets a detected slang level). App name everywhere: **Карточки**
+just one dimension: every word gets a detected slang level). App name everywhere: **Карточки для Лизи** (renamed 2026-10-22; home-screen label stays «Карточки»)
 (plain, no tagline about slang). Single user. UI copy is **Russian**; card words are **French**.
 
 ## v3 DIRECTION — read this first, it overrides any older habit
@@ -80,7 +80,7 @@ Rules that bite:
 - UI: `'IBM Plex Sans'` 15px base, 13px labels, 12px captions.
 - Meta / counts / section labels: `'IBM Plex Mono'` 11–12px, uppercase, letter-spacing .06em, muted (e.g. `23 К ПОВТОРЕНИЮ`, `FR → RU`, `07 / 30`).
 - Dictionary abbreviations (part of speech, register): Newsreader italic 15px muted, e.g. *v. pron. · arg.*
-- App mark: «Карточки» in Newsreader 500 22px, no italic, preceded by a tiny 10×14 outlined card glyph with a red top line.
+- App mark: «Карточки для Лизи» in Newsreader 500 22px, no italic, preceded by a tiny 10×14 outlined card glyph with a red top line.
 
 ## Shape & spacing
 - Side gutter 16px. Radius: cards 6px, sheets 12px top, buttons 6px, inputs 4px, chips 4px (NOT pills). No shadows except the sheet: a single 1px rule on its top edge plus scrim `rgba(17,17,17,.4)`.
@@ -143,7 +143,7 @@ Intervals under grade buttons (FSRS): Не знаю «<1 мин», Сложно 
 - Sort-Plan: title «Предлагаемые перемещения», sub «12 перемещений · 1 новая тема · слова, разложенные вручную, не трогаются». IMPORTANT data fix: the words moved to Деньги must NOT appear in the Folder board. Use → Деньги (3): le pognon, les ronds, être raide; → Эмоции (2): avoir la haine, être vénère; → новая тема «Транспорт» (3): la caisse, le tromé, la bécane; → Люди (2, toggle off): le daron, la daronne. Folder board lists Деньги words: la thune, le fric, l'oseille, le blé, raquer, être fauché, le flouze.
 - Word-Detail: «Перегенерировать с ИИ» → «Обновить перевод и заметку»; history squares outlined/filled ink-style.
 - Settings: section «Подсказки» instead of «ИИ»: toggle «Автоподсказки при вводе», toggle «Раскладывать по темам автоматически»; one privacy line: «Слова и скриншоты отправляются в Anthropic (Claude) для подсказок и не хранятся там.» Remove the «Модель» row. «Импорт из Petit Argot v1» → «Импорт из старой версии (HTML)».
-- Login: big «Карточки» mark (Newsreader 40) with the card glyph; tagline «Слова, которые хочется запомнить.» — nothing about slang. Built app: email + password fields (radius 4, 1px rule border, focused = 2px ink border), «Забыли пароль?» and «Создать аккаунт» links; the OTP board below is the original design.
+- Login: big «Карточки для Лизи» mark (balanced over two lines on phones) (Newsreader 40) with the card glyph; tagline «Слова, которые хочется запомнить.» — nothing about slang. Built app: email + password fields (radius 4, 1px rule border, focused = 2px ink border), «Забыли пароль?» and «Создать аккаунт» links; the OTP board below is the original design.
 - Dark boards: same structure with dark tokens.
 
 ## Screen-by-screen requirements

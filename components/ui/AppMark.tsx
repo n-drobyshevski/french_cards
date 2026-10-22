@@ -1,3 +1,4 @@
+import { APP_NAME } from "@/lib/brand";
 import { cx } from "./cx";
 
 /** Outlined index card with the red header rule. md: 10×14 (app bar), lg: 20×28 (login). */
@@ -23,7 +24,7 @@ export interface AppMarkProps {
   className?: string;
 }
 
-/** «Карточки» wordmark preceded by the card glyph. */
+/** «Карточки для Лизи» wordmark preceded by the card glyph. */
 export function AppMark({ size = "md", as: Tag = "span", className }: AppMarkProps) {
   const lg = size === "lg";
   return (
@@ -35,7 +36,7 @@ export function AppMark({ size = "md", as: Tag = "span", className }: AppMarkPro
       )}
     >
       <CardGlyph size={size} />
-      <span>Карточки</span>
+      <span>{APP_NAME}</span>
     </Tag>
   );
 }

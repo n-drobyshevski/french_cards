@@ -1,4 +1,4 @@
-# Карточки
+# Карточки для Лизи
 
 Mobile-first PWA for learning French words with Russian translations: spaced-repetition cards (FSRS), quick add with dictionary and Claude suggestions, word extraction from screenshots, and themes that sort themselves.
 

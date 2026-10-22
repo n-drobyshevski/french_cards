@@ -115,7 +115,7 @@ status («трудное», «учится», «выучено», «новое»
 
 ### Expanded sidebar (248px) — draw IDENTICALLY on every expanded board except Login
 Full height, paper, 1px `#d6d6d1` right rule, padding 16 12 12, flex column. Text only — no nav icons.
-1. **Mark** y 16, 40px, padding 0 8: card glyph 10×14 + «Карточки» Newsreader 500 22/28.
+1. **Mark** y 16, 40px, padding 0 8: card glyph 10×14 + «Карточки для Лизи» Newsreader 500 22/28.
 2. **«+ Новое слово»** y 72, 32px tertiary row (link D-Add-Empty.dc.html, aria «Добавить слово»,
    `aria-keyshortcuts="N"`), padding 0 8 0 12: «+ Новое слово» 14px 500 ink + right flat mono 11 muted «N».
 3. **Nav** y 120, items 36px, gap 2, radius 4, padding 0 8 0 12: label 14px + right count mono 12 tabular:
@@ -149,7 +149,7 @@ Reference markup (copy it; change only `aria-current`, the active bar, weights a
 <aside aria-label="Разделы" style="position: absolute; left: 0; top: 0; bottom: 0; width: 248px; box-sizing: border-box; padding: 16px 12px 12px; border-right: 1px solid #d6d6d1; background: #f1f1ee; display: flex; flex-direction: column">
   <div style="height: 40px; padding: 0 8px; display: flex; align-items: center; gap: 8px">
     <svg aria-hidden="true" width="10" height="14" viewBox="0 0 10 14" fill="none"><rect x="0.5" y="0.5" width="9" height="13" rx="1" stroke="#111111" stroke-width="1"></rect><path d="M0.5 3.5h9" stroke="#c8331f" stroke-width="1.5"></path></svg>
-    <span style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 22px; line-height: 28px; letter-spacing: -0.01em; color: #111111">Карточки</span>
+    <span style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 22px; line-height: 28px; letter-spacing: -0.01em; color: #111111">Карточки для Лизи</span>
   </div>
   <a href="D-Add-Empty.dc.html" aria-label="Добавить слово" aria-keyshortcuts="N" style="margin-top: 16px; height: 32px; padding: 0 8px 0 12px; display: flex; align-items: center; border-radius: 4px; color: #111111; text-decoration: none; font-size: 14px; font-weight: 500">
     <span style="flex: 1">+ Новое слово</span>
@@ -789,7 +789,7 @@ Red marks: bar, Входящие = 2.
 
 ### 21. D-Login.dc.html — sign in (no sidebar)
 Red marks: panel rule = 1.
-- Paper. Column 400 centred (x 520). y 120: card glyph 14×20 + «Карточки» Newsreader 500 40/44; 8px; Newsreader
+- Paper. Column 400 centred (x 520). y 120: card glyph 14×20 + «Карточки для Лизи» Newsreader 500 40/44; 8px; Newsreader
   italic 18 muted «Слова, которые хочется запомнить.»
 - y 232 index-card panel 400 (white, 1px rule, radius 6): header 40 mono 11 «ВХОД» + 2px red rule; body padding
   24: «Почта» 12 + input 44 (placeholder «you@example.com») value «n.drobyshevski@pm.me»; 16px; «Пароль» + input

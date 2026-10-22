@@ -9,6 +9,7 @@ import { CardGlyph } from "./LoginScreen";
 import { authErrorMessage, MIN_PASSWORD_LENGTH, newPasswordProblem } from "./messages";
 import { PasswordField } from "./PasswordField";
 import { checkSession, rememberSignedIn } from "./session";
+import { APP_NAME } from "@/lib/brand";
 
 type State = "checking" | "ready" | "no_session" | "done";
 
@@ -54,9 +55,9 @@ export function ResetPasswordScreen() {
 
   return (
     <main className="flex min-h-dvh flex-col bg-paper px-4 pt-28 pb-[max(28px,env(safe-area-inset-bottom))] text-ink">
-      <div className="flex items-center gap-3">
+      <div className="flex items-start gap-3">
         <CardGlyph />
-        <h1 className="m-0 font-serif text-[40px] leading-[44px] font-medium tracking-[-0.015em]">Карточки</h1>
+        <h1 className="m-0 font-serif text-[40px] leading-[44px] font-medium tracking-[-0.015em] text-balance">{APP_NAME}</h1>
       </div>
 
       <section aria-labelledby="reset-title" className="mt-12 overflow-hidden rounded-[6px] border border-rule bg-surface">

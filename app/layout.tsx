@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Newsreader } from "next/font/google";
 import { RegisterSW } from "@/components/pwa/RegisterSW";
 import { THEME_INIT_SCRIPT } from "@/components/providers/theme";
+import { APP_NAME, APP_SHORT_NAME } from "@/lib/brand";
 import "./globals.css";
 
 const plexSans = IBM_Plex_Sans({
@@ -24,10 +25,10 @@ const newsreader = Newsreader({
 });
 
 export const metadata: Metadata = {
-  title: "Карточки",
+  title: APP_NAME,
   description: "Французские слова на карточках, с подсказками и уровнем сленга.",
-  applicationName: "Карточки",
-  appleWebApp: { capable: true, title: "Карточки", statusBarStyle: "default" },
+  applicationName: APP_NAME,
+  appleWebApp: { capable: true, title: APP_SHORT_NAME, statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {

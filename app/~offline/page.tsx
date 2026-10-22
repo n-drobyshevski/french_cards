@@ -3,9 +3,10 @@ import { OfflineRetry } from "@/components/pwa/OfflineRetry";
 import { AppMark } from "@/components/ui/AppMark";
 import { buttonClasses } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icons";
+import { APP_NAME } from "@/lib/brand";
 
 export const metadata: Metadata = {
-  title: "Нет сети · Карточки",
+  title: `Нет сети · ${APP_NAME}`,
   robots: { index: false },
 };
 

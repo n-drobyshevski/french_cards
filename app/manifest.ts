@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { APP_NAME, APP_SHORT_NAME } from "@/lib/brand";
 import { SHARE_TARGET_ACCEPT, SHARE_TARGET_ACTION, SHARE_TARGET_FIELD } from "@/components/pwa/share-target";
 
 // Paper token from app/globals.css (light theme); also the launch screen background.
@@ -7,8 +8,8 @@ const PAPER = "#f1f1ee";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/",
-    name: "Карточки",
-    short_name: "Карточки",
+    name: APP_NAME,
+    short_name: APP_SHORT_NAME,
     description: "Французские слова на карточках, с подсказками и уровнем сленга.",
     lang: "ru",
     dir: "ltr",

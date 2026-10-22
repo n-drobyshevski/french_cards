@@ -11,6 +11,7 @@ import { isSupabaseConfigured, normalizeEmail, publicAllowedEmail } from "@/lib/
 import { authErrorMessage, EMAIL_RE, EXISTING_ACCOUNT, MIN_PASSWORD_LENGTH, NOT_ALLOWED, newPasswordProblem } from "./messages";
 import { PasswordField } from "./PasswordField";
 import { checkSession, passesEmailHint, rememberSignedIn } from "./session";
+import { APP_NAME } from "@/lib/brand";
 
 type Mode = "signin" | "signup" | "reset";
 
@@ -26,7 +27,7 @@ const NOTICES: Record<string, string> = {
 
 export function CardGlyph() {
   return (
-    <svg aria-hidden="true" width="20" height="28" viewBox="0 0 20 28" fill="none" className="shrink-0">
+    <svg aria-hidden="true" width="20" height="28" viewBox="0 0 20 28" fill="none" className="mt-2 shrink-0">
       <rect x="0.75" y="0.75" width="18.5" height="26.5" rx="1.5" className="stroke-ink" strokeWidth="1.5" />
       <path d="M0.75 7.5h18.5" className="stroke-red" strokeWidth="2" />
     </svg>
@@ -180,9 +181,9 @@ export function LoginScreen() {
 
   return (
     <main className="flex min-h-dvh flex-col bg-paper px-4 pt-28 pb-[max(28px,env(safe-area-inset-bottom))] text-ink">
-      <div className="flex items-center gap-3">
+      <div className="flex items-start gap-3">
         <CardGlyph />
-        <h1 className="m-0 font-serif text-[40px] leading-[44px] font-medium tracking-[-0.015em]">Карточки</h1>
+        <h1 className="m-0 font-serif text-[40px] leading-[44px] font-medium tracking-[-0.015em] text-balance">{APP_NAME}</h1>
       </div>
       <p className="mt-2 ml-8 font-serif text-[19px] leading-7 text-muted italic">Слова, которые хочется запомнить.</p>
 

@@ -6,6 +6,7 @@ import { CardGlyph } from "@/components/ui/AppMark";
 import { IconButton } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import { isIosSafari, isStandalone } from "./platform";
+import { APP_NAME } from "@/lib/brand";
 
 /** localStorage key holding when the hint was dismissed (ISO date). */
 export const INSTALL_HINT_DISMISSED_KEY = "kartochki:install-hint-dismissed";
@@ -99,7 +100,7 @@ export interface InstallHintProps {
 }
 
 /**
- * iOS Safari only: how to add Карточки to the home screen («Поделиться → На экран «Домой»»).
+ * iOS Safari only: how to add «Карточки для Лизи» to the home screen («Поделиться → На экран «Домой»»).
  * Dismissible; the dismissal is remembered in localStorage. Renders nothing elsewhere.
  */
 export function InstallHint({ placement = "floating", className }: InstallHintProps) {
@@ -122,7 +123,7 @@ export function InstallHint({ placement = "floating", className }: InstallHintPr
         <p className="mt-1 mb-0 text-[13px] leading-[18px] text-muted">
           Нажми
           <ShareGlyph />
-          <span className="font-medium text-ink">Поделиться → На экран «Домой»</span>. Карточки будут открываться
+          <span className="font-medium text-ink">Поделиться → На экран «Домой»</span>. «{APP_NAME}» будут открываться
           как приложение и работать без сети.
         </p>
       </div>
