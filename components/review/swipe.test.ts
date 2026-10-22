@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   FLICK_MIN_DISTANCE,
+  FLIP_DISTANCE,
+  FLIP_SHARE,
+  flipDecision,
+  flipVelocity,
   IDLE_SWIPE,
   MAX_ROTATION,
   SWIPE_SLOP,
@@ -134,5 +138,34 @@ describe("swipeVisual", () => {
     expect(swipeVisual(W / 6, W)).toMatchObject({ progress: 0.5, side: "good" });
     expect(swipeVisual(-W, W)).toMatchObject({ progress: 1, side: "again" });
     expect(swipeVisual(0, W)).toEqual({ rotate: 0, progress: 0, side: null });
+  });
+});
+
+describe("flipDecision", () => {
+  const H = 480;
+  it("flips after an upward drag past the distance threshold", () => {
+    expect(flipDecision(0, -FLIP_DISTANCE, H, 0)).toBe(true);
+    expect(flipDecision(0, -(FLIP_DISTANCE - 1), H, 0)).toBe(false);
+  });
+
+  it("uses a share of the height on short cards", () => {
+    expect(flipDecision(0, -(200 * FLIP_SHARE), 200, 0)).toBe(true);
+  });
+
+  it("flips on a quick upward flick", () => {
+    expect(flipDecision(0, -FLICK_MIN_DISTANCE, H, -0.6)).toBe(true);
+    expect(flipDecision(0, -FLICK_MIN_DISTANCE, H, -0.1)).toBe(false);
+  });
+
+  it("ignores downward and mostly horizontal drags", () => {
+    expect(flipDecision(0, 120, H, 1)).toBe(false);
+    expect(flipDecision(150, -100, H, -1)).toBe(false);
+  });
+});
+
+describe("flipVelocity", () => {
+  it("measures recent vertical speed, negative upwards", () => {
+    expect(flipVelocity([{ y: 300, t: 0 }, { y: 250, t: 50 }, { y: 200, t: 100 }], 100)).toBe(-1);
+    expect(flipVelocity([{ y: 300, t: 0 }], 0)).toBe(0);
   });
 });

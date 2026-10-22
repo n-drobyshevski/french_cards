@@ -134,3 +134,36 @@ export function swipeVisual(dx: number, width: number): SwipeVisual {
   const progress = Math.min(1, Math.abs(dx) / (width * SWIPE_THRESHOLD));
   return { rotate, progress, side: dx > 0 ? "good" : "again" };
 }
+
+// Swipe up on the question side flips the card.
+
+/** Upward travel (px) that flips on release, capped by FLIP_SHARE of the card height. */
+export const FLIP_DISTANCE = 72;
+export const FLIP_SHARE = 0.2;
+/** An upward flick faster than this (px/ms, measured over VELOCITY_WINDOW_MS) flips earlier. */
+export const FLIP_FLICK_VELOCITY = 0.4;
+/** Visual drag is damped so the card only lifts a little. */
+export const FLIP_DAMPING = 0.35;
+
+export interface FlipSample {
+  y: number;
+  t: number;
+}
+
+/** Vertical velocity (px/ms) over the recent samples; negative is upwards. */
+export function flipVelocity(samples: readonly FlipSample[], now: number): number {
+  const recent = samples.filter((s) => now - s.t <= VELOCITY_WINDOW_MS);
+  if (recent.length < 2) return 0;
+  const first = recent[0];
+  const last = recent[recent.length - 1];
+  const dt = last.t - first.t;
+  return dt > 0 ? (last.y - first.y) / dt : 0;
+}
+
+/** True when releasing a drag of (dx, dy) on a card of `height` should flip it. */
+export function flipDecision(dx: number, dy: number, height: number, velocity: number): boolean {
+  if (dy >= 0 || Math.abs(dy) <= Math.abs(dx)) return false;
+  const far = -dy >= Math.min(FLIP_DISTANCE, height * FLIP_SHARE);
+  const flick = -dy >= FLICK_MIN_DISTANCE && velocity <= -FLIP_FLICK_VELOCITY;
+  return far || flick;
+}

@@ -8,7 +8,7 @@ import type { Direction, Word } from "@/lib/types";
 import { posAbbr } from "./format";
 import type { SwipeOutcome } from "./swipe";
 import { swipeVisual } from "./swipe";
-import { useSwipe } from "./useSwipe";
+import { useSwipe, useSwipeUp } from "./useSwipe";
 
 /** Index-card shell: white, radius 6, 1px rule, the red header rule 44px from the top. */
 const cardShell = "flex flex-col overflow-hidden rounded-card border border-rule bg-surface text-ink";
@@ -45,6 +45,7 @@ export interface ReviewCardProps {
 /** The review card: question side (tap to flip) or answer side (swipe to grade). */
 export function ReviewCard({ word, direction, revealed, onReveal, folderName, swipeEnabled, onSwipe, hasNext }: ReviewCardProps) {
   const swipe = useSwipe({ enabled: revealed && swipeEnabled, onDecide: onSwipe });
+  const swipeUp = useSwipeUp({ enabled: !revealed && swipeEnabled, onFlip: onReveal });
   const { dx, width, mode } = swipe.view;
   const visual = swipeVisual(dx, width || 1);
   const moving = mode !== "idle" || dx !== 0;
@@ -72,9 +73,20 @@ export function ReviewCard({ word, direction, revealed, onReveal, folderName, sw
       {!revealed ? (
         <button
           type="button"
-          onClick={onReveal}
+          {...swipeUp.handlers}
+          onClick={() => {
+            if (!swipeUp.consumeClick()) onReveal();
+          }}
           aria-label={`Карточка ${prompt}, перевернуть`}
-          className={cx(cardShell, "absolute inset-0 text-left")}
+          style={
+            swipeUp.lift || swipeUp.settling
+              ? {
+                  transform: `translateY(${swipeUp.lift}px)`,
+                  transition: swipeUp.settling ? "transform 180ms ease-out" : "none",
+                }
+              : undefined
+          }
+          className={cx(cardShell, "absolute inset-0 text-left", swipeEnabled && "touch-none select-none")}
         >
           <CardHeader label={label} />
           <span className="flex min-h-0 flex-1 flex-col justify-center px-6 pb-6">
@@ -92,7 +104,7 @@ export function ReviewCard({ word, direction, revealed, onReveal, folderName, sw
           </span>
           <span className="mx-5 flex h-12 shrink-0 items-center gap-2 border-t border-rule text-[12px] text-muted">
             <Icon name="flip" size={14} />
-            <span>тапни, чтобы перевернуть</span>
+            <span>{swipeEnabled ? "тапни или смахни вверх" : "тапни, чтобы перевернуть"}</span>
           </span>
         </button>
       ) : (

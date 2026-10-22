@@ -1,7 +1,19 @@
 "use client";
 
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { IDLE_SWIPE, swipeReducer, type SwipeAction, type SwipeOutcome, type SwipeState } from "./swipe";
+import {
+  FLIP_DAMPING,
+  flipDecision,
+  flipVelocity,
+  IDLE_SWIPE,
+  SWIPE_SLOP,
+  swipeReducer,
+  VELOCITY_WINDOW_MS,
+  type FlipSample,
+  type SwipeAction,
+  type SwipeOutcome,
+  type SwipeState,
+} from "./swipe";
 
 /** Fly-out time after a decided swipe, before the grade is applied. */
 export const FLY_OUT_MS = 180;
@@ -101,5 +113,87 @@ export function useSwipe({ enabled, onDecide }: { enabled: boolean; onDecide: (o
           onLostPointerCapture,
         }
       : {},
+  };
+}
+
+/**
+ * Swipe up on the question side to flip. The card lifts (damped) with the finger and flips on
+ * release past the threshold or on a quick flick. The element needs `touch-action: none` so the
+ * browser does not scroll or pull-to-refresh instead. `consumeClick()` tells the element's
+ * onClick to skip the click that follows a flip gesture.
+ */
+export function useSwipeUp({ enabled, onFlip }: { enabled: boolean; onFlip: () => void }) {
+  const gesture = useRef<{
+    id: number;
+    x: number;
+    y: number;
+    height: number;
+    phase: "pending" | "dragging" | "ignored";
+    samples: FlipSample[];
+  } | null>(null);
+  const flipped = useRef(false);
+  const [lift, setLift] = useState(0);
+  const [settling, setSettling] = useState(false);
+
+  const end = () => {
+    gesture.current = null;
+    setSettling(true);
+    setLift(0);
+  };
+
+  const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    if (!enabled || event.button !== 0 || !event.isPrimary) return;
+    flipped.current = false;
+    gesture.current = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      height: event.currentTarget.getBoundingClientRect().height,
+      phase: "pending",
+      samples: [{ y: event.clientY, t: event.timeStamp }],
+    };
+  };
+
+  const onPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
+    const g = gesture.current;
+    if (!g || event.pointerId !== g.id || g.phase === "ignored") return;
+    const dx = event.clientX - g.x;
+    const dy = event.clientY - g.y;
+    g.samples = [...g.samples.filter((s) => event.timeStamp - s.t <= VELOCITY_WINDOW_MS), { y: event.clientY, t: event.timeStamp }];
+    if (g.phase === "pending") {
+      if (Math.abs(dx) < SWIPE_SLOP && Math.abs(dy) < SWIPE_SLOP) return;
+      g.phase = dy < 0 && Math.abs(dy) > Math.abs(dx) ? "dragging" : "ignored";
+      if (g.phase === "ignored") return;
+    }
+    setSettling(false);
+    setLift(Math.min(0, dy) * FLIP_DAMPING);
+  };
+
+  const onPointerUp = (event: ReactPointerEvent<HTMLElement>) => {
+    const g = gesture.current;
+    if (!g || event.pointerId !== g.id) return;
+    const dx = event.clientX - g.x;
+    const dy = event.clientY - g.y;
+    const samples = [...g.samples, { y: event.clientY, t: event.timeStamp }];
+    const flip = g.phase === "dragging" && flipDecision(dx, dy, g.height, flipVelocity(samples, event.timeStamp));
+    if (g.phase !== "pending") flipped.current = true; // a drag is never also a tap
+    end();
+    if (flip) onFlip();
+  };
+
+  const onPointerCancel = (event: ReactPointerEvent<HTMLElement>) => {
+    if (gesture.current && event.pointerId === gesture.current.id) end();
+  };
+
+  return {
+    lift,
+    settling,
+    /** True once if the click being handled ends a drag, so it must not flip again. */
+    consumeClick: () => {
+      const was = flipped.current;
+      flipped.current = false;
+      return was;
+    },
+    handlers: enabled ? { onPointerDown, onPointerMove, onPointerUp, onPointerCancel } : {},
   };
 }
