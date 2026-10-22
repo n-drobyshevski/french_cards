@@ -29,12 +29,12 @@ import {
   type DraftErrors,
   type WordDraft,
 } from "./draft";
-import { INBOX_CHOICE, type FolderChoice } from "./folder-choice";
+import { choiceKey, INBOX_CHOICE, listFolderChoices, type FolderChoice } from "./folder-choice";
 import { ListPanel, type ListRow } from "./ListPanel";
 import { cardNumber, nWords, plural } from "./match";
 import { parseWordList } from "./parse-list";
 import { AddSheetChrome, ToolButton, ToolLink } from "./parts";
-import { saveWords, undoSave, type SaveRequest, type SaveResult } from "./save";
+import { saveWordGroups, undoSave, type SaveRequest, type SaveResult } from "./save";
 import { SearchPanel, type QuickFields } from "./SearchPanel";
 import { FORM_ENRICH_DEBOUNCE_MS, LIST_ENRICH_DEBOUNCE_MS, useAutoEnrich } from "./use-auto-enrich";
 import { WordForm } from "./WordForm";
@@ -103,7 +103,8 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
   const [ackDuplicate, setAckDuplicate] = useState<string | null>(null);
   const [quick, setQuick] = useState<QuickFields>(EMPTY_QUICK);
   const [listText, setListText] = useState("");
-  const [listFolder, setListFolder] = useState<FolderChoice>(INBOX_CHOICE);
+  /** null = each pasted word to its own detected theme (with automatic sorting on). */
+  const [listFolder, setListFolder] = useState<FolderChoice | null>(null);
   const [listToggled, setListToggled] = useState<ReadonlySet<string>>(() => new Set());
   const [listEnriched, setListEnriched] = useState<ReadonlyMap<string, EnrichResult>>(() => new Map());
   const [saving, setSaving] = useState(false);
@@ -178,9 +179,10 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
   const parsed = useMemo(() => (mode === "list" ? parseWordList(listText) : []), [mode, listText]);
   const listFrs = useMemo(() => parsed.filter((r) => r.fr).map((r) => r.fr), [parsed]);
   const listDuplicates = useLiveQuery(() => loadListDuplicates(listFrs), [listFrs]);
+  const listAuto = listFolder === null && autoSort;
   const listRows = useMemo<ListRow[]>(() => {
     const seen = new Map<string, number>();
-    return parsed.map((r) => {
+    const rows = parsed.map((r): ListRow => {
       const lemma = normalizeLemma(r.fr);
       const occurrence = seen.get(lemma) ?? 0;
       seen.set(lemma, occurrence + 1);
@@ -193,13 +195,19 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
             ? "duplicate"
             : "ok";
       const checked = status !== "invalid" && (status === "ok") !== listToggled.has(key);
-      return { ...r, key, status, checked, enrich: listEnriched.get(key) ?? null };
+      return { ...r, key, status, checked, enrich: listEnriched.get(key) ?? null, autoFolder: null };
     });
-  }, [parsed, listDuplicates, listToggled, listEnriched]);
+    if (!listAuto) return rows;
+    const choices = listFolderChoices(
+      rows.map((r) => (r.status === "invalid" ? null : r.enrich)),
+      folders,
+    );
+    return rows.map((r, i) => ({ ...r, autoFolder: choices[i] }));
+  }, [parsed, listDuplicates, listToggled, listEnriched, listAuto, folders]);
   const listSelected = listRows.filter((r) => r.checked);
 
-  // Slang level and example: for the manual form while both sides are filled, and for the
-  // pasted rows not detected yet. Shown before saving; anything set by hand stays.
+  // Slang level, example and theme: for the manual form while both sides are filled, and for
+  // the pasted rows not detected yet. Shown before saving; anything set by hand stays.
   const formKey = mode === "form" && draft && suggestionsEnabled ? enrichKey(draft) : null;
   const formEnrichWords = useMemo<EnrichInput[] | null>(() => {
     if (!formKey) return null;
@@ -208,21 +216,23 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
   }, [formKey]);
   const formEnriching = useAutoEnrich(
     formEnrichWords,
+    autoSort ? folderInputs : undefined,
     (results, [sent]) => {
       const result = results.get(sent.id);
       if (!result) return;
       const sentKey = `${sent.fr}\u0001${sent.ru}`;
-      setDraft((d) => (d && enrichKey(d) === sentKey ? applyEnrichment(d, result) : d));
+      setDraft((d) => (d && enrichKey(d) === sentKey ? applyEnrichment(d, result, folders) : d));
     },
     FORM_ENRICH_DEBOUNCE_MS,
   );
   const listEnrichWords = useMemo<ListEnrichInput[] | null>(() => {
     if (mode !== "list" || !suggestionsEnabled) return null;
-    const missing = listRows.filter((r) => r.status !== "invalid" && !r.enrich);
+    const missing = listRows.filter((r) => r.status !== "invalid" && (!r.enrich || (listAuto && r.enrich.folder === null)));
     return missing.length > 0 ? missing.map((r, i) => ({ id: `l${i + 1}`, fr: r.fr, ru: r.ru, rowKey: r.key })) : null;
-  }, [mode, suggestionsEnabled, listRows]);
+  }, [mode, suggestionsEnabled, listRows, listAuto]);
   useAutoEnrich(
     listEnrichWords,
+    listAuto ? folderInputs : undefined,
     (results, sent) =>
       setListEnriched((prev) => {
         const next = new Map(prev);
@@ -321,11 +331,11 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
     onOpenWord(id);
   };
 
-  const commit = async (request: SaveRequest, message: string, andMore: boolean): Promise<SaveResult | null> => {
+  const commit = async (request: SaveRequest | SaveRequest[], message: string, andMore: boolean): Promise<SaveResult | null> => {
     setSaving(true);
     setSaveError(null);
     try {
-      const result = await saveWords(request);
+      const result = await saveWordGroups(Array.isArray(request) ? request : [request]);
       if (andMore) {
         setUndoBar({ id: ++undoSeq.current, message, result });
         startOver();
@@ -368,38 +378,60 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
     const fr = direction === "ru" ? other : trimmed;
     const ru = direction === "ru" ? trimmed : other;
     void commit(draftToSaveRequest(manualDraft({ fr, ru, folder: quick.folder })), `Добавлено · ${fr}`, false).then((result) => {
-      if (result) void fillSavedWords(result.words.map((word) => ({ word, scope: FULL_SCOPE })));
+      const scope = { ...FULL_SCOPE, folder: quick.folder.kind === "inbox" };
+      if (result) void fillSavedWords(result.words.map((word) => ({ word, scope })));
     });
   };
 
   const saveList = () => {
     if (saving || listSelected.length === 0) return;
+    // One save group per theme: the chosen one, or with automatic themes each row's own pick.
+    const groups = new Map<string, { request: SaveRequest; rows: ListRow[] }>();
+    for (const r of listSelected) {
+      const auto = listAuto ? (r.autoFolder ?? INBOX_CHOICE) : null;
+      const folder = auto ?? listFolder ?? INBOX_CHOICE;
+      const confidence = auto && auto.kind !== "inbox" && r.enrich ? r.enrich.confidence : null;
+      const key = `${choiceKey(folder)}\u0001${confidence ?? ""}`;
+      let group = groups.get(key);
+      if (!group) {
+        group = {
+          request: {
+            words: [],
+            folder,
+            folderSource: auto || folder.kind === "inbox" ? "auto" : "user",
+            folderConfidence: confidence,
+            newFolderCreatedBy: auto ? "auto" : "user",
+          },
+          rows: [],
+        };
+        groups.set(key, group);
+      }
+      group.rows.push(r);
+      group.request.words.push({
+        fr: r.fr,
+        ru: r.ru,
+        source: "import",
+        ...(r.enrich && {
+          pos: r.enrich.pos,
+          gender: r.enrich.gender,
+          slang_level: r.enrich.slang_level,
+          verlan: r.enrich.verlan,
+          example_fr: r.enrich.example_fr,
+          example_ru: r.enrich.example_ru,
+        }),
+      });
+    }
+    const ordered = [...groups.values()];
+    const rows = ordered.flatMap((g) => g.rows);
     void commit(
-      {
-        words: listSelected.map((r) => ({
-          fr: r.fr,
-          ru: r.ru,
-          source: "import" as const,
-          ...(r.enrich && {
-            pos: r.enrich.pos,
-            gender: r.enrich.gender,
-            slang_level: r.enrich.slang_level,
-            verlan: r.enrich.verlan,
-            example_fr: r.enrich.example_fr,
-            example_ru: r.enrich.example_ru,
-          }),
-        })),
-        folder: listFolder,
-        folderSource: listFolder.kind === "inbox" ? "auto" : "user",
-        folderConfidence: null,
-        newFolderCreatedBy: "user",
-      },
+      ordered.map((g) => g.request),
       `Добавлено ${nWords(listSelected.length)}`,
       false,
     ).then((result) => {
       if (!result) return;
-      const later = result.words.filter((_, i) => !listSelected[i]?.enrich);
-      if (later.length > 0) void fillSavedWords(later.map((word) => ({ word, scope: FULL_SCOPE })));
+      const scope = { ...FULL_SCOPE, folder: listAuto };
+      const later = result.words.filter((_, i) => !rows[i]?.enrich);
+      if (later.length > 0) void fillSavedWords(later.map((word) => ({ word, scope })));
     });
   };
 
@@ -572,8 +604,9 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
           onText={setListText}
           rows={listRows}
           onToggle={toggleListRow}
-          folder={listFolder}
+          folder={listFolder ?? INBOX_CHOICE}
           onFolder={setListFolder}
+          auto={autoSort ? { selected: listFolder === null, onSelect: () => setListFolder(null) } : undefined}
           folders={folders}
         />
       )}

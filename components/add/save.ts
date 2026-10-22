@@ -37,37 +37,50 @@ export interface SaveRequest {
 }
 
 export interface SaveResult {
+  /** In the order of the request(s). */
   words: Word[];
-  createdFolder: Folder | null;
+  /** Themes this save created. */
+  createdFolders: Folder[];
 }
 
 export async function saveWords(req: SaveRequest): Promise<SaveResult> {
-  const { folderId, created } = await resolveFolderChoice(req.folder, req.newFolderCreatedBy);
+  return saveWordGroups([req]);
+}
+
+/** Several groups, each into its own theme («Список» with automatic themes), saved and undone as one. */
+export async function saveWordGroups(requests: readonly SaveRequest[]): Promise<SaveResult> {
+  const result: SaveResult = { words: [], createdFolders: [] };
   try {
-    const words = await addWords(
-      req.words.map((w) => ({
-        ...w,
-        folder_id: folderId,
-        folder_source: req.folderSource,
-        folder_confidence: folderId === null ? null : req.folderConfidence,
-      })),
-    );
-    return { words, createdFolder: created };
+    for (const req of requests) {
+      const { folderId, created } = await resolveFolderChoice(req.folder, req.newFolderCreatedBy);
+      if (created) result.createdFolders.push(created);
+      const words = await addWords(
+        req.words.map((w) => ({
+          ...w,
+          folder_id: folderId,
+          folder_source: req.folderSource,
+          folder_confidence: folderId === null ? null : req.folderConfidence,
+        })),
+      );
+      result.words.push(...words);
+    }
+    return result;
   } catch (error) {
-    if (created) await deleteFolder(created.id).catch(() => {});
+    if (result.words.length > 0) await softDeleteWords(result.words.map((w) => w.id)).catch(() => {});
+    for (const f of result.createdFolders) await deleteFolder(f.id).catch(() => {});
     throw error;
   }
 }
 
-/** Undo for the snackbar: removes the words, and the theme this save created if nothing else is in it. */
+/** Undo for the snackbar: removes the words, and the themes this save created if nothing else is in them. */
 export async function undoSave(result: SaveResult): Promise<void> {
   await softDeleteWords(result.words.map((w) => w.id));
-  const folder = result.createdFolder;
-  if (!folder) return;
-  const left = await db.words
-    .where("folder_id")
-    .equals(folder.id)
-    .filter((w) => w.deleted_at === null)
-    .count();
-  if (left === 0) await deleteFolder(folder.id);
+  for (const folder of result.createdFolders) {
+    const left = await db.words
+      .where("folder_id")
+      .equals(folder.id)
+      .filter((w) => w.deleted_at === null)
+      .count();
+    if (left === 0) await deleteFolder(folder.id);
+  }
 }

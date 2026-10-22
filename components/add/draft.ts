@@ -102,13 +102,28 @@ export function enrichScope(d: WordDraft) {
     slang: !d.slang_touched,
     example: !d.example_touched && (!d.example_fr.trim() || d.example_auto),
     pos: true,
+    // Saved before any theme was picked: file it afterwards (existing themes only).
+    folder: !d.folder_touched && d.auto === null,
   };
 }
 
-/** Applies a detection result to the untouched fields of a manual draft. */
-export function applyEnrichment(d: WordDraft, r: EnrichResult): WordDraft {
+/**
+ * Applies a detection result to the untouched fields of a manual draft. A theme pick (when the
+ * request carried the themes) works like a suggestion's: preselected with its alternatives and
+ * proposal, unless the user already chose a theme.
+ */
+export function applyEnrichment(
+  d: WordDraft,
+  r: EnrichResult,
+  folders: readonly Pick<Folder, "id" | "slug" | "name">[] = [],
+): WordDraft {
   const scope = enrichScope(d);
   const next: WordDraft = { ...d, pos: r.pos, gender: r.gender };
+  if (r.folder !== null && !d.folder_touched) {
+    const picks = foldersForSuggestion({ folder: r.folder, folder_alternatives: r.folder_alternatives, new_folder: r.new_folder }, folders);
+    next.folder = picks.auto;
+    next.auto = { ...picks, confidence: r.confidence };
+  }
   if (scope.slang) Object.assign(next, { slang_level: r.slang_level, verlan: r.verlan, slang_auto: true });
   if (scope.example) {
     Object.assign(

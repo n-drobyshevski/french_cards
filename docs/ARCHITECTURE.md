@@ -24,7 +24,8 @@ Read with `docs/plan.md` (scope and phases), `mockups/SPEC.md` (the v3 visual de
 - UI copy is Russian; words are French.
 - Never show «ИИ»/«AI», sparkles or "magic" in the UI. The one exception is the Settings privacy line.
 - Every word has `slang_level` 0..3 (нейтр./fam./arg./vulg.) and a `verlan` flag. Show it with the `SlangMeter` component.
-  - The level and an example are detected for every new word, not only picked suggestions: `/api/ai/enrich` fills the manual form and «Список» rows before saving (fields the user set by hand are never overwritten), screenshot rows carry an example, and the quick one-line save fills them right after saving (`fillSavedWords`, skipped if the word was edited or undone meanwhile). All of it is off when «Подсказки» are switched off.
+  - The level, an example and a theme are detected for every new word, not only picked suggestions: `/api/ai/enrich` fills the manual form and «Список» rows before saving (fields the user set by hand, including a chosen theme, are never overwritten), screenshot rows carry an example, and the quick one-line save fills them right after saving (`fillSavedWords`, skipped if the word was edited or undone meanwhile). All of it is off when «Подсказки» are switched off.
+  - Themes follow «Раскладывать по темам автоматически». In the form the pick works like a suggestion's (alternatives, «+ новая тема»). «Список» defaults to «По темам автоматически»: each row goes to its own theme, a new theme only when ≥3 rows share it, low confidence stays in «Входящие». After a quick save the word only moves from «Входящие» into an existing theme, never a new one.
   - «Дополнить карточки» in the library proposes examples for words without one and levels for hand-typed words still at the default, applied only after review, with undo.
 - Folders («темы») hold words. `folder_id = null` means «Входящие» (Inbox).
   - Automatic sorting never moves a word whose `folder_source = 'user'`, and never renames or deletes a `locked` or user-created folder.
@@ -52,7 +53,7 @@ If `NEXT_PUBLIC_SUPABASE_URL` is unset, the app runs fully local: there is no lo
 | Sync/auth | `lib/supabase/{client,server}.ts`, `lib/sync.ts`, `proxy.ts`, `supabase/migrations/*`, `app/login/*`, `app/api/cron/ping/route.ts`, `vercel.json`, `.env.example`, `components/auth/*` |
 | UI kit + shell | `components/ui/*` (Button, Chip, SlangMeter, Sheet, Toggle, Segmented, Snackbar, Kbd, Icon set, AppMark, TabBar, Header), `app/(app)/layout.tsx`, `components/providers/*` (theme, db init, sync loop mount), `components/shell/*` (desktop sidebar/rail, global keys, «Клавиши», word drag-and-drop), `lib/use-media.ts`, `lib/key-names.ts` |
 | AI core | `lib/ai/{schemas,prompts,model,auth,rate-limit,enrich}.ts`, `app/api/ai/{suggest,extract,classify,enrich}/route.ts`, `scripts/build-lexique.*`, `public/lexique/*`, `lib/lexique.ts` |
-| Detection (slang level + example) | `lib/enrich.ts` (requests, patches, library plan), `components/add/use-auto-enrich.ts`, `components/library/EnrichPlanSheet.tsx` |
+| Detection (slang level, example, theme) | `lib/enrich.ts` (requests, patches, library plan), `components/add/use-auto-enrich.ts`, `components/library/EnrichPlanSheet.tsx` |
 | PWA | `app/manifest.ts`, `app/sw.ts`, `next.config.ts`, `public/icons/*`, `components/pwa/*` |
 | Review screens | `app/(app)/page.tsx` (review), `app/(app)/done/*` or in-page done state, `components/review/*`, `app/(app)/settings/page.tsx`, `components/settings/*` |
 | Library screens | `app/(app)/library/page.tsx`, `app/(app)/library/[id]/page.tsx`, `components/library/*` (tiles, folder list, word detail sheet, sort plan sheet), `lib/reorg.ts` |

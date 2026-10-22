@@ -329,12 +329,15 @@ export function FolderSelect({
   folders,
   onChange,
   labelledBy,
+  auto,
 }: {
   id?: string;
   value: FolderChoice;
   folders: readonly Folder[];
   onChange: (choice: FolderChoice) => void;
   labelledBy?: string;
+  /** A first option «label» that stands for «each word to its own theme». */
+  auto?: { label: string; selected: boolean; onSelect: () => void };
 }) {
   const options: FolderChoice[] = [INBOX_CHOICE, ...folders.map((f): FolderChoice => ({ kind: "folder", id: f.id }))];
   if (value.kind === "new") options.push(value);
@@ -343,13 +346,15 @@ export function FolderSelect({
       <select
         id={id}
         aria-labelledby={labelledBy}
-        value={choiceKey(value)}
+        value={auto?.selected ? "auto" : choiceKey(value)}
         onChange={(e) => {
+          if (auto && e.target.value === "auto") return auto.onSelect();
           const next = options.find((o) => choiceKey(o) === e.target.value);
           if (next) onChange(next);
         }}
         className="h-[46px] w-full min-w-0 cursor-pointer appearance-none bg-transparent pr-6 text-[15px] leading-5 text-ink outline-none! pointer-coarse:text-[16px]"
       >
+        {auto && <option value="auto">{auto.label}</option>}
         {options.map((o) => (
           <option key={choiceKey(o)} value={choiceKey(o)}>
             {o.kind === "new" ? `Новая тема: ${o.name}` : choiceName(o, folders)}

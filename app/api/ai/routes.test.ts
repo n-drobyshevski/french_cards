@@ -268,12 +268,44 @@ describe("POST /api/ai/enrich", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       results: [
-        { id: "a", pos: "noun", gender: "f", slang_level: 1, verlan: false, example_fr: null, example_ru: null, confidence: "high" },
-        { id: "b", pos: "adj", gender: "none", slang_level: 2, verlan: true, example_fr: "Il est chelou.", example_ru: "Он стрёмный.", confidence: "high" },
+        { id: "a", pos: "noun", gender: "f", slang_level: 1, verlan: false, example_fr: null, example_ru: null, confidence: "high", folder: null, folder_alternatives: [], new_folder: null },
+        { id: "b", pos: "adj", gender: "none", slang_level: 2, verlan: true, example_fr: "Il est chelou.", example_ru: "Он стрёмный.", confidence: "high", folder: null, folder_alternatives: [], new_folder: null },
       ],
     });
     const call = ai.generateText.mock.calls[0][0] as { prompt: string };
     expect(call.prompt).toContain("w1\tla caisse\tтачка");
+    expect(call.prompt).not.toContain("Themes:");
+  });
+
+  it("with themes: picks one per word, kept inside the learner's slugs", async () => {
+    const item = { pos: "noun", gender: "f", slang_level: "fam", verlan: false, example_fr: null, example_ru: null, confidence: "high" };
+    ai.generateText.mockResolvedValue({
+      output: {
+        items: [
+          { ...item, ref: "w1", folder: "dengi", folder_alternatives: ["dengi", "eda", "unknown"], new_folder: null },
+          { ...item, ref: "w2", folder: "NEW", folder_alternatives: [], new_folder: { slug: "transport", name: "транспорт", description: "Машины." } },
+          { ...item, ref: "w3", folder: "unknown", folder_alternatives: [], new_folder: null },
+        ],
+      },
+    });
+    const folders = [
+      { slug: "dengi", name: "Деньги", description: null },
+      { slug: "eda", name: "Еда", description: null },
+    ];
+    const words = [
+      { id: "a", fr: "la thune", ru: "бабки" },
+      { id: "b", fr: "la caisse", ru: "тачка" },
+      { id: "c", fr: "truc", ru: "штука" },
+    ];
+    const body = await (await enrich(json({ words, folders }))).json();
+    expect(body.results.map((r: { folder: string; folder_alternatives: string[] }) => [r.folder, r.folder_alternatives])).toEqual([
+      ["dengi", ["eda"]],
+      ["NEW", []],
+      ["INBOX", []],
+    ]);
+    expect(body.results[1].new_folder).toMatchObject({ slug: "transport", name: "Транспорт" });
+    const call = ai.generateText.mock.calls[0][0] as { prompt: string };
+    expect(call.prompt).toContain("Themes:\n- dengi: Деньги");
   });
 
   it("502 when the model call fails", async () => {

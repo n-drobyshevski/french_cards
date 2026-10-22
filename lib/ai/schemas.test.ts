@@ -52,6 +52,7 @@ const modelSchemas: Record<string, z.ZodType> = {
   taxonomyEmpty: buildTaxonomySchema([]),
   assignment: buildAssignmentSchema(SLUGS),
   enrichment: buildEnrichmentSchema(),
+  enrichmentWithThemes: buildEnrichmentSchema(SLUGS),
 };
 
 describe("model output schemas", () => {

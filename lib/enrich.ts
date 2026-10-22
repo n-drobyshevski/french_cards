@@ -1,10 +1,13 @@
-// Slang level, part of speech and an example for words the user typed (manual form, quick save,
-// «Список») and for words already in the library («Дополнить карточки»), via POST /api/ai/enrich.
+// Slang level, part of speech, an example and a theme for words the user typed (manual form,
+// quick save, «Список»), and slang level + example for words already in the library
+// («Дополнить карточки»), via POST /api/ai/enrich.
 // The network part is small; deciding what to change is in pure functions so it is unit-tested.
 import { db } from "./db";
-import { ENRICH_CHUNK_MAX, type AiErrorBody, type EnrichResponse, type EnrichResult } from "./ai/schemas";
+import { ENRICH_CHUNK_MAX, type AiErrorBody, type EnrichResponse, type EnrichResult, type FolderInput } from "./ai/schemas";
+import { listFolders } from "./folders";
 import { getSettings } from "./settings";
-import type { Word } from "./types";
+import type { Folder, Settings, Word } from "./types";
+import { toFolderInputs } from "./use-suggest";
 import { updateWords, type WordPatch } from "./words";
 
 export const ENRICH_URL = "/api/ai/enrich";
@@ -46,6 +49,8 @@ export interface EnrichOptions {
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   /** Called as chunks finish: (words done, words total). */
   onProgress?: (done: number, total: number) => void;
+  /** The learner's themes: when set, each result also carries a theme pick. */
+  folders?: readonly FolderInput[];
 }
 
 const defaultSleep = (ms: number, signal?: AbortSignal) =>
@@ -89,7 +94,7 @@ export async function postEnrich(words: readonly EnrichInput[], opts: EnrichOpti
       res = await fetchImpl(ENRICH_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ words }),
+        body: JSON.stringify(opts.folders ? { words, folders: opts.folders } : { words }),
         signal: opts.signal,
       });
     } catch {
@@ -154,6 +159,11 @@ export interface PatchScope {
   example: boolean;
   /** Part of speech and gender may be set (only while still "other"). */
   pos: boolean;
+  /**
+   * The detected theme may be set (only while the word is in «Входящие», only an existing theme,
+   * never a low-confidence pick). Used after saving; the forms show the pick before saving instead.
+   */
+  folder?: boolean;
 }
 
 type Enrichable = Pick<Word, "example_fr" | "slang_level" | "verlan" | "pos" | "gender">;
@@ -176,10 +186,22 @@ export function enrichmentPatch(word: Enrichable, r: EnrichResult, scope: PatchS
   return patch;
 }
 
-/** Whether background detection may run now (setting on, online). */
-export async function canEnrichNow(): Promise<boolean> {
-  if (typeof navigator !== "undefined" && navigator.onLine === false) return false;
-  return (await getSettings()).suggestions_enabled;
+/** The settings when background detection may run now (setting on, online), otherwise null. */
+export async function enrichSettings(): Promise<Settings | null> {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return null;
+  const settings = await getSettings();
+  return settings.suggestions_enabled ? settings : null;
+}
+
+/** The theme to file a saved word in after the fact: an existing theme picked with some confidence. */
+export function folderPatch(
+  word: Pick<Word, "folder_id">,
+  r: EnrichResult,
+  folders: readonly Pick<Folder, "id" | "slug">[],
+): WordPatch {
+  if (word.folder_id !== null || !r.folder || r.confidence === "low") return {};
+  const folder = folders.find((f) => f.slug === r.folder);
+  return folder ? { folder_id: folder.id, folder_source: "auto", folder_confidence: r.confidence } : {};
 }
 
 export interface SavedWordFill {
@@ -193,13 +215,16 @@ export interface SavedWordFill {
  * detects the missing fields and writes them. Silent: returns the number of words patched.
  */
 export async function fillSavedWords(items: readonly SavedWordFill[], opts: Omit<EnrichOptions, "onProgress"> = {}): Promise<number> {
-  const wanted = items.filter((i) => i.scope.slang || i.scope.example || i.scope.pos);
-  if (wanted.length === 0 || !(await canEnrichNow())) return 0;
+  const wanted = items.filter((i) => i.scope.slang || i.scope.example || i.scope.pos || i.scope.folder);
+  const settings = wanted.length > 0 ? await enrichSettings() : null;
+  if (!settings) return 0;
+  const withFolders = settings.auto_sort_enabled && wanted.some((i) => i.scope.folder);
+  const folders = withFolders ? await listFolders() : [];
   let results: Map<string, EnrichResult>;
   try {
     results = await enrichWords(
       wanted.map(({ word }) => ({ id: word.id, fr: word.fr, ru: word.ru, note: word.note })),
-      { ...opts, retries: opts.retries ?? 1 },
+      { ...opts, retries: opts.retries ?? 1, folders: withFolders ? toFolderInputs(folders) : undefined },
     );
   } catch {
     return 0;
@@ -212,6 +237,7 @@ export async function fillSavedWords(items: readonly SavedWordFill[], opts: Omit
       const current = await db.words.get(word.id);
       if (!current || current.deleted_at !== null || current.updated_at !== word.updated_at) continue;
       const patch = enrichmentPatch(current, r, scope);
+      if (withFolders && scope.folder) Object.assign(patch, folderPatch(current, r, folders));
       if (Object.keys(patch).length > 0) patches.push({ id: word.id, patch });
     }
   });

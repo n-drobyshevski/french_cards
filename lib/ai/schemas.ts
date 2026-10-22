@@ -147,29 +147,53 @@ export function buildAssignmentSchema(slugs: readonly string[]) {
 }
 export type AssignmentModel = z.infer<ReturnType<typeof buildAssignmentSchema>>;
 
-/** Slang level, part of speech and an example for cards the learner wrote themselves. */
-export function buildEnrichmentSchema() {
-  return z.object({
-    items: z
-      .array(
-        z.object({
-          ref: z.string().describe("The word ref from the input, e.g. w3."),
-          pos: posField(),
-          gender: genderField(),
-          slang_level: slangField(),
-          verlan: z.boolean().describe("True if the word is verlan (syllables inverted), e.g. keuf, meuf, relou, chelou, vénère."),
-          example_fr: z
-            .string()
-            .nullable()
-            .describe("One short natural French example sentence using the word in the sense of its Russian side, or null."),
-          example_ru: z.string().nullable().describe("Russian translation of example_fr in the same register, or null when example_fr is null."),
-          confidence: confidenceField(),
-        }),
-      )
-      .describe("Exactly one entry per input word, in input order."),
+/**
+ * Slang level, part of speech and an example for cards the learner wrote themselves; with
+ * `slugs` (the learner's themes) also a theme pick, as for suggestions.
+ */
+export function buildEnrichmentSchema(slugs: readonly string[] | null = null) {
+  const base = z.object({
+    ref: z.string().describe("The word ref from the input, e.g. w3."),
+    pos: posField(),
+    gender: genderField(),
+    slang_level: slangField(),
+    verlan: z.boolean().describe("True if the word is verlan (syllables inverted), e.g. keuf, meuf, relou, chelou, vénère."),
+    example_fr: z
+      .string()
+      .nullable()
+      .describe("One short natural French example sentence using the word in the sense of its Russian side, or null."),
+    example_ru: z.string().nullable().describe("Russian translation of example_fr in the same register, or null when example_fr is null."),
+    confidence: confidenceField(),
   });
+  let item: z.ZodType = base;
+  if (slugs !== null) {
+    const folder = folderEnum(slugs);
+    item = base.extend({
+      folder: folder.describe("Best theme slug from the list; NEW when new_folder fits better than every existing theme; INBOX when unsure."),
+      folder_alternatives: z.array(folder).describe("Up to 2 other plausible theme slugs from the list, best first. Never repeats folder."),
+      new_folder: newFolderShape(),
+    });
+  }
+  return z.object({ items: z.array(item).describe("Exactly one entry per input word, in input order.") });
 }
-export type EnrichmentModel = z.infer<ReturnType<typeof buildEnrichmentSchema>>;
+
+export interface EnrichmentItemModel {
+  ref: string;
+  pos: PartOfSpeech;
+  gender: Gender;
+  slang_level: SlangCode;
+  verlan: boolean;
+  example_fr: string | null;
+  example_ru: string | null;
+  confidence: Confidence;
+  /** Only when themes were sent. */
+  folder?: string;
+  folder_alternatives?: string[];
+  new_folder?: { slug: string; name: string; description: string } | null;
+}
+export interface EnrichmentModel {
+  items: EnrichmentItemModel[];
+}
 
 // ---------------------------------------------------------------------------------------
 // Request schemas (validated on the server only; never sent to the model, so bounds are fine)
@@ -267,6 +291,8 @@ export const EnrichRequestSchema = z.object({
     .min(1)
     .max(ENRICH_CHUNK_MAX)
     .refine((list) => new Set(list.map((w) => w.id)).size === list.length, "duplicate word id"),
+  /** The learner's themes: when present, each result also gets a theme pick. */
+  folders: foldersInput(60).optional(),
 });
 export type EnrichRequest = z.input<typeof EnrichRequestSchema>;
 
@@ -364,6 +390,10 @@ export interface EnrichResult {
   example_fr: string | null;
   example_ru: string | null;
   confidence: Confidence;
+  /** Theme pick (slug, "NEW" with `new_folder`, or "INBOX"); null when no themes were sent. */
+  folder: string | null;
+  folder_alternatives: string[];
+  new_folder: NewFolderProposal | null;
 }
 
 export interface EnrichResponse {

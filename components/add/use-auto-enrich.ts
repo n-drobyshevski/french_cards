@@ -1,29 +1,31 @@
-// Debounced, abortable detection of slang level and example for what the user is typing (the
-// manual form) or has pasted («Список»). Results come back through `onResults`; nothing is saved here.
+// Debounced, abortable detection of slang level, example and theme for what the user is typing
+// (the manual form) or has pasted («Список»). Results come back through `onResults`; nothing is saved here.
 import { useEffect, useEffectEvent, useRef, useState } from "react";
-import type { EnrichResult } from "@/lib/ai/schemas";
+import type { EnrichResult, FolderInput } from "@/lib/ai/schemas";
 import { enrichWords, type EnrichInput } from "@/lib/enrich";
 
 export const FORM_ENRICH_DEBOUNCE_MS = 700;
 export const LIST_ENRICH_DEBOUNCE_MS = 800;
 
 /**
- * Requests `words` once they have been stable for `delayMs`. A new list aborts the previous
- * request. Returns whether a request for the current list is still pending.
+ * Requests `words` once they have been stable for `delayMs`; with `folders`, results also carry
+ * a theme pick. A new request aborts the previous one. Returns whether the current one is pending.
  */
 export function useAutoEnrich<T extends EnrichInput>(
   words: readonly T[] | null,
+  folders: readonly FolderInput[] | undefined,
   onResults: (results: ReadonlyMap<string, EnrichResult>, words: readonly T[]) => void,
   delayMs: number,
 ): boolean {
-  const key = words && words.length > 0 ? JSON.stringify(words) : null;
+  const key = words && words.length > 0 ? JSON.stringify({ words, folders }) : null;
   const [settled, setSettled] = useState<string | null>(null);
   const cache = useRef(new Map<string, ReadonlyMap<string, EnrichResult>>());
   const deliver = useEffectEvent((results: ReadonlyMap<string, EnrichResult>, sent: readonly T[]) => onResults(results, sent));
 
   useEffect(() => {
     if (!key) return;
-    const sent = JSON.parse(key) as T[];
+    const request = JSON.parse(key) as { words: T[]; folders?: FolderInput[] };
+    const sent = request.words;
     const cached = cache.current.get(key);
     const controller = new AbortController();
     const timer = setTimeout(
@@ -33,7 +35,7 @@ export function useAutoEnrich<T extends EnrichInput>(
           setSettled(key);
           return;
         }
-        enrichWords(sent, { signal: controller.signal, retries: 1 }).then(
+        enrichWords(sent, { signal: controller.signal, retries: 1, folders: request.folders }).then(
           (results) => {
             if (controller.signal.aborted) return;
             cache.current.set(key, results);

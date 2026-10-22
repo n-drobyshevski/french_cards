@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { EnrichResult } from "./ai/schemas";
 import { ENRICH_CHUNK_MAX } from "./ai/schemas";
 import { db } from "./db";
+import { createFolder } from "./folders";
 import {
   applyEnrichChanges,
   buildEnrichPlan,
@@ -11,6 +12,7 @@ import {
   enrichmentPatch,
   enrichWords,
   fillSavedWords,
+  folderPatch,
   loadEnrichCandidates,
   mergeChanges,
   planChanges,
@@ -32,6 +34,9 @@ function result(id: string, over: Partial<EnrichResult> = {}): EnrichResult {
     example_fr: `Exemple ${id}.`,
     example_ru: `Пример ${id}.`,
     confidence: "high",
+    folder: null,
+    folder_alternatives: [],
+    new_folder: null,
     ...over,
   };
 }
@@ -133,6 +138,41 @@ describe("fillSavedWords", () => {
     const word = await addWord({ fr: "la caisse", ru: "тачка", slang_level: 3 }, NOW);
     await fillSavedWords([{ word, scope: { slang: false, example: true, pos: true } }], { fetchImpl: fakeFetch() });
     expect(await getWord(word.id)).toMatchObject({ slang_level: 3, example_fr: `Exemple ${word.id}.` });
+  });
+});
+
+describe("theme after saving", () => {
+  it("files an Inbox word into an existing theme, never a new or low-confidence one", () => {
+    const folders = [{ id: "f-den", slug: "dengi" }];
+    const inbox = { folder_id: null };
+    expect(folderPatch(inbox, result("a", { folder: "dengi", confidence: "med" }), folders)).toEqual({
+      folder_id: "f-den",
+      folder_source: "auto",
+      folder_confidence: "med",
+    });
+    expect(folderPatch(inbox, result("a", { folder: "dengi", confidence: "low" }), folders)).toEqual({});
+    expect(folderPatch(inbox, result("a", { folder: "NEW" }), folders)).toEqual({});
+    expect(folderPatch({ folder_id: "f-x" }, result("a", { folder: "dengi" }), folders)).toEqual({});
+  });
+
+  it("quick save: sends the themes and files the word when automatic sorting is on", async () => {
+    const dengi = await createFolder({ name: "Деньги" }, NOW);
+    const word = await addWord({ fr: "la thune", ru: "бабки" }, NOW);
+    let sentFolders: unknown;
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { words: { id: string }[]; folders?: { slug: string }[] };
+      sentFolders = body.folders;
+      return Response.json({ results: body.words.map((w) => result(w.id, { folder: dengi.slug })) });
+    });
+    await fillSavedWords([{ word, scope: { slang: true, example: true, pos: true, folder: true } }], { fetchImpl });
+    expect(sentFolders).toEqual([{ slug: dengi.slug, name: "Деньги", description: null }]);
+    expect(await getWord(word.id)).toMatchObject({ folder_id: dengi.id, folder_source: "auto", folder_confidence: "high", slang_level: 2 });
+
+    await updateSettings({ auto_sort_enabled: false });
+    const other = await addWord({ fr: "le fric", ru: "деньги" }, NOW);
+    await fillSavedWords([{ word: other, scope: { slang: true, example: true, pos: true, folder: true } }], { fetchImpl });
+    expect(sentFolders).toBeUndefined();
+    expect(await getWord(other.id)).toMatchObject({ folder_id: null, slang_level: 2 });
   });
 });
 

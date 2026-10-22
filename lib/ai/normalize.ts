@@ -104,7 +104,7 @@ interface FolderPick {
   new_folder: NewFolderProposal | null;
 }
 
-function pickFolder(rawFolder: string, rawNew: SuggestionModel["new_folder"], folders: readonly FolderRef[]): FolderPick {
+export function pickFolder(rawFolder: string, rawNew: SuggestionModel["new_folder"], folders: readonly FolderRef[]): FolderPick {
   const slugs = new Set(folders.map((f) => f.slug));
   const { folder: newFolder, existing } = normalizeNewFolder(rawNew, folders);
   if (rawFolder === FOLDER_NEW) {
@@ -116,15 +116,18 @@ function pickFolder(rawFolder: string, rawNew: SuggestionModel["new_folder"], fo
   return { folder: FOLDER_INBOX, new_folder: newFolder };
 }
 
+/** Alternatives that are known slugs, never the pick itself, at most FOLDER_ALTERNATIVES_MAX. */
+export function pickAlternatives(raw: readonly string[], folder: string, folders: readonly FolderRef[]): string[] {
+  const slugs = new Set(folders.map((f) => f.slug));
+  return [...new Set(raw)].filter((s) => slugs.has(s) && s !== folder).slice(0, FOLDER_ALTERNATIVES_MAX);
+}
+
 export function normalizeSuggestion(raw: SuggestionModel, folders: readonly FolderRef[]): Suggestion | null {
   const fr = cleanText(raw.fr, 120);
   const ru = cleanText(raw.ru, 160);
   if (!fr || !ru) return null;
   const { folder, new_folder } = pickFolder(raw.folder, raw.new_folder, folders);
-  const slugs = new Set(folders.map((f) => f.slug));
-  const alternatives = [...new Set(raw.folder_alternatives)]
-    .filter((s) => slugs.has(s) && s !== folder)
-    .slice(0, FOLDER_ALTERNATIVES_MAX);
+  const alternatives = pickAlternatives(raw.folder_alternatives, folder, folders);
   const example_fr = cleanText(raw.example_fr, 200);
   return {
     fr,

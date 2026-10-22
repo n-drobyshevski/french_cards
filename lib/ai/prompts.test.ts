@@ -60,5 +60,7 @@ describe("user prompts", () => {
     expect(e).toContain("Cards (2)");
     expect(e).toContain("w1\tla caisse\tтачка\t");
     expect(e).toContain("w2\tchelou\tстрёмный\tверлан");
+    expect(e).not.toContain("Themes:");
+    expect(enrichUserPrompt({ words: [{ ref: "w1", fr: "la thune", ru: "бабки", note: null }], folders })).toMatch(/^Themes:\n- dengi: Деньги — Деньги и работа\n- eda: Еда\n\nCards \(1\)/);
   });
 });
