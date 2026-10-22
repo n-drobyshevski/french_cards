@@ -185,7 +185,6 @@ export function LoginScreen() {
         <CardGlyph />
         <h1 className="m-0 font-serif text-[40px] leading-[44px] font-medium tracking-[-0.015em] text-balance">{APP_NAME}</h1>
       </div>
-      <p className="mt-2 ml-8 font-serif text-[19px] leading-7 text-muted italic">Слова, которые хочется запомнить.</p>
 
       {!configured ? (
         <>

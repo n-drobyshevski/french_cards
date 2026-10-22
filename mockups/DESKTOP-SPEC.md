@@ -789,8 +789,7 @@ Red marks: bar, Входящие = 2.
 
 ### 21. D-Login.dc.html — sign in (no sidebar)
 Red marks: panel rule = 1.
-- Paper. Column 400 centred (x 520). y 120: card glyph 14×20 + «Карточки для Лизи» Newsreader 500 40/44; 8px; Newsreader
-  italic 18 muted «Слова, которые хочется запомнить.»
+- Paper. Column 400 centred (x 520). y 120: card glyph 14×20 + «Карточки для Лизи» Newsreader 500 40/44 (no tagline).
 - y 232 index-card panel 400 (white, 1px rule, radius 6): header 40 mono 11 «ВХОД» + 2px red rule; body padding
   24: «Почта» 12 + input 44 (placeholder «you@example.com») value «n.drobyshevski@pm.me»; 16px; «Пароль» + input
   44 FOCUSED «••••••••••» + eye button (aria «Показать пароль»); 20px; «Войти» primary 44 full width →
