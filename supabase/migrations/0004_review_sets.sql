@@ -21,15 +21,10 @@ create table if not exists public.review_sets (
 create index if not exists review_sets_user_updated_idx on public.review_sets (user_id, updated_at);
 create index if not exists review_sets_user_synced_idx  on public.review_sets (user_id, synced_at, id);
 
-drop trigger if exists review_sets_stamp on public.review_sets;
 create trigger review_sets_stamp before insert or update on public.review_sets for each row execute function public.kartochki_stamp_row();
 
 alter table public.review_sets enable row level security;
 
-drop policy if exists "review_sets: select own" on public.review_sets;
-drop policy if exists "review_sets: insert own" on public.review_sets;
-drop policy if exists "review_sets: update own" on public.review_sets;
-drop policy if exists "review_sets: delete own" on public.review_sets;
 create policy "review_sets: select own" on public.review_sets for select to authenticated using (user_id = (select auth.uid()));
 create policy "review_sets: insert own" on public.review_sets for insert to authenticated with check (user_id = (select auth.uid()));
 create policy "review_sets: update own" on public.review_sets for update to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
