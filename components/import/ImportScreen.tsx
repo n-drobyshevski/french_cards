@@ -4,6 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useRouter } from "next/navigation";
 import { startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSnackbar } from "@/components/ui/Snackbar";
+import { listFieldDefs } from "@/lib/custom-fields";
 import { markFoldersChanged } from "@/lib/folder-spotlight";
 import { listFolders } from "@/lib/folders";
 import { tokenMs } from "@/lib/motion";
@@ -199,21 +200,29 @@ export function ImportScreen() {
     if (!ankiFinished || rows) return;
     let cancelled = false;
     const items = ankiState.items;
-    Promise.all([findDuplicates(items.map((i) => i.fr)), listFolders(), getSettings()])
-      .then(([dups, fs, settings]) => {
+    // The note's fields the card was not made from are kept as «Свои поля».
+    const notes = ankiState.deck?.notes ?? [];
+    Promise.all([findDuplicates(items.map((i) => i.fr)), listFolders(), getSettings(), listFieldDefs()])
+      .then(([dups, fs, settings, defs]) => {
         if (cancelled) return;
-        const built = ankiRows(items, fs, dups, {
-          autoSort: settings.auto_sort_enabled,
-          slang: settings.slang_detect_enabled,
-          examples: settings.examples_enabled,
-        });
+        const built = ankiRows(
+          items,
+          fs,
+          dups,
+          {
+            autoSort: settings.auto_sort_enabled,
+            slang: settings.slang_detect_enabled,
+            examples: settings.examples_enabled,
+          },
+          { notes, defs },
+        );
         setAnkiSkipped(built.skipped);
         setRows(built.rows);
         setReviewing(true);
       })
       .catch(() => {
         if (cancelled) return;
-        const built = ankiRows(items, foldersRef.current ?? [], new Map());
+        const built = ankiRows(items, foldersRef.current ?? [], new Map(), {}, { notes });
         setAnkiSkipped(built.skipped);
         setRows(built.rows);
         setReviewing(true);
@@ -221,7 +230,7 @@ export function ImportScreen() {
     return () => {
       cancelled = true;
     };
-  }, [ankiFinished, rows, ankiState.items]);
+  }, [ankiFinished, rows, ankiState.items, ankiState.deck]);
 
   // Done: step 03 ✓ and the full bar hold --dur-done-hold, then the review replaces the stream row
   // for row (I3). After «Дальше» the user asked for it, so it comes at once.

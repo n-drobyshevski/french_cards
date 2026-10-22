@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { AnkiDeck, AnkiItem, AnkiNote } from "@/lib/anki/types";
-import type { Word } from "@/lib/types";
-import { ankiRows, candidateTerms, deckTitle, frFirst, knownNotes, selectNotes } from "./anki-plan";
+import { FIELD_VALUE_MAX } from "@/lib/core/custom-fields";
+import type { FieldDef, Word } from "@/lib/types";
+import { ankiCustomFields, ankiRows, candidateTerms, deckTitle, frFirst, knownNotes, selectNotes } from "./anki-plan";
 
 const note = (id: string, deckId: string, ...texts: string[]): AnkiNote => ({
   id,
@@ -45,6 +46,64 @@ const item = (ref: string, fr: string, patch: Partial<AnkiItem> = {}): AnkiItem 
   ...patch,
 });
 
+const withFields = (id: string, ...fields: [name: string, text: string][]): AnkiNote => ({
+  ...note(id, "d1"),
+  fields: fields.map(([name, text]) => ({ name, text })),
+});
+
+const def = (id: string, name: string, patch: Partial<FieldDef> = {}): FieldDef => ({
+  id,
+  name,
+  hint: null,
+  ai_fill: true,
+  sort: 1,
+  updated_at: "2026-10-22T10:00:00.000Z",
+  deleted_at: null,
+  ...patch,
+});
+
+describe("ankiCustomFields", () => {
+  const n = withFields(
+    "1",
+    ["Front", "la meuf"],
+    ["Back", "девушка"],
+    ["Example", "C'est ma meuf."],
+    ["произношение", "[mœf]"],
+    ["Synonymes", "  la nana,\n la go "],
+    ["Source", "x".repeat(400)],
+  );
+  const defs = [def("ipa", "Произношение"), def("syn", "Synonymes", { sort: 2 }), def("old", "Source", { deleted_at: "2026-10-01T00:00:00.000Z" })];
+
+  it("AI values for the definitions, then the unused note fields: by definition name, else one-off", () => {
+    const out = ankiCustomFields(n, item("1", "la meuf", { used_fields: ["Back", "Example"], custom: [{ id: "syn", value: "la go" }] }), defs);
+    expect(out).toEqual([
+      { field_id: "syn", label: "Synonymes", value: "la go" },
+      // Same name as a definition (case aside): that definition, under its own name.
+      { field_id: "ipa", label: "Произношение", value: "[mœf]" },
+      // A deleted definition does not count: a one-off field, the value cut to its limit.
+      { field_id: null, label: "Source", value: "x".repeat(FIELD_VALUE_MAX) },
+    ]);
+  });
+
+  it("a definition the AI filled keeps the AI's value; unknown ids are ignored", () => {
+    const out = ankiCustomFields(n, item("1", "la meuf", { used_fields: ["front", "BACK", "Example", "Source"], custom: [{ id: "ipa", value: "[mœf] (AI)" }, { id: "ghost", value: "?" }] }), defs);
+    expect(out).toEqual([
+      { field_id: "ipa", label: "Произношение", value: "[mœf] (AI)" },
+      { field_id: "syn", label: "Synonymes", value: "la nana, la go" },
+    ]);
+  });
+
+  it("without definitions every unused field is one-off; the fr_field is never kept; no used_fields keeps nothing", () => {
+    const out = ankiCustomFields(n, item("1", "la meuf", { fr_field: "Front", used_fields: ["Back", "Example", "Source"] }), []);
+    expect(out).toEqual([
+      { field_id: null, label: "произношение", value: "[mœf]" },
+      { field_id: null, label: "Synonymes", value: "la nana, la go" },
+    ]);
+    expect(ankiCustomFields(n, item("1", "la meuf"), [])).toEqual([]);
+    expect(ankiCustomFields(undefined, item("1", "la meuf", { used_fields: [] }), [])).toEqual([]);
+  });
+});
+
 describe("anki plan", () => {
   it("takes short one-line fields as candidate words", () => {
     expect(candidateTerms(note("1", "d1", "la meuf", "девушка\nдевчонка", "x".repeat(61), " "))).toEqual(["la meuf"]);
@@ -77,6 +136,15 @@ describe("anki plan", () => {
       ["la meuf", "1", false],
       ["chelou", "3", true],
     ]);
+  });
+
+  it("keeps the note's other fields and the filled values as custom fields of the row", () => {
+    const n = withFields("1", ["Front", "la meuf"], ["Back", "девушка"], ["Произношение", "[mœf]"]);
+    const { rows } = ankiRows([item("1", "la meuf", { used_fields: ["Front", "Back"] }), item("2", "chelou")], [], new Map(), {}, { notes: [n], defs: [] });
+    expect(rows[0].customFields).toEqual([{ field_id: null, label: "Произношение", value: "[mœf]" }]);
+    expect(rows[1].customFields).toBeUndefined();
+    // Without notes only the filled values count.
+    expect(ankiRows([item("1", "la meuf", { used_fields: [] })], [], new Map()).rows[0].customFields).toBeUndefined();
   });
 
   it("knows which side the first field was", () => {

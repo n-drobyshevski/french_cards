@@ -1,7 +1,8 @@
 // What an Anki import sends, keeps and saves: pure helpers between the parsed deck
 // (lib/anki/apkg.ts), the enrichment (/api/ai/anki) and the review rows (./rows.ts).
 import { ANKI_RUN_MAX, type AnkiDeck, type AnkiItem, type AnkiNote } from "@/lib/anki/types";
-import type { Folder, Word } from "@/lib/types";
+import { cleanFieldLabel, cleanFieldValue, fieldDefByName, liveFieldDefs, withFieldValue } from "@/lib/core/custom-fields";
+import type { CustomFieldValue, FieldDef, Folder, Word } from "@/lib/types";
 import { buildRows, pluralRu, type ImportRow } from "./rows";
 
 /** Short one-line fields: the ones that can be the French word itself. */
@@ -35,15 +36,60 @@ export function selectNotes(deck: AnkiDeck, chosen: ReadonlySet<string>, known: 
   };
 }
 
-/** Review rows for the enriched notes; skipped ones are counted, not shown. Each row keeps its note id in `ref`. */
+const lower = (s: string) => s.trim().toLocaleLowerCase("ru");
+
+/**
+ * The custom fields a note's card gets: the values filled for the learner's definitions, then every
+ * non-empty note field the card was not made from (not in used_fields, not the fr_field): under the
+ * definition of the same name when there is one (unless already filled), otherwise as a one-off
+ * field labelled with the Anki field name. Pure.
+ */
+export function ankiCustomFields(
+  note: Pick<AnkiNote, "fields"> | undefined,
+  item: Pick<AnkiItem, "custom" | "used_fields" | "fr_field">,
+  defs: readonly FieldDef[],
+): CustomFieldValue[] {
+  const live = liveFieldDefs(defs);
+  let out: CustomFieldValue[] = [];
+  for (const c of item.custom ?? []) {
+    const def = live.find((d) => d.id === c.id);
+    if (def && !out.some((f) => f.field_id === def.id)) out = withFieldValue(out, { field_id: def.id, label: def.name }, c.value);
+  }
+  // Without used_fields (an older response) it is unknown which fields the card came from: none is kept.
+  if (!item.used_fields) return out;
+  const used = new Set([...item.used_fields, ...(item.fr_field ? [item.fr_field] : [])].map(lower));
+  for (const field of note?.fields ?? []) {
+    if (used.has(lower(field.name))) continue;
+    const value = cleanFieldValue(field.text);
+    const label = cleanFieldLabel(field.name);
+    if (!value || !label) continue;
+    const def = fieldDefByName(live, label);
+    if (def) {
+      if (!out.some((f) => f.field_id === def.id)) out = withFieldValue(out, { field_id: def.id, label: def.name }, value);
+    } else if (!out.some((f) => lower(f.label) === lower(label))) {
+      out = withFieldValue(out, { field_id: null, label }, value);
+    }
+  }
+  return out;
+}
+
+/**
+ * Review rows for the enriched notes; skipped ones are counted, not shown. Each row keeps its note
+ * id in `ref`, and with `notes` and `defs` (the custom field definitions) its custom fields.
+ */
 export function ankiRows(
   items: readonly AnkiItem[],
   folders: readonly Pick<Folder, "id" | "slug" | "name">[],
   duplicates: ReadonlyMap<string, Word>,
   prefs: { autoSort?: boolean; slang?: boolean; examples?: boolean } = {},
+  { notes = [], defs = [] }: { notes?: readonly Pick<AnkiNote, "id" | "fields">[]; defs?: readonly FieldDef[] } = {},
 ): { rows: ImportRow[]; skipped: number } {
   const kept = items.filter((it) => !it.skip && it.fr.trim() !== "");
-  const rows = buildRows(kept, folders, duplicates, prefs).map((row, i) => ({ ...row, ref: kept[i].ref }));
+  const byId = new Map(notes.map((n) => [n.id, n]));
+  const rows = buildRows(kept, folders, duplicates, prefs).map((row, i) => {
+    const customFields = ankiCustomFields(byId.get(kept[i].ref), kept[i], defs);
+    return { ...row, ref: kept[i].ref, ...(customFields.length > 0 && { customFields }) };
+  });
   return { rows, skipped: items.length - kept.length };
 }
 

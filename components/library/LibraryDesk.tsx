@@ -42,7 +42,7 @@ import { DisbandSheet, disbandMessage } from "./DisbandSheet";
 import { EnrichPlanSheet } from "./EnrichPlanSheet";
 import { cachedFolder, rememberLibrary, useSearchWait } from "./first-paint";
 import { FolderFormSheet } from "./FolderFormSheet";
-import { nWords, plural, practiceHref, reviewHref } from "./format";
+import { enrichCaption, nWords, plural, practiceHref, reviewHref } from "./format";
 import { markLeaving, markReturning } from "./leaving";
 import { Menu, MenuItem, MenuSeparator, type MenuAnchor } from "./Menu";
 import { ThemeMenuItems } from "./ThemeActions";
@@ -673,7 +673,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
         {toEnrich && toEnrich.total > 0 && (
           <span className="inline-flex items-baseline gap-2">
             <span className="tabular-nums">
-              {toEnrich.noExample > 0 ? `${nWords(toEnrich.noExample)} без примера` : `Уровень сленга для ${nWords(toEnrich.total)}`}
+              {enrichCaption(toEnrich)}
             </span>
             <TextLink aria-haspopup="dialog" onClick={() => setEnrichOpen(true)} className="items-center gap-1">
               <Icon name="spark" size={14} strokeWidth={1.5} className="shrink-0" />

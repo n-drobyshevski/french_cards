@@ -320,13 +320,46 @@ describe("POST /api/ai/enrich", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       results: [
-        { id: "a", pos: "noun", gender: "f", slang_level: 1, verlan: false, example_fr: null, example_ru: null, confidence: "high", folder: null, folder_alternatives: [], new_folder: null },
-        { id: "b", pos: "adj", gender: "none", slang_level: 2, verlan: true, example_fr: "Il est chelou.", example_ru: "Он стрёмный.", confidence: "high", folder: null, folder_alternatives: [], new_folder: null },
+        { id: "a", pos: "noun", gender: "f", slang_level: 1, verlan: false, example_fr: null, example_ru: null, confidence: "high", folder: null, folder_alternatives: [], new_folder: null, custom: [] },
+        { id: "b", pos: "adj", gender: "none", slang_level: 2, verlan: true, example_fr: "Il est chelou.", example_ru: "Он стрёмный.", confidence: "high", folder: null, folder_alternatives: [], new_folder: null, custom: [] },
       ],
     });
     const call = ai.generateText.mock.calls[0][0] as { prompt: string };
     expect(call.prompt).toContain("w1\tla caisse\tтачка");
     expect(call.prompt).not.toContain("Themes:");
+    expect(call.prompt).not.toContain("Custom fields");
+  });
+
+  it("with custom fields: short refs in the prompt and the schema, values mapped back to the definition ids", async () => {
+    const item = { pos: "adj", gender: "none", slang_level: "arg", verlan: true, example_fr: null, example_ru: null, confidence: "high" };
+    ai.generateText.mockResolvedValue({
+      output: {
+        items: [
+          { ...item, ref: "w1", custom: [{ field: "f1", value: " louche, bizarre " }, { field: "f2", value: null }, { field: "f5", value: "x" }] },
+          { ...item, ref: "w2", custom: [{ field: "f2", value: "[mœf]" }] },
+        ],
+      },
+    });
+    const fields = [
+      { id: "def-synonyms-0001", name: "Синонимы", hint: "2–3 синонима на французском" },
+      { id: "def-ipa-0002", name: "Произношение", hint: null },
+    ];
+    const words = [
+      { id: "a", fr: "chelou", ru: "стрёмный" },
+      { id: "b", fr: "la meuf", ru: "девушка" },
+    ];
+    const res = await enrich(json({ words, fields }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.results.map((r: { custom: unknown }) => r.custom)).toEqual([
+      [{ id: "def-synonyms-0001", value: "louche, bizarre" }],
+      [{ id: "def-ipa-0002", value: "[mœf]" }],
+    ]);
+    const call = ai.generateText.mock.calls[0][0];
+    expect(call.prompt).toContain("Custom fields (2):\nf1\tСинонимы — 2–3 синонима на французском\nf2\tПроизношение\n\nCards (2)");
+    expect(call.prompt).not.toContain("def-ipa-0002");
+    expect(call.maxOutputTokens).toBe(16000);
+    expect((await enrich(json({ words, fields: [fields[0], fields[0]] }))).status).toBe(400);
   });
 
   it("with themes: picks one per word, kept inside the learner's slugs", async () => {
@@ -481,6 +514,30 @@ describe("POST /api/ai/anki", () => {
     expect(call.prompt).toContain('<note ref="n1">\nFront: bagnole\nBack: car (slang)\ntags: argot\n</note>');
     expect(call.prompt).toContain("- povsednevnoe: Повседневное");
     expect(call.prompt).not.toContain("1001");
+    expect(call.prompt).not.toContain("Custom fields");
+  });
+
+  it("with custom fields: fills them per note; used_fields come back in the note's own spelling", async () => {
+    ai.generateText.mockResolvedValue({
+      output: {
+        items: [
+          row("n1", { used_fields: ["front", "BACK", "Ghost"], custom: [{ field: "f1", value: "[baɲɔl]" }] }),
+          row("n2", { fr_field: "Verso", used_fields: ["Verso", "Recto"], custom: [{ field: "f1", value: null }] }),
+          row("n3", { skip: true, used_fields: [], custom: [] }),
+        ],
+      },
+    });
+    const res = await anki(json({ notes, fields: [{ id: "def-ipa", name: "Произношение", hint: "МФА" }] }));
+    expect(res.status).toBe(200);
+    const { items } = await res.json();
+    expect(items.map((i: { used_fields: string[]; custom: unknown }) => [i.used_fields, i.custom])).toEqual([
+      [["Front", "Back"], [{ id: "def-ipa", value: "[baɲɔl]" }]],
+      [["Verso", "Recto"], []],
+      [[], []],
+    ]);
+    const call = ai.generateText.mock.calls[0][0];
+    expect(call.prompt).toContain("Custom fields (1):\nf1\tПроизношение — МФА\n\nNotes (3)");
+    expect(call.maxOutputTokens).toBe(16000);
   });
 
   it("502 when the model call fails, 429 once the bucket is empty", async () => {

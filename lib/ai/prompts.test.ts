@@ -88,5 +88,23 @@ describe("user prompts", () => {
     expect(p).toContain('Notes (2):\n<note ref="n1">\nFront: la caisse\nBack: тачка\ntags: argot voiture\n</note>\n<note ref="n2">\nRecto: свалить\n</note>');
     expect(SYSTEM_PROMPTS.anki).toContain("skip");
     expect(SYSTEM_PROMPTS.anki).toContain("fr_field");
+    expect(SYSTEM_PROMPTS.anki).toContain("used_fields");
+  });
+
+  it("custom fields: listed with their refs and hints before the cards or notes; rules in the enrich and anki prompts", () => {
+    const fields = [
+      { ref: "f1", name: "Синонимы", hint: "2–3 синонима\nна французском" },
+      { ref: "f2", name: "Произношение", hint: null },
+    ];
+    const e = enrichUserPrompt({ words: [{ ref: "w1", fr: "chelou", ru: "стрёмный", note: null }], folders, fields });
+    expect(e).toContain("Еда\n\nCustom fields (2):\nf1\tСинонимы — 2–3 синонима на французском\nf2\tПроизношение\n\nCards (1)");
+    expect(enrichUserPrompt({ words: [{ ref: "w1", fr: "chelou", ru: "стрёмный", note: null }], fields: [] })).not.toContain("Custom fields");
+    const a = ankiUserPrompt({ notes: [{ ref: "n1", fields: [{ name: "Front", text: "meuf" }], tags: [] }], folders: [], fields });
+    expect(a).toContain("Custom fields (2):\nf1\tСинонимы — 2–3 синонима на французском\nf2\tПроизношение\n\nNotes (1)");
+    for (const text of [SYSTEM_PROMPTS.enrich, SYSTEM_PROMPTS.anki]) {
+      expect(text).toContain("CUSTOM FIELDS");
+      expect(text).toContain("Never invent a pronunciation");
+    }
+    expect(SYSTEM_PROMPTS.suggest).not.toContain("CUSTOM FIELDS");
   });
 });

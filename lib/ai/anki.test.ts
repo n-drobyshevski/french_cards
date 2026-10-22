@@ -43,6 +43,7 @@ function row(ref: string, extra: Partial<AnkiItemModel> = {}): AnkiItemModel {
     issue: null,
     folder: "INBOX",
     new_folder: null,
+    used_fields: ["Front", "Back"],
     ...extra,
   };
 }
@@ -75,6 +76,8 @@ describe("finalizeAnki", () => {
       ref: "1001",
       skip: false,
       fr_field: "Front",
+      used_fields: ["Front", "Back"],
+      custom: [],
       fr: "la bagnole",
       fr_as_seen: "bagnole",
       ru: "тачка, машина",
@@ -141,5 +144,43 @@ describe("finalizeAnki", () => {
     expect(out[1]).toMatchObject({ folder: "dengi", fr_field: null });
     // A "new" theme named like an existing one is that theme.
     expect(out[2]).toMatchObject({ folder: "dengi", new_folder: null });
+  });
+
+  it("maps used_fields to the note's own names, case-insensitively, with fr_field first", () => {
+    const out = finalizeAnki(
+      {
+        items: [
+          row("n1", { fr_field: "FRONT", used_fields: ["back", "Nope", "front", "Back"] }),
+          row("n2", { fr_field: "verso", used_fields: [] }),
+          row("n3", { skip: true, used_fields: ["Front"] }),
+        ],
+      },
+      ankiRefMap(notes),
+      folders,
+    );
+    expect(out.map((i) => i.used_fields)).toEqual([["Front", "Back"], ["Verso"], []]);
+  });
+
+  it("maps custom field refs back to the definition ids, dropping unknown refs and empty values", () => {
+    const out = finalizeAnki(
+      {
+        items: [
+          row("n1", {
+            custom: [
+              { field: "f2", value: " [baɲɔl] " },
+              { field: "f1", value: null },
+              { field: "f9", value: "x" },
+              { field: "f2", value: "again" },
+            ],
+          }),
+          row("n2"),
+        ],
+      },
+      ankiRefMap(notes),
+      folders,
+      [{ id: "def-syn" }, { id: "def-ipa" }],
+    );
+    expect(out[0].custom).toEqual([{ id: "def-ipa", value: "[baɲɔl]" }]);
+    expect(out[1].custom).toEqual([]);
   });
 });

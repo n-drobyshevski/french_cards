@@ -112,7 +112,7 @@ export function EnrichPlanSheet({ open, onOpenChange }: EnrichPlanSheetProps) {
 
   const plan = phase.status === "ready" ? phase.plan : null;
   const picked = plan ? planChanges(plan).filter((c) => !off.has(c.key)) : [];
-  const empty = plan !== null && plan.examples.length === 0 && plan.slang.length === 0;
+  const empty = plan !== null && planChanges(plan).length === 0;
 
   const apply = async () => {
     setApplying(true);
@@ -187,6 +187,7 @@ export function EnrichPlanSheet({ open, onOpenChange }: EnrichPlanSheetProps) {
       ? ([
           ["example", "Примеры", plan.examples],
           ["slang", "Уровень сленга", plan.slang],
+          ["fields", FIELDS_TITLE, plan.fields],
         ] as const).filter(([, , changes]) => changes.length > 0)
       : [];
     return (
@@ -271,7 +272,9 @@ export function EnrichPlanSheet({ open, onOpenChange }: EnrichPlanSheetProps) {
                           {c.word.fr}
                         </span>
                         <span className="truncate pr-3 text-[13px] text-muted">{c.word.ru}</span>
-                        {field === "example" ? (
+                        {field === "fields" ? (
+                          <FilledFields change={c} desk />
+                        ) : field === "example" ? (
                           <span className="flex min-w-0 flex-col">
                             <span lang="fr" className="truncate font-serif text-[15px] leading-5 italic">
                               {c.patch.example_fr}
@@ -328,6 +331,7 @@ export function EnrichPlanSheet({ open, onOpenChange }: EnrichPlanSheetProps) {
               [
                 ["example", "Примеры", plan.examples],
                 ["slang", "Уровень сленга", plan.slang],
+                ["fields", FIELDS_TITLE, plan.fields],
               ] as const
             )
               .filter(([, , changes]) => changes.length > 0)
@@ -502,7 +506,9 @@ function ChangeRow({ change, field, checked, onToggle }: { change: EnrichChange;
           </span>
           <span className="min-w-0 truncate text-[13px] leading-5 text-muted">{word.ru}</span>
         </span>
-        {field === "example" ? (
+        {field === "fields" ? (
+          <FilledFields change={change} />
+        ) : field === "example" ? (
           <>
             <span lang="fr" className="truncate font-serif text-[15px] leading-5 italic">
               {patch.example_fr}
@@ -524,6 +530,22 @@ function ChangeRow({ change, field, checked, onToggle }: { change: EnrichChange;
 }
 
 const ENRICH_LEDGER = "32px 180px 160px minmax(0,1fr)";
+
+const FIELDS_TITLE = "Свои поля";
+
+/** The custom field values a change fills, «Название: значение», one line each (as an example's two lines). */
+function FilledFields({ change, desk = false }: { change: EnrichChange; desk?: boolean }) {
+  return (
+    <span className="flex min-w-0 flex-col">
+      {(change.filled ?? []).map((f) => (
+        <span key={f.field_id ?? f.label} className={cx("truncate leading-5", desk ? "text-[14px]" : "text-[15px]")}>
+          <span className="text-muted">{f.label}: </span>
+          {f.value}
+        </span>
+      ))}
+    </span>
+  );
+}
 
 function DeskEnrichFooter({
   ready,

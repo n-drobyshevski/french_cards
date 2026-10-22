@@ -1,19 +1,22 @@
 // Slang level, part of speech, an example and a theme for words the user typed (manual form,
 // quick save, «Список»), and slang level + example for words already in the library
-// («Дополнить карточки»), via POST /api/ai/enrich.
+// («Дополнить карточки»), via POST /api/ai/enrich. Both also fill the empty «Свои поля» whose
+// definition is marked for the automatic fill (FieldDef.ai_fill: the switch, no setting of its own).
 // The network part is small; deciding what to change is in pure functions so it is unit-tested.
 import { AiClientError, postAiJson, type AiClientErrorCode, type AiPostOptions } from "./ai-client";
 import { db } from "./db";
 import {
   ENRICH_CHUNK_MAX,
+  type CustomFieldInput,
   type EnrichResponse,
   type EnrichResult,
   type FolderInput,
   type ModelTierInput,
 } from "./ai/schemas";
+import { cleanFieldLabel, emptyAutoFields, FIELD_HINT_MAX, liveFieldDefs, listFieldDefs, MAX_FIELD_DEFS, withFieldValue } from "./custom-fields";
 import { listFolders } from "./folders";
 import { getSettings } from "./settings";
-import type { Folder, Settings, Word } from "./types";
+import type { CustomFieldValue, FieldDef, Folder, Settings, Word } from "./types";
 import { toFolderInputs } from "./use-suggest";
 import { updateWords, type WordPatch } from "./words";
 
@@ -56,9 +59,19 @@ export interface EnrichOptions extends AiPostOptions {
   folders?: readonly FolderInput[];
   /** Settings «Модель для подсказок». */
   model?: ModelTierInput;
+  /** Custom fields to fill (see autoFillFields); not sent when empty. */
+  fields?: readonly CustomFieldInput[];
 }
 
 const clip = (s: string, max: number) => s.replace(/\s+/g, " ").trim().slice(0, max).trim();
+
+/** The request's `fields`: live definitions marked for the automatic fill, in their order. */
+export function autoFillFields(defs: readonly FieldDef[]): CustomFieldInput[] {
+  return liveFieldDefs(defs)
+    .filter((d) => d.ai_fill && cleanFieldLabel(d.name))
+    .slice(0, MAX_FIELD_DEFS)
+    .map((d) => ({ id: d.id, name: cleanFieldLabel(d.name), hint: d.hint ? clip(d.hint, FIELD_HINT_MAX) || null : null }));
+}
 
 /** The request body the route accepts: trimmed, cut to its limits, words without both sides dropped. */
 export function toEnrichWords(words: readonly EnrichInput[]): EnrichInput[] {
@@ -76,7 +89,12 @@ export function toEnrichWords(words: readonly EnrichInput[]): EnrichInput[] {
 
 /** One request (≤ ENRICH_CHUNK_MAX words). */
 export async function postEnrich(words: readonly EnrichInput[], opts: EnrichOptions = {}): Promise<EnrichResult[]> {
-  const body = { words, ...(opts.folders && { folders: opts.folders }), ...(opts.model && { model: opts.model }) };
+  const body = {
+    words,
+    ...(opts.folders && { folders: opts.folders }),
+    ...(opts.fields?.length && { fields: opts.fields }),
+    ...(opts.model && { model: opts.model }),
+  };
   const res = await postAiJson<EnrichResponse>(ENRICH_URL, body, (code) => new EnrichError(code), opts);
   return res.results ?? [];
 }
@@ -151,10 +169,40 @@ export interface PatchScope {
   folder?: boolean;
 }
 
-type Enrichable = Pick<Word, "example_fr" | "slang_level" | "verlan" | "pos" | "gender">;
+type Enrichable = Pick<Word, "example_fr" | "slang_level" | "verlan" | "pos" | "gender" | "custom_fields">;
 
-/** The fields to write for a result; empty when nothing would change. */
-export function enrichmentPatch(word: Enrichable, r: EnrichResult, scope: PatchScope): WordPatch {
+/**
+ * The word's custom fields with the values the result filled: only for live definitions marked for
+ * the automatic fill that the word has no value for (a value the user wrote is never replaced).
+ * Null when nothing would be filled.
+ */
+export function filledCustomFields(
+  word: Pick<Word, "custom_fields">,
+  r: Pick<EnrichResult, "custom">,
+  defs: readonly FieldDef[],
+): { list: CustomFieldValue[]; filled: CustomFieldValue[] } | null {
+  if (!r.custom?.length || defs.length === 0) return null;
+  const empty = new Map(emptyAutoFields(word, defs).map((d) => [d.id, d]));
+  let list = word.custom_fields ?? [];
+  const filled: CustomFieldValue[] = [];
+  for (const c of r.custom) {
+    const def = empty.get(c.id);
+    if (!def) continue;
+    const next = withFieldValue(list, { field_id: def.id, label: def.name }, c.value);
+    const entry = next.find((f) => f.field_id === def.id);
+    if (!entry) continue;
+    empty.delete(def.id);
+    list = next;
+    filled.push(entry);
+  }
+  return filled.length > 0 ? { list, filled } : null;
+}
+
+/**
+ * The fields to write for a result; empty when nothing would change. With `defs` (the custom field
+ * definitions) the empty custom fields marked for the automatic fill are filled too.
+ */
+export function enrichmentPatch(word: Enrichable, r: EnrichResult, scope: PatchScope, defs: readonly FieldDef[] = []): WordPatch {
   const patch: WordPatch = {};
   if (scope.slang && (r.slang_level !== word.slang_level || r.verlan !== word.verlan)) {
     patch.slang_level = r.slang_level;
@@ -168,6 +216,8 @@ export function enrichmentPatch(word: Enrichable, r: EnrichResult, scope: PatchS
     patch.pos = r.pos;
     patch.gender = r.gender;
   }
+  const custom = filledCustomFields(word, r, defs);
+  if (custom) patch.custom_fields = custom.list;
   return patch;
 }
 
@@ -220,18 +270,29 @@ export async function fillSavedWords(items: readonly SavedWordFill[], opts: Omit
   const settings = items.length > 0 ? await enrichSettings() : null;
   if (!settings) return 0;
   const prefs = enrichPreferences(settings);
-  // Part of speech alone is not worth a request: only words with something the settings allow.
+  const defs = await listFieldDefs();
+  const fields = autoFillFields(defs);
+  const lacksFields = (w: Word) => fields.length > 0 && lacksAutoFields(w, defs);
+  // Part of speech alone is not worth a request: only words with something the settings (or the
+  // custom fields marked for the automatic fill) allow.
   const wanted = items
     .map((i) => ({ ...i, scope: allowedScope(i.scope, prefs) }))
-    .filter((i) => i.scope.slang || i.scope.example || i.scope.folder);
+    .filter((i) => i.scope.slang || i.scope.example || i.scope.folder || lacksFields(i.word));
   if (wanted.length === 0) return 0;
+  const withFields = wanted.some((i) => lacksFields(i.word));
   const withFolders = wanted.some((i) => i.scope.folder);
   const folders = withFolders ? await listFolders() : [];
   let results: Map<string, EnrichResult>;
   try {
     results = await enrichWords(
       wanted.map(({ word }) => ({ id: word.id, fr: word.fr, ru: word.ru, note: word.note })),
-      { ...opts, retries: opts.retries ?? 1, folders: withFolders ? toFolderInputs(folders) : undefined, model: settings.ai_model },
+      {
+        ...opts,
+        retries: opts.retries ?? 1,
+        folders: withFolders ? toFolderInputs(folders) : undefined,
+        fields: withFields ? fields : undefined,
+        model: settings.ai_model,
+      },
     );
   } catch {
     return 0;
@@ -243,7 +304,7 @@ export async function fillSavedWords(items: readonly SavedWordFill[], opts: Omit
       if (!r) continue;
       const current = await db.words.get(word.id);
       if (!current || current.deleted_at !== null || current.updated_at !== word.updated_at) continue;
-      const patch = enrichmentPatch(current, r, scope);
+      const patch = enrichmentPatch(current, r, scope, defs);
       if (withFolders && scope.folder) Object.assign(patch, folderPatch(current, r, folders));
       if (Object.keys(patch).length > 0) patches.push({ id: word.id, patch });
     }
@@ -265,29 +326,41 @@ export const lacksExample = (w: Pick<Word, "example_fr">) => !w.example_fr?.trim
 export type BackfillPreferences = Pick<EnrichPreferences, "slang" | "examples">;
 const ALL: BackfillPreferences = { slang: true, examples: true };
 
-export function isEnrichCandidate(w: Word, prefs: BackfillPreferences = ALL): boolean {
-  return w.deleted_at === null && ((prefs.examples && lacksExample(w)) || (prefs.slang && slangUndetected(w)));
+/** A custom field marked for the automatic fill is still empty (`defs`: the definitions). */
+export const lacksAutoFields = (w: Pick<Word, "custom_fields">, defs: readonly FieldDef[]) => emptyAutoFields(w, defs).length > 0;
+
+export function isEnrichCandidate(w: Word, prefs: BackfillPreferences = ALL, defs: readonly FieldDef[] = []): boolean {
+  return (
+    w.deleted_at === null &&
+    ((prefs.examples && lacksExample(w)) || (prefs.slang && slangUndetected(w)) || lacksAutoFields(w, defs))
+  );
 }
 
-/** Live words worth looking at, newest first. */
-export async function loadEnrichCandidates(prefs: BackfillPreferences = ALL): Promise<Word[]> {
-  const words = await db.words.filter((w) => isEnrichCandidate(w, prefs)).toArray();
+/** Live words worth looking at, newest first. `defs` are read when not given. */
+export async function loadEnrichCandidates(prefs: BackfillPreferences = ALL, defs?: readonly FieldDef[]): Promise<Word[]> {
+  const fieldDefs = defs ?? (await listFieldDefs());
+  const words = await db.words.filter((w) => isEnrichCandidate(w, prefs, fieldDefs)).toArray();
   return words.sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
 }
 
-/** For the library entry row: candidates in all, and how many of them would get an example. */
-export async function countEnrichCandidates(prefs: BackfillPreferences = ALL): Promise<{ total: number; noExample: number }> {
+/** For the library entry row: candidates in all, how many would get an example, and how many have empty custom fields to fill. */
+export async function countEnrichCandidates(
+  prefs: BackfillPreferences = ALL,
+): Promise<{ total: number; noExample: number; noFields: number }> {
+  const defs = await listFieldDefs();
   let total = 0;
   let noExample = 0;
+  let noFields = 0;
   await db.words.each((w) => {
-    if (!isEnrichCandidate(w, prefs)) return;
+    if (!isEnrichCandidate(w, prefs, defs)) return;
     total++;
     if (prefs.examples && lacksExample(w)) noExample++;
+    if (lacksAutoFields(w, defs)) noFields++;
   });
-  return { total, noExample };
+  return { total, noExample, noFields };
 }
 
-export type EnrichField = "example" | "slang";
+export type EnrichField = "example" | "slang" | "fields";
 
 export interface EnrichChange {
   key: string;
@@ -296,20 +369,28 @@ export interface EnrichChange {
   result: EnrichResult;
   patch: WordPatch;
   undo: WordPatch;
+  /** «Свои поля» only: the values filled (with the definitions' names), for the plan to show. */
+  filled?: CustomFieldValue[];
 }
 
 export interface EnrichPlan {
   examples: EnrichChange[];
   slang: EnrichChange[];
+  /** Empty custom fields filled (definitions marked for the automatic fill). */
+  fields: EnrichChange[];
 }
 
-/** Proposed changes: an example for words without one, a level for words whose level was never detected. */
+/**
+ * Proposed changes: an example for words without one, a level for words whose level was never
+ * detected, and the empty custom fields marked for the automatic fill (`defs`).
+ */
 export function buildEnrichPlan(
   words: readonly Word[],
   results: ReadonlyMap<string, EnrichResult>,
   prefs: BackfillPreferences = ALL,
+  defs: readonly FieldDef[] = [],
 ): EnrichPlan {
-  const plan: EnrichPlan = { examples: [], slang: [] };
+  const plan: EnrichPlan = { examples: [], slang: [], fields: [] };
   for (const word of words) {
     const r = results.get(word.id);
     if (!r) continue;
@@ -334,6 +415,18 @@ export function buildEnrichPlan(
         plan.slang.push({ key: `slang:${word.id}`, field: "slang", word, result: r, patch, undo });
       }
     }
+    const custom = filledCustomFields(word, r, defs);
+    if (custom) {
+      plan.fields.push({
+        key: `fields:${word.id}`,
+        field: "fields",
+        word,
+        result: r,
+        patch: { custom_fields: custom.list },
+        undo: { custom_fields: word.custom_fields ?? [] },
+        filled: custom.filled,
+      });
+    }
   }
   return plan;
 }
@@ -356,13 +449,18 @@ export interface EnrichPlanRun {
 export async function runEnrichPlan(opts: RunEnrichPlanOptions = {}): Promise<EnrichPlanRun> {
   const settings = opts.prefs && opts.model ? null : await getSettings();
   const prefs = opts.prefs ?? enrichPreferences(settings!);
-  const candidates = await loadEnrichCandidates(prefs);
+  const defs = await listFieldDefs();
+  const candidates = await loadEnrichCandidates(prefs, defs);
   const batch = candidates.slice(0, ENRICH_RUN_MAX);
-  const results = batch.length > 0 ? await enrichWords(batch, { ...opts, model: opts.model ?? settings?.ai_model }) : new Map<string, EnrichResult>();
-  return { plan: buildEnrichPlan(batch, results, prefs), more: candidates.length - batch.length };
+  const fields = batch.some((w) => lacksAutoFields(w, defs)) ? autoFillFields(defs) : [];
+  const results =
+    batch.length > 0
+      ? await enrichWords(batch, { ...opts, fields, model: opts.model ?? settings?.ai_model })
+      : new Map<string, EnrichResult>();
+  return { plan: buildEnrichPlan(batch, results, prefs, defs), more: candidates.length - batch.length };
 }
 
-export const planChanges = (plan: EnrichPlan) => [...plan.examples, ...plan.slang];
+export const planChanges = (plan: EnrichPlan) => [...plan.examples, ...plan.slang, ...plan.fields];
 
 /** Merges the picked changes per word, in the order given. */
 export function mergeChanges(changes: readonly EnrichChange[]): { apply: { id: string; patch: WordPatch }[]; undo: { id: string; patch: WordPatch }[] } {

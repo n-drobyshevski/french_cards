@@ -1,19 +1,27 @@
 import { expect, test, type Page } from "@playwright/test";
-import { buildApkg, FIXTURE_CRT, loadNodeSql } from "../lib/anki/test-fixtures";
+import { BASIC_MODEL, buildApkg, FIXTURE_CRT, loadNodeSql, type FixtureModel } from "../lib/anki/test-fixtures";
 import { mockAnki, type AnkiNoteWire, vocab } from "./fixtures";
 
 const DAY_MS = 86_400_000;
 
-/** A v18 deck (zstd collection): a reviewed card, a new one with HTML and sound, and a word the library has. */
+/** A note type with a third field the cards are not made from: it is kept as a custom field. */
+const PRONUNCIATION_MODEL: FixtureModel = { id: 1_342_697_561_420, name: "Basic + IPA", fields: ["Front", "Back", "Произношение"] };
+
+/**
+ * A v18 deck (zstd collection): a reviewed card (with a pronunciation field), a new one with HTML
+ * and sound, and a word the library has.
+ */
 async function deckFile(): Promise<Buffer> {
   const SQL = await loadNodeSql();
   const today = Math.floor((Date.now() / 1000 - FIXTURE_CRT) / 86_400);
   const bytes = buildApkg({
     SQL,
     schema: "v18",
+    models: [BASIC_MODEL, PRONUNCIATION_MODEL],
     notes: [
       {
-        fields: ["la meuf", "девушка"],
+        mid: PRONUNCIATION_MODEL.id,
+        fields: ["la meuf", "девушка", "[mœf]"],
         cards: [
           {
             type: 2,
@@ -31,6 +39,27 @@ async function deckFile(): Promise<Buffer> {
     ],
   });
   return Buffer.from(bytes);
+}
+
+/** The saved word's custom fields, read from IndexedDB like stateOf. */
+async function customFieldsOf(page: Page, fr: string) {
+  return page.evaluate(
+    (word) =>
+      new Promise<{ field_id: string | null; label: string; value: string }[] | undefined>((resolve, reject) => {
+        const open = indexedDB.open("kartochki");
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const tx = open.result.transaction(["words"]);
+          const words = tx.objectStore("words").getAll();
+          tx.oncomplete = () => {
+            type Row = { fr: string; deleted_at: string | null; custom_fields?: { field_id: string | null; label: string; value: string }[] };
+            resolve((words.result as Row[]).find((x) => x.fr === word && !x.deleted_at)?.custom_fields);
+            open.result.close();
+          };
+        };
+      }),
+    fr,
+  );
 }
 
 async function stateOf(page: Page, fr: string) {
@@ -60,14 +89,19 @@ async function stateOf(page: Page, fr: string) {
   );
 }
 
-test("import an Anki deck: known words stay out, missing data is filled, progress is carried over", async ({ page }) => {
+test("import an Anki deck: known words stay out, missing data is filled, progress and extra fields are carried over", async ({ page }) => {
   const sent: AnkiNoteWire[] = [];
   await mockAnki(
     page,
     (note) => {
       const front = note.fields[0]?.text ?? "";
       if (front === "la meuf")
-        return { ...vocab({ fr: "la meuf", ru: "девушка", slang_level: 1, gender: "f" }), skip: false, fr_field: "Front" };
+        return {
+          ...vocab({ fr: "la meuf", ru: "девушка", slang_level: 1, gender: "f" }),
+          skip: false,
+          fr_field: "Front",
+          used_fields: ["Front", "Back"],
+        };
       if (front === "chelou")
         return {
           ...vocab({
@@ -107,6 +141,8 @@ test("import an Anki deck: known words stay out, missing data is filled, progres
 
   const rows = page.getByRole("list", { name: "Найденные слова" });
   await expect(rows.getByText("ДОГАДКА")).toBeVisible();
+  // The pronunciation field the card was not made from is kept with the word.
+  await expect(rows.getByText("+1 поле")).toBeVisible();
   await expect(page.getByText(/прогресс переносится/)).toBeVisible();
 
   await page.getByRole("button", { name: "Добавить 2 слова" }).click();
@@ -119,4 +155,7 @@ test("import an Anki deck: known words stay out, missing data is filled, progres
   expect(new Date(forward!.due).getTime()).toBeGreaterThan(Date.now() + 8 * DAY_MS);
   expect(meuf.find((s) => s.direction === "ru_fr")).toMatchObject({ state: 0 });
   expect((await stateOf(page, "chelou")).every((s) => s.state === 0)).toBe(true);
+
+  expect(await customFieldsOf(page, "la meuf")).toContainEqual(expect.objectContaining({ label: "Произношение", value: "[mœf]" }));
+  expect(await customFieldsOf(page, "chelou")).toEqual([]);
 });
