@@ -4,6 +4,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
+  // Auto-memoises components and hooks (needs babel-plugin-react-compiler).
+  reactCompiler: true,
   turbopack: {
     rules: {
       "*.css": {
