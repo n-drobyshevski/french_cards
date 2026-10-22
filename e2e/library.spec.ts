@@ -3,8 +3,8 @@ import { enriched, mockEnrich } from "./fixtures";
 
 test("library search matches French and Russian, ignoring accents", async ({ page }) => {
   await page.goto("/library");
-  await expect(page.getByText("11 слов", { exact: true }).first()).toBeVisible();
-  const search = page.getByRole("searchbox", { name: "Поиск по FR и RU" }).or(page.getByRole("textbox", { name: "Поиск по FR и RU" }));
+  await expect(page.getByRole("button", { name: "Все слова: 11", exact: true })).toBeVisible();
+  const search = page.getByRole("searchbox", { name: "Поиск по FR и RU" });
 
   await search.fill("depeche");
   const results = page.getByRole("region", { name: "Слова" }).or(page.locator("section[aria-label='Слова']"));
@@ -34,7 +34,7 @@ test("a theme opens with its words and «Повторить тему» filters r
 
 test("an undo snackbar raised inside the word sheet is part of the sheet", async ({ page }) => {
   await page.goto("/library");
-  await page.getByRole("searchbox", { name: "Поиск по FR и RU" }).or(page.getByRole("textbox", { name: "Поиск по FR и RU" })).fill("flics");
+  await page.getByRole("searchbox", { name: "Поиск по FR и RU" }).fill("flics");
   await page.getByText("les flics", { exact: true }).click();
   const sheet = page.getByRole("dialog", { name: "Карточка слова" });
   await expect(sheet).toBeVisible();
@@ -62,7 +62,7 @@ test("«Дополнить карточки» proposes examples, applies the che
   await expect(sheet).toBeHidden();
   await expect(page.getByText(/^Обновлено \d+ слов/)).toBeVisible();
 
-  const search = page.getByRole("searchbox", { name: "Поиск по FR и RU" }).or(page.getByRole("textbox", { name: "Поиск по FR и RU" }));
+  const search = page.getByRole("searchbox", { name: "Поиск по FR и RU" });
   await page.getByRole("button", { name: "Отменить", exact: true }).click();
   await expect(page.getByText("Изменения отменены")).toBeVisible();
   await search.fill("flics");
@@ -72,11 +72,14 @@ test("«Дополнить карточки» proposes examples, applies the che
 
 test("the library shows theme tiles or every word, and remembers the choice", async ({ page }) => {
   await page.goto("/library");
-  const view = page.getByRole("radiogroup", { name: "Показывать" });
-  await expect(view.getByRole("radio", { name: "Темы" })).toBeChecked();
+  const all = page.getByRole("button", { name: "Все слова: 11", exact: true });
+  await expect(all).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByRole("link", { name: /^Эмоции:/ })).toBeVisible();
+  // Theme tiles preview their newest words.
+  await expect(page.getByRole("link", { name: /^Эмоции:/ })).toContainText(/c'est dur|je vais me tuer/);
 
-  await view.getByRole("radio", { name: "Все слова" }).click();
+  await all.click();
+  await expect(all).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByText("Все слова · 11")).toBeVisible();
   const list = page.getByRole("list", { name: "Все слова" });
   await expect(list.getByText("les flics", { exact: true })).toBeVisible();
@@ -88,19 +91,60 @@ test("the library shows theme tiles or every word, and remembers the choice", as
   await page.reload();
   await expect(page.getByText("Все слова · 11")).toBeVisible();
 
-  // A search narrows the list; the view switch steps aside while it is active.
-  await page.getByRole("searchbox", { name: "Поиск по FR и RU" }).or(page.getByRole("textbox", { name: "Поиск по FR и RU" })).fill("flics");
+  // A search narrows the list.
+  await page.getByRole("searchbox", { name: "Поиск по FR и RU" }).fill("flics");
   await expect(page.getByText("Найдено 1 слово")).toBeVisible();
-  await expect(view).toHaveCount(0);
   await page.getByRole("button", { name: "Очистить поиск" }).click();
 
-  await view.getByRole("radio", { name: "Темы" }).click();
+  await page.getByRole("button", { name: "К темам" }).click();
   await expect(page.getByRole("link", { name: /^Эмоции:/ })).toBeVisible();
+  // The black «Все слова» tile opens the list too.
+  await page.getByRole("button", { name: "Все слова одним списком: 11" }).click();
+  await expect(page.getByText("Все слова · 11")).toBeVisible();
+});
+
+test("the ledger counts filter, the filter sheet narrows and orders the list", async ({ page }) => {
+  await page.goto("/library");
+  // The search sits at the bottom, right above the tab bar.
+  const search = page.getByRole("searchbox", { name: "Поиск по FR и RU" });
+  const tabs = page.getByRole("navigation", { name: "Основная навигация" });
+  const [searchBox, tabsBox] = await Promise.all([search.boundingBox(), tabs.boundingBox()]);
+  expect(searchBox!.y + searchBox!.height).toBeLessThanOrEqual(tabsBox!.y);
+  expect(tabsBox!.y - (searchBox!.y + searchBox!.height)).toBeLessThan(40);
+
+  const due = page.getByRole("button", { name: /^К повторению: \d+$/ });
+  await due.click();
+  await expect(due).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByText("Сегодня повторять нечего.")).toBeVisible();
+  await due.click();
+  await expect(page.getByRole("link", { name: /^Эмоции:/ })).toBeVisible();
+
+  await page.getByRole("button", { name: "Фильтр и порядок" }).click();
+  const sheet = page.getByRole("dialog", { name: "Фильтр и порядок" });
+  await sheet.getByRole("radiogroup", { name: "Тема" }).getByRole("radio", { name: "Эмоции" }).click();
+  await expect(sheet.getByRole("button", { name: "Показать 2 слова" })).toBeVisible();
+  await sheet.getByRole("checkbox", { name: "fam." }).click();
+  await sheet.getByRole("button", { name: "Показать 1 слово" }).click();
+  await expect(sheet).toBeHidden();
+
+  await expect(page.getByText("Найдено 1 слово · Эмоции")).toBeVisible();
+  await expect(page.getByRole("list", { name: "Найденные слова" }).getByText("je vais me tuer", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Фильтр и порядок, выбрано: 2" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Сбросить фильтр" }).click();
+  await expect(page.getByRole("link", { name: /^Эмоции:/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Фильтр и порядок", exact: true })).toBeVisible();
+
+  // The order alone opens the whole list in that order.
+  await page.getByRole("button", { name: "Фильтр и порядок" }).click();
+  await sheet.getByRole("radio", { name: "По алфавиту" }).click();
+  await sheet.getByRole("button", { name: "Показать 11 слов" }).click();
+  await expect(page.getByRole("list", { name: "Все слова" }).getByRole("listitem").first()).toContainText("arrête");
 });
 
 test("a tap on an abbreviation in the word sheet explains it", async ({ page }) => {
   await page.goto("/library");
-  await page.getByRole("searchbox", { name: "Поиск по FR и RU" }).or(page.getByRole("textbox", { name: "Поиск по FR и RU" })).fill("flics");
+  await page.getByRole("searchbox", { name: "Поиск по FR и RU" }).fill("flics");
   await page.getByText("les flics", { exact: true }).click();
   const sheet = page.getByRole("dialog", { name: "Карточка слова" });
 

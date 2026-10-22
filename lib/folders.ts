@@ -227,7 +227,12 @@ export interface FolderStats {
   fresh: number;
   /** 0..1 mean card mastery (stability / 21 d, new = 0). */
   mastery: number;
+  /** Up to SAMPLE_WORDS French headwords, newest first (the phone tiles show them). */
+  samples: string[];
 }
+
+/** How many headwords a theme tile previews. */
+export const SAMPLE_WORDS = 3;
 
 export interface FolderWithStats extends Folder {
   stats: FolderStats;
@@ -241,7 +246,7 @@ export interface LibraryStats {
   folders: FolderWithStats[];
 }
 
-const emptyStats = (): FolderStats => ({ total: 0, due: 0, difficult: 0, fresh: 0, mastery: 0 });
+const emptyStats = (): FolderStats => ({ total: 0, due: 0, difficult: 0, fresh: 0, mastery: 0, samples: [] });
 
 interface Acc {
   stats: FolderStats;
@@ -275,6 +280,8 @@ export async function getLibraryStats(now: Date = new Date()): Promise<LibrarySt
   };
   const total = acc("__all__");
   const folderIds = new Set(folders.map((f) => f.id));
+  // Newest first, so each folder's samples are its latest words.
+  words.sort((a, b) => b.created_at.localeCompare(a.created_at));
   for (const w of words) {
     const key = w.folder_id !== null && folderIds.has(w.folder_id) ? w.folder_id : null;
     const ws = statesByWord.get(w.id) ?? [];
@@ -283,6 +290,7 @@ export async function getLibraryStats(now: Date = new Date()): Promise<LibrarySt
     const m = ws.reduce((sum, s) => sum + cardMastery(s), 0);
     for (const a of [acc(key), total]) {
       a.stats.total++;
+      if (a.stats.samples.length < SAMPLE_WORDS) a.stats.samples.push(w.fr);
       if (due) a.stats.due++;
       if (status === "difficult") a.stats.difficult++;
       if (ws.every((s) => cardStatus(s) === "new")) a.stats.fresh++;

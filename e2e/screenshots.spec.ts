@@ -54,7 +54,7 @@ test("add sheet with suggestions", async ({ page }) => {
 
 test("library and folder", async ({ page }) => {
   await page.goto("/library");
-  await expect(page.getByText("11 слов", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Все слова: 11", exact: true })).toBeVisible();
   await shot(page, "library");
   await page.getByRole("link", { name: /^Повседневное:/ }).click();
   await expect(page.getByRole("heading", { name: "Повседневное" })).toBeVisible();

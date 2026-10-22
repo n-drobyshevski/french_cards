@@ -30,7 +30,7 @@ Read with `docs/plan.md` (scope and phases), `mockups/SPEC.md` (the v3 visual de
   - Themes follow «Раскладывать по темам автоматически». In the form the pick works like a suggestion's (alternatives, «+ новая тема»). «Список» defaults to «По темам автоматически»: each row goes to its own theme, a new theme only when ≥3 rows share it, low confidence stays in «Входящие». After a quick save the word only moves from «Входящие» into an existing theme, never a new one.
   - «Дополнить карточки» in the library proposes examples for words without one and levels for hand-typed words still at the default, applied only after review, with undo.
 - Folders («темы») hold words. `folder_id = null` means «Входящие» (Inbox).
-  - Библиотека has two views, remembered per device (`settings.library_view`): «Темы» (tiles) and «Все слова» (one list, newest first, «Показать ещё» per 200). A search or filter always shows the matching words.
+  - Библиотека on phones (layout «C · Под пальцем», chosen 2026-10-22): a ledger strip «158 слов / 23 к повт. / 9 трудных» whose cells are also quick filters, a dashed «Входящие · N без темы — Разложить» row while something is unsorted, theme tiles that preview their three newest words, and the search with a «Фильтр и порядок» sheet (status, slang levels, theme, order) pinned at the bottom above the tab bar, riding on the keyboard while typing. Two views, remembered per device (`settings.library_view`): «Темы» (tiles) and «Все слова» (one list, «Показать ещё» per 200). A search or filter always shows the matching words; the order alone does not leave the tiles until «Показать». «Разложить по темам» (when nothing is unsorted), «Дополнить карточки» and the last re-sort's «Отменить» are quiet rows under the tiles.
   - Automatic sorting never moves a word whose `folder_source = 'user'`, and never renames or deletes a `locked` or user-created folder.
   - A new automatic folder needs ≥3 words.
   - Slang level is never a folder.
@@ -59,7 +59,7 @@ If `NEXT_PUBLIC_SUPABASE_URL` is unset, the app runs fully local: there is no lo
 | Detection (slang level, example, theme) | `lib/enrich.ts` (requests, patches, library plan), `components/add/use-auto-enrich.ts`, `components/library/EnrichPlanSheet.tsx` |
 | PWA | `app/manifest.ts`, `app/sw.ts`, `next.config.ts`, `public/icons/*`, `components/pwa/*` |
 | Review screens | `app/(app)/page.tsx` (review), `app/(app)/done/*` or in-page done state, `components/review/*`, `app/(app)/settings/page.tsx`, `components/settings/*` |
-| Library screens | `app/(app)/library/page.tsx`, `app/(app)/library/[id]/page.tsx`, `components/library/*` (tiles, folder list, word detail sheet, sort plan sheet), `lib/reorg.ts` |
+| Library screens | `app/(app)/library/page.tsx`, `app/(app)/library/[id]/page.tsx`, `components/library/*` (tiles, folder list, word detail sheet, sort plan sheet, phone filter: `phone-filter.ts` + `LibraryFilterSheet.tsx`), `lib/reorg.ts` |
 | Add flow | `components/add/*` (QuickAddSheet, suggestion lists, filled form, duplicate/offline states), `lib/use-suggest.ts` |
 | Import flow | `app/(app)/import/page.tsx`, `components/import/*`, `lib/image-prep.ts`, `lib/use-extract.ts` |
 

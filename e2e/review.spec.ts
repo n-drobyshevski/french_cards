@@ -10,14 +10,14 @@ test.describe("review", () => {
 
     await tabBar(page).getByRole("link", { name: "Библиотека" }).click();
     await expect(page.getByRole("heading", { name: "Библиотека" })).toBeVisible();
-    await expect(page.getByText("11 слов", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Все слова: 11", exact: true })).toBeVisible();
     for (const theme of ["Повседневное", "Деньги", "Еда", "Полиция", "Тусовка", "Эмоции", "Люди"]) {
       await expect(page.getByRole("link", { name: new RegExp(`^${theme}:`) })).toBeVisible();
     }
 
     // Reloading does not seed twice.
     await page.reload();
-    await expect(page.getByText("11 слов", { exact: true }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Все слова: 11", exact: true })).toBeVisible();
   });
 
   test("flip a card, grade it and undo the grade", async ({ page }) => {

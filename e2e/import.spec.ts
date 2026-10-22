@@ -27,7 +27,7 @@ test("import a screenshot: rows stream in, the user reviews them and adds the ch
   await page.getByRole("button", { name: "Добавить 2 слова" }).click();
   await expect(page).toHaveURL(/\/library$/);
   await expect(page.getByText(/Добавлено 2/)).toBeVisible();
-  await expect(page.getByText("13 слов", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Все слова: 13", exact: true })).toBeVisible();
 
   await page.getByRole("link", { name: /^Эмоции:/ }).click();
   await expect(page.getByText("kiffer", { exact: true })).toBeVisible();
