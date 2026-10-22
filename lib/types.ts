@@ -109,12 +109,27 @@ export interface Settings {
   /** Vibrate on card swipes (Android; system haptic on iOS 18+). */
   haptics: boolean;
   theme: "system" | "light" | "dark";
+  /** «Подсказки при вводе»: the «Варианты» list in the add sheet. */
   suggestions_enabled: boolean;
+  /** Detect the slang level (and verlan) of new words. */
+  slang_detect_enabled: boolean;
+  /** Add an example sentence to new words. */
+  examples_enabled: boolean;
   auto_sort_enabled: boolean;
   /** Single-key shortcuts on desktop (N, /, ?, G…, [, library J/K/X/M…). Off for screen-reader users (WCAG 2.1.4). */
   shortcuts: boolean;
   /** Desktop review: the hint line of keys under the card («Пробел вопрос · Z отменить»). */
   key_hints: boolean;
+  /** How many «Варианты» to show (1–3). */
+  suggest_count: 1 | 2 | 3;
+  /** Which register «Варианты» put first. */
+  suggest_register: "slang" | "any" | "neutral";
+  /** Short usage notes in suggestions and screenshot rows. */
+  notes_enabled: boolean;
+  /** Model for suggestions, slang level, examples and themes: fast = Haiku, accurate = Sonnet. */
+  ai_model: "fast" | "accurate";
+  /** Model for screenshots. */
+  ai_model_extract: "fast" | "accurate";
   /** Библиотека opens on the theme tiles or on the list of all words. */
   library_view: "themes" | "words";
   last_sync_at: string | null;
@@ -131,9 +146,16 @@ export const DEFAULT_SETTINGS: Settings = {
   haptics: true,
   theme: "system",
   suggestions_enabled: true,
+  slang_detect_enabled: true,
+  examples_enabled: true,
   auto_sort_enabled: true,
   shortcuts: true,
   key_hints: true,
+  suggest_count: 3,
+  suggest_register: "any",
+  notes_enabled: true,
+  ai_model: "fast",
+  ai_model_extract: "fast",
   library_view: "themes",
   last_sync_at: null,
 };

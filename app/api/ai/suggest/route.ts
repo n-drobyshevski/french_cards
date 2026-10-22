@@ -1,5 +1,6 @@
 // POST /api/ai/suggest — up to 3 suggestions for the add sheet, streamed as NDJSON.
-// Request: { q, direction: "auto"|"fr"|"ru", folders: [{slug,name,description}] }.
+// Request: { q, direction: "auto"|"fr"|"ru", folders: [{slug,name,description}], model?: "fast"|"accurate",
+// max?: 1–3, register?: "slang"|"any"|"neutral", notes?: boolean } (preferences from Settings «ИИ»).
 // Response lines: {type:"meta",direction} · {type:"suggestion",index,suggestion} × ≤3 ·
 // then {type:"done",count} or {type:"error",error}. See lib/ai/schemas.ts for the types.
 import { Output, streamText } from "ai";
@@ -8,7 +9,7 @@ import { cachedInstructions, modelFor, providerOptions } from "@/lib/ai/model";
 import { ndjsonResponse } from "@/lib/ai/ndjson";
 import { dedupeKey, detectDirection, normalizeSuggestion } from "@/lib/ai/normalize";
 import { SUGGEST_SYSTEM, suggestUserPrompt } from "@/lib/ai/prompts";
-import { buildSuggestionSchema, SUGGEST_MAX, SuggestRequestSchema, type SuggestLine } from "@/lib/ai/schemas";
+import { buildSuggestionSchema, SuggestRequestSchema, type SuggestLine } from "@/lib/ai/schemas";
 
 export const maxDuration = 30;
 
@@ -28,7 +29,7 @@ export async function POST(req: Request): Promise<Response> {
   const limited = limitAiRequest("suggest", guard);
   if (limited) return limited;
 
-  const { q, folders } = parsed.data;
+  const { q, folders, model, max, register, notes } = parsed.data;
   const direction = parsed.data.direction === "auto" ? detectDirection(q) : parsed.data.direction;
   const folderRefs = folders.map((f) => ({ slug: f.slug, name: f.name }));
 
@@ -37,9 +38,9 @@ export async function POST(req: Request): Promise<Response> {
   let failure: unknown = null;
 
   const result = streamText({
-    model: modelFor("suggest"),
+    model: modelFor("suggest", model),
     instructions: cachedInstructions(SUGGEST_SYSTEM),
-    prompt: suggestUserPrompt({ q, direction, folders }),
+    prompt: suggestUserPrompt({ q, direction, folders, max, register, notes }),
     output: Output.array({ element: buildSuggestionSchema(folders.map((f) => f.slug)), name: "suggestions" }),
     providerOptions,
     maxOutputTokens: 1500,
@@ -57,12 +58,13 @@ export async function POST(req: Request): Promise<Response> {
       for await (const raw of result.elementStream) {
         const suggestion = normalizeSuggestion(raw, folderRefs);
         if (!suggestion) continue;
+        if (!notes) suggestion.note = null;
         const key = dedupeKey(suggestion.fr);
         if (seen.has(key)) continue;
         seen.add(key);
         yield { type: "suggestion", index: count, suggestion };
         count++;
-        if (count >= SUGGEST_MAX) {
+        if (count >= max) {
           stop.abort();
           break;
         }
@@ -70,7 +72,7 @@ export async function POST(req: Request): Promise<Response> {
     } catch (error) {
       failure ??= error;
     }
-    if (failure && count < SUGGEST_MAX && !req.signal.aborted) {
+    if (failure && count < max && !req.signal.aborted) {
       console.error("[ai/suggest]", failure);
       yield { type: "error", error: "upstream_error" };
       return;

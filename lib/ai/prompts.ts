@@ -1,7 +1,7 @@
 // Frozen system prompts (prompt-cache prefixes: never interpolate per-request data into them)
 // and the per-request user messages that follow them. The routes pass the system prompt through
 // `cachedInstructions()` so it becomes a cache_control breakpoint.
-import type { FolderInput } from "./schemas";
+import type { FolderInput, SuggestRegister } from "./schemas";
 import { FOLDER_INBOX, FOLDER_NEW } from "./schemas";
 
 const APP_CONTEXT = `You work inside «Карточки для Лизи», a flashcard app for one Russian-speaking learner of French. The learner collects everyday French and, above all, the French people actually speak: familier, argot, verlan and vulgar words heard in films, rap, chats and the street. Every card has a French side, a Russian side, an optional short note and an example, a part of speech, a gender for nouns, a slang level and a verlan flag, and a theme folder («тема»).
@@ -158,15 +158,41 @@ function folderLines(folders: readonly FolderInput[]): string {
 
 const oneLine = (s: string) => s.replace(/[\r\n\t]+/g, " ").trim();
 
-export function suggestUserPrompt(input: { q: string; direction: "fr" | "ru"; folders: readonly FolderInput[] }): string {
-  const lang = input.direction === "ru" ? "Russian (suggest French equivalents)" : "French (complete or correct it)";
-  return `Themes:\n${folderLines(input.folders)}\n\nInput language: ${lang}\nTyped so far: <input>${oneLine(input.q)}</input>`;
+const REGISTER_PREFERENCE: Record<SuggestRegister, string | null> = {
+  any: null,
+  slang:
+    "Register preference: the learner wants spoken French. Put argot and familier words first; give the neutral word only when there is no spoken one.",
+  neutral: "Register preference: the learner wants standard French first. Put the neutral word first; familier or argot words only after it.",
+};
+
+const NO_NOTES = "Notes: the learner switched notes off. note is always null.";
+
+/** Learner preferences from Settings, as extra lines of the user message (the system prompt stays frozen). */
+function preferenceLines(input: { max?: number; register?: SuggestRegister; notes?: boolean }): string {
+  const lines: string[] = [];
+  if (input.max !== undefined && input.max < 3) lines.push(`Return at most ${input.max} suggestion${input.max === 1 ? "" : "s"}.`);
+  const register = input.register ? REGISTER_PREFERENCE[input.register] : null;
+  if (register) lines.push(register);
+  if (input.notes === false) lines.push(NO_NOTES);
+  return lines.length ? `\n\n${lines.join("\n")}` : "";
 }
 
-export function extractUserPrompt(input: { imageCount: number; folders: readonly FolderInput[] }): string {
+export function suggestUserPrompt(input: {
+  q: string;
+  direction: "fr" | "ru";
+  folders: readonly FolderInput[];
+  max?: number;
+  register?: SuggestRegister;
+  notes?: boolean;
+}): string {
+  const lang = input.direction === "ru" ? "Russian (suggest French equivalents)" : "French (complete or correct it)";
+  return `Themes:\n${folderLines(input.folders)}\n\nInput language: ${lang}\nTyped so far: <input>${oneLine(input.q)}</input>${preferenceLines(input)}`;
+}
+
+export function extractUserPrompt(input: { imageCount: number; folders: readonly FolderInput[]; notes?: boolean }): string {
   const images =
     input.imageCount === 1 ? "1 image" : `${input.imageCount} images (they may be consecutive tiles of one screenshot, top to bottom)`;
-  return `Themes:\n${folderLines(input.folders)}\n\nAttached: ${images}. Extract the French vocabulary.`;
+  return `Themes:\n${folderLines(input.folders)}\n\nAttached: ${images}. Extract the French vocabulary.${preferenceLines({ notes: input.notes })}`;
 }
 
 export function taxonomyUserPrompt(input: {

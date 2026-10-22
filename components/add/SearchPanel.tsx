@@ -44,6 +44,8 @@ export interface SearchPanelProps {
   suggestionsEnabled: boolean;
   /** Settings «Раскладывать по темам автоматически»: off shows «Входящие» as each variant's theme. */
   autoSort?: boolean;
+  /** Settings «Определять уровень сленга»: off hides the level on each variant. */
+  showSlang?: boolean;
   folders: readonly Folder[];
   context: AddContext | undefined;
   dictionary: readonly LexiqueHit[];
@@ -232,10 +234,11 @@ function Variants({
   suggest,
   suggestionsEnabled,
   autoSort = true,
+  showSlang = true,
   folders,
   onPickSuggestion,
   direction,
-}: Pick<SearchPanelProps, "suggest" | "suggestionsEnabled" | "autoSort" | "folders" | "onPickSuggestion"> & {
+}: Pick<SearchPanelProps, "suggest" | "suggestionsEnabled" | "autoSort" | "showSlang" | "folders" | "onPickSuggestion"> & {
   direction: "fr" | "ru";
 }) {
   const headingId = useId();
@@ -247,12 +250,12 @@ function Variants({
       <SectionHeader
         id={headingId}
         title="Варианты"
-        aside={direction === "ru" ? "по-французски · уровень · тема" : "перевод · уровень · тема"}
+        aside={`${direction === "ru" ? "по-французски" : "перевод"}${showSlang ? " · уровень" : ""} · тема`}
       />
       <ul className="m-0 mx-4 flex list-none flex-col p-0">
         {results.map((s) => (
           <li key={`${s.fr}\u0001${s.ru}`}>
-            <VariantRow suggestion={s} folders={folders} autoSort={autoSort} onPick={() => onPickSuggestion(s)} />
+            <VariantRow suggestion={s} folders={folders} autoSort={autoSort} showSlang={showSlang} onPick={() => onPickSuggestion(s)} />
           </li>
         ))}
       </ul>
@@ -273,11 +276,13 @@ function VariantRow({
   suggestion: s,
   folders,
   autoSort,
+  showSlang,
   onPick,
 }: {
   suggestion: Suggestion;
   folders: readonly Folder[];
   autoSort: boolean;
+  showSlang: boolean;
   onPick: () => void;
 }) {
   const abbr = posAbbr(s);
@@ -303,9 +308,11 @@ function VariantRow({
         <span className="truncate text-[15px] leading-5">{s.ru}</span>
       </span>
       <span className="flex shrink-0 flex-col items-end gap-1">
-        <span className="flex h-6 items-center">
-          <SlangMeter level={s.slang_level} verlan={s.verlan} />
-        </span>
+        {showSlang && (
+          <span className="flex h-6 items-center">
+            <SlangMeter level={s.slang_level} verlan={s.verlan} />
+          </span>
+        )}
         <span className="max-w-[156px] truncate font-mono text-[11px] leading-5 tracking-[.06em] whitespace-nowrap text-muted uppercase">
           Тема: {theme}
         </span>

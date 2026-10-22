@@ -19,6 +19,12 @@ export const PROVENANCE_VALUES = ["pair", "fr_only", "ru_only", "in_text"] as co
 export type Provenance = (typeof PROVENANCE_VALUES)[number];
 
 export const SUGGEST_MAX = 3;
+/** Settings «Модель»: fast = Haiku, accurate = Sonnet. */
+export const MODEL_TIERS = ["fast", "accurate"] as const;
+export type ModelTierInput = (typeof MODEL_TIERS)[number];
+/** Settings «Регистр вариантов»: slang first, a spread (default), or the neutral word first. */
+export const SUGGEST_REGISTERS = ["slang", "any", "neutral"] as const;
+export type SuggestRegister = (typeof SUGGEST_REGISTERS)[number];
 export const EXTRACT_MAX_ITEMS = 60;
 export const FOLDER_ALTERNATIVES_MAX = 2;
 export const TAXONOMY_MIN = 8;
@@ -222,6 +228,12 @@ export const SuggestRequestSchema = z.object({
     .pipe(z.string().min(1).max(80)),
   direction: z.enum(["auto", "fr", "ru"]).default("auto"),
   folders: foldersInput(60).default([]),
+  model: z.enum(MODEL_TIERS).default("fast"),
+  /** How many suggestions to return (1–3). */
+  max: z.number().int().min(1).max(SUGGEST_MAX).default(SUGGEST_MAX),
+  register: z.enum(SUGGEST_REGISTERS).default("any"),
+  /** false: no usage notes. */
+  notes: z.boolean().default(true),
 });
 export type SuggestRequest = z.input<typeof SuggestRequestSchema>;
 
@@ -237,6 +249,7 @@ export type TaxonomyFolderInput = z.infer<typeof TaxonomyFolderInputSchema>;
 
 export const TaxonomyRequestSchema = z.object({
   mode: z.literal("taxonomy"),
+  model: z.enum(MODEL_TIERS).default("fast"),
   words: z
     .array(
       z.object({
@@ -257,6 +270,7 @@ export type TaxonomyRequest = z.input<typeof TaxonomyRequestSchema>;
 
 export const AssignRequestSchema = z.object({
   mode: z.literal("assign"),
+  model: z.enum(MODEL_TIERS).default("fast"),
   words: z
     .array(
       z.object({
@@ -293,6 +307,7 @@ export const EnrichRequestSchema = z.object({
     .refine((list) => new Set(list.map((w) => w.id)).size === list.length, "duplicate word id"),
   /** The learner's themes: when present, each result also gets a theme pick. */
   folders: foldersInput(60).optional(),
+  model: z.enum(MODEL_TIERS).default("fast"),
 });
 export type EnrichRequest = z.input<typeof EnrichRequestSchema>;
 

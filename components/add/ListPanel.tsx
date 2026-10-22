@@ -39,10 +39,23 @@ export interface ListPanelProps {
   /** Offer «По темам автоматически» (each row to its own detected theme). */
   auto?: { selected: boolean; onSelect: () => void };
   folders: readonly Folder[];
+  /** Settings «Определять уровень сленга» / «Подбирать примеры»: what to show from detection. */
+  show?: { slang: boolean; examples: boolean };
 }
 
 /** «Список»: paste "fr — ru" lines, check the parsed rows, add them in one go. */
-export function ListPanel({ textareaRef, text, onText, rows, onToggle, folder, onFolder, auto, folders }: ListPanelProps) {
+export function ListPanel({
+  textareaRef,
+  text,
+  onText,
+  rows,
+  onToggle,
+  folder,
+  onFolder,
+  auto,
+  folders,
+  show = { slang: true, examples: true },
+}: ListPanelProps) {
   const hintId = useId();
   const themeId = useId();
   const headingId = useId();
@@ -88,7 +101,7 @@ export function ListPanel({ textareaRef, text, onText, rows, onToggle, folder, o
             <ul className="m-0 mx-4 flex list-none flex-col p-0">
               {rows.map((row) => (
                 <li key={row.key}>
-                  <ListRowItem row={row} folders={folders} onToggle={() => onToggle(row.key)} />
+                  <ListRowItem row={row} folders={folders} show={show} onToggle={() => onToggle(row.key)} />
                 </li>
               ))}
             </ul>
@@ -99,7 +112,17 @@ export function ListPanel({ textareaRef, text, onText, rows, onToggle, folder, o
   );
 }
 
-function ListRowItem({ row, folders, onToggle }: { row: ListRow; folders: readonly Folder[]; onToggle: () => void }) {
+function ListRowItem({
+  row,
+  folders,
+  show,
+  onToggle,
+}: {
+  row: ListRow;
+  folders: readonly Folder[];
+  show: { slang: boolean; examples: boolean };
+  onToggle: () => void;
+}) {
   const invalid = row.status === "invalid";
   const tag = invalid ? (row.problem === "no_french" ? "нет французского" : "нет перевода") : row.status === "ok" ? null : TAGS[row.status];
   return (
@@ -129,7 +152,7 @@ function ListRowItem({ row, folders, onToggle }: { row: ListRow; folders: readon
           {row.fr || "—"}
         </span>
         <span className="truncate text-[14px] leading-5 text-muted">{row.ru || "—"}</span>
-        {row.enrich?.example_fr && (
+        {show.examples && row.enrich?.example_fr && (
           <span lang="fr" className="truncate font-serif text-[14px] leading-5 text-muted italic">
             {row.enrich.example_fr}
           </span>
@@ -137,7 +160,7 @@ function ListRowItem({ row, folders, onToggle }: { row: ListRow; folders: readon
       </span>
       {row.enrich && !tag && (
         <span className="flex max-w-[40%] shrink-0 flex-col items-end gap-1">
-          <SlangMeter level={row.enrich.slang_level} verlan={row.enrich.verlan} size="sm" />
+          {show.slang && <SlangMeter level={row.enrich.slang_level} verlan={row.enrich.verlan} size="sm" />}
           {row.autoFolder && (
             <span className="max-w-full truncate font-mono text-[11px] leading-4 tracking-[.06em] text-muted">
               {row.autoFolder.kind === "new" ? `+ ${row.autoFolder.name}` : choiceName(row.autoFolder, folders)}

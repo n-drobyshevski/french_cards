@@ -176,6 +176,20 @@ describe("applyEnrichment", () => {
     expect(d).toMatchObject({ slang_level: 3, slang_auto: false, example_fr: "Ma caisse.", example_auto: false, pos: "noun" });
   });
 
+  it("fills only what Settings «ИИ» allow", () => {
+    const d = applyEnrichment(manualDraft({ fr: "la caisse", ru: "тачка" }), result, [], { slang: false, examples: true });
+    expect(d).toMatchObject({ slang_level: 0, slang_auto: false, example_fr: "Il a garé sa caisse.", pos: "noun" });
+    const e = applyEnrichment(manualDraft({ fr: "la caisse", ru: "тачка" }), result, [], { slang: true, examples: false });
+    expect(e).toMatchObject({ slang_level: 1, slang_auto: true, example_fr: "", example_auto: false });
+    expect(draftFromSuggestion(sug(), FOLDERS, { slang: false, examples: false })).toMatchObject({
+      slang_level: 0,
+      verlan: false,
+      slang_auto: false,
+      example_fr: "",
+      example_ru: "",
+    });
+  });
+
   it("replaces its own example when the word changes, and clears it when there is none", () => {
     const first = applyEnrichment(manualDraft({ fr: "la caisse", ru: "тачка" }), result);
     const next = applyEnrichment(first, { ...result, example_fr: "Je vous attends à la caisse.", example_ru: "Жду у кассы.", slang_level: 0 });

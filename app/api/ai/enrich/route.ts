@@ -25,13 +25,13 @@ export async function POST(req: Request): Promise<Response> {
   }
   const parsed = EnrichRequestSchema.safeParse(body);
   if (!parsed.success) return jsonError(400, "bad_request", parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`));
-  const { words, folders } = parsed.data;
+  const { words, folders, model } = parsed.data;
   const limited = limitAiRequest("enrich", guard);
   if (limited) return limited;
 
   try {
     const { output } = await generateText({
-      model: modelFor("enrich"),
+      model: modelFor("enrich", model),
       instructions: cachedInstructions(ENRICH_SYSTEM),
       prompt: enrichUserPrompt({
         words: words.map((w, i) => ({ ref: refFor(i), fr: w.fr, ru: w.ru, note: w.note ?? null })),

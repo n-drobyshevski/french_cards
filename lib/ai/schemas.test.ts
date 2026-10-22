@@ -116,7 +116,20 @@ describe("model output schemas", () => {
 describe("request schemas", () => {
   it("suggest: trims q, defaults direction and folders", () => {
     const r = SuggestRequestSchema.parse({ q: "  se   cass " });
-    expect(r).toEqual({ q: "se cass", direction: "auto", folders: [] });
+    expect(r).toEqual({ q: "se cass", direction: "auto", folders: [], model: "fast", max: 3, register: "any", notes: true });
+  });
+
+  it("suggest: settings preferences are bounded enums", () => {
+    expect(SuggestRequestSchema.parse({ q: "ok", model: "accurate", max: 1, register: "slang", notes: false })).toMatchObject({
+      model: "accurate",
+      max: 1,
+      register: "slang",
+      notes: false,
+    });
+    expect(SuggestRequestSchema.safeParse({ q: "ok", model: "claude-opus" }).success).toBe(false);
+    expect(SuggestRequestSchema.safeParse({ q: "ok", max: 4 }).success).toBe(false);
+    expect(SuggestRequestSchema.safeParse({ q: "ok", max: 0 }).success).toBe(false);
+    expect(SuggestRequestSchema.safeParse({ q: "ok", register: "vulg" }).success).toBe(false);
   });
 
   it("suggest: rejects empty or long q, bad direction, bad slugs, duplicate slugs", () => {

@@ -3,7 +3,14 @@
 // («Дополнить карточки»), via POST /api/ai/enrich.
 // The network part is small; deciding what to change is in pure functions so it is unit-tested.
 import { db } from "./db";
-import { ENRICH_CHUNK_MAX, type AiErrorBody, type EnrichResponse, type EnrichResult, type FolderInput } from "./ai/schemas";
+import {
+  ENRICH_CHUNK_MAX,
+  type AiErrorBody,
+  type EnrichResponse,
+  type EnrichResult,
+  type FolderInput,
+  type ModelTierInput,
+} from "./ai/schemas";
 import { listFolders } from "./folders";
 import { getSettings } from "./settings";
 import type { Folder, Settings, Word } from "./types";
@@ -51,6 +58,8 @@ export interface EnrichOptions {
   onProgress?: (done: number, total: number) => void;
   /** The learner's themes: when set, each result also carries a theme pick. */
   folders?: readonly FolderInput[];
+  /** Settings «Модель для подсказок». */
+  model?: ModelTierInput;
 }
 
 const defaultSleep = (ms: number, signal?: AbortSignal) =>
@@ -94,7 +103,7 @@ export async function postEnrich(words: readonly EnrichInput[], opts: EnrichOpti
       res = await fetchImpl(ENRICH_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(opts.folders ? { words, folders: opts.folders } : { words }),
+        body: JSON.stringify({ words, ...(opts.folders && { folders: opts.folders }), ...(opts.model && { model: opts.model }) }),
         signal: opts.signal,
       });
     } catch {
@@ -186,11 +195,28 @@ export function enrichmentPatch(word: Enrichable, r: EnrichResult, scope: PatchS
   return patch;
 }
 
-/** The settings when background detection may run now (setting on, online), otherwise null. */
+/** What Settings «ИИ» allow to fill in automatically. */
+export interface EnrichPreferences {
+  slang: boolean;
+  examples: boolean;
+  themes: boolean;
+}
+
+export const enrichPreferences = (s: Pick<Settings, "slang_detect_enabled" | "examples_enabled" | "auto_sort_enabled">): EnrichPreferences => ({
+  slang: s.slang_detect_enabled,
+  examples: s.examples_enabled,
+  themes: s.auto_sort_enabled,
+});
+
+/** The settings when background detection may run now (online), otherwise null. */
 export async function enrichSettings(): Promise<Settings | null> {
   if (typeof navigator !== "undefined" && navigator.onLine === false) return null;
-  const settings = await getSettings();
-  return settings.suggestions_enabled ? settings : null;
+  return getSettings();
+}
+
+/** A scope narrowed to what the settings allow. */
+export function allowedScope(scope: PatchScope, prefs: EnrichPreferences): PatchScope {
+  return { slang: scope.slang && prefs.slang, example: scope.example && prefs.examples, pos: scope.pos, folder: !!scope.folder && prefs.themes };
 }
 
 /** The theme to file a saved word in after the fact: an existing theme picked with some confidence. */
@@ -215,16 +241,21 @@ export interface SavedWordFill {
  * detects the missing fields and writes them. Silent: returns the number of words patched.
  */
 export async function fillSavedWords(items: readonly SavedWordFill[], opts: Omit<EnrichOptions, "onProgress"> = {}): Promise<number> {
-  const wanted = items.filter((i) => i.scope.slang || i.scope.example || i.scope.pos || i.scope.folder);
-  const settings = wanted.length > 0 ? await enrichSettings() : null;
+  const settings = items.length > 0 ? await enrichSettings() : null;
   if (!settings) return 0;
-  const withFolders = settings.auto_sort_enabled && wanted.some((i) => i.scope.folder);
+  const prefs = enrichPreferences(settings);
+  // Part of speech alone is not worth a request: only words with something the settings allow.
+  const wanted = items
+    .map((i) => ({ ...i, scope: allowedScope(i.scope, prefs) }))
+    .filter((i) => i.scope.slang || i.scope.example || i.scope.folder);
+  if (wanted.length === 0) return 0;
+  const withFolders = wanted.some((i) => i.scope.folder);
   const folders = withFolders ? await listFolders() : [];
   let results: Map<string, EnrichResult>;
   try {
     results = await enrichWords(
       wanted.map(({ word }) => ({ id: word.id, fr: word.fr, ru: word.ru, note: word.note })),
-      { ...opts, retries: opts.retries ?? 1, folders: withFolders ? toFolderInputs(folders) : undefined },
+      { ...opts, retries: opts.retries ?? 1, folders: withFolders ? toFolderInputs(folders) : undefined, model: settings.ai_model },
     );
   } catch {
     return 0;
@@ -254,24 +285,28 @@ export const slangUndetected = (w: Pick<Word, "source" | "slang_level" | "verlan
 
 export const lacksExample = (w: Pick<Word, "example_fr">) => !w.example_fr?.trim();
 
-export function isEnrichCandidate(w: Word): boolean {
-  return w.deleted_at === null && (lacksExample(w) || slangUndetected(w));
+/** What «Дополнить карточки» proposes, from Settings «ИИ». */
+export type BackfillPreferences = Pick<EnrichPreferences, "slang" | "examples">;
+const ALL: BackfillPreferences = { slang: true, examples: true };
+
+export function isEnrichCandidate(w: Word, prefs: BackfillPreferences = ALL): boolean {
+  return w.deleted_at === null && ((prefs.examples && lacksExample(w)) || (prefs.slang && slangUndetected(w)));
 }
 
 /** Live words worth looking at, newest first. */
-export async function loadEnrichCandidates(): Promise<Word[]> {
-  const words = await db.words.filter(isEnrichCandidate).toArray();
+export async function loadEnrichCandidates(prefs: BackfillPreferences = ALL): Promise<Word[]> {
+  const words = await db.words.filter((w) => isEnrichCandidate(w, prefs)).toArray();
   return words.sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
 }
 
-/** For the library entry row: candidates in all, and how many of them have no example. */
-export async function countEnrichCandidates(): Promise<{ total: number; noExample: number }> {
+/** For the library entry row: candidates in all, and how many of them would get an example. */
+export async function countEnrichCandidates(prefs: BackfillPreferences = ALL): Promise<{ total: number; noExample: number }> {
   let total = 0;
   let noExample = 0;
   await db.words.each((w) => {
-    if (!isEnrichCandidate(w)) return;
+    if (!isEnrichCandidate(w, prefs)) return;
     total++;
-    if (lacksExample(w)) noExample++;
+    if (prefs.examples && lacksExample(w)) noExample++;
   });
   return { total, noExample };
 }
@@ -293,12 +328,16 @@ export interface EnrichPlan {
 }
 
 /** Proposed changes: an example for words without one, a level for words whose level was never detected. */
-export function buildEnrichPlan(words: readonly Word[], results: ReadonlyMap<string, EnrichResult>): EnrichPlan {
+export function buildEnrichPlan(
+  words: readonly Word[],
+  results: ReadonlyMap<string, EnrichResult>,
+  prefs: BackfillPreferences = ALL,
+): EnrichPlan {
   const plan: EnrichPlan = { examples: [], slang: [] };
   for (const word of words) {
     const r = results.get(word.id);
     if (!r) continue;
-    if (lacksExample(word)) {
+    if (prefs.examples && lacksExample(word)) {
       const patch = enrichmentPatch(word, r, { slang: false, example: true, pos: false });
       if (patch.example_fr) {
         plan.examples.push({
@@ -311,7 +350,7 @@ export function buildEnrichPlan(words: readonly Word[], results: ReadonlyMap<str
         });
       }
     }
-    if (slangUndetected(word)) {
+    if (prefs.slang && slangUndetected(word)) {
       const patch = enrichmentPatch(word, r, { slang: true, example: false, pos: true });
       if (patch.slang_level !== undefined) {
         const undo: WordPatch = { slang_level: word.slang_level, verlan: word.verlan };

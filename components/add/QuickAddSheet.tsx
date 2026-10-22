@@ -15,7 +15,7 @@ import { isLexiqueLoaded, loadLexique, prefixSearch, type LexiqueHit } from "@/l
 import { getSettings } from "@/lib/settings";
 import { normalizeLemma } from "@/lib/text";
 import type { Folder } from "@/lib/types";
-import { toFolderInputs, useSuggest } from "@/lib/use-suggest";
+import { toFolderInputs, useSuggest, type SuggestPreferences } from "@/lib/use-suggest";
 import { loadAddContext, loadDuplicate, loadListDuplicates } from "./data";
 import {
   applyEnrichment,
@@ -92,8 +92,18 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
   const context = useLiveQuery(() => loadAddContext(), []);
   const suggestionsEnabled = settings?.suggestions_enabled ?? true;
   const autoSort = settings?.auto_sort_enabled ?? true;
+  const slangDetect = settings?.slang_detect_enabled ?? true;
+  const examplesOn = settings?.examples_enabled ?? true;
+  const model = settings?.ai_model ?? "fast";
+  // Detection for typed and pasted words runs when it has anything to fill in.
+  const detect = slangDetect || examplesOn || autoSort;
+  const detectPrefs = useMemo(() => ({ slang: slangDetect, examples: examplesOn }), [slangDetect, examplesOn]);
   const folderInputs = useMemo(() => toFolderInputs(folders), [folders]);
-  const suggest = useSuggest({ folders: folderInputs, enabled: suggestionsEnabled });
+  const count = settings?.suggest_count ?? 3;
+  const register = settings?.suggest_register ?? "any";
+  const notes = settings?.notes_enabled ?? true;
+  const preferences = useMemo<SuggestPreferences>(() => ({ model, max: count, register, notes }), [model, count, register, notes]);
+  const suggest = useSuggest({ folders: folderInputs, enabled: suggestionsEnabled, preferences });
   const { setQuery: requestSuggestions, cancel: cancelSuggestions } = suggest;
 
   const [mode, setMode] = useState<Mode>("search");
@@ -208,7 +218,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
 
   // Slang level, example and theme: for the manual form while both sides are filled, and for
   // the pasted rows not detected yet. Shown before saving; anything set by hand stays.
-  const formKey = mode === "form" && draft && suggestionsEnabled ? enrichKey(draft) : null;
+  const formKey = mode === "form" && draft && detect ? enrichKey(draft) : null;
   const formEnrichWords = useMemo<EnrichInput[] | null>(() => {
     if (!formKey) return null;
     const [fr, ru] = formKey.split("\u0001");
@@ -216,23 +226,23 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
   }, [formKey]);
   const formEnriching = useAutoEnrich(
     formEnrichWords,
-    autoSort ? folderInputs : undefined,
+    { folders: autoSort ? folderInputs : undefined, model },
     (results, [sent]) => {
       const result = results.get(sent.id);
       if (!result) return;
       const sentKey = `${sent.fr}\u0001${sent.ru}`;
-      setDraft((d) => (d && enrichKey(d) === sentKey ? applyEnrichment(d, result, folders) : d));
+      setDraft((d) => (d && enrichKey(d) === sentKey ? applyEnrichment(d, result, folders, detectPrefs) : d));
     },
     FORM_ENRICH_DEBOUNCE_MS,
   );
   const listEnrichWords = useMemo<ListEnrichInput[] | null>(() => {
-    if (mode !== "list" || !suggestionsEnabled) return null;
+    if (mode !== "list" || !detect) return null;
     const missing = listRows.filter((r) => r.status !== "invalid" && (!r.enrich || (listAuto && r.enrich.folder === null)));
     return missing.length > 0 ? missing.map((r, i) => ({ id: `l${i + 1}`, fr: r.fr, ru: r.ru, rowKey: r.key })) : null;
-  }, [mode, suggestionsEnabled, listRows, listAuto]);
+  }, [mode, detect, listRows, listAuto]);
   useAutoEnrich(
     listEnrichWords,
-    listAuto ? folderInputs : undefined,
+    { folders: listAuto ? folderInputs : undefined, model },
     (results, sent) =>
       setListEnriched((prev) => {
         const next = new Map(prev);
@@ -261,7 +271,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
   };
 
   const pickSuggestion = (s: Suggestion) => {
-    setDraft(draftFromSuggestion(s, folders, { autoSort }));
+    setDraft(draftFromSuggestion(s, folders, { autoSort, slang: slangDetect, examples: examplesOn }));
     setErrors({});
     setSaveError(null);
     setMode("form");
@@ -411,14 +421,9 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
         fr: r.fr,
         ru: r.ru,
         source: "import",
-        ...(r.enrich && {
-          pos: r.enrich.pos,
-          gender: r.enrich.gender,
-          slang_level: r.enrich.slang_level,
-          verlan: r.enrich.verlan,
-          example_fr: r.enrich.example_fr,
-          example_ru: r.enrich.example_ru,
-        }),
+        ...(r.enrich && { pos: r.enrich.pos, gender: r.enrich.gender }),
+        ...(r.enrich && slangDetect && { slang_level: r.enrich.slang_level, verlan: r.enrich.verlan }),
+        ...(r.enrich && examplesOn && { example_fr: r.enrich.example_fr, example_ru: r.enrich.example_ru }),
       });
     }
     const ordered = [...groups.values()];
@@ -563,6 +568,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
           suggest={suggest}
           suggestionsEnabled={suggestionsEnabled}
           autoSort={autoSort}
+          showSlang={slangDetect}
           folders={folders}
           context={context}
           dictionary={dictionary}
@@ -608,6 +614,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
           onFolder={setListFolder}
           auto={autoSort ? { selected: listFolder === null, onSelect: () => setListFolder(null) } : undefined}
           folders={folders}
+          show={detectPrefs}
         />
       )}
     </Sheet>

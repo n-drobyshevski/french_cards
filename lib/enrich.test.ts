@@ -126,12 +126,24 @@ describe("fillSavedWords", () => {
     expect(await getWord(edited.id)).toMatchObject({ slang_level: 0, example_fr: null });
   });
 
-  it("does nothing with suggestions switched off", async () => {
-    await updateSettings({ suggestions_enabled: false });
+  it("follows Settings «ИИ»: only what is switched on, with the chosen model", async () => {
+    await updateSettings({ slang_detect_enabled: false, examples_enabled: false, auto_sort_enabled: false });
     const word = await addWord({ fr: "la caisse", ru: "тачка" }, NOW);
     const fetchImpl = fakeFetch();
-    expect(await fillSavedWords([{ word, scope: { slang: true, example: true, pos: true } }], { fetchImpl })).toBe(0);
+    const all = { slang: true, example: true, pos: true, folder: true };
+    expect(await fillSavedWords([{ word, scope: all }], { fetchImpl })).toBe(0);
     expect(fetchImpl).not.toHaveBeenCalled();
+
+    await updateSettings({ slang_detect_enabled: true, ai_model: "accurate" });
+    let body: Record<string, unknown> = {};
+    const spy = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return fakeFetch()(url, init);
+    });
+    expect(await fillSavedWords([{ word, scope: all }], { fetchImpl: spy })).toBe(1);
+    expect(body.model).toBe("accurate");
+    expect(body.folders).toBeUndefined();
+    expect(await getWord(word.id)).toMatchObject({ slang_level: 2, example_fr: null, folder_id: null });
   });
 
   it("keeps a level the user set in the form", async () => {
@@ -185,6 +197,19 @@ describe("«Дополнить карточки»", () => {
     expect(candidates.map((w) => w.id)).toEqual([noExample.id, manual.id]);
     expect(await countEnrichCandidates()).toEqual({ total: 2, noExample: 2 });
     expect(candidates.some((w) => w.id === suggested.id)).toBe(false);
+  });
+
+  it("proposes only what Settings «ИИ» allow", async () => {
+    const manual = await addWord({ fr: "la caisse", ru: "тачка", source: "manual" }, NOW);
+    const suggested = await addWord({ fr: "le keuf", ru: "мент", source: "suggest", slang_level: 2 }, NOW);
+    const onlySlang = { slang: true, examples: false };
+    expect((await loadEnrichCandidates(onlySlang)).map((w) => w.id)).toEqual([manual.id]);
+    expect(await countEnrichCandidates(onlySlang)).toEqual({ total: 1, noExample: 0 });
+    const results = new Map([[manual.id, result(manual.id)], [suggested.id, result(suggested.id)]]);
+    const plan = buildEnrichPlan([manual, suggested], results, onlySlang);
+    expect(plan.examples).toEqual([]);
+    expect(plan.slang.map((c) => c.word.id)).toEqual([manual.id]);
+    expect(await countEnrichCandidates({ slang: false, examples: false })).toEqual({ total: 0, noExample: 0 });
   });
 
   it("plans examples and levels, applies the picked ones and undoes them", async () => {

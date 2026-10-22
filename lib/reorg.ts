@@ -14,9 +14,11 @@ import {
   type AssignmentResult,
   type TaxonomyRequest,
   type TaxonomyResponse,
+  type ModelTierInput,
 } from "./ai/schemas";
 import { db, newId } from "./db";
 import { createFolder, FOLDER_COLORS, listFolders } from "./folders";
+import { getSettings } from "./settings";
 import type { Confidence, Folder, ReorgRun, Word } from "./types";
 import { moveWords, type MoveRecord } from "./words";
 
@@ -636,6 +638,8 @@ async function pool<T, R>(items: readonly T[], limit: number, fn: (item: T) => P
 }
 
 export interface RunReorgOptions extends ClassifyOptions {
+  /** Settings «Модель для подсказок»; read from Settings when omitted. */
+  model?: ModelTierInput;
   /** Called as assign chunks finish: (done, total). */
   onProgress?: (done: number, total: number) => void;
   /** Injected for tests. */
@@ -650,7 +654,8 @@ export async function runReorg(opts: RunReorgOptions = {}): Promise<ReorgPlan> {
   const { movable } = partition(snap);
   if (movable.length === 0) return buildPlan(snap, [], [], now);
 
-  const taxonomy = await postClassify<TaxonomyResponse>(buildTaxonomyRequest(snap), opts);
+  const model = opts.model ?? (await getSettings()).ai_model;
+  const taxonomy = await postClassify<TaxonomyResponse>({ ...buildTaxonomyRequest(snap), model }, opts);
   const targets = assignTargets(snap, taxonomy);
   const requests = buildAssignRequests(snap, targets);
   let done = 0;
@@ -659,7 +664,7 @@ export async function runReorg(opts: RunReorgOptions = {}): Promise<ReorgPlan> {
     requests,
     ASSIGN_CONCURRENCY,
     async (req) => {
-      const res = await postClassify<AssignResponse>(req, opts);
+      const res = await postClassify<AssignResponse>({ ...req, model }, opts);
       opts.onProgress?.(++done, requests.length);
       return res.assignments;
     },

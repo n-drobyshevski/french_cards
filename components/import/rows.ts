@@ -92,7 +92,7 @@ export function buildRows(
   items: readonly VocabItem[],
   folders: readonly Pick<Folder, "id" | "slug" | "name">[],
   duplicates: ReadonlyMap<string, Word>,
-  { autoSort = true }: { autoSort?: boolean } = {},
+  { autoSort = true, slang = true, examples = true }: { autoSort?: boolean; slang?: boolean; examples?: boolean } = {},
 ): ImportRow[] {
   const votes = newFolderVotes(items);
   return items.map((it, i) => {
@@ -103,13 +103,14 @@ export function buildRows(
       fr: it.fr,
       ru: it.ru,
       note: it.note,
-      exampleFr: it.example_fr,
-      exampleRu: it.example_ru,
+      // Settings «Подбирать примеры» / «Определять уровень сленга» off: left for the user.
+      exampleFr: examples ? it.example_fr : null,
+      exampleRu: examples ? it.example_ru : null,
       frAsSeen: it.fr_as_seen,
       pos: it.pos,
       gender: it.gender,
-      slang_level: it.slang_level,
-      verlan: it.verlan,
+      slang_level: slang ? it.slang_level : 0,
+      verlan: slang ? it.verlan : false,
       confidence: it.confidence,
       ruGuess: it.ru_suggested,
       issue: it.issue,

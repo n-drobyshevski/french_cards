@@ -117,6 +117,19 @@ describe("POST /api/ai/suggest", () => {
     expect(call.abortSignal).toBeInstanceOf(AbortSignal);
   });
 
+  it("follows the settings: model, how many suggestions, notes", async () => {
+    ai.streamText.mockImplementation(fakeStream([suggestion("se casser", { note: "груб." }), suggestion("se casser la tête")]));
+    const out = await lines(await suggest(json({ q: "se cass", model: "accurate", max: 1, notes: false, register: "slang" })));
+    const rows = out.filter((l) => l.type === "suggestion");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].suggestion.note).toBeNull();
+    expect(out.at(-1)).toEqual({ type: "done", count: 1 });
+    const call = ai.streamText.mock.calls[0][0];
+    expect(call.model.modelId).toBe("claude-sonnet-5-5");
+    expect(call.prompt).toContain("Return at most 1 suggestion.");
+    expect((await suggest(json({ q: "ok", model: "claude-opus-5-5" }))).status).toBe(400);
+  });
+
   it("detects Russian input and reports upstream errors", async () => {
     ai.streamText.mockImplementation(fakeStream([suggestion("la thune")], new Error("boom")));
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -192,6 +205,43 @@ describe("POST /api/ai/extract", () => {
       "image/jpeg",
       "image/webp",
     ]);
+  });
+
+  it("follows the settings: model and notes", async () => {
+    ai.streamText.mockImplementation(
+      fakeStream([
+        {
+          fr: "le keuf",
+          fr_as_seen: null,
+          ru: "мент",
+          ru_suggested: false,
+          note: "верлан от flic",
+          example_fr: null,
+          example_ru: null,
+          pos: "noun",
+          gender: "m",
+          slang_level: "arg",
+          verlan: true,
+          provenance: "pair",
+          confidence: "high",
+          issue: null,
+          folder: "INBOX",
+          new_folder: null,
+        },
+      ]),
+    );
+    const form = new FormData();
+    form.append("images", new Blob([PNG], { type: "image/png" }), "a.png");
+    form.append("model", "accurate");
+    form.append("notes", "false");
+    const out = await lines(await extract(new Request("http://localhost/api/ai/extract", { method: "POST", body: form })));
+    expect(out[1].item.note).toBeNull();
+    const call = ai.streamText.mock.calls[0][0];
+    expect(call.model.modelId).toBe("claude-sonnet-5-5");
+    const wrong = new FormData();
+    wrong.append("images", new Blob([PNG], { type: "image/png" }), "a.png");
+    wrong.append("model", "opus");
+    expect((await extract(new Request("http://localhost/api/ai/extract", { method: "POST", body: wrong }))).status).toBe(400);
   });
 });
 

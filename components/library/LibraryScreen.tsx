@@ -10,7 +10,7 @@ import { Chip } from "@/components/ui/Chip";
 import { Icon } from "@/components/ui/Icons";
 import { Segmented } from "@/components/ui/Segmented";
 import { useSnackbar } from "@/components/ui/Snackbar";
-import { countEnrichCandidates } from "@/lib/enrich";
+import { countEnrichCandidates, enrichPreferences } from "@/lib/enrich";
 import { getLibraryStats } from "@/lib/folders";
 import { getSettings, updateSettings } from "@/lib/settings";
 import type { Settings } from "@/lib/types";
@@ -50,7 +50,7 @@ export function LibraryScreen() {
   const settings = useLiveQuery(getSettings);
   const view: LibraryView = settings?.library_view ?? "themes";
   const lastRun = useLiveQuery(() => getUndoableRun(), []);
-  const toEnrich = useLiveQuery(() => countEnrichCandidates(), []);
+  const toEnrich = useLiveQuery(async () => countEnrichCandidates(enrichPreferences(await getSettings())), []);
 
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);

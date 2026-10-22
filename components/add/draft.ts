@@ -40,20 +40,21 @@ export interface WordDraft {
 export function draftFromSuggestion(
   s: Suggestion,
   folders: readonly Pick<Folder, "id" | "slug" | "name">[],
-  { autoSort = true }: { autoSort?: boolean } = {},
+  { autoSort = true, slang = true, examples = true }: { autoSort?: boolean; slang?: boolean; examples?: boolean } = {},
 ): WordDraft {
   const picks = foldersForSuggestion(s, folders);
   return {
     fr: s.fr,
     ru: s.ru,
     note: s.note ?? "",
-    example_fr: s.example_fr ?? "",
-    example_ru: s.example_ru ?? "",
+    // Settings «Подбирать примеры» / «Определять уровень сленга» off: the user fills these in.
+    example_fr: examples ? (s.example_fr ?? "") : "",
+    example_ru: examples ? (s.example_ru ?? "") : "",
     pos: s.pos,
     gender: s.gender,
-    slang_level: s.slang_level,
-    verlan: s.verlan,
-    slang_auto: true,
+    slang_level: slang ? s.slang_level : 0,
+    verlan: slang ? s.verlan : false,
+    slang_auto: slang,
     slang_touched: false,
     example_auto: false,
     example_touched: false,
@@ -96,6 +97,12 @@ export function enrichKey(d: Pick<WordDraft, "fr" | "ru" | "source">): string | 
   return fr && ru ? `${fr}\u0001${ru}` : null;
 }
 
+/** What Settings «ИИ» let detection fill in (themes are governed by sending the themes at all). */
+export interface DraftEnrichPreferences {
+  slang: boolean;
+  examples: boolean;
+}
+
 /** Fields detection may still fill: what the user has not set by hand. */
 export function enrichScope(d: WordDraft) {
   return {
@@ -116,8 +123,10 @@ export function applyEnrichment(
   d: WordDraft,
   r: EnrichResult,
   folders: readonly Pick<Folder, "id" | "slug" | "name">[] = [],
+  prefs: DraftEnrichPreferences = { slang: true, examples: true },
 ): WordDraft {
-  const scope = enrichScope(d);
+  const own = enrichScope(d);
+  const scope = { ...own, slang: own.slang && prefs.slang, example: own.example && prefs.examples };
   const next: WordDraft = { ...d, pos: r.pos, gender: r.gender };
   if (r.folder !== null && !d.folder_touched) {
     const picks = foldersForSuggestion({ folder: r.folder, folder_alternatives: r.folder_alternatives, new_folder: r.new_folder }, folders);

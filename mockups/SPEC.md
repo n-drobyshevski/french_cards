@@ -6,7 +6,7 @@ just one dimension: every word gets a detected slang level). App name everywhere
 
 ## v3 DIRECTION — read this first, it overrides any older habit
 The user said the previous mockups looked "AI-styled". v3 must NOT look like a generic AI-generated app:
-- NO sparkle/magic icons anywhere. NO «ИИ» / «AI» labels in the UI, except one privacy line in Settings.
+- NO sparkle/magic icons anywhere. NO «ИИ» / «AI» labels in the UI, except the Settings section «ИИ» and its privacy line (changed 2026-10-22 at the user's request).
   Automatic features just work quietly and are described by what they do: «Варианты», «подобрано автоматически»,
   «догадка» (translation not visible on screenshot), «Разложить по темам».
 - NO pastel pill soup, no tinted icon chips, no soft drop shadows, no big rounded "bubbly" cards, no gradient, no shimmer.
@@ -103,7 +103,7 @@ Icons: simple 1.5px-stroke line icons, 20px.
 Theme colors (muted inks, used only for that top band and progress): Повседневное `#5a5a57`, Деньги `#2f6b4f`, Еда `#a0522d`, Полиция `#2f4b8a`, Тусовка `#6b4a8a`, Эмоции `#a33a3a`, Люди `#2f6f74`. «Входящие» (unsorted) uses a dashed border and no band, count in red ink.
 
 ## Copy rules
-- Never «ИИ» / «AI» / «умный» / «магия» in UI, except Settings privacy line.
+- Never «ИИ» / «AI» / «умный» / «магия» in UI, except the Settings section «ИИ» and its privacy line.
 - Suggestions come in two quiet sections: «Словарь» (instant) and «Варианты» (richer, may load) — loading = 2 grey hairline skeleton rows, no "думает…".
 - Theme picked automatically: chip selected + tiny muted caption «подобрано автоматически».
 - Screenshot translation not present in image: italic text + mono tag `ДОГАДКА`.
@@ -142,7 +142,7 @@ Intervals under grade buttons (FSRS): Не знаю «<1 мин», Сложно 
 - Library: title «Библиотека», subline mono `158 СЛОВ · 23 К ПОВТОРЕНИЮ`; search input radius 4; filter chips Все / К повторению 23 / Трудные 9 / Сленг: все ▾; the re-sort entry is a plain full-width secondary row button «Разложить по темам  ›» with caption «7 слов без темы» — no banner, no sparkle; theme tiles per the catalog-label spec.
 - Sort-Plan: title «Предлагаемые перемещения», sub «12 перемещений · 1 новая тема · слова, разложенные вручную, не трогаются». IMPORTANT data fix: the words moved to Деньги must NOT appear in the Folder board. Use → Деньги (3): le pognon, les ronds, être raide; → Эмоции (2): avoir la haine, être vénère; → новая тема «Транспорт» (3): la caisse, le tromé, la bécane; → Люди (2, toggle off): le daron, la daronne. Folder board lists Деньги words: la thune, le fric, l'oseille, le blé, raquer, être fauché, le flouze.
 - Word-Detail: «Перегенерировать с ИИ» → «Обновить перевод и заметку»; history squares outlined/filled ink-style.
-- Settings: section «Подсказки» instead of «ИИ»: toggle «Автоподсказки при вводе», toggle «Раскладывать по темам автоматически»; one privacy line: «Слова и скриншоты отправляются в Anthropic (Claude) для подсказок и не хранятся там.» Remove the «Модель» row. «Импорт из Petit Argot v1» → «Импорт из старой версии (HTML)».
+- Settings: section «ИИ» (renamed from «Подсказки» 2026-10-22): toggles «Автоподсказки при вводе», «Определять уровень сленга», «Подбирать примеры», «Раскладывать по темам автоматически», «Писать заметки»; mono segmented «Вариантов 1 / 2 / 3»; segmented «Регистр вариантов: Сленг / Любой / Нейтр.»; «Модель: подсказки» and «Модель: скриншоты» segmented «Быстрее / Точнее»; footer lines «"Точнее" отвечает медленнее…» and the privacy line «Слова и скриншоты отправляются в Anthropic (Claude) для подсказок и не хранятся там.» «Импорт из Petit Argot v1» → «Импорт из старой версии (HTML)».
 - Login: big «Карточки для Лизи» mark (balanced over two lines on phones) (Newsreader 40) with the card glyph — no tagline (removed 2026-10-22). Built app: email + password fields (radius 4, 1px rule border, focused = 2px ink border), «Забыли пароль?» and «Создать аккаунт» links; the OTP board below is the original design.
 - Dark boards: same structure with dark tokens.
 
