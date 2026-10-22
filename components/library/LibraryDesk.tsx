@@ -39,7 +39,7 @@ import { BulkBar, EmptyPane, FilterStrip, SelectionSummary, summaryTargets, Text
 import { DisbandSheet, disbandMessage } from "./DisbandSheet";
 import { EnrichPlanSheet } from "./EnrichPlanSheet";
 import { FolderFormSheet } from "./FolderFormSheet";
-import { nWords, plural, reviewHref } from "./format";
+import { nWords, plural, practiceHref, reviewHref } from "./format";
 import { Menu, MenuCheckboxItem, MenuItem, MenuSeparator, type MenuAnchor } from "./Menu";
 import { INBOX_KEY, MoveMenu, ThemeSquare } from "./MoveMenu";
 import { matchesSlang, type SlangKey } from "./SlangFilter";
@@ -981,6 +981,11 @@ function Desk({ scope }: { scope: LibraryScope }) {
 
       {folder && (
         <Menu open={!!themeMenu} anchor={themeMenu ? { element: themeMenu, align: "end" } : null} onClose={() => setThemeMenu(null)} label="Действия с темой" width={320} exactWidth>
+          {(stats?.folders.find((f) => f.id === folder.id)?.stats.total ?? 0) > 0 && (
+            <MenuItem icon="refresh" caption="Все слова вперемешку, не влияет на расписание." onSelect={() => router.push(practiceHref(folder.id))}>
+              Тренировка всей темы
+            </MenuItem>
+          )}
           <MenuItem icon="pencil" shortcut="F2" onSelect={() => setFolderForm({ mode: "edit" })}>
             Название, описание и цвет
           </MenuItem>

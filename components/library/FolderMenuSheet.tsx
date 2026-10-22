@@ -9,7 +9,7 @@ import { Toggle } from "@/components/ui/Toggle";
 import { updateFolder } from "@/lib/folders";
 import { getSessionCounts } from "@/lib/session";
 import type { Folder } from "@/lib/types";
-import { folderHref, reviewHref } from "./format";
+import { folderHref, nWords, practiceHref, reviewHref } from "./format";
 
 const ROW = "flex h-[52px] items-center gap-3 border-t border-rule bg-transparent text-left text-[15px] no-underline active:bg-surface-2";
 
@@ -19,6 +19,8 @@ export interface FolderMenuSheetProps {
   folder: Folder;
   /** Also offer «Открыть тему» and «Повторить тему» (the library's long-press menu). */
   navigation?: boolean;
+  /** Live words in the theme: «Тренировка всей темы» is offered when there are any. */
+  words?: number;
   onEdit: () => void;
   /** «Расформировать»: offered when the theme has words. */
   onDisband?: () => void;
@@ -26,10 +28,10 @@ export interface FolderMenuSheetProps {
 }
 
 /**
- * Actions on a theme: open and review it (from the library), edit, pin, disband, delete. The theme screen
+ * Actions on a theme: open and review it (from the library), practise all of it, edit, pin, disband, delete. The theme screen
  * opens it from «⋯», the phone library from a long press on the theme tile.
  */
-export function FolderMenuSheet({ open, onOpenChange, folder, navigation = false, onEdit, onDisband, onDelete }: FolderMenuSheetProps) {
+export function FolderMenuSheet({ open, onOpenChange, folder, navigation = false, words = 0, onEdit, onDisband, onDelete }: FolderMenuSheetProps) {
   const lockLabelId = `lock-${folder.id}`;
   const cards = useLiveQuery(async () => {
     if (!open || !navigation) return null;
@@ -49,20 +51,31 @@ export function FolderMenuSheet({ open, onOpenChange, folder, navigation = false
               <Icon name="chevron-right" size={18} />
               Открыть тему
             </Link>
-            {cards ? (
+            {!!cards && (
               <Link href={reviewHref(folder.id)} onClick={() => onOpenChange(false)} className={cx(ROW, "text-ink")}>
                 <Icon name="cards" size={18} />
                 <span className="flex-1">Повторить тему</span>
                 <span className="font-mono text-[13px] tracking-[.04em] text-muted">{cards}</span>
               </Link>
-            ) : (
-              <p className={cx(ROW, "m-0 text-muted active:bg-transparent")}>
-                <Icon name="cards" size={18} />
-                <span className="flex-1">Повторить тему</span>
-                <span className="text-[12px]">{cards === 0 ? "нечего повторять" : ""}</span>
-              </p>
             )}
           </>
+        )}
+        {words > 0 && (
+          <Link
+            href={practiceHref(folder.id)}
+            onClick={() => onOpenChange(false)}
+            aria-label="Тренировка всей темы"
+            aria-describedby={`practice-${folder.id}`}
+            className={cx(ROW, "h-auto min-h-[52px] py-2 text-ink")}
+          >
+            <Icon name="refresh" size={18} className="shrink-0" />
+            <span className="flex min-w-0 flex-col">
+              <span className="leading-5">Тренировка всей темы</span>
+              <span id={`practice-${folder.id}`} className="text-[12px] leading-4 text-muted">
+                {nWords(words)} вперемешку, не влияет на расписание.
+              </span>
+            </span>
+          </Link>
         )}
         <button type="button" onClick={onEdit} className={cx(ROW, "text-ink")}>
           <Icon name="pencil" size={18} />

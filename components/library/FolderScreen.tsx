@@ -18,7 +18,7 @@ import { FolderFormSheet } from "./FolderFormSheet";
 import { DisbandSheet, disbandMessage } from "./DisbandSheet";
 import { FolderMenuSheet } from "./FolderMenuSheet";
 import { LibraryDesk } from "./LibraryDesk";
-import { nWords, reviewHref } from "./format";
+import { nWords, practiceHref, reviewHref } from "./format";
 import { useLibraryWords } from "./useLibraryWords";
 import { WordList } from "./WordList";
 
@@ -182,10 +182,18 @@ function PhoneFolder({ id }: { id: string }) {
         {/* «Повторить тему» stays above the tab bar */}
         {items && items.length > 0 && meta && (
           <div ref={bottomBarRef} className="sticky bottom-(--shell-bottom) z-[2] -mx-4 mt-auto border-t border-rule bg-paper p-4">
-            <Link href={reviewHref(folderId)} className={buttonClasses({ block: true })}>
-              Повторить тему
-              <span className="font-mono text-[13px] tracking-[.04em]">{meta.cards}</span>
-            </Link>
+            {meta.cards > 0 ? (
+              <Link href={reviewHref(folderId)} className={buttonClasses({ block: true })}>
+                Повторить тему
+                <span className="font-mono text-[13px] tracking-[.04em]">{meta.cards}</span>
+              </Link>
+            ) : (
+              // Nothing due: a practice round over the whole theme instead.
+              <Link href={practiceHref(folderId)} className={buttonClasses({ block: true })}>
+                Тренировка всей темы
+                <span className="font-mono text-[13px] tracking-[.04em]">{items.length}</span>
+              </Link>
+            )}
           </div>
         )}
       </div>
@@ -196,6 +204,7 @@ function PhoneFolder({ id }: { id: string }) {
             open={menuOpen}
             onOpenChange={setMenuOpen}
             folder={folder}
+            words={stats?.total ?? 0}
             onEdit={() => {
               setMenuOpen(false);
               setEditOpen(true);

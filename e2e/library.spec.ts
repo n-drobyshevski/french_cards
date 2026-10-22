@@ -266,3 +266,23 @@ test("without suggestions «Расформировать» can still send every 
   await expect(page.getByText("Тема «Эмоции» расформирована · 2 во «Входящих»")).toBeVisible();
   await expect(page.getByRole("link", { name: /^Входящие:/ })).toBeVisible();
 });
+
+test("«Тренировка всей темы» runs every card of the theme without touching the schedule", async ({ page }) => {
+  await page.goto("/library");
+  await longPress(page, page.getByRole("link", { name: /^Эмоции:/ }));
+  await page.getByRole("dialog", { name: "Эмоции" }).getByRole("link", { name: "Тренировка всей темы" }).click();
+
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByText("Тренировка темы · не влияет на расписание")).toBeVisible();
+  await expect(page.getByText("00 / 02", { exact: true })).toBeVisible();
+  for (let i = 0; i < 2; i++) {
+    await page.getByRole("button", { name: /^Карточка (c'est dur|je vais me tuer), перевернуть$/ }).click();
+    await page.getByRole("button", { name: /^Знаю/ }).click();
+  }
+  await expect(page.getByText("Практика окончена")).toBeVisible();
+
+  // Nothing was graded for real: both cards are still new.
+  await page.goto("/library");
+  await longPress(page, page.getByRole("link", { name: /^Эмоции:/ }));
+  await expect(page.getByRole("dialog", { name: "Эмоции" }).getByRole("link", { name: /Повторить тему/ })).toContainText("2");
+});

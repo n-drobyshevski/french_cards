@@ -14,7 +14,7 @@ import { useSnackbar } from "@/components/ui/Snackbar";
 import { cardNumber } from "@/components/add/match";
 import { listFolders } from "@/lib/folders";
 import { previewIntervals, reviewStateId, type Rating } from "@/lib/scheduler";
-import { advancePractice, buildPracticeQueue, startOfStudyDay, type QueueItem } from "@/lib/session";
+import { advancePractice, buildPracticeQueue, startOfStudyDay, type QueueItem, type SessionFilter } from "@/lib/session";
 import { getSettings } from "@/lib/settings";
 import { useFinePointer, useLayoutClass } from "@/lib/use-media";
 import { getLastReview, getWord, gradeCard, undoLastReview } from "@/lib/words";
@@ -32,6 +32,7 @@ import { ReviewTopBar, type ReviewProgress } from "./ReviewTopBar";
 import { SessionDone } from "./SessionDone";
 import { useInlineSnackbar } from "./useInlineSnackbar";
 import { useReviewFilter } from "./useReviewFilter";
+import { onThemePractice, takeThemePractice } from "./practice-request";
 
 /** Re-read the queue this often while visible, so learning steps and the 04:00 day roll over. */
 const TICK_MS = 60_000;
@@ -65,7 +66,8 @@ interface Awaiting {
 }
 
 interface Practice {
-  kind: "mistakes" | "extra";
+  /** mistakes: «Повторить ошибки»; extra: «Ещё практика»; theme: «Тренировка всей темы». */
+  kind: "mistakes" | "extra" | "theme";
   queue: QueueItem[];
   total: number;
   history: QueueItem[][];
@@ -312,15 +314,20 @@ export function ReviewScreen() {
     }
   };
 
-  const startPractice = async (kind: Practice["kind"]) => {
+  const startPractice = async (kind: Practice["kind"], over: SessionFilter = filter) => {
     if (practiceLoading) return;
     setPracticeLoading(true);
     try {
-      const items = await buildPracticeQueue({ ...filter, scope: kind === "mistakes" ? "today" : "recent" });
+      const scope = kind === "mistakes" ? "today" : kind === "theme" ? "all" : "recent";
+      const items = await buildPracticeQueue({ ...over, scope });
       if (items.length === 0) {
         toast.show({
           message:
-            kind === "mistakes" ? "Сегодня ошибок не было" : "Пока нечего повторять — сначала ответьте на несколько карточек",
+            kind === "mistakes"
+              ? "Сегодня ошибок не было"
+              : kind === "theme"
+                ? "В теме пока нет карточек"
+                : "Пока нечего повторять — сначала ответьте на несколько карточек",
         });
         return;
       }
@@ -331,6 +338,19 @@ export function ReviewScreen() {
       setPracticeLoading(false);
     }
   };
+
+  // «Тренировка всей темы» from the library (`/?folder=…&practice=1`), once the screen can run it.
+  const takeThemeRequest = useEffectEvent(() => {
+    if (!loaded) return;
+    const requested = takeThemePractice();
+    if (requested) void startPractice("theme", toSessionFilter(direction, requested));
+  });
+  useEffect(() => {
+    // After the commit: starting a round sets state.
+    const check = () => queueMicrotask(() => takeThemeRequest());
+    check();
+    return onThemePractice(check);
+  }, [loaded]);
 
   const endPractice = () => {
     setPractice(null);
@@ -436,7 +456,7 @@ export function ReviewScreen() {
     const remaining = new Set(practice.queue.map((i) => i.key)).size;
     const cleared = practice.total - remaining;
     progress = {
-      left: "Практика · не влияет на расписание",
+      left: practice.kind === "theme" ? "Тренировка темы · не влияет на расписание" : "Практика · не влияет на расписание",
       right: formatProgress(cleared, practice.total),
       ratio: progressRatio(cleared, practice.total),
     };

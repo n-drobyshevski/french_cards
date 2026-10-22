@@ -90,6 +90,8 @@ export function formatDate(iso: string): string {
 
 /** Path of the review screen filtered to a folder (null = «Входящие»). */
 export const reviewHref = (folderId: string | null) => `/?folder=${encodeURIComponent(folderId ?? "inbox")}`;
+/** «Тренировка всей темы»: review opens straight into a practice round over every card of the theme. */
+export const practiceHref = (folderId: string | null) => `${reviewHref(folderId)}&practice=1`;
 
 /** Path of a folder screen (null = «Входящие»). */
 export const folderHref = (folderId: string | null) => `/library/${encodeURIComponent(folderId ?? "inbox")}`;

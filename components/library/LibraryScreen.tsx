@@ -368,6 +368,7 @@ function PhoneLibrary() {
             onOpenChange={setMenuOpen}
             folder={menuFolder}
             navigation
+            words={menuFolder.stats.total}
             onEdit={() => {
               setMenuOpen(false);
               setEditOpen(true);

@@ -209,11 +209,21 @@ export async function getDaySummary(filter: SessionFilter = {}, now: Date = new 
 }
 
 export interface PracticeOptions extends SessionFilter {
-  /** "today": cards failed today («Повторить ошибки»). "recent": failed/hard in the last `days`, topped up with the weakest cards («Ещё практика»). */
-  scope?: "today" | "recent";
+  /**
+   * "today": cards failed today («Повторить ошибки»). "recent": failed/hard in the last `days`,
+   * topped up with the weakest cards («Ещё практика»). "all": every card of the filtered words in
+   * random order, new ones included («Тренировка всей темы»).
+   */
+  scope?: "today" | "recent" | "all";
   days?: number;
+  /** Default 20; "all" defaults to PRACTICE_ALL_MAX. */
   limit?: number;
+  /** Injected for tests: Math.random by default. */
+  random?: () => number;
 }
+
+/** Cap for «Тренировка всей темы»: a round should stay finishable. */
+export const PRACTICE_ALL_MAX = 200;
 
 /**
  * Practice queue. Grading in practice must NOT call gradeCard — keep the queue in memory and
@@ -221,6 +231,7 @@ export interface PracticeOptions extends SessionFilter {
  */
 export async function buildPracticeQueue(opts: PracticeOptions = {}, now: Date = new Date()): Promise<QueueItem[]> {
   const scope = opts.scope ?? "recent";
+  if (scope === "all") return allCardsQueue(opts);
   const limit = opts.limit ?? 20;
   const days = opts.days ?? 7;
   const from = scope === "today" ? startOfStudyDay(now) : new Date(now.getTime() - days * 86_400_000);
@@ -251,6 +262,20 @@ export async function buildPracticeQueue(opts: PracticeOptions = {}, now: Date =
     for (const s of weakest) push(s);
   }
   return items;
+}
+
+/** Every card of the filtered words, shuffled (Fisher–Yates), capped. */
+async function allCardsQueue(opts: PracticeOptions): Promise<QueueItem[]> {
+  const [words, states] = await Promise.all([liveWords(opts), db.review_state.filter((s) => s.deleted_at === null).toArray()]);
+  const items: QueueItem[] = states
+    .filter((s) => words.has(s.word_id) && (!opts.direction || s.direction === opts.direction))
+    .map((state) => ({ key: state.id, word: words.get(state.word_id)!, state, direction: state.direction, isNew: state.state === 0 }));
+  const random = opts.random ?? Math.random;
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+  return items.slice(0, opts.limit ?? PRACTICE_ALL_MAX);
 }
 
 /**
