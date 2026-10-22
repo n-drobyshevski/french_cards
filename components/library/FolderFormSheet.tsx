@@ -25,6 +25,7 @@ export function FolderFormSheet({ open, onOpenChange, folder, usedColors = [], o
       open={open}
       onOpenChange={onOpenChange}
       onClosed={() => setFormKey((k) => k + 1)}
+      dialogWidth={440}
       description={folder ? "Название, описание и цвет темы" : "Название, описание и цвет новой темы"}
     >
       <FolderForm

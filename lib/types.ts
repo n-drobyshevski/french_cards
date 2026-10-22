@@ -111,6 +111,8 @@ export interface Settings {
   theme: "system" | "light" | "dark";
   suggestions_enabled: boolean;
   auto_sort_enabled: boolean;
+  /** Single-key shortcuts on desktop (N, /, ?, G…, [, library J/K/X/M…). Off for screen-reader users (WCAG 2.1.4). */
+  shortcuts: boolean;
   last_sync_at: string | null;
   /** Pull cursors per synced table: the server `synced_at` of the last row received. Owned by lib/sync.ts. */
   sync_cursors?: Partial<Record<SyncTable, string>>;
@@ -126,6 +128,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: "system",
   suggestions_enabled: true,
   auto_sort_enabled: true,
+  shortcuts: true,
   last_sync_at: null,
 };
 

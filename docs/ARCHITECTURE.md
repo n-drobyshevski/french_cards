@@ -48,7 +48,7 @@ If `NEXT_PUBLIC_SUPABASE_URL` is unset, the app runs fully local: there is no lo
 |---|---|
 | Domain/data | `lib/types.ts`, `lib/db.ts` (shared, edit carefully), `lib/scheduler.ts`, `lib/session.ts`, `lib/words.ts`, `lib/folders.ts`, `lib/seed.ts`, `lib/backup.ts`, `lib/text.ts` (accent folding, normalization, duplicate detection) |
 | Sync/auth | `lib/supabase/{client,server}.ts`, `lib/sync.ts`, `proxy.ts`, `supabase/migrations/*`, `app/login/*`, `app/api/cron/ping/route.ts`, `vercel.json`, `.env.example`, `components/auth/*` |
-| UI kit + shell | `components/ui/*` (Button, Chip, SlangMeter, Sheet, Toggle, Segmented, Snackbar, Icon set, AppMark, TabBar, Header), `app/(app)/layout.tsx`, `components/providers/*` (theme, db init, sync loop mount) |
+| UI kit + shell | `components/ui/*` (Button, Chip, SlangMeter, Sheet, Toggle, Segmented, Snackbar, Kbd, Icon set, AppMark, TabBar, Header), `app/(app)/layout.tsx`, `components/providers/*` (theme, db init, sync loop mount), `components/shell/*` (desktop sidebar/rail, global keys, «Клавиши», word drag-and-drop), `lib/use-media.ts`, `lib/key-names.ts` |
 | AI core | `lib/ai/{schemas,prompts,model,auth,rate-limit}.ts`, `app/api/ai/{suggest,extract,classify}/route.ts`, `scripts/build-lexique.*`, `public/lexique/*`, `lib/lexique.ts` |
 | PWA | `app/manifest.ts`, `app/sw.ts`, `next.config.ts`, `public/icons/*`, `components/pwa/*` |
 | Review screens | `app/(app)/page.tsx` (review), `app/(app)/done/*` or in-page done state, `components/review/*`, `app/(app)/settings/page.tsx`, `components/settings/*` |
@@ -60,4 +60,5 @@ If `NEXT_PUBLIC_SUPABASE_URL` is unset, the app runs fully local: there is no lo
 - Vitest unit tests sit next to the code as `*.test.ts`.
 - IndexedDB tests use `fake-indexeddb/auto`.
 - Playwright e2e lives in `e2e/` at a mobile viewport (390×844), using the preinstalled Chromium (`PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers`; never run `playwright install`).
+- Desktop e2e (`e2e/desktop-*.spec.ts`) runs only in the `desktop-chromium` project (1440×800); everything else runs in `mobile-chromium`.
 - Before pushing: `npm run lint && npm run typecheck && npm test && npm run build`.

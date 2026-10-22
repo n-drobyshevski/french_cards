@@ -18,6 +18,12 @@
   --card-lines: #dfe6f3;
   --scrim: rgba(17, 17, 17, 0.4);
   --on-ink: #ffffff;
+  /* Desktop tokens (mockups/DESKTOP-SPEC.md §3). */
+  --hover: #e8e8e4;
+  --hover-surface: #f4f4f1;
+  --boundary: #8a8a85;
+  --selected: #e2e2dd;
+  --scrim-desk: rgba(17, 17, 17, 0.24);
   color-scheme: light;
 }
 
@@ -38,6 +44,11 @@
     --card-lines: #22252c;
     --scrim: rgba(0, 0, 0, 0.55);
     --on-ink: #121212;
+    --hover: #222220;
+    --hover-surface: #242422;
+    --boundary: #6e6e69;
+    --selected: #2c2c29;
+    --scrim-desk: rgba(0, 0, 0, 0.5);
     color-scheme: dark;
   }
 }
@@ -58,7 +69,26 @@
   --card-lines: #22252c;
   --scrim: rgba(0, 0, 0, 0.55);
   --on-ink: #121212;
+  --hover: #222220;
+  --hover-surface: #242422;
+  --boundary: #6e6e69;
+  --selected: #2c2c29;
+  --scrim-desk: rgba(0, 0, 0, 0.5);
   color-scheme: dark;
+}
+
+/* Breakpoints: compact < 768 (md), medium 768–1199, expanded ≥ 1200 (xl). */
+@theme {
+  --breakpoint-xl: 75rem;
+}
+
+/* `hoverable:` = hover with a mouse/trackpad only (DESKTOP-SPEC §2: no hover styles on touch). */
+@custom-variant hoverable {
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      @slot;
+    }
+  }
 }
 
 @theme inline {
@@ -75,6 +105,11 @@
   --color-warn-bg: var(--warn-bg);
   --color-warn-edge: var(--warn-edge);
   --color-on-ink: var(--on-ink);
+  --color-hover: var(--hover);
+  --color-hover-surface: var(--hover-surface);
+  --color-boundary: var(--boundary);
+  --color-selected: var(--selected);
+  --color-scrim-desk: var(--scrim-desk);
   --font-sans: var(--font-plex-sans), system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, monospace;
   --font-serif: var(--font-newsreader), Georgia, serif;
@@ -96,6 +131,37 @@ body {
   color: var(--ink);
   font-family: var(--font-sans);
   font-size: 15px;
+}
+
+/* App shell (components/shell): width of the nav column at the left, for fixed UI that centres in
+   the content area (snackbar, install hint). 0 on phones and while the sidebar is hidden with `[`;
+   <html data-sidebar="hidden"> is set before first paint (SIDEBAR_INIT_SCRIPT). */
+:root {
+  --shell-nav: 0px;
+}
+
+@media (width >= 48rem) {
+  :root {
+    --shell-nav: 72px;
+  }
+
+  :root[data-sidebar="hidden"] {
+    --shell-nav: 0px;
+  }
+
+  :root[data-sidebar="hidden"] [data-shell-reveal] {
+    display: flex;
+  }
+}
+
+@media (width >= 75rem) {
+  :root:not([data-sidebar="hidden"]) {
+    --shell-nav: 248px;
+  }
+}
+
+:root[data-sidebar="hidden"] [data-shell-nav] {
+  display: none;
 }
 
 /* Mono meta labels: `23 К ПОВТОРЕНИЮ`, `FR → RU`, `07 / 30` */

@@ -31,7 +31,26 @@ export default defineConfig({
     trace: "retain-on-failure",
     launchOptions: executablePath ? { executablePath } : {},
   },
-  projects: [{ name: "mobile-chromium" }],
+  projects: [
+    // Today's phone UI. Desktop specs (desktop-*.spec.ts) run only in the desktop project.
+    { name: "mobile-chromium", testIgnore: /desktop-.*\.spec\.ts/ },
+    {
+      name: "desktop-chromium",
+      testMatch: /desktop-.*\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1440, height: 800 },
+        deviceScaleFactor: 1,
+        isMobile: false,
+        hasTouch: false,
+        baseURL: BASE_URL,
+        locale: "ru-RU",
+        timezoneId: "Europe/Paris",
+        serviceWorkers: "block",
+        launchOptions: executablePath ? { executablePath } : {},
+      },
+    },
+  ],
   webServer: {
     command: `npx next start -p ${PORT}`,
     url: BASE_URL,

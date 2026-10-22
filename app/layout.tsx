@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Newsreader } from "next/font/google";
 import { RegisterSW } from "@/components/pwa/RegisterSW";
 import { THEME_INIT_SCRIPT } from "@/components/providers/theme";
+import { SIDEBAR_INIT_SCRIPT } from "@/components/shell/sidebar-init";
 import { APP_NAME, APP_SHORT_NAME } from "@/lib/brand";
 import "./globals.css";
 
@@ -51,6 +52,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <head>
         {/* Applies a forced light/dark theme before first paint on every route. */}
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        {/* Desktop: keeps the sidebar hidden with `[` hidden from the first paint. */}
+        <script dangerouslySetInnerHTML={{ __html: SIDEBAR_INIT_SCRIPT }} />
       </head>
       <body className="min-h-full flex flex-col">
         {children}

@@ -87,7 +87,8 @@ export function useSnackbar(): SnackbarApi {
 }
 
 /**
- * Hosts one snackbar fixed above the tab bar (uses --shell-bottom from the app shell) and above
+ * Hosts one snackbar fixed above the tab bar (uses --shell-bottom from the app shell; from 768 up
+ * centred in the content area right of --shell-nav) and above
  * any registered page action bar (bottom-clearance.ts), or inside the open sheet (SnackbarSlot).
  * The timer pauses while the bar is touched, hovered or focused.
  */
@@ -167,7 +168,7 @@ export function SnackbarProvider({ children }: { children: ReactNode }) {
         <div
           role="status"
           aria-live="polite"
-          className="pointer-events-none fixed inset-x-0 z-[60] mx-auto w-full max-w-[440px] px-4"
+          className="pointer-events-none fixed inset-x-0 z-[60] mx-auto w-full max-w-[440px] px-4 md:left-(--shell-nav) md:max-w-[512px]"
           style={{ bottom: floatingBottom("calc(var(--shell-bottom, env(safe-area-inset-bottom)) + 16px)") }}
         >
           {!slot && bar}

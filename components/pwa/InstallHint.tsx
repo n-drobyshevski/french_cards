@@ -136,7 +136,7 @@ export function InstallHint({ placement = "floating", className }: InstallHintPr
   return (
     <div
       className={cx(
-        "pointer-events-none fixed inset-x-0 z-40 mx-auto w-full max-w-[440px] px-4",
+        "pointer-events-none fixed inset-x-0 z-40 mx-auto w-full max-w-[440px] px-4 md:left-(--shell-nav) md:max-w-[512px]",
         className,
       )}
       style={{ bottom: floatingBottom("calc(var(--shell-bottom, env(safe-area-inset-bottom)) + 8px)") }}

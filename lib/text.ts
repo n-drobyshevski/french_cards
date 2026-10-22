@@ -55,6 +55,24 @@ export function normalizeLemma(fr: string): string {
   return s.replace(LEADING_ARTICLE, "") || s;
 }
 
+const SORT_PREFIX = /^(?:(?:les|le|la|un|une|des|se)\s+|l'|s')(?=\S)/;
+
+/**
+ * Alphabetical key of a French entry, like a dictionary: accent-folded, lowercase, with a leading
+ * article (le/la/les/l'/un/une/des) or «se»/«s'» dropped. «la thune» → «thune», «se casser» → «casser».
+ */
+export function frSortKey(fr: string): string {
+  const s = searchKey(fr);
+  return s.replace(SORT_PREFIX, "") || s;
+}
+
+const frCollator = new Intl.Collator("fr", { sensitivity: "base", numeric: true });
+
+/** Sorts French entries alphabetically by `frSortKey` (library «Слово ▲», theme guide words). */
+export function compareFr(a: string, b: string): number {
+  return frCollator.compare(frSortKey(a), frSortKey(b)) || frCollator.compare(a, b);
+}
+
 /** Finds a live word whose French form normalizes to the same lemma. */
 export async function findDuplicate(fr: string, opts: { excludeId?: string } = {}): Promise<Word | undefined> {
   const key = normalizeLemma(fr);

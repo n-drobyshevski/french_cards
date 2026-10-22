@@ -52,7 +52,7 @@ function Bar({ active }: { active: TabId | null }) {
     <nav
       data-tabbar=""
       aria-label="Основная навигация"
-      className="fixed inset-x-0 bottom-0 z-30 mx-auto grid w-full max-w-[440px] grid-cols-3 border-t border-rule bg-surface pb-[env(safe-area-inset-bottom)]"
+      className="fixed inset-x-0 bottom-0 z-30 mx-auto grid w-full max-w-[440px] grid-cols-3 border-t border-rule bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
     >
       <TabLink href="/" icon="cards" label="Повторение" active={active === "review"} />
       <button
@@ -78,6 +78,7 @@ function RoutedBar() {
 
 /**
  * Bottom tab bar: Повторение / Добавить / Библиотека. «Добавить» opens the quick-add sheet.
+ * Phones only: from 768 up the rail/sidebar (components/shell) replaces it.
  * usePathname can suspend while prerendering dynamic routes, so the bar renders without an
  * active tab until the path is known.
  */

@@ -147,6 +147,28 @@ const PATHS = {
       <path d="M12 17h.01" />
     </>
   ),
+  /** «Входящие» in the desktop rail. */
+  inbox: (
+    <>
+      <path d="M3 13h5l1.5 3h5L16 13h5" />
+      <path d="M5 5h14l2 8v6H3v-6z" />
+    </>
+  ),
+  /** «Импорт» (screenshot) in the desktop rail. */
+  image: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="1" />
+      <circle cx="9" cy="10" r="1.5" />
+      <path d="m20.5 16-5-5-8 8.5" />
+    </>
+  ),
+  /** «Показать боковую панель» (desktop, `[`). */
+  sidebar: (
+    <>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="1" />
+      <path d="M9 4.5v15" />
+    </>
+  ),
   /** Fill the input with a suggestion. */
   "arrow-up-left": (
     <>

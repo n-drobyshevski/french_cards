@@ -1,8 +1,16 @@
 import { APP_NAME } from "@/lib/brand";
 import { cx } from "./cx";
 
-/** Outlined index card with the red header rule. md: 10×14 (app bar), lg: 20×28 (login). */
-export function CardGlyph({ size = "md", className }: { size?: "md" | "lg"; className?: string }) {
+/** Outlined index card with the red header rule. md: 10×14 (app bar), rail: 14×20 (desktop rail), lg: 20×28 (login). */
+export function CardGlyph({ size = "md", className }: { size?: "md" | "rail" | "lg"; className?: string }) {
+  if (size === "rail") {
+    return (
+      <svg aria-hidden="true" width="14" height="20" viewBox="0 0 14 20" fill="none" className={cx("shrink-0", className)}>
+        <rect x="0.5" y="0.5" width="13" height="19" rx="1.5" stroke="var(--ink)" strokeWidth="1" />
+        <path d="M0.5 5h13" stroke="var(--red)" strokeWidth="1.5" />
+      </svg>
+    );
+  }
   return size === "lg" ? (
     <svg aria-hidden="true" width="20" height="28" viewBox="0 0 20 28" fill="none" className={cx("shrink-0", className)}>
       <rect x="0.75" y="0.75" width="18.5" height="26.5" rx="1.5" stroke="var(--ink)" strokeWidth="1.5" />

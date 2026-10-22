@@ -13,7 +13,7 @@ import {
 import { db } from "./db";
 import { createFolder } from "./folders";
 import { getSettings, updateSettings } from "./settings";
-import type { Word } from "./types";
+import type { Settings, Word } from "./types";
 import { addWord, gradeCard, softDeleteWord } from "./words";
 
 const T0 = new Date("2026-10-21T10:00:00.000Z");
@@ -159,6 +159,33 @@ describe("import", () => {
     const s = await getSettings();
     expect(s.new_per_day).toBe(7);
     expect(s.last_sync_at).toBe("x");
+  });
+
+  it("round-trips the shortcuts setting and defaults it for old backups", async () => {
+    await sampleData();
+    await updateSettings({ shortcuts: false });
+    const file = await exportBackup(later(30));
+    expect(file.tables.settings[0]).toMatchObject({ shortcuts: false });
+
+    await updateSettings({ shortcuts: true });
+    await importBackup(file, { includeSettings: true });
+    expect((await getSettings()).shortcuts).toBe(false);
+
+    // A backup from before the setting existed keeps the local value.
+    const old = {
+      ...file,
+      tables: {
+        ...file.tables,
+        settings: file.tables.settings.map((row) => {
+          const rest: Partial<Settings> = { ...row };
+          delete rest.shortcuts;
+          return rest;
+        }),
+      },
+    };
+    await updateSettings({ shortcuts: true });
+    await importBackup(old, { includeSettings: true });
+    expect((await getSettings()).shortcuts).toBe(true);
   });
 
   it("skips malformed rows", async () => {

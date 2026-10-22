@@ -422,6 +422,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
       open={open}
       onOpenChange={handleOpenChange}
       height={mode === "search" ? "large" : "full"}
+      dialogWidth={640}
       footer={footer}
       onOpenAutoFocus={(event) => {
         event.preventDefault();

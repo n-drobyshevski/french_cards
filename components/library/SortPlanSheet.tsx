@@ -167,6 +167,7 @@ export function SortPlanSheet({ open, onOpenChange }: SortPlanSheetProps) {
       open={open}
       onOpenChange={onOpenChange}
       height="full"
+      dialogWidth={760}
       description="План раскладки слов по темам"
       footer={footer}
     >

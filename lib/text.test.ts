@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "./db";
-import { findDuplicate, findDuplicates, foldAccents, matchesSearch, normalizeLemma, searchKey, slugify } from "./text";
+import { compareFr, findDuplicate, findDuplicates, foldAccents, frSortKey, matchesSearch, normalizeLemma, searchKey, slugify } from "./text";
 import { addWord, softDeleteWord } from "./words";
 
 beforeEach(async () => {
@@ -67,6 +67,34 @@ describe("normalizeLemma", () => {
   it("keeps accents and normalizes to NFC", () => {
     expect(normalizeLemma("pâte")).not.toBe(normalizeLemma("pate"));
     expect(normalizeLemma("été")).toBe("été");
+  });
+});
+
+describe("frSortKey / compareFr", () => {
+  it("drops a leading article or «se» and folds accents", () => {
+    expect(frSortKey("la thune")).toBe("thune");
+    expect(frSortKey("l’oseille")).toBe("oseille");
+    expect(frSortKey("les keufs")).toBe("keufs");
+    expect(frSortKey("se casser")).toBe("casser");
+    expect(frSortKey("s'en foutre")).toBe("en foutre");
+    expect(frSortKey("Dépêche-toi")).toBe("depeche-toi");
+    expect(frSortKey("la")).toBe("la");
+    expect(frSortKey("lequel")).toBe("lequel");
+  });
+
+  it("orders entries like a dictionary", () => {
+    const words = ["vas-y", "la thune", "une blague", "se casser", "bouffer", "chelou", "dépêche-toi", "les flics", "le fric"];
+    expect([...words].sort(compareFr)).toEqual([
+      "une blague",
+      "bouffer",
+      "se casser",
+      "chelou",
+      "dépêche-toi",
+      "les flics",
+      "le fric",
+      "la thune",
+      "vas-y",
+    ]);
   });
 });
 
