@@ -32,3 +32,14 @@ export const ENRICH_CHUNK_MAX = 50;
 
 /** How many existing examples the client may list for «другой пример» to avoid. */
 export const EXAMPLE_AVOID_MAX = 6;
+
+// «Контекст» (/api/ai/lookup, /api/ai/context).
+export const LOOKUP_TRANSLATIONS_MAX = 5;
+export const LOOKUP_SYNONYMS_MAX = 8;
+export const CONTEXT_EXAMPLES_MAX = 8;
+/** Translations the client sends to /api/ai/context so each example can say which sense it shows. */
+export const CONTEXT_MEANINGS_MAX = LOOKUP_TRANSLATIONS_MAX;
+export const CONJ_TENSES = ["present", "passe_compose", "imparfait", "futur"] as const;
+export type ConjTense = (typeof CONJ_TENSES)[number];
+export const EXAMPLE_KINDS = ["forum", "song", "article", "subtitles", "social", "book", "other"] as const;
+export type ExampleKind = (typeof EXAMPLE_KINDS)[number];

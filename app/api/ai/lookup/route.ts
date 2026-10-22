@@ -4,7 +4,7 @@
 import { generateText, Output } from "ai";
 import { finalizeLookup } from "@/lib/ai/context";
 import { guardAiRequest, jsonError, limitAiRequest, NO_STORE } from "@/lib/ai/auth";
-import { cachedInstructions, modelFor, providerOptions } from "@/lib/ai/model";
+import { cachedInstructions, modelFor, modelIdFor, providerOptionsFor } from "@/lib/ai/model";
 import { detectDirection } from "@/lib/ai/normalize";
 import { LOOKUP_SYSTEM, lookupUserPrompt } from "@/lib/ai/prompts";
 import { LookupModelSchema, LookupRequestSchema, type LookupModel } from "@/lib/ai/schemas";
@@ -33,7 +33,7 @@ export async function POST(req: Request): Promise<Response> {
       instructions: cachedInstructions(LOOKUP_SYSTEM),
       prompt: lookupUserPrompt({ q, direction: detectDirection(q) }),
       output: Output.object({ schema: LookupModelSchema, name: "lookup" }),
-      providerOptions,
+      providerOptions: providerOptionsFor(modelIdFor("lookup", model)),
       maxOutputTokens: 2000,
       abortSignal: req.signal,
     });

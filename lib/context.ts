@@ -8,7 +8,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AiClientError, postAiJson, type AiClientErrorCode } from "./ai-client";
 import type { ContextResponse, LookupResponse } from "./ai/schemas";
-import { CONTEXT_MEANINGS_MAX } from "./ai/schemas";
+import { CONTEXT_MEANINGS_MAX } from "./ai/constants";
 import { searchKey } from "./core/text";
 import { db, type LookupEntry } from "./db";
 import { getSettings } from "./settings";

@@ -6,7 +6,7 @@
 import { generateText, Output } from "ai";
 import { finalizeContext, snippetsFromSources, type WebSource } from "@/lib/ai/context";
 import { guardAiRequest, jsonError, limitAiRequest, NO_STORE } from "@/lib/ai/auth";
-import { cachedInstructions, modelFor, providerFor, providerOptions } from "@/lib/ai/model";
+import { cachedInstructions, modelFor, modelIdFor, providerFor, providerOptionsFor } from "@/lib/ai/model";
 import { CONTEXT_PICK_SYSTEM, CONTEXT_SEARCH_SYSTEM, contextPickPrompt, contextSearchPrompt } from "@/lib/ai/prompts";
 import { ContextModelSchema, ContextRequestSchema, type ContextModel, type ContextResponse } from "@/lib/ai/schemas";
 
@@ -37,7 +37,7 @@ export async function POST(req: Request): Promise<Response> {
       instructions: cachedInstructions(CONTEXT_SEARCH_SYSTEM),
       prompt: contextSearchPrompt({ fr, meanings }),
       tools: { web_search: providerFor().tools.webSearch_20250305({ maxUses: SEARCHES_MAX }) },
-      providerOptions,
+      providerOptions: providerOptionsFor(modelIdFor("context", model)),
       maxOutputTokens: 2500,
       abortSignal: req.signal,
     });
@@ -52,7 +52,7 @@ export async function POST(req: Request): Promise<Response> {
       instructions: cachedInstructions(CONTEXT_PICK_SYSTEM),
       prompt: contextPickPrompt({ fr, meanings, snippets }),
       output: Output.object({ schema: ContextModelSchema, name: "context" }),
-      providerOptions,
+      providerOptions: providerOptionsFor(modelIdFor("context", model)),
       maxOutputTokens: 3000,
       abortSignal: req.signal,
     });

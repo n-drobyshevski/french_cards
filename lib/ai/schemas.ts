@@ -21,6 +21,13 @@ import {
   SLANG_CODES,
   SUGGEST_MAX,
   SUGGEST_REGISTERS,
+  CONTEXT_EXAMPLES_MAX,
+  CONTEXT_MEANINGS_MAX,
+  EXAMPLE_KINDS,
+  LOOKUP_SYNONYMS_MAX,
+  LOOKUP_TRANSLATIONS_MAX,
+  type ConjTense,
+  type ExampleKind,
   type Provenance,
   type SlangCode,
 } from "./constants";
@@ -578,15 +585,6 @@ export interface AiErrorBody {
 // dictionary part: translations by share, synonyms by register, conjugation); /api/ai/context
 // searches the web for real sentences that use the word, each tied to its source.
 
-export const LOOKUP_TRANSLATIONS_MAX = 5;
-export const LOOKUP_SYNONYMS_MAX = 8;
-export const CONTEXT_EXAMPLES_MAX = 8;
-/** Translations the client sends to /api/ai/context so each example can say which sense it shows. */
-export const CONTEXT_MEANINGS_MAX = LOOKUP_TRANSLATIONS_MAX;
-export const CONJ_TENSES = ["present", "passe_compose", "imparfait", "futur"] as const;
-export type ConjTense = (typeof CONJ_TENSES)[number];
-export const EXAMPLE_KINDS = ["forum", "song", "article", "subtitles", "social", "book", "other"] as const;
-export type ExampleKind = (typeof EXAMPLE_KINDS)[number];
 
 /** POST /api/ai/lookup: a French or Russian word or phrase. */
 export const LookupRequestSchema = z.object({
