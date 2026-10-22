@@ -6,10 +6,11 @@ import { useEffect, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { isAllowedEmail, isSupabaseConfigured, publicAllowedEmail } from "@/lib/supabase/config";
 import { syncNow } from "@/lib/sync";
+import { AUTH_MARKER_KEY } from "./auth-init";
 
 // Remembers that this device had a valid session, so the app keeps working offline after the
-// access token expires and cannot be refreshed.
-const MARKER_KEY = "kartochki.auth.email";
+// access token expires and cannot be refreshed. The pre-paint gate (auth-init.ts) reads it too.
+const MARKER_KEY = AUTH_MARKER_KEY;
 
 export function rememberSignedIn(email: string | null | undefined): void {
   try {

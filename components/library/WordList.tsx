@@ -1,14 +1,17 @@
 "use client";
 
 import { useRef, useState, type ReactNode } from "react";
+import { Collapse } from "@/components/ui/Collapse";
 import { Icon } from "@/components/ui/Icons";
 import { Sheet, SheetCloseButton, SheetTitle } from "@/components/ui/Sheet";
 import { SlangMeter, slangAbbr } from "@/components/ui/SlangMeter";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { cx } from "@/components/ui/cx";
+import { exitMs } from "@/lib/motion";
 import type { Folder, Word } from "@/lib/types";
 import { moveWords, restoreMoves, restoreWords, softDeleteWords } from "@/lib/words";
 import { posAbbr, STATUS_DOT, STATUS_LABELS } from "./format";
+import { markLeaving, markReturning, useLeavingList } from "./leaving";
 import { SwipeRow } from "./SwipeRow";
 import { folderOptions, TargetPickerSheet } from "./TargetPickerSheet";
 import type { LibraryWord } from "./useLibraryWords";
@@ -16,12 +19,22 @@ import { WordDetailSheet } from "./WordDetailSheet";
 
 const ACTIONS_WIDTH = 160;
 
-/** Row body: status dot, French headword with its abbreviation, Russian, slang meter and «к повт.». */
-export function WordRowContent({ item, showFolder }: { item: LibraryWord; showFolder?: boolean }) {
+/**
+ * Row body: status dot, French headword with its abbreviation, Russian, slang meter and «к повт.».
+ * `struck`: deleted — a 1px ink line draws across the word and its translation (--dur-exit, linear).
+ */
+export function WordRowContent({ item, showFolder, struck = false }: { item: LibraryWord; showFolder?: boolean; struck?: boolean }) {
   const { word, schedule } = item;
   const abbr = posAbbr(word);
   return (
-    <span className="flex h-16 w-full min-w-0 items-center gap-3 border-b border-rule">
+    <span className="relative flex h-16 w-full min-w-0 items-center gap-3 border-b border-rule transition-[border-color] duration-(--dur-quick) ease-standard group-data-lifted/swipe:border-ink">
+      {struck && (
+        <span
+          aria-hidden="true"
+          data-strike=""
+          className="pointer-events-none absolute top-6 right-0 left-[18px] h-px origin-left bg-ink transition-[scale] duration-(--dur-exit) ease-linear starting:scale-x-0"
+        />
+      )}
       <span aria-hidden="true" className={cx("size-1.5 shrink-0 rounded-full", STATUS_DOT[schedule.status])} />
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="flex min-w-0 items-baseline gap-2 whitespace-nowrap">
@@ -80,6 +93,9 @@ export interface WordListProps {
 /**
  * Word rows with swipe-left actions «Переместить» / «Удалить», a long-press menu as their
  * fallback, and the word detail sheet on tap. Every change offers «Отменить».
+ *
+ * Rows never just vanish (§5.10, L7, L10): a deleted word is struck out, then its row closes;
+ * a word moved out of this list closes; «Отменить» opens the row again and lights it (spotlight).
  */
 export function WordList({ items, folders, showFolder, label, className, footer }: WordListProps) {
   const snackbar = useSnackbar();
@@ -89,8 +105,20 @@ export function WordList({ items, folders, showFolder, label, className, footer 
   const [menuOpen, setMenuOpen] = useState(false);
   const [moveWord, setMoveWord] = useState<Word | null>(null);
   const [moveOpen, setMoveOpen] = useState(false);
+  // Deleted rows, struck out until they have closed (and again unstruck by «Отменить»).
+  const [struck, setStruck] = useState<ReadonlySet<string>>(() => new Set());
   // What to do once the long-press menu has finished closing (opening another sheet).
   const afterMenu = useRef<(() => void) | null>(null);
+  const entries = useLeavingList(items, (item) => item.word.id);
+
+  const strike = (id: string, on: boolean) =>
+    setStruck((prev) => {
+      if (prev.has(id) === on) return prev;
+      const next = new Set(prev);
+      if (on) next.add(id);
+      else next.delete(id);
+      return next;
+    });
 
   const startMove = (word: Word) => {
     setOpenRow(null);
@@ -100,6 +128,8 @@ export function WordList({ items, folders, showFolder, label, className, footer 
 
   const move = async (word: Word, key: string) => {
     const to = key === "inbox" ? null : key;
+    // Leaving this list (a theme page, a filter): the row closes instead of vanishing.
+    markLeaving([word.id]);
     try {
       const records = await moveWords([word.id], to);
       if (records.length === 0) return;
@@ -107,15 +137,19 @@ export function WordList({ items, folders, showFolder, label, className, footer 
       snackbar.show({
         message: `${to === null ? "Перемещено во" : "Перемещено в"} ${name}`,
         actionLabel: "Отменить",
-        onAction: () => void restoreMoves(records),
+        onAction: () => {
+          markReturning([word.id]);
+          void restoreMoves(records);
+        },
       });
     } catch (e) {
       snackbar.show({ message: e instanceof Error ? e.message : "Не получилось переместить" });
     }
   };
 
-  const remove = async (word: Word) => {
-    setOpenRow(null);
+  /** The write: the row closes as it starts, and the snackbar comes with it. */
+  const deleteNow = async (word: Word) => {
+    markLeaving([word.id]);
     try {
       await softDeleteWords([word.id]);
       snackbar.show({
@@ -125,61 +159,95 @@ export function WordList({ items, folders, showFolder, label, className, footer 
           </>
         ),
         actionLabel: "Отменить",
-        onAction: () => void restoreWords([word.id]),
+        onAction: () => {
+          markReturning([word.id]);
+          strike(word.id, false);
+          void restoreWords([word.id]);
+        },
       });
     } catch (e) {
+      strike(word.id, false);
       snackbar.show({ message: e instanceof Error ? e.message : "Не получилось удалить" });
     }
+  };
+
+  /** «Удалить»: the word is struck out (--dur-exit), then deleted and its row closes. */
+  const remove = (word: Word) => {
+    setOpenRow(null);
+    strike(word.id, true);
+    window.setTimeout(() => void deleteNow(word), exitMs());
   };
 
   return (
     <>
       <ul aria-label={label} className={cx("m-0 flex list-none flex-col p-0", className)}>
-        {items.map((item) => (
-          <li key={item.word.id} className="-mr-4 [contain-intrinsic-size:auto_64px] [content-visibility:auto]">
-            <SwipeRow
-              open={openRow === item.word.id}
-              onOpenChange={(open) => setOpenRow(open ? item.word.id : null)}
-              onTap={() => {
-                setOpenRow(null);
-                setDetailId(item.word.id);
-              }}
-              onLongPress={() => {
-                setOpenRow(null);
-                setMenuWord(item.word);
-                setMenuOpen(true);
-              }}
-              label={rowLabel(item, showFolder)}
-              actionsWidth={ACTIONS_WIDTH}
-              actions={({ open }) => (
-                <>
-                  <button
-                    type="button"
-                    tabIndex={open ? 0 : -1}
-                    onClick={() => startMove(item.word)}
-                    className="flex h-full w-[88px] flex-col items-center justify-center gap-1 bg-surface-2 text-[12px] font-medium text-ink active:opacity-80"
-                  >
-                    <Icon name="move" size={18} />
-                    Переместить
-                  </button>
-                  <button
-                    type="button"
-                    tabIndex={open ? 0 : -1}
-                    onClick={() => void remove(item.word)}
-                    className="flex h-full w-[72px] flex-col items-center justify-center gap-1 bg-again text-[12px] font-medium text-on-ink active:opacity-80"
-                  >
-                    <Icon name="trash" size={18} />
-                    Удалить
-                  </button>
-                </>
+        {entries.map(({ id, item, leaving, returning }) => {
+          const lifted = menuOpen && menuWord?.id === id;
+          return (
+            <li
+              key={id}
+              aria-hidden={leaving || undefined}
+              className={cx(
+                // 8px into the gutter on the left (room for the lifted card's edge), to the screen edge on the right.
+                "-mr-4 -ml-2",
+                !lifted && !leaving && !returning && "[contain-intrinsic-size:auto_64px] [content-visibility:auto]",
               )}
             >
-              <span className="flex w-full min-w-0 pr-4">
-                <WordRowContent item={item} showFolder={showFolder} />
-              </span>
-            </SwipeRow>
-          </li>
-        ))}
+              <Collapse open={!leaving} appear={returning} innerClassName={lifted ? "-mt-0.5 pt-0.5" : undefined}>
+                <SwipeRow
+                  open={openRow === id}
+                  onOpenChange={(open) => setOpenRow(open ? id : null)}
+                  onTap={() => {
+                    setOpenRow(null);
+                    setDetailId(id);
+                  }}
+                  onLongPress={() => {
+                    setOpenRow(null);
+                    setMenuWord(item.word);
+                    setMenuOpen(true);
+                  }}
+                  onFullSwipe={() => {
+                    setOpenRow(null);
+                    void deleteNow(item.word);
+                  }}
+                  lifted={lifted}
+                  highlight={returning}
+                  label={rowLabel(item, showFolder)}
+                  actionsWidth={ACTIONS_WIDTH}
+                  actions={({ open, locked }) => (
+                    <>
+                      <button
+                        type="button"
+                        tabIndex={open ? 0 : -1}
+                        onClick={() => startMove(item.word)}
+                        className={cx(
+                          "flex h-full shrink-0 flex-col items-center justify-center gap-1 overflow-hidden bg-surface-2 text-[12px] font-medium whitespace-nowrap text-ink transition-[flex-basis] duration-(--dur-move) ease-standard active:opacity-80",
+                          locked ? "basis-0" : "basis-[88px]",
+                        )}
+                      >
+                        <Icon name="move" size={18} />
+                        Переместить
+                      </button>
+                      <button
+                        type="button"
+                        tabIndex={open ? 0 : -1}
+                        onClick={() => remove(item.word)}
+                        className="flex h-full min-w-[72px] flex-1 flex-col items-center justify-center gap-1 bg-again text-[12px] font-medium text-on-ink active:opacity-80"
+                      >
+                        <Icon name="trash" size={18} />
+                        Удалить
+                      </button>
+                    </>
+                  )}
+                >
+                  <span className="flex w-full min-w-0 pr-4 pl-2">
+                    <WordRowContent item={item} showFolder={showFolder} struck={struck.has(id)} />
+                  </span>
+                </SwipeRow>
+              </Collapse>
+            </li>
+          );
+        })}
       </ul>
       {footer}
 
@@ -214,7 +282,7 @@ export function WordList({ items, folders, showFolder, label, className, footer 
                 if (!word) return;
                 if (a.key === "open") afterMenu.current = () => setDetailId(word.id);
                 else if (a.key === "move") afterMenu.current = () => startMove(word);
-                else void remove(word);
+                else afterMenu.current = () => remove(word);
                 setMenuOpen(false);
               }}
               className={cx(

@@ -8,16 +8,54 @@ import { Icon } from "@/components/ui/Icons";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { BackupError, backupFileName, exportBackupBlob, importBackup, previewBackupImport, undoBackupImport } from "@/lib/backup";
 import { importLegacyHtml } from "@/lib/seed";
-import { syncNow, useSyncStatus } from "@/lib/sync";
 import { SYNC_TABLES } from "@/lib/types";
+import { useDelayedFlag } from "@/lib/use-delayed-flag";
 import { softDeleteWords } from "@/lib/words";
 import { BackupImportSheet, type BackupPreview } from "./BackupImportSheet";
 import { DeskButtonRow, DeskRow, DeskSection } from "./DesktopControls";
-import { describeBackupImport, describeLegacyImport, syncLine } from "./format";
+import { describeBackupImport, describeLegacyImport, shortEmail, SYNC_LINE_TEXTS, type SyncLine } from "./format";
 import { SettingsButtonRow, SettingsRow, SettingsSection } from "./SettingsList";
-import { useClock } from "./useClock";
+import { useSyncLine } from "./useSyncLine";
 
-const DOT: Record<"good" | "again" | "muted", string> = { good: "bg-good", again: "bg-again", muted: "bg-muted" };
+const DOT: Record<SyncLine["tone"], string> = { good: "bg-good", ink: "bg-ink", again: "bg-again", muted: "bg-boundary" };
+
+/**
+ * The phone sync status (T5, board M-Settings-Sync F3): dot + mono text, and for a failure the
+ * reason on a second muted line. The slot is as wide as the widest state, so the row never jitters
+ * when the text changes; the dot colour crossfades.
+ */
+function SyncStatus({ line }: { line: SyncLine }) {
+  const mono = "font-mono text-[11px] leading-4 tracking-[.02em] whitespace-nowrap";
+  return (
+    <span className="grid max-w-[70%] min-w-0 shrink-0 justify-items-start text-left">
+      {SYNC_LINE_TEXTS.map((text) => (
+        <span key={text} aria-hidden="true" className={cx("invisible col-start-1 row-start-1 pl-3.5", mono)}>
+          {text}
+        </span>
+      ))}
+      <span className="col-start-1 row-start-1 flex max-w-full min-w-0 items-center gap-2">
+        <span
+          aria-hidden="true"
+          className={cx(
+            "size-1.5 shrink-0 rounded-[1px] transition-colors duration-(--dur-quick) ease-standard",
+            DOT[line.tone],
+            !line.text && "invisible",
+          )}
+        />
+        <span className={cx("min-w-0 truncate", mono, line.tone === "again" ? "text-again" : "text-muted")}>
+          {line.text}
+          {line.retry && (
+            <>
+              {" · "}
+              <span className="underline underline-offset-[3px]">Повторить</span>
+            </>
+          )}
+        </span>
+      </span>
+      {line.detail && <span className={cx("col-start-1 row-start-2 max-w-full truncate pl-3.5 text-muted", mono)}>{line.detail}</span>}
+    </span>
+  );
+}
 
 /** Saves the backup: share sheet on iOS (where download links open a preview), a download elsewhere. */
 async function saveBackup(): Promise<"saved" | "cancelled"> {
@@ -58,8 +96,7 @@ const message = (error: unknown, fallback: string) =>
 export function DataSection({ desktop = false }: { desktop?: boolean }) {
   const toast = useSnackbar();
   const auth = useAuthUser();
-  const sync = useSyncStatus();
-  const nowMs = useClock();
+  const { line, busy: syncBusy, sync } = useSyncLine();
   const [busy, setBusy] = useState<null | "export" | "json" | "html" | "signout">(null);
   const jsonInput = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<(BackupPreview & { text: string }) | null>(null);
@@ -67,7 +104,12 @@ export function DataSection({ desktop = false }: { desktop?: boolean }) {
   const [importing, setImporting] = useState(false);
   const htmlInput = useRef<HTMLInputElement>(null);
 
-  const line = syncLine({ auth, sync, nowMs });
+  // The phone rows swap their label in place (T6): after 150 ms for local work, at once for the
+  // network (sign-out), then for at least 500 ms. They never grey out.
+  const exporting = useDelayedFlag(busy === "export", { delay: 150, min: 500 });
+  const readingJson = useDelayedFlag(busy === "json", { delay: 150, min: 500 });
+  const readingHtml = useDelayedFlag(busy === "html", { delay: 150, min: 500 });
+  const signingOut = useDelayedFlag(busy === "signout", { delay: 0, min: 500 });
   const signedIn = auth.status === "signed_in" || auth.status === "offline";
 
   const onExport = async () => {
@@ -166,37 +208,26 @@ export function DataSection({ desktop = false }: { desktop?: boolean }) {
     }
   };
 
-  const status = (
-    <>
-      <span aria-hidden="true" className={cx("size-1.5 shrink-0 rounded-[1px]", DOT[line.tone])} />
-      <span
-        className={cx(
-          "max-w-[62%] truncate font-mono text-[11px] leading-4 tracking-[.02em]",
-          line.tone === "again" ? "text-again" : "text-muted",
-        )}
-      >
-        {line.text}
-      </span>
-    </>
-  );
-
-  const deskDot = line.tone === "again" ? "again" : line.text.endsWith("нет сети") ? "muted" : null;
+  const syncText = `${line.text}${line.retry ? " · Повторить" : ""}`;
+  const syncLabel = `Синхронизация: ${syncText}${line.detail ? `. ${line.detail}` : ""}. Синхронизировать сейчас`;
+  const deskDot = line.tone === "again" ? "again" : line.text.startsWith("Нет сети") ? "muted" : null;
   const deskStatus = (
-    <span className="flex min-w-0 shrink items-center gap-2">
-      {deskDot && <span aria-hidden="true" className={cx("size-1.5 shrink-0 rounded-full", DOT[deskDot])} />}
-      <span className={cx("truncate text-[13px] leading-5 tabular-nums", deskDot === "again" ? "text-again" : "text-muted")}>{line.text}</span>
+    <span className="flex min-w-0 shrink flex-col items-end">
+      <span className="flex max-w-full min-w-0 items-center gap-2">
+        {deskDot && <span aria-hidden="true" className={cx("size-1.5 shrink-0 rounded-full", DOT[deskDot])} />}
+        <span className={cx("truncate text-[13px] leading-4 tabular-nums", deskDot === "again" ? "text-again" : "text-muted")}>{syncText}</span>
+      </span>
+      {line.detail && <span className="max-w-full truncate text-[12px] leading-4 text-muted tabular-nums">{line.detail}</span>}
     </span>
   );
+  const account = auth.email ? (
+    <span className="truncate font-mono text-[11px] leading-4 tracking-[.02em] text-muted">{shortEmail(auth.email)}</span>
+  ) : undefined;
 
   const rows = desktop ? (
     <DeskSection id="set-data" title="Данные">
-      {line.canSync ? (
-        <DeskButtonRow
-          label="Синхронизация"
-          aria-label={`Синхронизация: ${line.text}. Синхронизировать сейчас`}
-          onClick={() => void syncNow()}
-          trailing={deskStatus}
-        />
+      {line.canSync || syncBusy ? (
+        <DeskButtonRow label="Синхронизация" aria-label={syncLabel} aria-busy={syncBusy || undefined} onClick={sync} trailing={deskStatus} />
       ) : (
         <DeskRow label="Синхронизация">{deskStatus}</DeskRow>
       )}
@@ -220,11 +251,12 @@ export function DataSection({ desktop = false }: { desktop?: boolean }) {
       />
       {signedIn && (
         <DeskButtonRow
-          label="Выйти"
+          label={busy === "signout" ? "Выходим…" : "Выйти"}
           tone="again"
           disabled={busy !== null}
           aria-busy={busy === "signout" || undefined}
           onClick={() => void onSignOut()}
+          trailing={account}
         />
       )}
     </DeskSection>
@@ -234,36 +266,46 @@ export function DataSection({ desktop = false }: { desktop?: boolean }) {
     <>
       {rows ?? (
         <SettingsSection title="Данные">
-          {line.canSync ? (
+          {line.canSync || syncBusy ? (
             <SettingsButtonRow
               label="Синхронизация"
-              aria-label={`Синхронизация: ${line.text}. Синхронизировать сейчас`}
-              onClick={() => void syncNow()}
-              trailing={status}
+              aria-label={syncLabel}
+              pending={syncBusy}
+              onClick={sync}
+              trailing={<SyncStatus line={line} />}
+              className="min-h-14"
             />
           ) : (
-            <SettingsRow label="Синхронизация">{status}</SettingsRow>
+            <SettingsRow label="Синхронизация" className="min-h-14">
+              <SyncStatus line={line} />
+            </SettingsRow>
           )}
 
           <SettingsButtonRow
             label="Экспорт JSON"
-            disabled={busy !== null}
-            aria-busy={busy === "export" || undefined}
+            pendingLabel="Сохраняем…"
+            pending={busy === "export"}
+            swapped={exporting}
+            blocked={busy !== null}
             onClick={() => void onExport()}
             trailing={<Icon name="download" size={16} className="text-muted" />}
           />
 
           <SettingsButtonRow
             label="Импорт JSON"
-            disabled={busy !== null}
-            aria-busy={busy === "json" || undefined}
+            pendingLabel="Читаем файл…"
+            pending={busy === "json"}
+            swapped={readingJson}
+            blocked={busy !== null}
             onClick={() => jsonInput.current?.click()}
             trailing={<Icon name="chevron-right" size={14} strokeWidth={2} className="text-muted" />}
           />
           <SettingsButtonRow
             label="Импорт из старой версии (HTML)"
-            disabled={busy !== null}
-            aria-busy={busy === "html" || undefined}
+            pendingLabel="Читаем файл…"
+            pending={busy === "html"}
+            swapped={readingHtml}
+            blocked={busy !== null}
             onClick={() => htmlInput.current?.click()}
             trailing={<Icon name="chevron-right" size={14} strokeWidth={2} className="text-muted" />}
           />
@@ -271,9 +313,12 @@ export function DataSection({ desktop = false }: { desktop?: boolean }) {
             <SettingsButtonRow
               label="Выйти"
               tone="again"
-              disabled={busy !== null}
-              aria-busy={busy === "signout" || undefined}
+              pendingLabel="Выходим…"
+              pending={busy === "signout"}
+              swapped={signingOut}
+              blocked={busy !== null}
               onClick={() => void onSignOut()}
+              trailing={account}
             />
           )}
         </SettingsSection>

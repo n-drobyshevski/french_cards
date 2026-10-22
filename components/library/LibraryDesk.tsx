@@ -18,7 +18,7 @@ import {
   type UIEvent,
 } from "react";
 import { useAddSheet } from "@/components/providers/AddSheetContext";
-import { setDraggedWords } from "@/components/shell/dnd";
+import { setDraggedWords, spotlightTheme } from "@/components/shell/dnd";
 import { blocksGlobalKeys, FOCUS_SEARCH_EVENT, OPEN_LAYER_SELECTOR } from "@/components/shell/keys";
 import { useShortcutsEnabled } from "@/components/shell/ShellContext";
 import { Button } from "@/components/ui/Button";
@@ -42,6 +42,7 @@ import { EnrichPlanSheet } from "./EnrichPlanSheet";
 import { cachedFolder, rememberLibrary } from "./first-paint";
 import { FolderFormSheet } from "./FolderFormSheet";
 import { nWords, plural, practiceHref, reviewHref } from "./format";
+import { markLeaving, markReturning } from "./leaving";
 import { Menu, MenuCheckboxItem, MenuItem, MenuSeparator, type MenuAnchor } from "./Menu";
 import { INBOX_KEY, MoveMenu, ThemeSquare } from "./MoveMenu";
 import { matchesSlang, type SlangKey } from "./SlangFilter";
@@ -269,11 +270,21 @@ function Desk({ scope }: { scope: LibraryScope }) {
   // ----- Actions with undo
   const moveIds = async (list: readonly string[], key: string) => {
     const to = key === INBOX_KEY ? null : key;
+    // Rows that leave a filtered table close instead of vanishing (D8).
+    markLeaving(list);
     try {
       const records = await moveWords(list, to);
       if (records.length === 0) return;
       const name = to === null ? "Входящие" : (folders.find((f) => f.id === to)?.name ?? "тему");
-      showUndo({ message: `${to === null ? "Перемещено во" : "Перемещено в"} «${name}»`, undo: () => void restoreMoves(records) });
+      // The target theme in the sidebar acknowledges the move (L10), as a drop does (D8).
+      spotlightTheme(to);
+      showUndo({
+        message: `${to === null ? "Перемещено во" : "Перемещено в"} «${name}»`,
+        undo: () => {
+          markReturning(records.map((r) => r.word_id));
+          void restoreMoves(records);
+        },
+      });
     } catch (e) {
       snackbar.show({ message: e instanceof Error ? e.message : "Не получилось переместить" });
     }
@@ -281,6 +292,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
   const deleteIds = async (list: readonly string[]) => {
     if (list.length === 0) return;
     const first = byId.get(list[0])?.word.fr;
+    markLeaving(list);
     try {
       await softDeleteWords(list);
       const ids = [...list];
@@ -293,7 +305,10 @@ function Desk({ scope }: { scope: LibraryScope }) {
           ) : (
             `Удалено ${nWords(ids.length)}`
           ),
-        undo: () => void restoreWords(ids),
+        undo: () => {
+          markReturning(ids);
+          void restoreWords(ids);
+        },
       });
     } catch (e) {
       snackbar.show({ message: e instanceof Error ? e.message : "Не получилось удалить" });

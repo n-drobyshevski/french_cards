@@ -1,6 +1,6 @@
 import { AuthApiError, AuthRetryableFetchError } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
-import { authErrorMessage, EXISTING_ACCOUNT, isRecoverySession, NOT_ALLOWED, newPasswordProblem, safeNextPath } from "./messages";
+import { authErrorField, authErrorMessage, EXISTING_ACCOUNT, isRecoverySession, NOT_ALLOWED, newPasswordProblem, safeNextPath } from "./messages";
 
 const apiError = (code: string, status = 400) => new AuthApiError("x", status, code);
 
@@ -51,5 +51,15 @@ describe("isRecoverySession", () => {
     expect(isRecoverySession({ recovery_sent_at: "2026-10-22T05:00:00Z" }, now)).toBe(false);
     expect(isRecoverySession({}, now)).toBe(false);
     expect(isRecoverySession(null, now)).toBe(false);
+  });
+});
+
+describe("authErrorField", () => {
+  it("puts address problems under the address and the rest under the password", () => {
+    expect(authErrorField(NOT_ALLOWED, "signin")).toBe("email");
+    expect(authErrorField("Проверьте адрес почты.", "signup")).toBe("email");
+    expect(authErrorField("Неверная почта или пароль.", "signin")).toBe("password");
+    expect(authErrorField("Нет сети. Проверьте подключение и попробуйте ещё раз.", "signin")).toBe("password");
+    expect(authErrorField("Не получилось отправить письмо. Попробуйте ещё раз.", "reset")).toBe("email");
   });
 });

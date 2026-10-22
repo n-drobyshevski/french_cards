@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { createFolder, deleteFolder } from "@/lib/folders";
 import { addWord, gradeCard } from "@/lib/words";
+import { syncLine, type SyncLineInput } from "@/components/settings/format";
 import { guideWords, loadShellData, navKeyForPath, resolveNavKey, sidebarSyncLine } from "./data";
 
 /** Local noon, 21 Oct 2026. */
@@ -75,31 +76,25 @@ describe("navKeyForPath", () => {
 
 describe("sidebarSyncLine", () => {
   const signedIn = { status: "signed_in" as const, email: "n.drobyshevski@pm.me" };
-  const now = Date.parse("2026-10-21T12:00:00Z");
+  const now = new Date(2026, 9, 21, 14, 5).getTime();
+  const line = (sync: SyncLineInput["sync"], auth: SyncLineInput["auth"] = signedIn) => sidebarSyncLine(auth.status, syncLine({ auth, sync, nowMs: now }));
 
   it("is hidden without sync", () => {
-    expect(sidebarSyncLine({ auth: { status: "local", email: null }, sync: { state: "disabled", lastSyncAt: null }, nowMs: now })).toBeNull();
-    expect(sidebarSyncLine({ auth: { status: "signed_out", email: null }, sync: { state: "disabled", lastSyncAt: null }, nowMs: now })).toBeNull();
+    expect(line({ state: "disabled", lastSyncAt: null }, { status: "local", email: null })).toBeNull();
+    expect(line({ state: "disabled", lastSyncAt: null }, { status: "signed_out", email: null })).toBeNull();
   });
 
-  it("mirrors Settings without the account", () => {
-    expect(sidebarSyncLine({ auth: signedIn, sync: { state: "idle", lastSyncAt: "2026-10-21T11:59:50Z" }, nowMs: now })).toEqual({
-      text: "Синхронизация · только что",
+  it("mirrors Settings: the states of T5, a dot only for «нет сети» and a failure", () => {
+    expect(line({ state: "idle", lastSyncAt: new Date(2026, 9, 21, 14, 2).toISOString() })).toEqual({
+      text: "Синхронизировано · 14:02",
       dot: null,
+      detail: null,
       canSync: true,
     });
-    expect(sidebarSyncLine({ auth: signedIn, sync: { state: "syncing", lastSyncAt: null }, nowMs: now })).toEqual({
-      text: "Синхронизация…",
-      dot: null,
-      canSync: false,
-    });
-    expect(sidebarSyncLine({ auth: signedIn, sync: { state: "offline", lastSyncAt: null }, nowMs: now })).toMatchObject({
-      text: "Синхронизация · нет сети",
-      dot: "muted",
-    });
-    expect(sidebarSyncLine({ auth: signedIn, sync: { state: "error", lastSyncAt: null }, nowMs: now })).toMatchObject({
-      text: "Синхронизация · ошибка",
-      dot: "again",
-    });
+    expect(line({ state: "syncing", lastSyncAt: null })).toMatchObject({ text: "Синхронизация…", dot: null, canSync: false });
+    expect(line({ state: "offline", lastSyncAt: null })).toMatchObject({ text: "Нет сети · изменения сохранятся", dot: "muted" });
+    expect(
+      line({ state: "error", lastSyncAt: null, errorKind: "server", errorAt: new Date(2026, 9, 21, 14, 5).toISOString() }),
+    ).toEqual({ text: "Не синхронизировано · Повторить", dot: "again", detail: "Сервер не ответил · 14:05", canSync: true });
   });
 });

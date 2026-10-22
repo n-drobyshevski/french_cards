@@ -4,7 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAddSheet } from "@/components/providers/AddSheetContext";
-import { useAppReady } from "@/components/providers/AppProviders";
+import { useAppReady, useBootFailure } from "@/components/providers/AppProviders";
 import { Button, IconButton } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
@@ -18,6 +18,7 @@ import type { Settings } from "@/lib/types";
 import { getUndoableRun, undoReorgRun } from "@/lib/reorg";
 import { useLayoutClass } from "@/lib/use-media";
 import { useSettings } from "@/lib/use-settings";
+import { BootNotice } from "./BootNotice";
 import { DeskPlaceholder } from "./DeskPlaceholder";
 import { DisbandSheet, disbandMessage } from "./DisbandSheet";
 import { EnrichPlanSheet } from "./EnrichPlanSheet";
@@ -80,6 +81,7 @@ async function getLibraryOverview() {
 
 function PhoneLibrary() {
   const ready = useAppReady();
+  const bootFailed = useBootFailure().failed;
   const snackbar = useSnackbar();
   const addSheet = useAddSheet();
   const overview = useLiveQuery(getLibraryOverview, []);
@@ -117,6 +119,9 @@ function PhoneLibrary() {
   const shown = page.key === listKey ? page.size : PAGE_SIZE;
 
   const results = useMemo(() => (words ? filterPhoneWords(words.words, filter, deferredQuery) : null), [words, filter, deferredQuery]);
+  const pageItems = useMemo(() => results?.slice(0, shown), [results, shown]);
+  // «Все слова»: the rows fade in over the reserved blank, or replace the skeleton at once (L4).
+  const listReveal = useRevealClass(!!results);
 
   const totals = stats?.totals;
   const inbox = stats?.inbox;
@@ -254,7 +259,7 @@ function PhoneLibrary() {
       </div>
 
       {listMode ? (
-        <section aria-label="Слова" className="mt-5 flex flex-col">
+        <section aria-label="Слова" aria-busy={!results || undefined} className="mt-5 flex flex-col">
           <div className="meta flex h-8 items-center justify-between border-b border-ink">
             <span className="font-medium text-ink" role="status">
               {!results
@@ -287,9 +292,10 @@ function PhoneLibrary() {
               ))}
             </div>
           )}
-          {results && words && (
+          {results && pageItems && words && (
             <WordList
-              items={results.slice(0, shown)}
+              className={listReveal}
+              items={pageItems}
               folders={words.folders}
               showFolder={filter.theme === ALL_THEMES}
               label={filtered ? "Найденные слова" : "Все слова"}
@@ -326,6 +332,9 @@ function PhoneLibrary() {
             </div>
           )}
         </section>
+      ) : bootFailed ? (
+        // First-run setup failed: say so where the tiles would be (B1).
+        <BootNotice />
       ) : view === "themes" ? (
         <>
           {/* «Входящие»: only while something is unsorted (reserved blank if it was there last time) */}

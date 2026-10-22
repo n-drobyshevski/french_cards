@@ -11,11 +11,10 @@ import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { FlatKey } from "@/components/ui/Kbd";
 import { useSnackbar } from "@/components/ui/Snackbar";
-import { syncNow } from "@/lib/sync";
 import { useLayoutClass } from "@/lib/use-media";
 import { navKeyForPath, resolveNavKey, type NavKey, type ShellData, type ShellTheme } from "./data";
 import { useThemeDrop } from "./dnd";
-import { ActiveBar, dropClasses, useSidebarSyncLine } from "./NavParts";
+import { ActiveBar, DropLight, dropClasses, useSidebarSyncLine } from "./NavParts";
 import { useShortcutsEnabled } from "./ShellContext";
 
 // Expanded sidebar (≥ 1200, DESKTOP-SPEC §2 «Expanded sidebar»): text only, paper, 1px right rule.
@@ -66,9 +65,11 @@ function ThemeRow({ theme, active }: { theme: ShellTheme; active: boolean }) {
       href={theme.href}
       aria-current={active ? "page" : undefined}
       aria-label={`${theme.name}, ${nWords(theme.count)}`}
+      data-theme-target={theme.id ?? "inbox"}
       {...drop.dropProps}
-      className={cx(rowClass, "h-11 gap-2.5", dropClasses(drop.dragging, drop.over))}
+      className={cx(rowClass, "isolate h-11 gap-2.5", dropClasses(drop.dragging, drop.over))}
     >
+      <DropLight />
       {active && <ActiveBar edge="sidebar" />}
       <span
         aria-hidden="true"
@@ -97,21 +98,22 @@ function ThemeRow({ theme, active }: { theme: ShellTheme; active: boolean }) {
 }
 
 function SyncButton() {
-  const line = useSidebarSyncLine();
+  const { line, busy, sync } = useSidebarSyncLine();
   if (!line) return null;
   return (
     <button
       type="button"
-      disabled={!line.canSync}
-      aria-label={`${line.text}. Синхронизировать сейчас`}
-      title="Синхронизировать сейчас"
-      onClick={() => void syncNow()}
+      disabled={!line.canSync && !busy}
+      aria-busy={busy || undefined}
+      aria-label={`${line.text}${line.detail ? `. ${line.detail}` : ""}. Синхронизировать сейчас`}
+      title={line.detail ?? "Синхронизировать сейчас"}
+      onClick={sync}
       className="flex h-6 shrink-0 items-center gap-1.5 rounded-[4px] bg-transparent pr-2 pl-3 text-left text-[12px] text-muted hoverable:bg-hover focus-visible:outline-offset-[-2px] disabled:cursor-default"
     >
       {line.dot && (
         <span aria-hidden="true" className={cx("size-1.5 shrink-0 rounded-full", line.dot === "again" ? "bg-again" : "bg-muted")} />
       )}
-      <span className="truncate">{line.text}</span>
+      <span className={cx("truncate", line.dot === "again" && "text-again")}>{line.text}</span>
     </button>
   );
 }

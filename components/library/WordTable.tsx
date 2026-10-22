@@ -12,6 +12,7 @@ import {
   type RefObject,
   type UIEvent,
 } from "react";
+import { useIsDragged } from "@/components/shell/dnd";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { SKELETON_FADE, SKELETON_WIDTHS, SkeletonBar } from "@/components/ui/Skeleton";
@@ -20,6 +21,7 @@ import { SLANG_LABELS } from "@/lib/types";
 import { CheckMark } from "./Checkbox";
 import { CURRENT_ROW_BG } from "./dark";
 import { posAbbr } from "./format";
+import { useLeavingList } from "./leaving";
 import type { MenuAnchor } from "./Menu";
 import type { Columns, SortKey, SortState } from "./table";
 import type { LibraryWord } from "./useLibraryWords";
@@ -28,7 +30,8 @@ import { rowLabel } from "./WordList";
 // The desktop word table (DESKTOP-SPEC §3 table tokens, §4 library a11y model): one tab stop with
 // a roving row, role="grid" + aria-multiselectable, aria-selected = selection, aria-current = the
 // cursor. Rows are draggable onto sidebar themes; fine pointers get hover actions, coarse ones a
-// persistent ⋯ and long-press.
+// persistent ⋯ and long-press. Dragged rows dim to .5; rows that leave the table after a move, a
+// drop or a delete close (height → 0, --dur-move) instead of vanishing, and open again on undo (D8).
 
 export interface RowHandlers {
   click: (id: string, event: MouseEvent<HTMLElement>) => void;
@@ -101,6 +104,8 @@ export function WordTable({
   const selectionActive = selection.size > 0;
   const tabRow = cursor && rows.some((r) => r.word.id === cursor) ? cursor : (rows[0]?.word.id ?? null);
   const ghost = useRef<HTMLDivElement>(null);
+  const entries = useLeavingList(rows, (r) => r.word.id);
+  let rowIndex = 0;
 
   return (
     <div ref={scrollRef} onScroll={onScroll} className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -186,11 +191,13 @@ export function WordTable({
               })}
             </div>
           ) : (
-            rows.map((item, i) => (
+            entries.map(({ id, item, leaving, returning }) => (
                 <Row
-                  key={item.word.id}
+                  key={id}
                   item={item}
-                  index={i}
+                  index={leaving ? -1 : rowIndex++}
+                  leaving={leaving}
+                  returning={returning}
                   columns={columns}
                   current={item.word.id === cursor}
                   tabbable={item.word.id === tabRow}
@@ -223,7 +230,12 @@ export function WordTable({
 
 interface RowProps {
   item: LibraryWord;
+  /** Position among the live rows; -1 while `leaving`. */
   index: number;
+  /** Gone from the table: closing, out of the grid's rows and focus. */
+  leaving: boolean;
+  /** Back after an undo: opens from 0. */
+  returning: boolean;
   columns: Columns;
   current: boolean;
   tabbable: boolean;
@@ -237,7 +249,8 @@ interface RowProps {
 
 const LONG_PRESS_MS = 500;
 
-const Row = memo(function Row({ item, index, columns, current, tabbable, selected, selectionActive, coarse, fine, handlers, ghost }: RowProps) {
+const Row = memo(function Row({ item, index, leaving, returning, columns, current, tabbable, selected, selectionActive, coarse, fine, handlers, ghost }: RowProps) {
+  const dragged = useIsDragged(item.word.id);
   const { word, schedule, folder } = item;
   const id = word.id;
   const abbr = posAbbr(word);
@@ -289,8 +302,10 @@ const Row = memo(function Row({ item, index, columns, current, tabbable, selecte
   return (
     <div
       role="row"
-      data-row-id={id}
-      aria-rowindex={index + 2}
+      data-row-id={leaving ? undefined : id}
+      aria-hidden={leaving || undefined}
+      inert={leaving}
+      aria-rowindex={leaving ? undefined : index + 2}
       aria-selected={selected}
       aria-current={current ? "true" : undefined}
       aria-label={rowLabel(item, !!folder || columns.theme)}
@@ -330,8 +345,17 @@ const Row = memo(function Row({ item, index, columns, current, tabbable, selecte
       }}
       style={{ gridTemplateColumns: columns.template }}
       className={cx(
-        "group/row relative grid shrink-0 cursor-default items-center border-b border-rule px-6 outline-none select-none [contain-intrinsic-size:auto_40px] [content-visibility:auto] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ink",
-        coarse ? "h-12" : "h-10",
+        "group/row relative grid shrink-0 cursor-default items-center border-b border-rule px-6 outline-none select-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ink",
+        leaving || returning ? "overflow-hidden" : "[contain-intrinsic-size:auto_40px] [content-visibility:auto]",
+        leaving
+          ? "h-0 border-b-0 opacity-0 [transition:height_var(--dur-move)_var(--ease-exit),border-bottom-width_var(--dur-move)_var(--ease-exit),opacity_var(--dur-quick)_var(--ease-exit)]"
+          : cx(
+              coarse ? "h-12" : "h-10",
+              dragged && "opacity-50",
+              returning
+                ? "[transition:height_var(--dur-move)_var(--ease-standard),opacity_var(--dur-enter)_var(--ease-enter)] starting:h-0 starting:opacity-0"
+                : "transition-opacity duration-(--dur-quick) ease-standard",
+            ),
         current ? CURRENT_ROW_BG : selected ? "bg-selected" : "hoverable:bg-hover",
       )}
     >
