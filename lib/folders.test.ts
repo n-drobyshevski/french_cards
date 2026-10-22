@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { db } from "./db";
+import { db, liveRows } from "./db";
 import {
   createFolder,
   DEFAULT_FOLDERS,
@@ -10,6 +10,7 @@ import {
   getFolderBySlug,
   getFolderStats,
   getLibraryStats,
+  libraryStatsFrom,
   listFolders,
   reorderFolders,
   restoreFolder,
@@ -134,5 +135,27 @@ describe("getLibraryStats", () => {
     await addWord({ fr: "a", ru: "1", folder_id: f.id }, T0);
     await db.folders.update(f.id, { deleted_at: T0.toISOString() });
     expect((await getLibraryStats(T0)).inbox.total).toBe(1);
+  });
+
+  it("libraryStatsFrom matches getLibraryStats and leaves the caller's words in their order", async () => {
+    const f = await createFolder({ name: "Tmp" }, T0);
+    for (let i = 0; i < 4; i++) await addWord({ fr: `w${i}`, ru: "x", folder_id: i % 2 ? f.id : null }, new Date(T0.getTime() + i * 1000));
+    const [folders, words, states] = await Promise.all([listFolders(), liveRows(db.words), liveRows(db.review_state)]);
+    const order = words.map((w) => w.id);
+    expect(libraryStatsFrom(folders, words, states, T0)).toEqual(await getLibraryStats(T0));
+    expect(words.map((w) => w.id)).toEqual(order);
+  });
+});
+
+describe("restoreFolder", () => {
+  it("returns only the words still where the deletion put them", async () => {
+    const f = await createFolder({ name: "Tmp" }, T0);
+    const a = await addWord({ fr: "a", ru: "1", folder_id: f.id }, T0);
+    const b = await addWord({ fr: "b", ru: "2", folder_id: f.id }, T0);
+    const moves = await deleteFolder(f.id, T0);
+    await db.words.update(b.id, { folder_id: "elsewhere" });
+    await restoreFolder(f.id, [...moves, { word_id: "missing", from: f.id, to: null, from_source: "auto", from_confidence: null }], T0);
+    expect((await db.words.get(a.id))?.folder_id).toBe(f.id);
+    expect((await db.words.get(b.id))?.folder_id).toBe("elsewhere");
   });
 });

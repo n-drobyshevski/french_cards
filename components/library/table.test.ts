@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { compareFr } from "@/lib/text";
 import type { Folder, Word } from "@/lib/types";
 import type { WordSchedule } from "./format";
 import {
   alphaNeighbours,
+  alphaOrder,
+  catalogNumbers,
   cursorAfterRemoval,
+  neighboursAt,
   guideRange,
   listKeyAction,
   nextSort,
@@ -143,10 +147,56 @@ describe("alphaNeighbours", () => {
     expect(alphaNeighbours(words, "vas-y").map((n) => n.fr)).toEqual(["la thune", "se tirer", "le tromé", "vas-y"]);
   });
 
+  it("orders like compareFr, then by id", () => {
+    const list = ["Été", "été", "ete", "le zinc", "l'apéro", "s'en foutre", "la thune", "10 balles", "2 balles", "œil", "oeuf"].map((fr, i) => ({ id: `w${10 - i}`, fr }));
+    const expected = [...list].sort((a, b) => compareFr(a.fr, b.fr) || a.id.localeCompare(b.id));
+    expect(alphaOrder(list)).toEqual(expected);
+    expect(alphaOrder([{ id: "b", fr: "ça" }, { id: "a", fr: "ca" }]).map((w) => w.id)).toEqual(
+      [{ id: "b", fr: "ça" }, { id: "a", fr: "ca" }].sort((a, b) => compareFr(a.fr, b.fr) || a.id.localeCompare(b.id)).map((w) => w.id),
+    );
+  });
+
+  it("takes the window around a position of the sorted list", () => {
+    const sorted = alphaOrder(words);
+    expect(neighboursAt(sorted, 2)).toEqual(alphaNeighbours(words, sorted[2].id));
+    expect(neighboursAt(sorted, 0).map((n) => n.current)).toEqual([true, false, false, false]);
+    expect(neighboursAt(sorted, -1)).toEqual([]);
+  });
+
   it("formats guide words", () => {
     expect(guideRange("chelou", "vas-y")).toBe("chelou — vas-y");
     expect(guideRange("chelou", "chelou")).toBe("chelou");
     expect(guideRange(undefined, undefined)).toBeNull();
+  });
+});
+
+describe("catalogNumbers", () => {
+  it("numbers words in creation order, equal times by id", () => {
+    const words = [
+      { id: "c", created_at: "2026-10-02T00:00:00Z" },
+      { id: "b", created_at: "2026-10-01T00:00:00Z" },
+      { id: "a", created_at: "2026-10-02T00:00:00Z" },
+      { id: "B", created_at: "2026-10-02T00:00:00Z" },
+    ];
+    const numbers = catalogNumbers(words);
+    // The rule the pane used before: created earlier, or at the same time with id <= its own.
+    for (const w of words) {
+      expect(numbers.get(w.id)).toBe(words.filter((x) => x.created_at < w.created_at || (x.created_at === w.created_at && x.id <= w.id)).length);
+    }
+    expect([...numbers.entries()]).toEqual([
+      ["b", 1],
+      ["B", 2],
+      ["a", 3],
+      ["c", 4],
+    ]);
+  });
+});
+
+describe("sortWords keys", () => {
+  it("matches compareFr under every order's tie-break", () => {
+    const list = ["la thune", "Thune", "thune", "l'apéro", "apero", "se casser", "casser"].map((fr, i) => item(fr, { level: (i % 2) as 0 | 1 }));
+    const expected = [...list].sort((a, b) => a.word.slang_level - b.word.slang_level || compareFr(a.word.fr, b.word.fr) || a.word.id.localeCompare(b.word.id));
+    expect(frs(sortWords(list, { key: "level", dir: 1 }))).toEqual(frs(expected));
   });
 });
 

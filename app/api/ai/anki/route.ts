@@ -7,7 +7,7 @@ import { generateText, Output } from "ai";
 import { ankiRefMap, finalizeAnki } from "@/lib/ai/anki";
 import { fieldRefMap } from "@/lib/ai/enrich";
 import { guardAiRequest, jsonError, limitAiRequest, NO_STORE } from "@/lib/ai/auth";
-import { cachedInstructions, modelFor, providerOptions } from "@/lib/ai/model";
+import { cachedInstructions, modelFor, modelIdFor, providerOptionsFor } from "@/lib/ai/model";
 import { ANKI_SYSTEM, ankiUserPrompt } from "@/lib/ai/prompts";
 import { AnkiRequestSchema, buildAnkiSchema, type AnkiModel, type AnkiResponse } from "@/lib/ai/schemas";
 
@@ -46,7 +46,7 @@ export async function POST(req: Request): Promise<Response> {
         fields: fields.map((f, i) => ({ ref: fieldRefs[i], name: f.name, hint: f.hint ?? null })),
       }),
       output: Output.object({ schema: buildAnkiSchema(folders.map((f) => f.slug), fieldRefs), name: "cards" }),
-      providerOptions,
+      providerOptions: providerOptionsFor(modelIdFor("anki", model)),
       maxOutputTokens: fields.length > 0 ? 16000 : 10000,
       abortSignal: req.signal,
     });

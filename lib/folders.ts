@@ -1,6 +1,6 @@
 // Folders («темы»): CRUD, the default set, and per-folder counts for the library.
 import { DEFAULT_FOLDERS, defaultFolderId, nextFolderSort, pickFolderColor, uniqueSlug } from "./core/folders";
-import { db, newId } from "./db";
+import { db, liveRows, newId } from "./db";
 import { cardMastery, cardStatus, wordStatus } from "./scheduler";
 import { endOfStudyDay } from "./session";
 import type { Confidence, Folder, ReviewState, Word } from "./types";
@@ -18,6 +18,8 @@ export {
 } from "./core/folders";
 
 const FOLDER_TABLES = () => [db.folders, db.words, db.outbox];
+
+const liveInFolder = async (id: string) => (await db.words.where("folder_id").equals(id).toArray()).filter((w) => w.deleted_at === null);
 
 /** Live folders ordered by `sort`. */
 export async function listFolders(): Promise<Folder[]> {
@@ -137,7 +139,7 @@ export async function deleteFolder(id: string, now: Date = new Date()): Promise<
     const folder = await getFolder(id);
     if (!folder) return [];
     await db.folders.put({ ...folder, deleted_at: iso, updated_at: iso });
-    const words = await db.words.where("folder_id").equals(id).filter((w) => w.deleted_at === null).toArray();
+    const words = await liveInFolder(id);
     const moves: MoveRecord[] = words.map((w) => ({
       word_id: w.id,
       from: id,
@@ -178,7 +180,7 @@ export async function disbandFolder(
     if (!folder) return null;
     const others = new Set((await listFolders()).filter((f) => f.id !== id).map((f) => f.id));
     const byWord = new Map(placements.map((p) => [p.wordId, p]));
-    const words = await db.words.where("folder_id").equals(id).filter((w) => w.deleted_at === null).toArray();
+    const words = await liveInFolder(id);
     const moves: MoveRecord[] = [];
     const updated: Word[] = [];
     for (const w of words) {
@@ -210,11 +212,12 @@ export async function restoreFolder(id: string, moves: readonly MoveRecord[], no
     if (!folder) return;
     await db.folders.put({ ...folder, deleted_at: null, updated_at: iso });
     const restored: Word[] = [];
-    for (const m of moves) {
-      const w = await db.words.get(m.word_id);
-      if (!w || w.deleted_at !== null || w.folder_id !== m.to) continue;
+    const words = await db.words.bulkGet(moves.map((m) => m.word_id));
+    moves.forEach((m, i) => {
+      const w = words[i];
+      if (!w || w.deleted_at !== null || w.folder_id !== m.to) return;
       restored.push({ ...w, folder_id: m.from, folder_source: m.from_source, folder_confidence: m.from_confidence, updated_at: iso });
-    }
+    });
     await db.words.bulkPut(restored);
   });
 }
@@ -264,11 +267,17 @@ export function isDueToday(s: Pick<ReviewState, "state" | "due">, now: Date = ne
 
 /** Counts for the library screen in one pass (use inside useLiveQuery). */
 export async function getLibraryStats(now: Date = new Date()): Promise<LibraryStats> {
-  const [folders, words, states] = await Promise.all([
-    listFolders(),
-    db.words.filter((w) => w.deleted_at === null).toArray(),
-    db.review_state.filter((s) => s.deleted_at === null).toArray(),
-  ]);
+  const [folders, words, states] = await Promise.all([listFolders(), liveRows(db.words), liveRows(db.review_state)]);
+  return libraryStatsFrom(folders, words, states, now);
+}
+
+/** `getLibraryStats` over rows already read: live folders by sort, live words and cards. */
+export function libraryStatsFrom(
+  folders: readonly Folder[],
+  rows: readonly Word[],
+  states: readonly ReviewState[],
+  now: Date = new Date(),
+): LibraryStats {
   const statesByWord = new Map<string, ReviewState[]>();
   for (const s of states) {
     const list = statesByWord.get(s.word_id);
@@ -283,8 +292,8 @@ export async function getLibraryStats(now: Date = new Date()): Promise<LibrarySt
   };
   const total = acc("__all__");
   const folderIds = new Set(folders.map((f) => f.id));
-  // Newest first, so each folder's samples are its latest words.
-  words.sort((a, b) => b.created_at.localeCompare(a.created_at));
+  // Newest first, so each folder's samples are its latest words (a copy: callers reuse their array).
+  const words = [...rows].sort((a, b) => b.created_at.localeCompare(a.created_at));
   for (const w of words) {
     const key = w.folder_id !== null && folderIds.has(w.folder_id) ? w.folder_id : null;
     const ws = statesByWord.get(w.id) ?? [];

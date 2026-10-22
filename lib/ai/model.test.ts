@@ -1,6 +1,6 @@
-import { anthropic } from "@ai-sdk/anthropic";
+import { anthropic, createAnthropic } from "@ai-sdk/anthropic";
 import { describe, expect, it, vi } from "vitest";
-import { ACCURATE_MODEL_ID, DEFAULT_MODEL_ID, isAiConfigured, modelIdFor, providerFor } from "./model";
+import { ACCURATE_MODEL_ID, DEFAULT_MODEL_ID, isAiConfigured, modelIdFor, providerFor, providerOptionsFor } from "./model";
 
 type Env = Record<string, string>;
 
@@ -49,5 +49,41 @@ describe("modelIdFor", () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+});
+
+describe("providerOptionsFor", () => {
+  it("turns thinking off on Haiku and runs Sonnet 5.5 at its lowest thinking, medium effort", () => {
+    expect(providerOptionsFor(DEFAULT_MODEL_ID)).toEqual({ anthropic: { thinking: { type: "disabled" } } });
+    expect(providerOptionsFor(ACCURATE_MODEL_ID)).toEqual({ anthropic: { thinking: { type: "between_tools" }, effort: "medium" } });
+    // AI_MODEL_EXTRACT can name any model; unknown ids keep the old options.
+    expect(providerOptionsFor("claude-opus-5-5")).toEqual({ anthropic: { thinking: { type: "disabled" } } });
+  });
+
+  it("follows the resolved id, so an AI_MODEL_EXTRACT Sonnet gets the Sonnet options", () => {
+    vi.stubEnv("AI_MODEL_EXTRACT", "claude-sonnet-5-5");
+    try {
+      expect(providerOptionsFor(modelIdFor("extract", "fast"))).toEqual(providerOptionsFor(ACCURATE_MODEL_ID));
+      expect(providerOptionsFor(modelIdFor("suggest", "fast"))).toEqual(providerOptionsFor(DEFAULT_MODEL_ID));
+      expect(providerOptionsFor(`us.anthropic.${ACCURATE_MODEL_ID}-v1`)).toEqual(providerOptionsFor(ACCURATE_MODEL_ID));
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("reaches the API as between_tools thinking at medium effort for Sonnet 5.5", async () => {
+    const fetchSpy = vi.fn<typeof fetch>(async () => new Response("{}", { status: 500 }));
+    vi.stubGlobal("fetch", fetchSpy);
+    try {
+      const model = createAnthropic({ apiKey: "sk-ant-x" })(ACCURATE_MODEL_ID);
+      await Promise.resolve(
+        model.doGenerate({ prompt: [{ role: "user", content: [{ type: "text", text: "hi" }] }], providerOptions: providerOptionsFor(ACCURATE_MODEL_ID) }),
+      ).catch(() => undefined);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    const body = JSON.parse(String(fetchSpy.mock.calls[0]?.[1]?.body));
+    expect(body.thinking).toEqual({ type: "between_tools" });
+    expect(body.output_config).toMatchObject({ effort: "medium" });
   });
 });

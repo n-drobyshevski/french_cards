@@ -5,7 +5,7 @@
 // Response lines: {type:"meta",images} · {type:"item",index,item} × ≤60 · {type:"done",count} | {type:"error",error}.
 import { Output, streamText, type FilePart, type TextPart } from "ai";
 import { guardAiRequest, jsonError, limitAiRequest } from "@/lib/ai/auth";
-import { cachedInstructions, modelFor, providerOptions } from "@/lib/ai/model";
+import { cachedInstructions, modelFor, modelIdFor, providerOptionsFor } from "@/lib/ai/model";
 import { MAX_EXTRACT_BODY_BYTES, MAX_IMAGE_BYTES, MAX_IMAGES, readBodyWithLimit, sniffImageType } from "@/lib/ai/images";
 import { ndjsonResponse } from "@/lib/ai/ndjson";
 import { dedupeKey, normalizeVocabItem } from "@/lib/ai/normalize";
@@ -95,7 +95,7 @@ export async function POST(req: Request): Promise<Response> {
     instructions: cachedInstructions(EXTRACT_SYSTEM),
     messages: [{ role: "user", content }],
     output: Output.array({ element: buildVocabItemSchema(folders.map((f) => f.slug)), name: "vocabulary" }),
-    providerOptions,
+    providerOptions: providerOptionsFor(modelIdFor("extract", model)),
     maxOutputTokens: 16000,
     abortSignal: AbortSignal.any([req.signal, stop.signal]),
     onError({ error }) {

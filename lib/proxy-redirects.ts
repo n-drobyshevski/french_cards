@@ -1,4 +1,4 @@
-// Redirect decisions made in proxy.ts before anything else, kept here so they can be unit-tested.
+// Redirect and request-kind decisions made in proxy.ts before anything else, kept here so they can be unit-tested.
 
 interface RequestLike {
   nextUrl: URL;
@@ -27,4 +27,19 @@ export function strayAuthCodeRedirect(request: RequestLike): URL | null {
   const url = new URL("/auth/confirm", request.nextUrl);
   url.searchParams.set("code", searchParams.get("code")!);
   return url;
+}
+
+/**
+ * Router payload fetches, prefetches and other subresource requests: the proxy leaves their session
+ * cookies alone, since only a document navigation needs them fresh (pages are static and the browser
+ * client refreshes its own session). Next strips its flight headers (rsc, next-router-prefetch)
+ * before the proxy sees them, so Sec-Fetch-Dest is the signal; without it the request counts as a
+ * document.
+ */
+export function isBackgroundRequest(request: Pick<RequestLike, "headers">): boolean {
+  const { headers } = request;
+  if (headers.has("next-router-prefetch") || headers.get("rsc") === "1") return true;
+  if (/prefetch/i.test(headers.get("sec-purpose") ?? headers.get("purpose") ?? "")) return true;
+  const dest = headers.get("sec-fetch-dest");
+  return dest !== null && dest !== "document";
 }

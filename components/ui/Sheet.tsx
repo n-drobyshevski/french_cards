@@ -143,6 +143,9 @@ function DrawerSheet({
   bodyClassName,
   children,
 }: SheetProps) {
+  // Not compiled: under the React Compiler the add sheet's height drifted off its size style when
+  // the quick form opened (vaul also writes the drawer's style), e2e/add.spec.ts «Варианты» error.
+  "use no memo";
   const viewport = useVisualViewport(open);
   const keyboard = viewport && viewport.keyboard >= KEYBOARD_MIN ? viewport.keyboard : 0;
   const visible = viewport ? `${viewport.height}px` : "100dvh";

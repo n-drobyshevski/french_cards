@@ -2,7 +2,10 @@
 
 import {
   memo,
+  startTransition,
+  useEffect,
   useRef,
+  useState,
   type CSSProperties,
   type DragEvent,
   type KeyboardEvent,
@@ -22,7 +25,7 @@ import { CheckMark } from "./Checkbox";
 import { CURRENT_ROW_BG } from "./dark";
 import { STALE_DIM } from "./first-paint";
 import { posAbbr } from "./format";
-import { useLeavingList } from "./leaving";
+import { useLeavingList, type ListEntry } from "./leaving";
 import type { MenuAnchor } from "./Menu";
 import type { Columns, SortKey, SortState } from "./table";
 import type { LibraryWord } from "./useLibraryWords";
@@ -72,6 +75,14 @@ export interface WordTableProps {
   footer?: ReactNode;
 }
 
+/** Rows mounted with the first paint (more than a tall viewport), then ROW_CHUNK per idle callback. */
+const FIRST_ROWS = 120;
+const ROW_CHUNK = 300;
+
+const onIdle = (fn: () => void): number =>
+  typeof window.requestIdleCallback === "function" ? window.requestIdleCallback(fn, { timeout: 500 }) : window.setTimeout(fn, 16);
+const cancelIdle = (id: number) => (typeof window.cancelIdleCallback === "function" ? window.cancelIdleCallback(id) : window.clearTimeout(id));
+
 const HEADS: { key: SortKey; label: string; col: "fr" | "ru" | "level" | "theme" | "due" }[] = [
   { key: "fr", label: "Слово", col: "fr" },
   { key: "ru", label: "Перевод", col: "ru" },
@@ -106,10 +117,38 @@ export function WordTable({
   const all = rows.length > 0 && selectedCount === rows.length;
   const some = selectedCount > 0 && !all;
   const selectionActive = selection.size > 0;
-  const tabRow = cursor && rows.some((r) => r.word.id === cursor) ? cursor : (rows[0]?.word.id ?? null);
+  const cursorAt = cursor ? rows.findIndex((r) => r.word.id === cursor) : -1;
+  const tabRow = cursorAt >= 0 ? cursor : (rows[0]?.word.id ?? null);
   const ghost = useRef<HTMLDivElement>(null);
   const entries = useLeavingList(rows, (r) => r.word.id);
+
+  // A big library mounts its first rows with the first paint and the rest in idle chunks, held for
+  // their height by a spacer; the cursor's row (J/K, End, ?word=) is always mounted.
+  const [mounted, setMounted] = useState(FIRST_ROWS);
+  if (cursorAt >= mounted) setMounted(cursorAt + 1);
+  const limit = Math.max(mounted, cursorAt + 1);
+  const pending = !loading && limit < rows.length;
+  useEffect(() => {
+    if (!pending) return;
+    const id = onIdle(() => startTransition(() => setMounted((m) => m + ROW_CHUNK)));
+    return () => cancelIdle(id);
+  }, [pending, mounted]);
+  useEffect(() => {
+    if (!pending) return;
+    // Find in page needs every row.
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.code === "KeyF") setMounted(Number.POSITIVE_INFINITY);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pending]);
+  // Each entry with its position among the live rows (-1 while leaving).
+  const shown: (ListEntry<LibraryWord> & { index: number })[] = [];
   let rowIndex = 0;
+  for (const entry of entries) {
+    if (!entry.leaving && rowIndex >= limit) break;
+    shown.push({ ...entry, index: entry.leaving ? -1 : rowIndex++ });
+  }
 
   return (
     <div ref={scrollRef} onScroll={onScroll} className="relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -195,11 +234,11 @@ export function WordTable({
               })}
             </div>
           ) : (
-            entries.map(({ id, item, leaving, returning }) => (
+            shown.map(({ id, item, index, leaving, returning }) => (
                 <Row
                   key={id}
                   item={item}
-                  index={leaving ? -1 : rowIndex++}
+                  index={index}
                   leaving={leaving}
                   returning={returning}
                   columns={columns}
@@ -214,6 +253,7 @@ export function WordTable({
                 />
               ))
           )}
+          {pending && <div aria-hidden="true" style={{ height: (rows.length - limit) * (coarse ? 48 : 40) }} />}
         </div>
       </div>
       <div className={cx(STALE_DIM, stale && "opacity-50")}>{empty}</div>

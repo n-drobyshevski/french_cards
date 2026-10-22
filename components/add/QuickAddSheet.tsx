@@ -73,7 +73,8 @@ interface Frozen {
 
 /**
  * The quick-add bottom sheet, mounted once by AppProviders and opened with useAddSheet().open().
- * Each opening starts fresh (keyed by the provider's `session`).
+ * Each opening starts fresh (keyed by the provider's `session`); before the first one there is no
+ * session, so none of its live queries run.
  */
 export function QuickAddSheet() {
   const sheet = useAddSheet();
@@ -86,13 +87,15 @@ export function QuickAddSheet() {
 
   return (
     <>
-      <AddSession
-        key={sheet.session}
-        open={sheet.isOpen}
-        onOpenChange={sheet.setOpen}
-        initialFr={sheet.initial.fr ?? ""}
-        onOpenWord={openWord}
-      />
+      {sheet.session > 0 && (
+        <AddSession
+          key={sheet.session}
+          open={sheet.isOpen}
+          onOpenChange={sheet.setOpen}
+          initialFr={sheet.initial.fr ?? ""}
+          onOpenWord={openWord}
+        />
+      )}
       <WordDetailSheet wordId={detailId} onClose={() => setDetailId(null)} />
     </>
   );

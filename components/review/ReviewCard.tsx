@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type Ref } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type Ref } from "react";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { AbbrHint } from "@/components/ui/AbbrHint";
@@ -217,8 +217,11 @@ function CardFields({ word, defs }: { word: Word; defs: readonly FieldDef[] }) {
   );
 }
 
-/** Question side: call number, the prompt (with its POS line) and the «перевернуть» footer. */
-function QuestionFace({
+/**
+ * Question side: call number, the prompt (with its POS line) and the «перевернуть» footer.
+ * Memoised, like AnswerFace: a drag re-renders the card's layers every frame, not its text.
+ */
+const QuestionFace = memo(function QuestionFace({
   word,
   direction,
   number,
@@ -283,10 +286,10 @@ function QuestionFace({
       </span>
     </>
   );
-}
+});
 
 /** Answer side: headword and POS, then the answer block (meter, translation, note, examples, «Свои поля», footer). */
-function AnswerFace({
+const AnswerFace = memo(function AnswerFace({
   word,
   direction,
   number,
@@ -407,7 +410,7 @@ function AnswerFace({
       </div>
     </>
   );
-}
+});
 
 /**
  * Swipe stamps (R4, §5.3), on both sides of the card: «ЗНАЮ» top-left −8°, «НЕ ЗНАЮ» top-right +8°.
@@ -569,6 +572,9 @@ export function ReviewCard({
     playHeadwordGlide(head, from - topWithin(head, face));
   }, [revealed]);
   useLayoutEffect(() => {
+    // A drag only moves the layers (transforms), so the headword's place in the face holds: no
+    // layout read on every pointermove.
+    if (mode === "dragging") return;
     const head = revealed ? answerHeadRef.current : questionHeadRef.current;
     const face = revealed ? answerRef.current : questionRef.current;
     if (head && face) headTop.current[revealed ? "answer" : "question"] = topWithin(head, face);

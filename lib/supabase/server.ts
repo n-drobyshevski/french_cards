@@ -1,6 +1,7 @@
 // Server Supabase client for Server Components, Server Functions and Route Handlers.
-// Create one per request. proxy.ts keeps the session cookies fresh; writes from a Server
-// Component are ignored because Next does not allow setting cookies there.
+// Create one per request. proxy.ts refreshes the session cookies on page loads and Route Handlers
+// (the /api/ai/* gate) refresh their own; writes from a Server Component are ignored because Next
+// does not allow setting cookies there.
 import { createServerClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
@@ -19,7 +20,7 @@ export async function createSupabaseServerClient(): Promise<SupabaseClient | nul
         try {
           for (const { name, value, options } of cookiesToSet) cookieStore.set(name, value, options);
         } catch {
-          // Called from a Server Component: proxy.ts refreshes the cookies instead.
+          // Called from a Server Component: proxy.ts refreshes the cookies on the next page load.
         }
       },
     },
@@ -44,10 +45,7 @@ export async function getVerifiedUser(): Promise<VerifiedUser | null> {
   }
 }
 
-/**
- * Same rule proxy.ts applies to /api/ai/*; route handlers call it again so they never rely
- * on proxy coverage alone.
- */
+/** The /api/ai/* access rule. Route handlers are its only gate: proxy.ts lets those requests through. */
 export async function checkAiAccess(): Promise<AiAccess & { user: VerifiedUser | null }> {
   const configured = getSupabaseConfig() !== null;
   const user = configured ? await getVerifiedUser() : null;

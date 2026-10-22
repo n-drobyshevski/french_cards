@@ -68,6 +68,24 @@ describe("guard", () => {
     expect(ai.streamText).not.toHaveBeenCalled();
   });
 
+  // proxy.ts lets /api/ai/* through, so every route must answer a denied caller itself.
+  it.each([
+    ["suggest", suggest],
+    ["extract", extract],
+    ["classify", classify],
+    ["enrich", enrich],
+    ["example", example],
+  ])("%s answers 401/403 itself without calling the model", async (_, route) => {
+    access.value = { ok: false, status: 401, error: "unauthenticated", user: null };
+    const res = await route(json({}));
+    expect(res.status).toBe(401);
+    expect(res.headers.get("Cache-Control")).toBe("private, no-store");
+    access.value = { ok: false, status: 403, error: "forbidden", user: null };
+    expect((await route(json({}))).status).toBe(403);
+    expect(ai.streamText).not.toHaveBeenCalled();
+    expect(ai.generateText).not.toHaveBeenCalled();
+  });
+
   it("503 without an API key", async () => {
     delete process.env.ANTHROPIC_API_KEY;
     expect((await suggest(json({ q: "cass" }))).status).toBe(503);

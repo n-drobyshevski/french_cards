@@ -1,7 +1,7 @@
 // Desktop library table (mockups/DESKTOP-SPEC.md §2 «Library table columns», §4 «Library / Theme»):
 // sorting, fluid column rules, selection ranges, the cursor after a removal, alphabetical
 // neighbours and the list-region key map. Pure, unit-tested; the components wire them up.
-import { compareFr } from "@/lib/text";
+import { compareFrKeyed, frSortKey } from "@/lib/text";
 import type { LibraryWord } from "./useLibraryWords";
 
 /** Column heads, plus the phone's two orders that have no column: «Сначала новые», «Сначала трудные». */
@@ -41,6 +41,9 @@ export function orderLabel(sort: SortState): string {
 }
 
 const ruCollator = new Intl.Collator("ru", { sensitivity: "base", numeric: true });
+function compareKeyed(a: { fr: string; key: string }, b: { fr: string; key: string }): number {
+  return compareFrKeyed(a.key, a.fr, b.key, b.fr);
+}
 
 /** «к повт.» first, then «новое», then by the next review. */
 function dueRank(item: LibraryWord): [number, number] {
@@ -78,7 +81,9 @@ export function sortWords(items: readonly LibraryWord[], sort: SortState, folder
         return 0;
     }
   };
-  return [...items].sort((a, b) => sort.dir * (compare(a, b) || compareFr(a.word.fr, b.word.fr)) || a.word.id.localeCompare(b.word.id));
+  const keyed = items.map((item) => ({ item, fr: item.word.fr, key: frSortKey(item.word.fr) }));
+  keyed.sort((a, b) => sort.dir * (compare(a.item, b.item) || compareKeyed(a, b)) || a.item.word.id.localeCompare(b.item.word.id));
+  return keyed.map((k) => k.item);
 }
 
 function newestFirst(a: LibraryWord, b: LibraryWord): number {
@@ -157,15 +162,37 @@ export interface Neighbour {
   current: boolean;
 }
 
-/** «Рядом в алфавите»: one word before and two after (more on the other side at an end), current included. */
-export function alphaNeighbours(words: readonly { id: string; fr: string }[], id: string): Neighbour[] {
-  const sorted = [...words].sort((a, b) => compareFr(a.fr, b.fr) || a.id.localeCompare(b.id));
-  const at = sorted.findIndex((w) => w.id === id);
-  if (at < 0) return [];
+/** Words in «Слово ▲» order (compareFr, then id). */
+export function alphaOrder<T extends { id: string; fr: string }>(words: readonly T[]): T[] {
+  const keyed = words.map((w) => ({ w, fr: w.fr, key: frSortKey(w.fr) }));
+  keyed.sort((a, b) => compareKeyed(a, b) || a.w.id.localeCompare(b.w.id));
+  return keyed.map((k) => k.w);
+}
+
+/** «Рядом в алфавите» around `sorted[at]` of an alphaOrder list: one before, two after (more on the other side at an end). */
+export function neighboursAt(sorted: readonly { id: string; fr: string }[], at: number): Neighbour[] {
+  if (at < 0 || at >= sorted.length) return [];
+  const id = sorted[at].id;
   let from = Math.max(0, at - 1);
   const to = Math.min(sorted.length, from + 4);
   from = Math.max(0, to - 4);
   return sorted.slice(from, to).map((w) => ({ id: w.id, fr: w.fr, current: w.id === id }));
+}
+
+/** «Рядом в алфавите»: one word before and two after (more on the other side at an end), current included. */
+export function alphaNeighbours(words: readonly { id: string; fr: string }[], id: string): Neighbour[] {
+  const sorted = alphaOrder(words);
+  return neighboursAt(sorted, sorted.findIndex((w) => w.id === id));
+}
+
+/**
+ * Catalog number of each word (creation order from 1, «Карточка № 159»): the words created before
+ * it, or at the same time with an id up to its own.
+ */
+export function catalogNumbers(words: readonly { id: string; created_at: string }[]): Map<string, number> {
+  const byCode = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+  const order = [...words].sort((a, b) => byCode(a.created_at, b.created_at) || byCode(a.id, b.id));
+  return new Map(order.map((w, i) => [w.id, i + 1]));
 }
 
 /** «chelou — vas-y»: first and last visible headword, or the word alone. */

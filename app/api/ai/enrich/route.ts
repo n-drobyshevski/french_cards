@@ -8,7 +8,7 @@ import { generateText, Output } from "ai";
 import { guardAiRequest, jsonError, limitAiRequest, NO_STORE } from "@/lib/ai/auth";
 import { refFor } from "@/lib/ai/classify";
 import { fieldRefMap, finalizeEnrichment } from "@/lib/ai/enrich";
-import { cachedInstructions, modelFor, providerOptions } from "@/lib/ai/model";
+import { cachedInstructions, modelFor, modelIdFor, providerOptionsFor } from "@/lib/ai/model";
 import { ENRICH_SYSTEM, enrichUserPrompt } from "@/lib/ai/prompts";
 import { buildEnrichmentSchema, EnrichRequestSchema, type EnrichmentModel, type EnrichResponse } from "@/lib/ai/schemas";
 
@@ -41,7 +41,7 @@ export async function POST(req: Request): Promise<Response> {
         fields: fields.map((f, i) => ({ ref: fieldRefs[i], name: f.name, hint: f.hint ?? null })),
       }),
       output: Output.object({ schema: buildEnrichmentSchema(folders ? folders.map((f) => f.slug) : null, fieldRefs), name: "cards" }),
-      providerOptions,
+      providerOptions: providerOptionsFor(modelIdFor("enrich", model)),
       // Custom fields add up to ten short values per word.
       maxOutputTokens: fields.length > 0 ? 16000 : 8000,
       abortSignal: req.signal,

@@ -5,14 +5,8 @@
 // The network part is small; deciding what to change is in pure functions so it is unit-tested.
 import { AiClientError, postAiJson, type AiClientErrorCode, type AiPostOptions } from "./ai-client";
 import { db } from "./db";
-import {
-  ENRICH_CHUNK_MAX,
-  type CustomFieldInput,
-  type EnrichResponse,
-  type EnrichResult,
-  type FolderInput,
-  type ModelTierInput,
-} from "./ai/schemas";
+import { ENRICH_CHUNK_MAX } from "./ai/constants";
+import type { CustomFieldInput, EnrichResponse, EnrichResult, FolderInput, ModelTierInput } from "./ai/schemas";
 import { cleanFieldLabel, emptyAutoFields, FIELD_HINT_MAX, liveFieldDefs, listFieldDefs, MAX_FIELD_DEFS, withFieldValue } from "./custom-fields";
 import { listFolders } from "./folders";
 import { getSettings } from "./settings";
@@ -21,7 +15,10 @@ import { toFolderInputs } from "./use-suggest";
 import { updateWords, type WordPatch } from "./words";
 
 export const ENRICH_URL = "/api/ai/enrich";
-export const ENRICH_CONCURRENCY = 3;
+// Smaller requests than the server cap, more at once: each finishes sooner and the bar moves in
+// finer steps. 6 in flight stays well inside the enrich rate-limit bucket.
+export const ENRICH_REQUEST_SIZE = Math.min(20, ENRICH_CHUNK_MAX);
+export const ENRICH_CONCURRENCY = 6;
 /** Words looked at per «Дополнить карточки» run. */
 export const ENRICH_RUN_MAX = 300;
 
@@ -59,6 +56,8 @@ export interface EnrichOptions extends AiPostOptions {
   folders?: readonly FolderInput[];
   /** Settings «Модель для подсказок». */
   model?: ModelTierInput;
+  /** Words per request (default ENRICH_REQUEST_SIZE, at most ENRICH_CHUNK_MAX). */
+  requestSize?: number;
   /** Custom fields to fill (see autoFillFields); not sent when empty. */
   fields?: readonly CustomFieldInput[];
 }
@@ -128,7 +127,7 @@ export function chunk<T>(items: readonly T[], size: number): T[][] {
 
 /** All words in chunks, a few requests at a time. Results by word id (skipped words are missing). */
 export async function enrichWords(words: readonly EnrichInput[], opts: EnrichOptions = {}): Promise<Map<string, EnrichResult>> {
-  const chunks = chunk(toEnrichWords(words), ENRICH_CHUNK_MAX);
+  const chunks = chunk(toEnrichWords(words), Math.min(opts.requestSize ?? ENRICH_REQUEST_SIZE, ENRICH_CHUNK_MAX));
   const total = chunks.reduce((n, c) => n + c.length, 0);
   const out = new Map<string, EnrichResult>();
   let next = 0;
@@ -136,11 +135,20 @@ export async function enrichWords(words: readonly EnrichInput[], opts: EnrichOpt
   let batches = 0;
   opts.onProgress?.(0, total);
   opts.onStage?.({ words: total, wordsDone: 0, done: 0, total: chunks.length, batch: [] });
+  // One failed request stops the others (and cancels those in flight): the run has failed anyway.
+  const stop = new AbortController();
+  const onAbort = () => stop.abort();
+  opts.signal?.addEventListener("abort", onAbort, { once: true });
+  if (opts.signal?.aborted) stop.abort();
+  const reqOpts = { ...opts, signal: stop.signal };
   const worker = async () => {
     while (next < chunks.length) {
-      if (opts.signal?.aborted) throw new EnrichError("aborted");
+      if (stop.signal.aborted) throw new EnrichError("aborted");
       const part = chunks[next++];
-      const batch = await postEnrich(part, opts);
+      const batch = await postEnrich(part, reqOpts).catch((error: unknown) => {
+        stop.abort();
+        throw error;
+      });
       for (const r of batch) out.set(r.id, r);
       done += part.length;
       batches++;
@@ -148,7 +156,11 @@ export async function enrichWords(words: readonly EnrichInput[], opts: EnrichOpt
       opts.onStage?.({ words: total, wordsDone: done, done: batches, total: chunks.length, batch });
     }
   };
-  await Promise.all(Array.from({ length: Math.min(ENRICH_CONCURRENCY, chunks.length) }, worker));
+  try {
+    await Promise.all(Array.from({ length: Math.min(ENRICH_CONCURRENCY, chunks.length) }, worker));
+  } finally {
+    opts.signal?.removeEventListener("abort", onAbort);
+  }
   return out;
 }
 
@@ -299,10 +311,11 @@ export async function fillSavedWords(items: readonly SavedWordFill[], opts: Omit
   }
   const patches: { id: string; patch: WordPatch }[] = [];
   await db.transaction("r", db.words, async () => {
-    for (const { word, scope } of wanted) {
+    const stored = await db.words.bulkGet(wanted.map(({ word }) => word.id));
+    for (const [i, { word, scope }] of wanted.entries()) {
       const r = results.get(word.id);
       if (!r) continue;
-      const current = await db.words.get(word.id);
+      const current = stored[i];
       if (!current || current.deleted_at !== null || current.updated_at !== word.updated_at) continue;
       const patch = enrichmentPatch(current, r, scope, defs);
       if (withFolders && scope.folder) Object.assign(patch, folderPatch(current, r, folders));
@@ -339,7 +352,7 @@ export function isEnrichCandidate(w: Word, prefs: BackfillPreferences = ALL, def
 /** Live words worth looking at, newest first. `defs` are read when not given. */
 export async function loadEnrichCandidates(prefs: BackfillPreferences = ALL, defs?: readonly FieldDef[]): Promise<Word[]> {
   const fieldDefs = defs ?? (await listFieldDefs());
-  const words = await db.words.filter((w) => isEnrichCandidate(w, prefs, fieldDefs)).toArray();
+  const words = (await db.words.toArray()).filter((w) => isEnrichCandidate(w, prefs, fieldDefs));
   return words.sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
 }
 
@@ -351,12 +364,12 @@ export async function countEnrichCandidates(
   let total = 0;
   let noExample = 0;
   let noFields = 0;
-  await db.words.each((w) => {
-    if (!isEnrichCandidate(w, prefs, defs)) return;
+  for (const w of await db.words.toArray()) {
+    if (!isEnrichCandidate(w, prefs, defs)) continue;
     total++;
     if (prefs.examples && lacksExample(w)) noExample++;
     if (lacksAutoFields(w, defs)) noFields++;
-  });
+  }
   return { total, noExample, noFields };
 }
 

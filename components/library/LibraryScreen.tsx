@@ -2,8 +2,8 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
-import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useAddSheet } from "@/components/providers/AddSheetContext";
+import { createElement, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useAddSheetActions } from "@/components/providers/AddSheetContext";
 import { useAppReady, useBootFailure } from "@/components/providers/AppProviders";
 import { Button, IconButton } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
@@ -29,7 +29,7 @@ import { FolderFormSheet } from "./FolderFormSheet";
 import { FolderMenuSheet } from "./FolderMenuSheet";
 import { FolderTile, NAV_FORWARD, NewFolderTile, TileSkeleton } from "./FolderTile";
 import { enrichCaption, folderHref, nWords, plural } from "./format";
-import { LibraryDesk } from "./LibraryDesk";
+import { useLibraryDesk } from "./lazy-desk";
 import { LibraryFilterSheet } from "./LibraryFilterSheet";
 import {
   ALL_THEMES,
@@ -61,13 +61,15 @@ type LibraryView = Settings["library_view"];
  */
 export function LibraryScreen() {
   const layout = useLayoutClass();
-  if (layout !== "compact") return <LibraryDesk scope={{ kind: "all" }} />;
+  const wide = layout !== "compact";
+  // The module's own component (stable identity), not one made in render.
+  const desk = useLibraryDesk(wide);
+  if (desk) return createElement(desk, { scope: { kind: "all" } });
+  // Until the desk's chunk is in, the placeholder stays where it is (same element, no restart).
   return (
     <>
       {/* A real box, not `contents`: the library ⇄ theme slide (NavSlide, L6) snapshots it. */}
-      <div className="flex min-w-0 flex-1 flex-col md:hidden">
-        <PhoneLibrary />
-      </div>
+      <div className="flex min-w-0 flex-1 flex-col md:hidden">{!wide && <PhoneLibrary />}</div>
       <DeskPlaceholder title="Библиотека" />
     </>
   );
@@ -87,7 +89,7 @@ function PhoneLibrary() {
   const ready = useAppReady();
   const bootFailed = useBootFailure().failed;
   const snackbar = useSnackbar();
-  const addSheet = useAddSheet();
+  const addSheet = useAddSheetActions();
   const overview = useLiveQuery(getLibraryOverview, []);
   // Counts wait for the first-run seed, so a new device never flashes «0 слов» (L3).
   const loaded = ready && overview !== undefined ? overview : undefined;
@@ -124,6 +126,7 @@ function PhoneLibrary() {
 
   const results = useMemo(() => (words ? filterPhoneWords(words.words, filter, deferredQuery) : null), [words, filter, deferredQuery]);
   const pageItems = useMemo(() => results?.slice(0, shown), [results, shown]);
+  const showMore = useCallback(() => setPage({ key: listKey, size: shown + PAGE_SIZE }), [listKey, shown]);
   // «Все слова»: the rows fade in over the reserved blank, or replace the skeleton at once (L4).
   const listReveal = useRevealClass(!!results);
   // L5: while the deferred query lags, the old results stay (dimmed after 150 ms); «Ищем…» after 300 ms.
@@ -327,18 +330,8 @@ function PhoneLibrary() {
                 folders={words.folders}
                 showFolder={filter.theme === ALL_THEMES}
                 label={filtered ? "Найденные слова" : "Все слова"}
-                footer={
-                  results.length > shown ? (
-                    <Button
-                      variant="secondary"
-                      size="md"
-                      className="mt-3 self-start"
-                      onClick={() => setPage({ key: listKey, size: shown + PAGE_SIZE })}
-                    >
-                      Показать ещё {Math.min(PAGE_SIZE, results.length - shown)} из {results.length - shown}
-                    </Button>
-                  ) : null
-                }
+                moreLabel={results.length > shown ? `Показать ещё ${Math.min(PAGE_SIZE, results.length - shown)} из ${results.length - shown}` : undefined}
+                onMore={showMore}
               />
             )}
             {results && results.length === 0 && !filtered && (
