@@ -469,12 +469,15 @@ export function SlangPicker({
   level,
   verlan,
   auto,
+  pending = false,
   onChange,
 }: {
   level: SlangLevel;
   verlan: boolean;
   /** Show «определён автоматически». */
   auto: boolean;
+  /** Detection is running (shows «определяется…»). */
+  pending?: boolean;
   onChange: (next: { slang_level?: SlangLevel; verlan?: boolean }) => void;
 }) {
   const labelId = useId();
@@ -497,7 +500,13 @@ export function SlangPicker({
         <span id={labelId} className="meta font-medium">
           Уровень сленга
         </span>
-        {auto && <span className="text-[12px] leading-4 text-muted">определён автоматически</span>}
+        {pending ? (
+          <span role="status" className="text-[12px] leading-4 text-muted">
+            определяется…
+          </span>
+        ) : (
+          auto && <span className="text-[12px] leading-4 text-muted">определён автоматически</span>
+        )}
       </div>
       <div className="mt-2 flex gap-2">
         <Segmented

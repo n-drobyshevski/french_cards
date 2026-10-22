@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { enriched, mockEnrich } from "./fixtures";
 
 test("library search matches French and Russian, ignoring accents", async ({ page }) => {
   await page.goto("/library");
@@ -43,4 +44,28 @@ test("an undo snackbar raised inside the word sheet is part of the sheet", async
   const undo = sheet.getByRole("button", { name: "Отменить", exact: true });
   await undo.focus();
   await expect(undo).toBeFocused();
+});
+
+test("«Дополнить карточки» proposes examples, applies the checked ones and undoes them", async ({ page }) => {
+  await mockEnrich(page, (w) => enriched(w));
+  await page.goto("/library");
+  await page.getByRole("button", { name: /Дополнить карточки/ }).click();
+  const sheet = page.getByRole("dialog", { name: "Дополнить карточки" });
+  await expect(sheet.getByRole("region", { name: /^Примеры:/ }).or(sheet.locator("section[aria-label^='Примеры:']"))).toBeVisible();
+  await expect(sheet.getByText("Exemple avec les flics.")).toBeVisible();
+
+  // Uncheck one example: it is not written.
+  await sheet.getByRole("checkbox", { name: /les flics/ }).click();
+  const apply = sheet.getByRole("button", { name: /Применить/ });
+  await expect(apply).toBeEnabled();
+  await apply.click();
+  await expect(sheet).toBeHidden();
+  await expect(page.getByText(/^Обновлено \d+ слов/)).toBeVisible();
+
+  const search = page.getByRole("searchbox", { name: "Поиск по FR и RU" }).or(page.getByRole("textbox", { name: "Поиск по FR и RU" }));
+  await page.getByRole("button", { name: "Отменить", exact: true }).click();
+  await expect(page.getByText("Изменения отменены")).toBeVisible();
+  await search.fill("flics");
+  await page.getByText("les flics", { exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Карточка слова" }).getByText("Exemple avec les flics.")).toHaveCount(0);
 });

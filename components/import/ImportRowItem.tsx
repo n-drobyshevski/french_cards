@@ -122,6 +122,11 @@ export function ImportRowItem({ row, folders, onToggle, onEdit, onPickFolder }: 
         {row.fr.trim() || "—"}
       </span>
       {ru}
+      {row.exampleFr && !dup && (
+        <span lang="fr" className="truncate font-serif text-[14px] leading-5 text-muted italic">
+          {row.exampleFr}
+        </span>
+      )}
     </>
   );
 
@@ -200,12 +205,14 @@ export interface RowEditorProps {
   onCancel: () => void;
 }
 
-/** Inline catalog-card form for one row (FR, RU, note, slang level). */
+/** Inline catalog-card form for one row (FR, RU, note, example, slang level). */
 export function RowEditor({ row, onSave, onCancel }: RowEditorProps) {
   const id = useId();
   const [fr, setFr] = useState(row.fr);
   const [ru, setRu] = useState(row.ru);
   const [note, setNote] = useState(row.note ?? "");
+  const [exampleFr, setExampleFr] = useState(row.exampleFr ?? "");
+  const [exampleRu, setExampleRu] = useState(row.exampleRu ?? "");
   const [level, setLevel] = useState<SlangLevel>(row.slang_level);
   const [verlan, setVerlan] = useState(row.verlan);
   const valid = fr.trim() !== "" && ru.trim() !== "";
@@ -217,6 +224,8 @@ export function RowEditor({ row, onSave, onCancel }: RowEditorProps) {
       fr: fr.replace(/\s+/g, " ").trim(),
       ru: ru.replace(/\s+/g, " ").trim(),
       note: note.trim() || null,
+      exampleFr: exampleFr.trim() || null,
+      exampleRu: exampleFr.trim() ? exampleRu.trim() || null : null,
       slang_level: level,
       verlan,
       ruGuess: row.ruGuess && !ruChanged ? row.ruGuess : false,
@@ -277,6 +286,31 @@ export function RowEditor({ row, onSave, onCancel }: RowEditorProps) {
             className={cx(inputCls, "text-[14px] leading-5 pointer-coarse:text-[16px]")}
           />
         </label>
+        <label className={fieldRow}>
+          <span className={labelCls}>Пример</span>
+          <input
+            lang="fr"
+            autoComplete="off"
+            enterKeyHint="done"
+            value={exampleFr}
+            placeholder="необязательно"
+            onChange={(e) => setExampleFr(e.target.value)}
+            className={cx(inputCls, "font-serif text-[16px] leading-5 italic")}
+          />
+        </label>
+        {exampleFr.trim() && (
+          <label className={fieldRow}>
+            <span className={labelCls}>Перевод</span>
+            <input
+              autoComplete="off"
+              enterKeyHint="done"
+              value={exampleRu}
+              placeholder="перевод примера"
+              onChange={(e) => setExampleRu(e.target.value)}
+              className={cx(inputCls, "text-[14px] leading-5 pointer-coarse:text-[16px]")}
+            />
+          </label>
+        )}
         {row.frAsSeen && row.frAsSeen !== fr && (
           <p className="m-0 mt-2 text-[12px] leading-4 text-muted">
             На скриншоте: <span lang="fr" className="font-serif text-[14px] italic">{row.frAsSeen}</span>

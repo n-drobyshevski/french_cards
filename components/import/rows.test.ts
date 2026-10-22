@@ -37,6 +37,8 @@ function item(fr: string, patch: Partial<VocabItem> = {}): VocabItem {
     ru: `ru:${fr}`,
     ru_suggested: false,
     note: null,
+    example_fr: null,
+    example_ru: null,
     pos: "noun",
     gender: "f",
     slang_level: 1,
@@ -160,6 +162,16 @@ describe("choice keys and names", () => {
 
 describe("toWordInput", () => {
   const [row] = buildRows([item("chelou", { folder: "emotsii", confidence: "med", note: "верлан от louche" })], folders, new Map());
+
+  it("keeps the example read with the row", () => {
+    const [withExample] = buildRows(
+      [item("chelou", { example_fr: "Il est chelou, ton pote.", example_ru: "Стрёмный у тебя кореш." })],
+      folders,
+      new Map(),
+    );
+    expect(toWordInput(withExample, null)).toMatchObject({ example_fr: "Il est chelou, ton pote.", example_ru: "Стрёмный у тебя кореш." });
+    expect(toWordInput(row, null)).toMatchObject({ example_fr: null, example_ru: null });
+  });
 
   it("saves screenshot words with the automatic theme and its confidence", () => {
     expect(toWordInput(row, "f-emo")).toMatchObject({

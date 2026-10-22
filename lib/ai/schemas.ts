@@ -25,6 +25,7 @@ export const TAXONOMY_MIN = 8;
 export const TAXONOMY_MAX = 25;
 export const NEW_FOLDER_MIN_WORDS = 3;
 export const ASSIGN_CHUNK_MAX = 150;
+export const ENRICH_CHUNK_MAX = 50;
 
 const slangField = () =>
   z
@@ -88,6 +89,11 @@ export function buildVocabItemSchema(slugs: readonly string[]) {
     ru: z.string().describe("Russian translation: copied from the image when present there, otherwise your own, 1-3 equivalents."),
     ru_suggested: z.boolean().describe("True when the Russian translation is not on the image and you wrote it yourself."),
     note: z.string().nullable().describe("Short Russian usage note (at most 120 characters), or null."),
+    example_fr: z
+      .string()
+      .nullable()
+      .describe("One short natural French example sentence with the word in the sense used on the image, or null."),
+    example_ru: z.string().nullable().describe("Russian translation of example_fr, or null when example_fr is null."),
     pos: posField(),
     gender: genderField(),
     slang_level: slangField(),
@@ -140,6 +146,30 @@ export function buildAssignmentSchema(slugs: readonly string[]) {
   });
 }
 export type AssignmentModel = z.infer<ReturnType<typeof buildAssignmentSchema>>;
+
+/** Slang level, part of speech and an example for cards the learner wrote themselves. */
+export function buildEnrichmentSchema() {
+  return z.object({
+    items: z
+      .array(
+        z.object({
+          ref: z.string().describe("The word ref from the input, e.g. w3."),
+          pos: posField(),
+          gender: genderField(),
+          slang_level: slangField(),
+          verlan: z.boolean().describe("True if the word is verlan (syllables inverted), e.g. keuf, meuf, relou, chelou, vénère."),
+          example_fr: z
+            .string()
+            .nullable()
+            .describe("One short natural French example sentence using the word in the sense of its Russian side, or null."),
+          example_ru: z.string().nullable().describe("Russian translation of example_fr in the same register, or null when example_fr is null."),
+          confidence: confidenceField(),
+        }),
+      )
+      .describe("Exactly one entry per input word, in input order."),
+  });
+}
+export type EnrichmentModel = z.infer<ReturnType<typeof buildEnrichmentSchema>>;
 
 // ---------------------------------------------------------------------------------------
 // Request schemas (validated on the server only; never sent to the model, so bounds are fine)
@@ -224,6 +254,22 @@ export type AssignRequest = z.input<typeof AssignRequestSchema>;
 
 export const ClassifyRequestSchema = z.discriminatedUnion("mode", [TaxonomyRequestSchema, AssignRequestSchema]);
 
+export const EnrichRequestSchema = z.object({
+  words: z
+    .array(
+      z.object({
+        id: wordId,
+        fr: shortText(120).min(1),
+        ru: shortText(160).min(1),
+        note: shortText(300).nullable().optional(),
+      }),
+    )
+    .min(1)
+    .max(ENRICH_CHUNK_MAX)
+    .refine((list) => new Set(list.map((w) => w.id)).size === list.length, "duplicate word id"),
+});
+export type EnrichRequest = z.input<typeof EnrichRequestSchema>;
+
 // ---------------------------------------------------------------------------------------
 // Wire types: what the routes send back after server-side normalization.
 
@@ -257,6 +303,8 @@ export interface VocabItem {
   ru: string;
   ru_suggested: boolean;
   note: string | null;
+  example_fr: string | null;
+  example_ru: string | null;
   pos: PartOfSpeech;
   gender: Gender;
   slang_level: SlangLevel;
@@ -304,6 +352,22 @@ export interface AssignmentResult {
 
 export interface AssignResponse {
   assignments: AssignmentResult[];
+}
+
+/** Detected fields for one word sent to /api/ai/enrich. */
+export interface EnrichResult {
+  id: string;
+  pos: PartOfSpeech;
+  gender: Gender;
+  slang_level: SlangLevel;
+  verlan: boolean;
+  example_fr: string | null;
+  example_ru: string | null;
+  confidence: Confidence;
+}
+
+export interface EnrichResponse {
+  results: EnrichResult[];
 }
 
 export interface AiErrorBody {

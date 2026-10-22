@@ -2,7 +2,9 @@
 
 import { useId, type Ref } from "react";
 import { Icon } from "@/components/ui/Icons";
+import { SlangMeter } from "@/components/ui/SlangMeter";
 import { cx } from "@/components/ui/cx";
+import type { EnrichResult } from "@/lib/ai/schemas";
 import type { Folder } from "@/lib/types";
 import type { FolderChoice } from "./folder-choice";
 import type { ParsedLine } from "./parse-list";
@@ -14,6 +16,8 @@ export interface ListRow extends ParsedLine {
   key: string;
   status: ListRowStatus;
   checked: boolean;
+  /** Detected slang level and example, once they have arrived. */
+  enrich: EnrichResult | null;
 }
 
 const TAGS: Record<Exclude<ListRowStatus, "ok">, string> = {
@@ -115,7 +119,13 @@ function ListRowItem({ row, onToggle }: { row: ListRow; onToggle: () => void }) 
           {row.fr || "—"}
         </span>
         <span className="truncate text-[14px] leading-5 text-muted">{row.ru || "—"}</span>
+        {row.enrich?.example_fr && (
+          <span lang="fr" className="truncate font-serif text-[14px] leading-5 text-muted italic">
+            {row.enrich.example_fr}
+          </span>
+        )}
       </span>
+      {row.enrich && !tag && <SlangMeter level={row.enrich.slang_level} verlan={row.enrich.verlan} size="sm" />}
       {tag && (
         <span
           className={cx(

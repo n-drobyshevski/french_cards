@@ -149,6 +149,7 @@ export function normalizeVocabItem(raw: VocabItemModel, folders: readonly Folder
   if (!fr || !ru) return null;
   const { folder, new_folder } = pickFolder(raw.folder, raw.new_folder, folders);
   const asSeen = cleanText(raw.fr_as_seen, 120);
+  const example_fr = cleanText(raw.example_fr, 200);
   return {
     fr,
     fr_as_seen: asSeen && asSeen.toLowerCase() !== fr.toLowerCase() ? asSeen : null,
@@ -156,6 +157,8 @@ export function normalizeVocabItem(raw: VocabItemModel, folders: readonly Folder
     // With only French on the image the translation is necessarily ours.
     ru_suggested: raw.provenance === "fr_only" || raw.provenance === "in_text" ? true : raw.ru_suggested,
     note: cleanText(raw.note, 160),
+    example_fr,
+    example_ru: example_fr ? cleanText(raw.example_ru, 200) : null,
     pos: raw.pos,
     gender: raw.pos === "noun" ? raw.gender : "none",
     slang_level: slangLevelFromCode(raw.slang_level),

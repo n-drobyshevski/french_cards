@@ -28,6 +28,8 @@ export interface WordFormProps {
   onAddAnyway: () => void;
   /** Return in «Русский»: save like «Добавить». */
   onSubmit: () => void;
+  /** Slang level and example are being detected for a manual entry. */
+  enriching?: boolean;
 }
 
 const isEnter = (e: KeyboardEvent<HTMLInputElement>) =>
@@ -45,6 +47,7 @@ export function WordForm({
   onOpenWord,
   onAddAnyway,
   onSubmit,
+  enriching = false,
 }: WordFormProps) {
   const ruId = useId();
   const frErrorId = useId();
@@ -115,7 +118,7 @@ export function WordForm({
             <input
               type="text"
               value={draft.example_fr}
-              onChange={(e) => onChange({ example_fr: e.target.value })}
+              onChange={(e) => onChange({ example_fr: e.target.value, example_touched: true, example_auto: false })}
               placeholder="Фраза по-французски"
               aria-label="Пример по-французски"
               lang="fr"
@@ -126,7 +129,7 @@ export function WordForm({
               <input
                 type="text"
                 value={draft.example_ru}
-                onChange={(e) => onChange({ example_ru: e.target.value })}
+                onChange={(e) => onChange({ example_ru: e.target.value, example_touched: true, example_auto: false })}
                 placeholder="Перевод примера"
                 aria-label="Перевод примера"
                 lang="ru"
@@ -134,6 +137,7 @@ export function WordForm({
                 className="-mt-1.5 h-8 min-w-0 bg-transparent p-0 text-[14px] leading-5 text-muted outline-none! placeholder:text-muted pointer-coarse:text-[16px]"
               />
             )}
+            {draft.example_auto && <span className="pb-1.5 text-[12px] leading-4 text-muted">подобран автоматически</span>}
           </span>
         </FieldRow>
       </div>
@@ -142,7 +146,8 @@ export function WordForm({
         level={draft.slang_level}
         verlan={draft.verlan}
         auto={draft.slang_auto}
-        onChange={(next) => onChange({ ...next, slang_auto: false })}
+        pending={enriching && !draft.slang_touched}
+        onChange={(next) => onChange({ ...next, slang_auto: false, slang_touched: true })}
       />
 
       <div className="mx-4 mt-6">
