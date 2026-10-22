@@ -4,6 +4,7 @@
 // Limits live in `.describe()` text and are enforced by slicing on the server.
 // This file is client-safe (zod only), so hooks can import the wire types from here.
 import { z } from "zod";
+import { ANKI_CHUNK_MAX, ANKI_FIELD_CHARS, ANKI_FIELDS_MAX, ANKI_TAGS_MAX, type AnkiItem } from "@/lib/anki/types";
 import type { Confidence, Gender, PartOfSpeech, SlangLevel } from "@/lib/types";
 
 export const FOLDER_NEW = "NEW" as const;
@@ -201,6 +202,52 @@ export interface EnrichmentModel {
   items: EnrichmentItemModel[];
 }
 
+/**
+ * One Anki note turned into a card (or skipped). Same fields as a screenshot row, read from the
+ * note's fields instead of an image; provenance is derived on the server from ru_suggested.
+ */
+export function buildAnkiItemSchema(slugs: readonly string[]) {
+  const folder = folderEnum(slugs);
+  return z.object({
+    ref: z.string().describe("The note ref from the input, e.g. n3."),
+    skip: z.boolean().describe("True when the note is not French vocabulary (grammar rule, empty, another language); the other fields may then be minimal."),
+    fr_field: z.string().nullable().describe("Name of the note field the French term was read from, exactly as given; null when skipped."),
+    fr: z.string().describe("French dictionary form (article + noun, infinitive with se for pronominal verbs, masculine singular adjective, or the expression). Empty when skipped."),
+    fr_as_seen: z
+      .string()
+      .nullable()
+      .describe("The French text as written in the note when it differs from fr (conjugated, plural, feminine, no article, typo); null when identical."),
+    ru: z.string().describe("Russian side: the note's own Russian translation cleaned up, otherwise your translation, 1-3 equivalents. Empty when skipped."),
+    ru_suggested: z.boolean().describe("True when the note has no Russian translation and you wrote ru yourself."),
+    note: z
+      .string()
+      .nullable()
+      .describe("Short Russian usage note (at most 120 characters); holds the note's original non-Russian gloss, e.g. «англ.: car». Null if nothing useful."),
+    example_fr: z.string().nullable().describe("The note's French example sentence when it has one, otherwise one short natural sentence, or null."),
+    example_ru: z.string().nullable().describe("Russian translation of example_fr (copied from the note when present there), or null when example_fr is null."),
+    pos: posField(),
+    gender: genderField(),
+    slang_level: slangField(),
+    verlan: z.boolean().describe("True if the word is verlan."),
+    confidence: confidenceField(),
+    issue: z
+      .string()
+      .nullable()
+      .describe("Short Russian remark when something is off (why the note is skipped, likely typo, doubtful translation in the note); otherwise null."),
+    folder: folder.describe("Best theme slug from the list; NEW to use new_folder; INBOX when unsure or skipped."),
+    new_folder: newFolderShape(),
+  });
+}
+export type AnkiItemModel = z.infer<ReturnType<typeof buildAnkiItemSchema>>;
+
+/** /api/ai/anki model output: one entry per note. */
+export function buildAnkiSchema(slugs: readonly string[]) {
+  return z.object({ items: z.array(buildAnkiItemSchema(slugs)).describe("Exactly one entry per input note, in input order.") });
+}
+export interface AnkiModel {
+  items: AnkiItemModel[];
+}
+
 // ---------------------------------------------------------------------------------------
 // Request schemas (validated on the server only; never sent to the model, so bounds are fine)
 
@@ -335,6 +382,29 @@ export const EnrichRequestSchema = z.object({
 });
 export type EnrichRequest = z.input<typeof EnrichRequestSchema>;
 
+/** POST /api/ai/anki: one chunk of notes from an Anki deck. `ref` is the AnkiNote id. */
+export const AnkiRequestSchema = z.object({
+  notes: z
+    .array(
+      z.object({
+        ref: shortText(40).min(1),
+        fields: z
+          .array(z.object({ name: shortText(60).min(1), text: shortText(ANKI_FIELD_CHARS).min(1) }))
+          .min(1)
+          .max(ANKI_FIELDS_MAX),
+        tags: z.array(shortText(60)).max(ANKI_TAGS_MAX).default([]),
+      }),
+    )
+    .min(1)
+    .max(ANKI_CHUNK_MAX)
+    .refine((list) => new Set(list.map((n) => n.ref)).size === list.length, "duplicate note ref"),
+  /** The learner's themes; without them every card goes to «Входящие» or a proposed new theme. */
+  folders: foldersInput(60).optional(),
+  model: z.enum(MODEL_TIERS).default("fast"),
+});
+export type AnkiRequest = z.input<typeof AnkiRequestSchema>;
+export type AnkiRequestNote = z.infer<typeof AnkiRequestSchema>["notes"][number];
+
 // ---------------------------------------------------------------------------------------
 // Wire types: what the routes send back after server-side normalization.
 
@@ -437,6 +507,11 @@ export interface EnrichResult {
 
 export interface EnrichResponse {
   results: EnrichResult[];
+}
+
+/** /api/ai/anki: one item per note the model returned, in note order (skips included). */
+export interface AnkiResponse {
+  items: AnkiItem[];
 }
 
 export interface AiErrorBody {

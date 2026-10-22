@@ -7,6 +7,7 @@ const ai = vi.hoisted(() => ({ streamText: vi.fn(), generateText: vi.fn() }));
 vi.mock("ai", async (importOriginal) => ({ ...(await importOriginal<typeof import("ai")>()), ...ai }));
 
 import { resetRateLimits } from "@/lib/ai/rate-limit";
+import { POST as anki } from "./anki/route";
 import { POST as classify } from "./classify/route";
 import { POST as enrich } from "./enrich/route";
 import { POST as example } from "./example/route";
@@ -399,5 +400,97 @@ describe("POST /api/ai/example", () => {
     const res = await example(json({ fr: "chelou", ru: "стрёмный" }));
     spy.mockRestore();
     expect(res.status).toBe(502);
+  });
+});
+
+describe("POST /api/ai/anki", () => {
+  const notes = [
+    { ref: "1001", fields: [{ name: "Front", text: "bagnole" }, { name: "Back", text: "car (slang)" }], tags: ["argot"] },
+    { ref: "1002", fields: [{ name: "Recto", text: "свалить" }, { name: "Verso", text: "se casser" }] },
+    { ref: "1003", fields: [{ name: "Front", text: "Subjonctif après bien que" }] },
+  ];
+  const row = (ref: string, extra: Record<string, unknown> = {}) => ({
+    ref,
+    skip: false,
+    fr_field: "Front",
+    fr: "la bagnole",
+    fr_as_seen: "bagnole",
+    ru: "тачка, машина",
+    ru_suggested: true,
+    note: "англ.: car (slang)",
+    example_fr: null,
+    example_ru: null,
+    pos: "noun",
+    gender: "f",
+    slang_level: "fam",
+    verlan: false,
+    confidence: "high",
+    issue: null,
+    folder: "INBOX",
+    new_folder: null,
+    ...extra,
+  });
+
+  it("returns the access error before validating", async () => {
+    access.value = { ok: false, status: 401, error: "unauthenticated", user: null };
+    const res = await anki(json({ notes: [] }));
+    expect(res.status).toBe(401);
+    expect(ai.generateText).not.toHaveBeenCalled();
+  });
+
+  it("400 on invalid input", async () => {
+    const many = Array.from({ length: 27 }, (_, i) => ({ ref: String(i), fields: [{ name: "Front", text: "mot" }] }));
+    expect((await anki(json({ notes: [{ ref: "1", fields: [] }] }))).status).toBe(400);
+    expect((await anki(json({ notes: [{ ref: "1", fields: [{ name: "Front", text: "  " }] }] }))).status).toBe(400);
+    expect((await anki(json({ notes: [notes[0], notes[0]] }))).status).toBe(400);
+    expect((await anki(json({ notes: [] }))).status).toBe(400);
+    expect((await anki(json({ notes, model: "opus" }))).status).toBe(400);
+    const res = await anki(json({ notes: many }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: "bad_request", details: [expect.stringContaining("notes")] });
+    expect(ai.generateText).not.toHaveBeenCalled();
+  });
+
+  it("maps refs back to note ids, keeps skips, drops unknown refs and accepts a new theme", async () => {
+    ai.generateText.mockResolvedValue({
+      output: {
+        items: [
+          row("n1", { folder: "NEW", new_folder: { slug: "transport", name: "Транспорт", description: "Машины." } }),
+          row("n7"),
+          row("n2", { fr_field: "Verso", fr: "se casser", fr_as_seen: null, ru: "свалить", ru_suggested: false, pos: "verb", slang_level: "arg", folder: "povsednevnoe" }),
+          row("n3", { skip: true, fr_field: null, fr: "", ru: "", issue: "правило грамматики, не слово" }),
+        ],
+      },
+    });
+    const res = await anki(json({ notes, folders: [{ slug: "povsednevnoe", name: "Повседневное" }], model: "accurate" }));
+    expect(res.status).toBe(200);
+    const { items } = await res.json();
+    expect(items.map((i: { ref: string; skip: boolean }) => [i.ref, i.skip])).toEqual([
+      ["1001", false],
+      ["1002", false],
+      ["1003", true],
+    ]);
+    expect(items[0]).toMatchObject({ fr: "la bagnole", provenance: "fr_only", slang_level: 1, folder: "NEW", new_folder: { slug: "transport" } });
+    expect(items[1]).toMatchObject({ fr_field: "Verso", provenance: "pair", gender: "none", slang_level: 2, folder: "povsednevnoe" });
+    expect(items[2]).toMatchObject({ issue: "правило грамматики, не слово", folder: "INBOX" });
+
+    const call = ai.generateText.mock.calls[0][0];
+    expect(call.model.modelId).toBe("claude-sonnet-5-5");
+    expect(call.maxOutputTokens).toBe(10000);
+    expect(call.instructions.providerOptions).toEqual({ anthropic: { cacheControl: { type: "ephemeral" } } });
+    expect(call.prompt).toContain('<note ref="n1">\nFront: bagnole\nBack: car (slang)\ntags: argot\n</note>');
+    expect(call.prompt).toContain("- povsednevnoe: Повседневное");
+    expect(call.prompt).not.toContain("1001");
+  });
+
+  it("502 when the model call fails, 429 once the bucket is empty", async () => {
+    ai.generateText.mockRejectedValue(new Error("down"));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect((await anki(json({ notes }))).status).toBe(502);
+    let last: Response | null = null;
+    for (let i = 0; i < 15; i++) last = await anki(json({ notes }));
+    spy.mockRestore();
+    expect(last!.status).toBe(429);
+    expect(Number(last!.headers.get("Retry-After"))).toBeGreaterThan(0);
   });
 });

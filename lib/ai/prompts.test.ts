@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assignUserPrompt, enrichUserPrompt, estimateTokens, extractUserPrompt, suggestUserPrompt, SYSTEM_PROMPTS, taxonomyUserPrompt } from "./prompts";
+import { ankiUserPrompt, assignUserPrompt, enrichUserPrompt, estimateTokens, extractUserPrompt, suggestUserPrompt, SYSTEM_PROMPTS, taxonomyUserPrompt } from "./prompts";
 
 describe("system prompts", () => {
   for (const [name, text] of Object.entries(SYSTEM_PROMPTS)) {
@@ -74,5 +74,19 @@ describe("user prompts", () => {
     expect(e).toContain("w2\tchelou\tстрёмный\tверлан");
     expect(e).not.toContain("Themes:");
     expect(enrichUserPrompt({ words: [{ ref: "w1", fr: "la thune", ru: "бабки", note: null }], folders })).toMatch(/^Themes:\n- dengi: Деньги — Деньги и работа\n- eda: Еда\n\nCards \(1\)/);
+  });
+
+  it("anki: themes, then each note with its fields on their own lines and its tags", () => {
+    const p = ankiUserPrompt({
+      notes: [
+        { ref: "n1", fields: [{ name: "Front", text: "la\ncaisse" }, { name: "Back", text: "тачка" }], tags: ["argot", "voiture"] },
+        { ref: "n2", fields: [{ name: "Recto", text: "свалить" }], tags: [] },
+      ],
+      folders: [],
+    });
+    expect(p).toContain("(no themes yet: use INBOX or NEW)");
+    expect(p).toContain('Notes (2):\n<note ref="n1">\nFront: la caisse\nBack: тачка\ntags: argot voiture\n</note>\n<note ref="n2">\nRecto: свалить\n</note>');
+    expect(SYSTEM_PROMPTS.anki).toContain("skip");
+    expect(SYSTEM_PROMPTS.anki).toContain("fr_field");
   });
 });

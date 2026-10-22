@@ -1,8 +1,11 @@
 import { asSchema } from "ai";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { ANKI_CHUNK_MAX, ANKI_FIELD_CHARS, ANKI_FIELDS_MAX, ANKI_TAGS_MAX } from "@/lib/anki/types";
 import {
+  AnkiRequestSchema,
   AssignRequestSchema,
+  buildAnkiSchema,
   buildAssignmentSchema,
   buildEnrichmentSchema,
   buildSuggestionSchema,
@@ -53,6 +56,8 @@ const modelSchemas: Record<string, z.ZodType> = {
   assignment: buildAssignmentSchema(SLUGS),
   enrichment: buildEnrichmentSchema(),
   enrichmentWithThemes: buildEnrichmentSchema(SLUGS),
+  anki: buildAnkiSchema(SLUGS),
+  ankiNoFolders: buildAnkiSchema([]),
 };
 
 describe("model output schemas", () => {
@@ -163,5 +168,19 @@ describe("request schemas", () => {
     expect(EnrichRequestSchema.safeParse({ words: [{ ...word(1), ru: " " }] }).success).toBe(false);
     expect(EnrichRequestSchema.safeParse({ words: [word(1), word(1)] }).success).toBe(false);
     expect(EnrichRequestSchema.safeParse({ words: Array.from({ length: ENRICH_CHUNK_MAX + 1 }, (_, i) => word(i)) }).success).toBe(false);
+  });
+
+  it("anki: bounded notes, fields and tags, unique refs", () => {
+    const note = (i: number) => ({ ref: String(1000 + i), fields: [{ name: "Front", text: ` mot${i} ` }] });
+    expect(AnkiRequestSchema.parse({ notes: [note(1)] })).toEqual({ notes: [{ ref: "1001", fields: [{ name: "Front", text: "mot1" }], tags: [] }], model: "fast" });
+    expect(AnkiRequestSchema.safeParse({ notes: Array.from({ length: ANKI_CHUNK_MAX }, (_, i) => note(i)) }).success).toBe(true);
+    expect(AnkiRequestSchema.safeParse({ notes: Array.from({ length: ANKI_CHUNK_MAX + 1 }, (_, i) => note(i)) }).success).toBe(false);
+    expect(AnkiRequestSchema.safeParse({ notes: [note(1), note(1)] }).success).toBe(false);
+    expect(AnkiRequestSchema.safeParse({ notes: [{ ...note(1), ref: "x".repeat(41) }] }).success).toBe(false);
+    expect(AnkiRequestSchema.safeParse({ notes: [{ ...note(1), fields: [] }] }).success).toBe(false);
+    const fields = Array.from({ length: ANKI_FIELDS_MAX + 1 }, (_, i) => ({ name: `F${i}`, text: "x" }));
+    expect(AnkiRequestSchema.safeParse({ notes: [{ ...note(1), fields }] }).success).toBe(false);
+    expect(AnkiRequestSchema.safeParse({ notes: [{ ...note(1), fields: [{ name: "F", text: "x".repeat(ANKI_FIELD_CHARS + 1) }] }] }).success).toBe(false);
+    expect(AnkiRequestSchema.safeParse({ notes: [{ ...note(1), tags: Array(ANKI_TAGS_MAX + 1).fill("t") }] }).success).toBe(false);
   });
 });
