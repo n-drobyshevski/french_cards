@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addSheet, EXTRACTED, LA_THUNE, mockExtract, mockSuggest, openReview, screenshotPng, SE_CASSER_LA_TETE, tabBar } from "./fixtures";
+import { addSheet, EXTRACTED, LA_THUNE, mockExtract, mockSuggest, openReview, questionCard, screenshotPng, SE_CASSER_LA_TETE, tabBar } from "./fixtures";
 
 // Main screens at 390×844 for docs/screenshots (compare with mockups/*.dc.html).
 // Opt-in: SCREENSHOTS=1 npx playwright test e2e/screenshots.spec.ts
@@ -17,14 +17,14 @@ test("review front, back and dark", async ({ page }) => {
   await openReview(page);
   // Start on se casser, like the mockups: grade the first four cards.
   for (let i = 0; i < 4; i++) {
-    await page.getByRole("button", { name: "Показать ответ" }).click();
+    await questionCard(page).click();
     await page.getByRole("group", { name: "Оценка" }).getByRole("button", { name: /^Знаю/ }).click();
     await expect(page.getByText(`0${i + 1} / 11`, { exact: true })).toBeVisible();
   }
   await expect(page.getByRole("button", { name: /Карточка se casser/ })).toBeVisible();
   await page.getByRole("status").filter({ hasText: "Знаю" }).waitFor({ state: "detached", timeout: 10_000 }).catch(() => {});
   await shot(page, "review-front");
-  await page.getByRole("button", { name: "Показать ответ" }).click();
+  await questionCard(page).click();
   await expect(page.getByRole("group", { name: "Оценка" })).toBeVisible();
   await shot(page, "review-back");
 
@@ -32,7 +32,7 @@ test("review front, back and dark", async ({ page }) => {
   await page.getByRole("radiogroup", { name: "Тема" }).getByRole("radio", { name: "Тёмная" }).click();
   await page.goto("/");
   await expect(page.getByRole("button", { name: /Карточка se casser/ })).toBeVisible();
-  await page.getByRole("button", { name: "Показать ответ" }).click();
+  await questionCard(page).click();
   await expect(page.getByRole("group", { name: "Оценка" })).toBeVisible();
   await shot(page, "review-back-dark");
 });

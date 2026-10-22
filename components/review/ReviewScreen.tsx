@@ -4,7 +4,6 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAddSheet } from "@/components/providers/AddSheetContext";
 import { useAppReady } from "@/components/providers/AppProviders";
-import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { bottomBarRef } from "@/components/ui/bottom-clearance";
 import { Icon } from "@/components/ui/Icons";
@@ -99,9 +98,9 @@ export function ReviewScreen() {
   /** Whether focus last moved by pointer (then Space/Enter on a focused button still flip the card). */
   const focusByPointer = useRef(false);
   /**
-   * Revealing or grading unmounts the focused control (flip button, «Показать ответ», grade
-   * buttons). Where focus should go once the new controls render, so keyboard and screen-reader
-   * users land on the answer, then on the next card's «Показать ответ».
+   * Revealing or grading unmounts the focused control (the question card, grade buttons). Where
+   * focus should go once the new controls render, so keyboard and screen-reader users land on the
+   * answer, then on the next question card.
    */
   const refocus = useRef<"answer" | "reveal" | null>(null);
   const mainRef = useRef<HTMLElement>(null);
@@ -330,7 +329,7 @@ export function ReviewScreen() {
       answer.focus({ preventScroll: true });
       return;
     }
-    // The next card's «Показать ответ», or the «Готово на сегодня» heading when the session ended.
+    // The next question card, or the «Готово на сегодня» heading when the session ended.
     const button = root?.querySelector<HTMLButtonElement>("[data-review-reveal]");
     const next = button ? (button.disabled ? null : button) : root?.querySelector<HTMLElement>("h1[tabindex]");
     if (!next) return;
@@ -435,15 +434,12 @@ export function ReviewScreen() {
             </p>
           )}
           {snackbar.render()}
-          <div ref={bottomBarRef} data-review-focus="" className="mt-4 shrink-0">
-            {revealed ? (
+          {/* The question side flips by tap or swipe up, so only the answer side has a bottom bar. */}
+          {revealed && (
+            <div ref={bottomBarRef} data-review-focus="" className="mt-4 shrink-0">
               <GradeBar buttons={gradeButtons} intervals={intervals} onGrade={(r) => void grade(r)} />
-            ) : (
-              <Button block data-review-reveal="" disabled={!current} onClick={reveal} aria-keyshortcuts="Space">
-                Показать ответ
-              </Button>
-            )}
-          </div>
+            </div>
+          )}
         </>
       )}
 

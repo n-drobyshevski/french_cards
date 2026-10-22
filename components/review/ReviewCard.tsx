@@ -78,6 +78,8 @@ export function ReviewCard({ word, direction, revealed, onReveal, folderName, sw
             if (!swipeUp.consumeClick()) onReveal();
           }}
           aria-label={`Карточка ${prompt}, перевернуть`}
+          aria-keyshortcuts="Space"
+          data-review-reveal=""
           style={
             swipeUp.lift || swipeUp.settling
               ? {

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { openReview, tabBar } from "./fixtures";
+import { openReview, questionCard, tabBar } from "./fixtures";
 
 test.describe("review", () => {
   test("first run seeds the prototype words and default themes", async ({ page }) => {
@@ -25,7 +25,7 @@ test.describe("review", () => {
     const undo = page.getByRole("button", { name: "Отменить последний ответ" });
     await expect(undo).toBeDisabled();
 
-    await page.getByRole("button", { name: "Показать ответ" }).click();
+    await questionCard(page).click();
     await expect(page.getByText("шутка", { exact: true })).toBeVisible();
     const grades = page.getByRole("group", { name: "Оценка" });
     await expect(grades.getByRole("button")).toHaveCount(3);
@@ -35,7 +35,7 @@ test.describe("review", () => {
     await grades.getByRole("button", { name: /^Знаю, следующий показ/ }).click();
     await expect(page.getByText("01 / 11", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: /Карточка une blague/ })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Показать ответ" })).toBeVisible();
+    await expect(questionCard(page)).toBeVisible();
     await expect(page.getByText(/^Знаю ·/)).toBeVisible();
 
     // Undo from the header button: the same card comes back unanswered and the count resets.
@@ -59,9 +59,9 @@ test.describe("review", () => {
 });
 
 test.describe("review focus", () => {
-  test("keyboard reveal moves focus to the answer; grading moves it to the next «Показать ответ»", async ({ page }) => {
+  test("keyboard reveal moves focus to the answer; grading moves it to the next question card", async ({ page }) => {
     await openReview(page);
-    const reveal = page.getByRole("button", { name: "Показать ответ" });
+    const reveal = questionCard(page);
     await reveal.focus();
     await page.keyboard.press("Enter");
     const answer = page.getByRole("article", { name: "une blague — шутка" });
@@ -72,6 +72,6 @@ test.describe("review focus", () => {
     await good.focus();
     await page.keyboard.press("Enter");
     await expect(page.getByText("01 / 11", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Показать ответ" })).toBeFocused();
+    await expect(questionCard(page)).toBeFocused();
   });
 });

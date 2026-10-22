@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { openReview } from "./fixtures";
+import { openReview, questionCard } from "./fixtures";
 
 // Real touch input (CDP), not mouse: on touch the browser captures the pointer implicitly on the
 // child under the finger and may claim horizontal drags for its own back gesture. Both broke
@@ -60,13 +60,13 @@ test("a tap on the question card still flips it", async ({ page }) => {
 test("swiping the answer card with a finger grades it: right = Знаю, left = Не знаю", async ({ page }) => {
   await openReview(page);
 
-  await page.getByRole("button", { name: "Показать ответ" }).click();
+  await questionCard(page).click();
   const first = await page.locator("[data-review-answer] h2").innerText();
   await touchSwipe(page, 1);
   await expect(page.getByText(`Знаю · ${first}`)).toBeVisible();
   await expect(page).toHaveURL(/\/$/);
 
-  await page.getByRole("button", { name: "Показать ответ" }).click();
+  await questionCard(page).click();
   const second = await page.locator("[data-review-answer] h2").innerText();
   await touchSwipe(page, -1);
   await expect(page.getByText(`Не знаю · ${second}`)).toBeVisible();

@@ -155,9 +155,12 @@ export async function screenshotPng(page: Page): Promise<Buffer> {
 }
 
 /** Opens a route and waits until first-run seeding has filled the review queue. */
+/** The question side of the review card; tapping it (or swiping up) shows the answer. */
+export const questionCard = (page: Page) => page.getByRole("button", { name: /^Карточка .*, перевернуть$/ });
+
 export async function openReview(page: Page) {
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Показать ответ" })).toBeEnabled();
+  await expect(questionCard(page)).toBeVisible();
 }
 
 export const tabBar = (page: Page) => page.getByRole("navigation", { name: "Основная навигация" });

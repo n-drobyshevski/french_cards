@@ -1,7 +1,7 @@
 "use client";
 
 // Floating bottom UI (the app snackbar, the install hint) sits just above the tab bar. Screens
-// with their own bottom action bar (grade buttons, «Показать ответ», «Повторить тему», «Добавить
+// with their own bottom action bar (grade buttons, «Повторить тему», «Добавить
 // N слов») register it here, and --bottom-clearance is set to the distance from the viewport
 // bottom to the top of the highest visible bar plus a gap, so floating UI stays above it.
 

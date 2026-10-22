@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { addSheet, LA_THUNE, mockSuggest, openReview, SE_CASSER_LA_TETE, tabBar } from "./fixtures";
+import { addSheet, LA_THUNE, mockSuggest, openReview, questionCard, SE_CASSER_LA_TETE, tabBar } from "./fixtures";
 
 test("add a word from a suggestion and find it in its theme", async ({ page }) => {
   const requests: unknown[] = [];
@@ -47,7 +47,7 @@ test("a duplicate is flagged instead of added twice", async ({ page }) => {
 test("the undo snackbar after adding from the review screen stays above the grade buttons", async ({ page }) => {
   await mockSuggest(page, [LA_THUNE]);
   await openReview(page);
-  await page.getByRole("button", { name: "Показать ответ" }).click();
+  await questionCard(page).click();
   const grades = page.getByRole("group", { name: "Оценка" });
   await expect(grades).toBeVisible();
 
