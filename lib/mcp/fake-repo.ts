@@ -1,7 +1,7 @@
 // In-memory McpRepo for tests. Upserts behave like the kartochki_stamp_row trigger: a row whose
 // updated_at is not newer than the stored one is kept out and the stored row comes back. Replaces
 // write a row only while the stored updated_at is still the expected one.
-import type { Folder, ReviewLog, ReviewState, Word } from "@/lib/types";
+import type { FieldDef, Folder, ReviewLog, ReviewState, Word } from "@/lib/types";
 import { PartialWriteError, type McpRepo, type Replacement, type TableRows, type WritableTable } from "./repo";
 
 type Tables = { [T in keyof TableRows]: Map<string, TableRows[T]> };
@@ -25,13 +25,14 @@ export interface FakeRepo {
 const clone = <T>(x: T): T => structuredClone(x);
 
 export function createFakeRepo(
-  seed: { folders?: Folder[]; words?: Word[]; review_state?: ReviewState[]; review_log?: ReviewLog[] } = {},
+  seed: { folders?: Folder[]; words?: Word[]; review_state?: ReviewState[]; review_log?: ReviewLog[]; field_defs?: FieldDef[] } = {},
 ): FakeRepo {
   const tables: Tables = {
     folders: new Map((seed.folders ?? []).map((r) => [r.id, clone(r)])),
     words: new Map((seed.words ?? []).map((r) => [r.id, clone(r)])),
     review_state: new Map((seed.review_state ?? []).map((r) => [r.id, clone(r)])),
     review_log: new Map((seed.review_log ?? []).map((r) => [r.id, clone(r)])),
+    field_defs: new Map((seed.field_defs ?? []).map((r) => [r.id, clone(r)])),
   };
   const failing = new Set<WritableTable>();
   const partial = new Map<WritableTable, { after: number; lostAnswers?: boolean }>();
@@ -43,6 +44,7 @@ export function createFakeRepo(
     repo: {
       folders: async () => clone([...tables.folders.values()]),
       words: async () => clone([...tables.words.values()]),
+      fieldDefs: async () => clone([...tables.field_defs.values()]),
       wordsByIds: async (ids) => clone(ids.map((id) => tables.words.get(id)).filter((w): w is Word => !!w)),
       states: async (wordIds) =>
         clone([...tables.review_state.values()].filter((s) => wordIds === undefined || wordIds.includes(s.word_id))),

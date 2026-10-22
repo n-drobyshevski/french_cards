@@ -1,6 +1,6 @@
 ---
 name: kartochki
-description: Conventions for the user's «Карточки» flashcard app for colloquial French (the user is a Russian speaker). Use whenever the user wants to add, find, fix, sort or delete French words or slang, asks what to review today («что повторить сегодня»), sends a French text, chat, song or screenshot to turn into cards, or mentions карточки, темы or «Входящие». Covers card format (dictionary form, Russian translation in the same register, example), the slang level rubric 0–3 with verlan, theme choice, when to ask before changing anything, and step-by-step recipes for the Kartochki connector tools (search_words, add_words, update_word, move_words, restore_moves, delete_words, restore_words, create_folder, list_folders, study_summary). Needs the Kartochki connector; without it, explain that it must be added first.
+description: Conventions for the user's «Карточки» flashcard app for colloquial French (the user is a Russian speaker). Use whenever the user wants to add, find, fix, sort or delete French words or slang, asks what to review today («что повторить сегодня»), sends a French text, chat, song or screenshot to turn into cards, or mentions карточки, темы or «Входящие». Covers card format (dictionary form, Russian translation in the same register, example), the slang level rubric 0–3 with verlan, theme choice, when to ask before changing anything, and step-by-step recipes for the Kartochki connector tools (search_words, add_words, update_word, move_words, restore_moves, delete_words, restore_words, create_folder, list_folders, list_fields, study_summary). Needs the Kartochki connector; without it, explain that it must be added first.
 ---
 
 # Карточки: working with the user's French cards
@@ -25,6 +25,10 @@ Each card the connector saves has these fields. Fill all of them for every new w
 | `verlan` | `true` only for words formed by inverting syllables. | `true` |
 
 Vulgar and offensive words are legitimate vocabulary here. Translate them with a Russian word of the same strength, mark them 3, and do not soften, censor or moralise.
+
+### Custom fields («Свои поля»)
+
+The user can add their own fields to every card (e.g. «Синонимы»). `list_fields` shows them in order, each with a hint on what to write. Set them by name in `custom_fields` (`add_words` per word, `update_word` in `patch`), following the hint; `null` clears one, and `update_word` leaves the fields you don't name alone. A name that is not in `list_fields` creates a field on that one word only: use one only when the user asks for it, and if a result lists `new_one_off_fields` you didn't intend, fix the name. `search_words` shows a word's fields as `custom_fields`.
 
 ## Slang level rubric
 

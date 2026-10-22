@@ -48,9 +48,21 @@ describe("createSupabaseRepo", () => {
     expect(calls[1].ops).toContainEqual(["gt", "id", `id-${String(PAGE - 1).padStart(4, "0")}`]);
   });
 
-  it("reads and writes back every synced word column, extra_examples included", async () => {
+  it("reads and writes back every synced word column, extra_examples and custom_fields included", async () => {
     const extra = [{ fr: "c'est relou", ru: "это напрягает" }];
-    const stored = { ...ids(1)[0], fr: "relou", ru: "напряжный", extra_examples: extra, user_id: "user-1", synced_at: "2026-10-22T10:00:01+00:00" };
+    const fields = [
+      { field_id: "d-syn", label: "Синонимы", value: "lourd, chiant" },
+      { field_id: null, label: "Откуда", value: "верлан от lourd" },
+    ];
+    const stored = {
+      ...ids(1)[0],
+      fr: "relou",
+      ru: "напряжный",
+      extra_examples: extra,
+      custom_fields: fields,
+      user_id: "user-1",
+      synced_at: "2026-10-22T10:00:01+00:00",
+    };
     let reads = 0;
     const { client, calls } = fakeClient((call) => {
       const write = call.ops.some(([op]) => op === "upsert");
@@ -58,11 +70,32 @@ describe("createSupabaseRepo", () => {
     });
     const repo = createSupabaseRepo(client, "user-1");
     const [row] = await repo.wordsByIds(["id-0000"]);
-    expect(row).toMatchObject({ extra_examples: extra });
+    expect(row).toMatchObject({ extra_examples: extra, custom_fields: fields });
     expect(row).not.toHaveProperty("synced_at");
     await repo.upsert("words", [row]);
     const body = (calls.at(-1)!.ops.find(([op]) => op === "upsert") as unknown[])[1] as Record<string, unknown>[];
-    expect(body[0]).toMatchObject({ extra_examples: extra, user_id: "user-1" });
+    expect(body[0]).toMatchObject({ extra_examples: extra, custom_fields: fields, user_id: "user-1" });
+    await repo.replace("words", [{ row, expected: row.updated_at }]);
+    const [, update] = calls.at(-1)!.ops.find(([op]) => op === "update") as [string, Record<string, unknown>];
+    expect(update).toMatchObject({ custom_fields: fields, user_id: "user-1" });
+  });
+
+  it("reads the custom-field definitions of the user, tombstones included, in the app's shape", async () => {
+    const pages = [
+      [
+        { id: "d1", name: "Синонимы", hint: null, ai_fill: true, sort: 1, updated_at: "2026-10-22T10:00:00+00:00", deleted_at: null, user_id: "user-1", synced_at: "x" },
+        { id: "d2", name: "Ударение", hint: "слог", ai_fill: false, sort: 0, updated_at: "2026-10-22T10:00:00+00:00", deleted_at: "2026-10-22T11:00:00+00:00", user_id: "user-1", synced_at: "x" },
+      ],
+      [],
+    ];
+    const { client, calls } = fakeClient(() => ({ data: pages.shift() ?? [], error: null }));
+    const defs = await createSupabaseRepo(client, "user-1").fieldDefs();
+    expect(defs).toEqual([
+      { id: "d1", name: "Синонимы", hint: null, ai_fill: true, sort: 1, updated_at: "2026-10-22T10:00:00.000Z", deleted_at: null },
+      { id: "d2", name: "Ударение", hint: "слог", ai_fill: false, sort: 0, updated_at: "2026-10-22T10:00:00.000Z", deleted_at: "2026-10-22T11:00:00.000Z" },
+    ]);
+    expect(calls.map((c) => c.table)).toEqual(["field_defs", "field_defs"]);
+    for (const call of calls) expect(call.ops).toContainEqual(["eq", "user_id", "user-1"]);
   });
 
   it("scopes filtered reads too, and chunks long id lists", async () => {

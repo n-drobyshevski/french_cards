@@ -5,7 +5,7 @@
 // the stored row when a write's updated_at is not newer.
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { fromRemoteRow, toRemoteRow } from "@/lib/core/rows";
-import type { Folder, ReviewLog, ReviewState, Word } from "@/lib/types";
+import type { FieldDef, Folder, ReviewLog, ReviewState, Word } from "@/lib/types";
 import type { McpConfig } from "./config";
 
 /** Keyset page size (the app's PULL_PAGE); a page is never trusted to be the last unless it is empty. */
@@ -20,6 +20,8 @@ export interface TableRows {
   words: Word;
   review_state: ReviewState;
   review_log: ReviewLog;
+  /** Read-only here: the definitions of «Свои поля» are edited in the app. */
+  field_defs: FieldDef;
 }
 
 export type WritableTable = "folders" | "words" | "review_state";
@@ -29,6 +31,8 @@ export interface McpRepo {
   folders(): Promise<Folder[]>;
   /** Every word, tombstones included. */
   words(): Promise<Word[]>;
+  /** Every shared custom-field definition («Свои поля»), tombstones included. Read-only. */
+  fieldDefs(): Promise<FieldDef[]>;
   /** Words by id (tombstones included; unknown ids are left out). */
   wordsByIds(ids: readonly string[]): Promise<Word[]>;
   /** Review cards: all of them, or those of the given words. Tombstones included. */
@@ -116,6 +120,7 @@ export function createSupabaseRepo(client: SupabaseClient, userId: string): McpR
   return {
     folders: () => fetchAll("folders"),
     words: () => fetchAll("words"),
+    fieldDefs: () => fetchAll("field_defs"),
     wordsByIds: (ids) => (ids.length ? fetchIn("words", "id", ids) : Promise.resolve([])),
     states: (wordIds) => (wordIds === undefined ? fetchAll("review_state") : wordIds.length ? fetchIn("review_state", "word_id", wordIds) : Promise.resolve([])),
     logsSince: (from) => fetchAll("review_log", { column: "review", op: "gte", value: from }),

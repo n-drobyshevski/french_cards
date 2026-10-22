@@ -1,6 +1,6 @@
 # Claude connector («Карточки» in the Claude apps)
 
-The app serves a remote MCP server at `/api/mcp/<MCP_SECRET>`. Added once as a custom connector on claude.ai, it works in Claude on the web, desktop and mobile, and in Claude Code signed in with the same account. Claude can then search, add, edit, move, delete and restore words, undo moves, create themes and read today's study numbers. Grading reviews stays in the app.
+The app serves a remote MCP server at `/api/mcp/<MCP_SECRET>`. Added once as a custom connector on claude.ai, it works in Claude on the web, desktop and mobile, and in Claude Code signed in with the same account. Claude can then search, add, edit, move, delete and restore words, fill in custom fields («Свои поля»), undo moves, create themes and read today's study numbers. Grading reviews stays in the app.
 
 An optional skill (`claude/skills/kartochki/`) teaches Claude the card conventions: the slang-level rubric, verlan, translation and example style, when to ask before changing anything, and recipes. The connector works without it.
 
@@ -17,7 +17,7 @@ An optional skill (`claude/skills/kartochki/`) teaches Claude the card conventio
   - The `kartochki_stamp_row` trigger still runs: it stamps `synced_at`, so devices pull Claude's changes on their next sync (on open, on focus, or within about 5 minutes while the app is visible).
   - Writes follow the app's rules (`lib/mcp/tools.ts`): new words get both review cards (written before the word) and `source = "chat"` («из чата» in the word sheet); rewrites stamp `updated_at` past the stored value; nothing is hard-deleted.
   - Rewrites of a word are compare-and-set: the row is written only if its `updated_at` is still the one read just before. If the phone synced a change, or another call changed the word, in between, Claude gets a `conflict` instead of overwriting it.
-  - Migration `0005_connector_grants.sql` grants `service_role` the table rights the connector needs, so it does not depend on the project's default privileges.
+  - Migration `0005_connector_grants.sql` grants `service_role` the table rights the connector needs, so it does not depend on the project's default privileges. Migration `0006_custom_fields.sql` adds `words.custom_fields` and the `field_defs` table, with `select` only for `service_role`: the connector reads the shared field definitions but never edits them. Without 0006, `search_words`, `update_word`, `list_fields` and `add_words` with `custom_fields` fail with a database error.
 - **No subscriptions:** the server's tool list never changes, so it refuses `subscriptions/listen` streams (`maxSubscriptions: 0`) instead of holding a function open.
 - **Rate limit:** write tools take a token from the in-memory `mcp` bucket (`lib/ai/rate-limit.ts`, 20 in a burst, then one per 3 s). An exhausted bucket gives an `isError` tool result; `initialize` and `tools/list` are never limited.
 - **«Сегодня»:** `study_summary` computes the 04:00-to-04:00 study day in `MCP_TIMEZONE` (`lib/mcp/study-day.ts`). The device's «Новых в день» setting is not synced, so Claude assumes 15 unless told otherwise.
@@ -26,11 +26,12 @@ An optional skill (`claude/skills/kartochki/`) teaches Claude the card conventio
 
 | Tool | Kind | What it does |
 |---|---|---|
-| `search_words` | read | Accent-insensitive search over French, Russian, note and tags; filter by theme and status (new, learning, mastered, due); pages of up to 100 with `offset`/`next_offset`. |
+| `search_words` | read | Accent-insensitive search over French, Russian, note, tags and custom field values; filter by theme and status (new, learning, mastered, due); pages of up to 100 with `offset`/`next_offset`. |
 | `list_folders` | read | Themes in order with word and due counts, plus «Входящие» (which includes words whose theme was deleted). |
+| `list_fields` | read | The shared custom fields («Свои поля») in order: `{ name, hint, auto_fill }`, deleted ones left out, plus a note on one-off fields. |
 | `study_summary` | read | Cards due today, new cards left, reviews done, words by status, words due soonest. |
-| `add_words` | write | 1–50 words with every field; skips duplicates by lemma (`on_duplicate: "add"` overrides); `folder_chosen_by_user` (per call, or per word) decides `folder_source`. Returns the ids for undo. |
-| `update_word` | write | Patches one word's text, example, note, tags, part of speech, level or verlan; `both_directions` adds or removes the RU→FR card. |
+| `add_words` | write | 1–50 words with every field, custom fields included; skips duplicates by lemma (`on_duplicate: "add"` overrides); `folder_chosen_by_user` (per call, or per word) decides `folder_source`. Returns the ids for undo. |
+| `update_word` | write | Patches one word's text, example, note, tags, part of speech, level, verlan or custom fields; `both_directions` adds or removes the RU→FR card. |
 | `move_words` | write | Moves words to a theme or `inbox`. `mode: "auto"` skips words placed by hand and words in locked themes. Returns an `undo` list for `restore_moves`. |
 | `restore_moves` | write | Undoes `move_words` exactly: theme, and whether automatic sorting may move the word again. |
 | `delete_words` | write | Soft-deletes words and their cards. |
@@ -38,6 +39,13 @@ An optional skill (`claude/skills/kartochki/`) teaches Claude the card conventio
 | `create_folder` | write | New theme, same rules as in the app (unique name, slug, colour, order). |
 
 Themes can be named by id, slug, Russian name, or `inbox`.
+
+### Custom fields («Свои поля»)
+
+The shared definitions are edited in the app (Settings → «Свои поля»); the connector only reads them (`repo.fieldDefs()`). Claude addresses fields by name:
+
+- **Input** (`add_words` per word, `update_word` in `patch`): `custom_fields: { "<name>": "<value>" | null }`. A name that matches a live shared field (any case) sets that field (`field_id` = the definition's id, label = its current name); any other name creates a one-off field on that word (`field_id: null`). `null` or an empty value clears a field. `update_word` changes only the named fields and keeps the rest; clears are applied first. Names are at most 40 characters and values at most 300 (longer input is refused, like other fields); whitespace is collapsed. A word holds at most 12 fields; a call that would go past that is refused before anything is written.
+- **Output:** words in `search_words`, `update_word` and `add_words` results carry `custom_fields: { "<name>": "<value>" }` only when they have any. Shared fields come first under the definition's current name; one-off fields and values of deleted definitions follow under their stored label. When a call created one-off fields, the result lists them in `new_one_off_fields` (per added word in `add_words`) with a `fields_note`, so Claude can tell a misspelt shared name.
 
 ## Setup
 
@@ -52,7 +60,7 @@ Themes can be named by id, slug, Russian name, or `inbox`.
    - `MCP_TIMEZONE` (optional): your IANA time zone, for example `Europe/Moscow`. The default is `Europe/Paris`.
 
    Then redeploy.
-   Apply `supabase/migrations/0005_connector_grants.sql` if you haven't (README, step 1).
+   Apply `supabase/migrations/0005_connector_grants.sql` and `0006_custom_fields.sql` if you haven't (README, step 1).
 3. Check the endpoint. A wrong key must give `404`, with no redirect:
    ```sh
    curl -s -o /dev/null -w "%{http_code}\n" -X POST https://frenchcards.vercel.app/api/mcp/wrong

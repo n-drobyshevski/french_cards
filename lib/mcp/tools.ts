@@ -10,12 +10,24 @@ import type { CallToolResult, McpServer, StandardSchemaWithJSON, ToolAnnotations
 import { z } from "zod";
 import { GENDER_VALUES, POS_VALUES } from "@/lib/ai/schemas";
 import { takeToken } from "@/lib/ai/rate-limit";
+import {
+  cleanCustomFields,
+  cleanFieldLabel,
+  cleanFieldValue,
+  FIELD_LABEL_MAX,
+  FIELD_VALUE_MAX,
+  fieldDefByName,
+  fieldsForDisplay,
+  liveFieldDefs,
+  MAX_WORD_FIELDS,
+  withFieldValue,
+} from "@/lib/core/custom-fields";
 import { DEFAULT_FOLDERS, defaultFolderId, nextFolderSort, pickFolderColor, uniqueSlug } from "@/lib/core/folders";
 import { matchesSearch, normalizeLemma } from "@/lib/core/text";
 import { buildWord, cleanText, directionsOf, isMovable } from "@/lib/core/words";
 import { newId } from "@/lib/id";
 import { newReviewState, reviewStateId, wordStatus, type CardStatus } from "@/lib/scheduler";
-import type { Confidence, Direction, Folder, ReviewState, Word } from "@/lib/types";
+import type { Confidence, CustomFieldValue, Direction, FieldDef, Folder, ReviewState, Word } from "@/lib/types";
 import { PartialWriteError, RepoError, type McpRepo, type Replacement } from "./repo";
 import { studyDay } from "./study-day";
 
@@ -87,9 +99,11 @@ interface ViewContext {
   live: Map<string, Folder>;
   statesByWord: Map<string, ReviewState[]>;
   dayEnd: number;
+  /** Custom-field definitions (tombstones included), for the fields' current names. */
+  defs: readonly FieldDef[];
 }
 
-function viewContext(folders: readonly Folder[], states: readonly ReviewState[], deps: ToolDeps): ViewContext {
+function viewContext(folders: readonly Folder[], states: readonly ReviewState[], defs: readonly FieldDef[], deps: ToolDeps): ViewContext {
   const statesByWord = new Map<string, ReviewState[]>();
   for (const s of states) {
     if (s.deleted_at !== null) continue;
@@ -101,6 +115,7 @@ function viewContext(folders: readonly Folder[], states: readonly ReviewState[],
     live: new Map(liveFolders(folders).map((f) => [f.id, f])),
     statesByWord,
     dayEnd: studyDay(deps.now(), deps.timeZone).end.getTime(),
+    defs,
   };
 }
 
@@ -109,8 +124,16 @@ const isDueToday = (s: Pick<ReviewState, "state" | "due">, dayEnd: number) => s.
 /** Short form for lists of changes. */
 const brief = (w: Word, live: ReadonlyMap<string, Folder>) => ({ id: w.id, fr: w.fr, ru: w.ru, folder: folderRef(placeOf(w, live)) });
 
+/** The word's custom fields as name → value (shared fields under their current names, in order). */
+function customFieldsView(w: Word, defs: readonly FieldDef[]): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const f of fieldsForDisplay(w, defs)) if (!(f.label in out)) out[f.label] = f.value;
+  return out;
+}
+
 function wordView(w: Word, ctx: ViewContext) {
   const states = ctx.statesByWord.get(w.id) ?? [];
+  const fields = customFieldsView(w, ctx.defs);
   return {
     id: w.id,
     fr: w.fr,
@@ -119,6 +142,8 @@ function wordView(w: Word, ctx: ViewContext) {
     example_fr: w.example_fr,
     example_ru: w.example_ru,
     extra_examples: w.extra_examples,
+    // Only when the word has any, to keep results small.
+    ...(Object.keys(fields).length > 0 ? { custom_fields: fields } : {}),
     pos: w.pos,
     gender: w.gender,
     slang_level: w.slang_level,
@@ -204,6 +229,41 @@ export function syncStates(word: Word, existing: readonly ReviewState[], now: Da
 
 const uniqueIds = (ids: readonly string[]) => [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
 
+/**
+ * Sets custom fields by name on a word's values: the name of a live shared definition (any case)
+ * addresses that field, any other name a field of this word only. null or "" clears a field;
+ * clears go first, so one call can swap fields on a full card. Returns the new values and the
+ * one-off names the word did not have before.
+ */
+export function applyCustomFields(
+  current: readonly CustomFieldValue[] | null | undefined,
+  patch: Readonly<Record<string, string | null>>,
+  defs: readonly FieldDef[],
+): { values: CustomFieldValue[]; newOneOff: string[] } {
+  let values = cleanCustomFields(current);
+  const newOneOff: string[] = [];
+  const entries = Object.entries(patch).sort(([, a], [, b]) => Number(!!cleanFieldValue(a)) - Number(!!cleanFieldValue(b)));
+  for (const [name, value] of entries) {
+    const label = cleanFieldLabel(name);
+    if (!label) throw new ToolError("A custom field name is empty.");
+    const def = fieldDefByName(defs, label);
+    const had = values.find((f) => sameName(f.label, label));
+    // A one-off field keeps the spelling it was saved with.
+    values = withFieldValue(values, def ? { field_id: def.id, label: def.name } : { field_id: null, label: had?.label ?? label }, value);
+    if (!cleanFieldValue(value)) continue;
+    if (!(def ? values.some((f) => f.field_id === def.id) : values.some((f) => sameName(f.label, label)))) {
+      throw new ToolError(
+        `A card holds at most ${MAX_WORD_FIELDS} custom fields, so «${label}» doesn't fit. Clear another one (value null) in the same call, or leave it out.`,
+      );
+    }
+    if (!def && !had && !newOneOff.some((n) => sameName(n, label))) newOneOff.push(label);
+  }
+  return { values, newOneOff };
+}
+
+const ONE_OFF_NOTE =
+  "The names in new_one_off_fields are not shared fields (list_fields), so they were saved on that word only. If a shared field was meant, clear the one-off one (null) and set the shared name with update_word.";
+
 // ---------------------------------------------------------------------------------------------
 // Schemas
 
@@ -215,6 +275,13 @@ const folderSelector = z
   .describe(`Theme: its id, slug or Russian name (from list_folders), or "${INBOX_SELECTOR}" for «${INBOX_NAME}».`);
 
 const optionalText = (max: number, what: string) => z.string().max(max).nullable().optional().describe(what);
+const customFieldsInput = (what: string) =>
+  z
+    .record(z.string().trim().min(1).max(FIELD_LABEL_MAX), z.string().max(FIELD_VALUE_MAX).nullable())
+    .optional()
+    .describe(
+      `Custom fields («Свои поля») as name → value. Names: the user's shared fields from list_fields (any case); any other name creates a field for this word only. ${what} Values up to ${FIELD_VALUE_MAX} characters; at most ${MAX_WORD_FIELDS} fields per word.`,
+    );
 const idList = (max: number) => z.array(z.string().trim().min(1).max(64)).min(1).max(max);
 const slangLevel = z
   .number()
@@ -239,6 +306,7 @@ const newWordSchema = z.object({
   slang_level: slangLevel.optional().describe("Slang level: 0 neutral, 1 familier, 2 argot, 3 vulgaire. Default 0."),
   verlan: z.boolean().optional().describe("True for verlan forms (meuf, relou, chelou, vénère)."),
   tags: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
+  custom_fields: customFieldsInput("Fill a shared field as its hint says; null or an empty value leaves it out."),
   both_directions: z.boolean().optional().describe("Also make a RU→FR card (default true)."),
   folder: folderSelector.optional().describe(`Theme for this word only (id, slug, name or "${INBOX_SELECTOR}"); overrides the call's \`folder\`.`),
   folder_chosen_by_user: z
@@ -287,7 +355,7 @@ export const searchWords = tool({
   name: "search_words",
   title: "Search words",
   description:
-    "Search the user's saved French words. Every term of `query` must match the French, the Russian, the note or a tag, ignoring accents and case; an empty query lists words. Filter by theme and learning status. Newest first; `total` counts all matches, and `next_offset` (when not null) fetches the next page. Use it before add_words to avoid duplicates, and to find ids for update_word, move_words and delete_words.",
+    "Search the user's saved French words. Every term of `query` must match the French, the Russian, the note, a tag or a custom field's value, ignoring accents and case; an empty query lists words. Filter by theme and learning status. Newest first; `total` counts all matches, and `next_offset` (when not null) fetches the next page. A word's custom fields («Свои поля») come as `custom_fields` (name → value), only when it has any. Use it before add_words to avoid duplicates, and to find ids for update_word, move_words and delete_words.",
   input: z.object({
     query: z.string().max(200).optional().describe("Words to look for (French or Russian). Empty = all."),
     folder: folderSelector.optional(),
@@ -298,9 +366,9 @@ export const searchWords = tool({
   write: false,
   annotations: READ,
   async run(deps, args) {
-    const [folders, words, states] = await Promise.all([deps.repo.folders(), deps.repo.words(), deps.repo.states()]);
+    const [folders, words, states, defs] = await Promise.all([deps.repo.folders(), deps.repo.words(), deps.repo.states(), deps.repo.fieldDefs()]);
     const target = args.folder === undefined ? undefined : resolveFolder(args.folder, folders);
-    const ctx = viewContext(folders, states, deps);
+    const ctx = viewContext(folders, states, defs, deps);
     const matches = words
       .filter((w) => w.deleted_at === null)
       .filter((w) => target === undefined || (placeOf(w, ctx.live)?.id ?? null) === (target?.id ?? null))
@@ -333,7 +401,7 @@ export const listFolders = tool({
   annotations: READ,
   async run(deps) {
     const [folders, words, states] = await Promise.all([deps.repo.folders(), deps.repo.words(), deps.repo.states()]);
-    const ctx = viewContext(folders, states, deps);
+    const ctx = viewContext(folders, states, [], deps);
     const counts = new Map<string | null, { words: number; due: number }>();
     const total = { words: 0, due: 0 };
     for (const w of words) {
@@ -358,6 +426,23 @@ export const listFolders = tool({
       })),
       inbox: { id: null, slug: INBOX_SELECTOR, name: INBOX_NAME, ...(counts.get(null) ?? { words: 0, due: 0 }) },
       total,
+    };
+  },
+});
+
+export const listFields = tool({
+  name: "list_fields",
+  title: "List custom fields",
+  description:
+    "List the user's shared custom fields («Свои поля») in display order: each has a name, a hint on what to write in it, and auto_fill (true: the app fills it in itself where it is empty, e.g. with «Дополнить карточки»). Values are per word: search_words shows them, add_words and update_word set them by name.",
+  input: z.object({}),
+  write: false,
+  annotations: READ,
+  async run(deps) {
+    const defs = liveFieldDefs(await deps.repo.fieldDefs());
+    return {
+      fields: defs.map((d) => ({ name: d.name, hint: d.hint, auto_fill: d.ai_fill })),
+      note: "Values are stored per word and set by field name in add_words and update_word (null clears one). A name not listed here is allowed: it creates a field on that word only, so use one only when the user asks for it.",
     };
   },
 });
@@ -434,7 +519,7 @@ export const addWords = tool({
   name: "add_words",
   title: "Add words",
   description:
-    `Add 1–50 new words. Each gets review cards (FR→RU, and RU→FR unless both_directions is false). Words whose French form is already saved are skipped (on_duplicate "skip", the default) and listed in \`duplicates\`. Fill in everything you can: ru, slang_level (0 neutral, 1 familier, 2 argot, 3 vulgaire), verlan, pos, gender for nouns, and a short example_fr with example_ru. \`folder\` is a theme id, slug or name (default «${INBOX_NAME}»); set folder_chosen_by_user to true only when the user named the theme (per word, \`folder\` and folder_chosen_by_user override the call's). List the words and get the user's OK before adding more than 5. Undo with delete_words and the returned ids.`,
+    `Add 1–50 new words. Each gets review cards (FR→RU, and RU→FR unless both_directions is false). Words whose French form is already saved are skipped (on_duplicate "skip", the default) and listed in \`duplicates\`. Fill in everything you can: ru, slang_level (0 neutral, 1 familier, 2 argot, 3 vulgaire), verlan, pos, gender for nouns, and a short example_fr with example_ru. \`folder\` is a theme id, slug or name (default «${INBOX_NAME}»); set folder_chosen_by_user to true only when the user named the theme (per word, \`folder\` and folder_chosen_by_user override the call's). Optional \`custom_fields\` sets the user's custom fields by name (list_fields). List the words and get the user's OK before adding more than 5. Undo with delete_words and the returned ids.`,
   input: z.object({
     words: z.array(newWordSchema).min(1).max(50),
     folder: folderSelector.optional().describe(`Theme for all words: id, slug or name (default «${INBOX_NAME}»).`),
@@ -446,7 +531,12 @@ export const addWords = tool({
   write: true,
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   async run(deps, args) {
-    const [folders, words] = await Promise.all([deps.repo.folders(), deps.repo.words()]);
+    const wantsFields = args.words.some((w) => w.custom_fields !== undefined);
+    const [folders, words, defs] = await Promise.all([
+      deps.repo.folders(),
+      deps.repo.words(),
+      wantsFields ? deps.repo.fieldDefs() : Promise.resolve([] as FieldDef[]),
+    ]);
     const callFolder = args.folder === undefined ? null : resolveFolder(args.folder, folders);
     // Resolve every theme before writing anything.
     const targets = args.words.map((w) => (w.folder === undefined ? callFolder : resolveFolder(w.folder, folders)));
@@ -456,6 +546,7 @@ export const addWords = tool({
 
     const now = deps.now();
     const built: Word[] = [];
+    const oneOff = new Map<string, string[]>();
     const duplicates: { fr: string; existing: ReturnType<typeof brief> }[] = [];
     args.words.forEach((input, i) => {
       const key = normalizeLemma(input.fr);
@@ -464,6 +555,8 @@ export const addWords = tool({
         duplicates.push({ fr: input.fr, existing: brief(dup, live) });
         return;
       }
+      // Throws (before anything is written) when a word's fields don't fit.
+      const fields = input.custom_fields ? applyCustomFields([], input.custom_fields, defs) : { values: [], newOneOff: [] };
       const folder = targets[i];
       const chosen = input.folder_chosen_by_user ?? args.folder_chosen_by_user;
       const pos = input.pos ?? "other";
@@ -480,6 +573,7 @@ export const addWords = tool({
           slang_level: (input.slang_level ?? 0) as Word["slang_level"],
           verlan: input.verlan ?? false,
           tags: input.tags,
+          custom_fields: fields.values,
           both_directions: input.both_directions ?? true,
           folder_id: folder?.id ?? null,
           folder_source: chosen ? "user" : "auto",
@@ -490,6 +584,7 @@ export const addWords = tool({
       );
       byLemma.set(key, word);
       built.push(word);
+      if (fields.newOneOff.length > 0) oneOff.set(word.id, fields.newOneOff);
     });
 
     if (built.length > 0) {
@@ -509,9 +604,20 @@ export const addWords = tool({
       }
     }
     return {
-      added: built.map((w) => ({ ...brief(w, live), slang_level: w.slang_level, verlan: w.verlan })),
+      added: built.map((w) => {
+        const fields = customFieldsView(w, defs);
+        const fresh = oneOff.get(w.id);
+        return {
+          ...brief(w, live),
+          slang_level: w.slang_level,
+          verlan: w.verlan,
+          ...(Object.keys(fields).length > 0 ? { custom_fields: fields } : {}),
+          ...(fresh ? { new_one_off_fields: fresh } : {}),
+        };
+      }),
       duplicates,
       undo: built.length > 0 ? { tool: "delete_words", ids: built.map((w) => w.id) } : null,
+      ...(oneOff.size > 0 ? { fields_note: ONE_OFF_NOTE } : {}),
       note: SYNC_NOTE,
     };
   },
@@ -521,7 +627,7 @@ export const updateWord = tool({
   name: "update_word",
   title: "Edit a word",
   description:
-    "Edit one word: French, Russian, note, example, tags, part of speech, gender, slang level, verlan, or both_directions. Only the fields in `patch` change; null clears note or example. both_directions false removes the RU→FR card, true brings it back with its progress. Use move_words to change the theme.",
+    "Edit one word: French, Russian, note, example, tags, part of speech, gender, slang level, verlan, both_directions, or custom fields. Only the fields in `patch` change; null clears note or example. `custom_fields` changes only the fields it names (null clears one) and keeps the others. both_directions false removes the RU→FR card, true brings it back with its progress. Use move_words to change the theme.",
   input: z.object({
     id: z.string().trim().min(1).max(64).describe("Word id from search_words."),
     patch: z
@@ -536,6 +642,7 @@ export const updateWord = tool({
         slang_level: slangLevel.optional(),
         verlan: z.boolean().optional(),
         tags: z.array(z.string().trim().min(1).max(40)).max(10).optional().describe("Replaces all tags."),
+        custom_fields: customFieldsInput("Only the named fields change; null or an empty value clears one."),
         both_directions: z.boolean().optional(),
       })
       .describe("Fields to change."),
@@ -543,7 +650,7 @@ export const updateWord = tool({
   write: true,
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   async run(deps, args) {
-    const [current] = await deps.repo.wordsByIds([args.id]);
+    const [[current], defs] = await Promise.all([deps.repo.wordsByIds([args.id]), deps.repo.fieldDefs()]);
     if (!current || current.deleted_at !== null) throw new ToolError(`No word with id ${args.id}. Find it with search_words.`);
     const now = deps.now();
     const p = args.patch;
@@ -557,6 +664,13 @@ export const updateWord = tool({
     if (p.verlan !== undefined) next.verlan = p.verlan;
     if (p.tags !== undefined) next.tags = [...new Set(p.tags.map((t) => t.trim()).filter(Boolean))];
     if (p.both_directions !== undefined) next.both_directions = p.both_directions;
+    let newOneOff: string[] = [];
+    if (p.custom_fields !== undefined) {
+      const fields = applyCustomFields(current.custom_fields, p.custom_fields, defs);
+      newOneOff = fields.newOneOff;
+      // Rewritten only when the values really change (a missing column reads as no fields).
+      if (JSON.stringify(fields.values) !== JSON.stringify(cleanCustomFields(current.custom_fields))) next.custom_fields = fields.values;
+    }
     if (next.pos !== "noun") next.gender = "none";
     if (!next.example_fr) next.example_ru = null;
 
@@ -584,7 +698,8 @@ export const updateWord = tool({
     const [folders, states] = await Promise.all([deps.repo.folders(), deps.repo.states([next.id])]);
     return {
       status: changed || cards > 0 ? "updated" : "unchanged",
-      word: wordView(changed ? next : current, viewContext(folders, states, deps)),
+      word: wordView(changed ? next : current, viewContext(folders, states, defs, deps)),
+      ...(newOneOff.length > 0 ? { new_one_off_fields: newOneOff, fields_note: ONE_OFF_NOTE } : {}),
       note: SYNC_NOTE,
     };
   },
@@ -870,6 +985,7 @@ function register<S extends z.ZodObject>(server: McpServer, deps: ToolDeps, spec
 export const TOOL_NAMES = [
   searchWords.name,
   listFolders.name,
+  listFields.name,
   studySummary.name,
   addWords.name,
   updateWord.name,
@@ -883,6 +999,7 @@ export const TOOL_NAMES = [
 export function registerTools(server: McpServer, deps: ToolDeps): void {
   register(server, deps, searchWords);
   register(server, deps, listFolders);
+  register(server, deps, listFields);
   register(server, deps, studySummary);
   register(server, deps, addWords);
   register(server, deps, updateWord);
@@ -897,6 +1014,7 @@ export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard
 - Before adding, search_words for the word; add_words also skips French forms that are already saved.
 - For each new word give the dictionary form, one to three Russian equivalents in the same register, slang_level (0 neutral, 1 familier, 2 argot, 3 vulgaire), verlan (true for verlan forms such as meuf, relou, chelou), pos, gender for nouns, and a short everyday example_fr with its example_ru. Vulgar words are legitimate vocabulary: translate them with the same strength and mark them 3.
 - Set folder_chosen_by_user to true only when the user named the theme; otherwise pick a fitting theme yourself, or leave the word in the inbox.
+- Cards can carry the user's custom fields («Свои поля»): list_fields shows the shared ones and what to write in each. Set them by name with custom_fields in add_words or update_word (null clears one); search_words shows them. Use a name not in list_fields only when the user asks for a field on that one word.
 - Before adding more than 5 words, and before any move or delete, list what will change and wait for the user's OK.
 - After a change, say what changed and how to undo it with the result's \`undo\` (delete_words, restore_words or restore_moves).
 - Make write calls one at a time, never in parallel: each reads the current rows first, and parallel writes to the same words conflict or slip past the duplicate check.

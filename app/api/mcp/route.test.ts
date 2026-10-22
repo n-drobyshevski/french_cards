@@ -108,7 +108,7 @@ describe("/api/mcp/[key]", () => {
     expect((await rpc(SECRET, "initialize")).status).toBe(404);
   });
 
-  it("initializes and lists the 10 tools with titles and annotations", async () => {
+  it("initializes and lists the 11 tools with titles and annotations", async () => {
     const version = await initialize();
     const res = await rpc(SECRET, "tools/list", {}, { "mcp-protocol-version": version });
     expect(res.headers.get("cache-control")).toBe("no-store");
@@ -118,6 +118,7 @@ describe("/api/mcp/[key]", () => {
         "add_words",
         "create_folder",
         "delete_words",
+        "list_fields",
         "list_folders",
         "move_words",
         "restore_moves",

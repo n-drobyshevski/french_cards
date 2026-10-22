@@ -4,7 +4,7 @@ import { resetRateLimits } from "@/lib/ai/rate-limit";
 import { defaultFolderId } from "@/lib/core/folders";
 import { buildWord, type NewWordInput } from "@/lib/core/words";
 import { newReviewState } from "@/lib/scheduler";
-import type { Folder, ReviewLog, ReviewState } from "@/lib/types";
+import type { FieldDef, Folder, ReviewLog, ReviewState } from "@/lib/types";
 import { createFakeRepo, type FakeRepo } from "./fake-repo";
 import { RepoError } from "./repo";
 import {
@@ -12,6 +12,7 @@ import {
   callTool,
   createFolder,
   deleteWords,
+  listFields,
   listFolders,
   moveWords,
   resolveFolder,
@@ -523,6 +524,121 @@ describe("search_words / list_folders", () => {
     ]);
     expect(out.inbox).toMatchObject({ words: 2, due: 1 });
     expect(out.total).toEqual({ words: 3, due: 1 });
+  });
+});
+
+describe("custom fields («Свои поля»)", () => {
+  const def = (id: string, name: string, sort: number, extra: Partial<FieldDef> = {}): FieldDef => ({
+    id,
+    name,
+    hint: null,
+    ai_fill: false,
+    sort,
+    updated_at: OLD.toISOString(),
+    deleted_at: null,
+    ...extra,
+  });
+  const DEFS = [
+    def("d-ant", "Антонимы", 2, { ai_fill: true, hint: "1–2 антонима" }),
+    def("d-syn", "Синонимы", 1, { hint: "2–3 синонима на французском" }),
+    def("d-old", "Ударение", 0, { deleted_at: OLD.toISOString() }),
+  ];
+
+  it("add_words maps a shared name (any case) to its definition and saves other names as one-off fields", async () => {
+    const fake = createFakeRepo({ folders: FOLDERS, field_defs: DEFS });
+    const out = await ok(addWords, fake, {
+      words: [{ fr: "chelou", ru: "странный", custom_fields: { синонимы: "bizarre, louche", "Откуда": "  верлан   от louche ", Антонимы: null } }],
+      folder_chosen_by_user: false,
+    });
+    const saved = [...fake.tables.words.values()][0];
+    expect(saved.custom_fields).toEqual([
+      { field_id: "d-syn", label: "Синонимы", value: "bizarre, louche" },
+      { field_id: null, label: "Откуда", value: "верлан от louche" },
+    ]);
+    expect(out.added[0]).toMatchObject({ custom_fields: { Синонимы: "bizarre, louche", Откуда: "верлан от louche" }, new_one_off_fields: ["Откуда"] });
+    expect(out.fields_note).toMatch(/that word only/);
+  });
+
+  it("add_words reads no definitions without custom fields, and refuses too long values before writing", async () => {
+    const fake = createFakeRepo({ field_defs: DEFS });
+    const spy = vi.spyOn(fake.repo, "fieldDefs");
+    const out = await ok(addWords, fake, { words: [{ fr: "ouf", ru: "безумный" }], folder_chosen_by_user: false });
+    expect(spy).not.toHaveBeenCalled();
+    expect(out.added[0]).not.toHaveProperty("custom_fields");
+    expect(out).not.toHaveProperty("fields_note");
+    expect([...fake.tables.words.values()][0].custom_fields).toEqual([]);
+
+    const tooLong = await refused(addWords, fake, { words: [{ fr: "relou", ru: "напряжный", custom_fields: { Синонимы: "x".repeat(301) } }], folder_chosen_by_user: false });
+    expect(tooLong).toMatch(/custom_fields/);
+    expect(await refused(addWords, fake, { words: [{ fr: "relou", ru: "напряжный", custom_fields: { ["я".repeat(41)]: "x" } }], folder_chosen_by_user: false })).toMatch(/custom_fields/);
+    const full = Object.fromEntries(Array.from({ length: 13 }, (_, i) => [`Поле ${i}`, "x"]));
+    expect(await refused(addWords, fake, { words: [{ fr: "relou", ru: "напряжный", custom_fields: full }], folder_chosen_by_user: false })).toMatch(/at most 12/);
+    expect(fake.tables.words.size).toBe(1);
+  });
+
+  it("update_word sets and clears only the named fields and keeps the others", async () => {
+    const fake = createFakeRepo({
+      field_defs: DEFS,
+      words: [
+        word("w1", "la thune", "бабки", {
+          custom_fields: [
+            { field_id: "d-syn", label: "Синонимы", value: "le fric" },
+            { field_id: "d-ant", label: "Антонимы", value: "la dèche" },
+            { field_id: null, label: "Откуда", value: "цыганское" },
+          ],
+        }),
+      ],
+    });
+    const out = await ok(updateWord, fake, { id: "w1", patch: { custom_fields: { СИНОНИМЫ: "le fric, l'oseille", Антонимы: null } } });
+    expect(out.status).toBe("updated");
+    expect(out).not.toHaveProperty("new_one_off_fields");
+    expect(fake.tables.words.get("w1")?.custom_fields).toEqual([
+      { field_id: "d-syn", label: "Синонимы", value: "le fric, l'oseille" },
+      { field_id: null, label: "Откуда", value: "цыганское" },
+    ]);
+    expect(out).toMatchObject({ word: { custom_fields: { Синонимы: "le fric, l'oseille", Откуда: "цыганское" } } });
+
+    const oneOff = await ok(updateWord, fake, { id: "w1", patch: { custom_fields: { откуда: "из цыганского", Пример: "j'ai pas une thune" } } });
+    expect(oneOff).toMatchObject({ status: "updated", new_one_off_fields: ["Пример"] });
+    expect(fake.tables.words.get("w1")?.custom_fields?.map((f) => [f.label, f.value])).toEqual([
+      ["Синонимы", "le fric, l'oseille"],
+      ["Откуда", "из цыганского"],
+      ["Пример", "j'ai pas une thune"],
+    ]);
+
+    const writes = fake.writes.length;
+    const same = await ok(updateWord, fake, { id: "w1", patch: { custom_fields: { Антонимы: null, Синонимы: "le fric, l'oseille" } } });
+    expect(same.status).toBe("unchanged");
+    expect(fake.writes).toHaveLength(writes);
+  });
+
+  it("search_words shows the values under the definition's current name, and finds words by them", async () => {
+    const fake = createFakeRepo({
+      field_defs: [{ ...DEFS[1], name: "Похожие" }, DEFS[2]],
+      words: [
+        word("a", "chelou", "странный", {
+          custom_fields: [
+            { field_id: "d-syn", label: "Синонимы", value: "bizarre" },
+            { field_id: "d-old", label: "Ударение", value: "на второй слог" },
+          ],
+        }),
+        word("b", "ouf", "безумный"),
+      ],
+    });
+    const out = await ok(searchWords, fake, { query: "bizarre" });
+    expect(out.words.map((w) => w.id)).toEqual(["a"]);
+    expect(out.words[0].custom_fields).toEqual({ Похожие: "bizarre", Ударение: "на второй слог" });
+    const plain = await ok(searchWords, fake, { query: "ouf" });
+    expect(plain.words[0]).not.toHaveProperty("custom_fields");
+  });
+
+  it("list_fields lists the live definitions in order, without deleted ones", async () => {
+    const out = await ok(listFields, createFakeRepo({ field_defs: DEFS }), {});
+    expect(out.fields).toEqual([
+      { name: "Синонимы", hint: "2–3 синонима на французском", auto_fill: false },
+      { name: "Антонимы", hint: "1–2 антонима", auto_fill: true },
+    ]);
+    expect(out.note).toMatch(/that word only/);
   });
 });
 
