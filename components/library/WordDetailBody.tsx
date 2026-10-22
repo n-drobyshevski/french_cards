@@ -497,13 +497,17 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
           <label htmlFor={`${id}-ru`} className="meta mt-4">
             Русский
           </label>
-          <input
-            id={`${id}-ru`}
-            value={draft.ru}
-            onChange={(e) => set("ru", e.target.value)}
-            autoComplete="off"
-            className="mt-2 h-12 rounded-chip border border-rule bg-surface px-3 text-[16px] text-ink outline-none focus:border-ink"
-          />
+          {/* H4: the form's ✕ / ✓ sit inside «Русский», the last box of the form. */}
+          <div className="mt-2 flex items-center rounded-chip border border-rule bg-surface pr-1 focus-within:border-ink">
+            <input
+              id={`${id}-ru`}
+              value={draft.ru}
+              onChange={(e) => set("ru", e.target.value)}
+              autoComplete="off"
+              className="h-12 min-w-0 flex-1 bg-transparent px-3 text-[16px] text-ink outline-none!"
+            />
+            {editPair()}
+          </div>
           <ProposalLine proposal={proposal} onUse={(ru) => set("ru", ru)} />
           <span id={`${id}-slang`} className="meta mt-4">
             Уровень сленга
@@ -526,7 +530,6 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             </span>
           </div>
           {errorLine}
-          {editActions}
         </form>
       ) : (
         <>
