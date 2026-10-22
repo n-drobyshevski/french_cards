@@ -39,3 +39,4 @@ The e2e suite starts `next start` on port 3100 and mocks `/api/ai/*`. It uses th
 
 - `public/lexique/fr-lemmas.json` is derived from **Lexique 3.83** by Boris New & Christophe Pallier ([lexique.org](http://www.lexique.org)), licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); the derived file is shared under the same license. See `public/lexique/LICENSE.txt`; rebuild with `node scripts/build-lexique.mjs`.
 - Ideas and patterns from [ts-fsrs-demo](https://github.com/ishiko732/ts-fsrs-demo) (MIT) and [jiaci](https://github.com/leoon-hu/jiaci) (MIT).
+- Anki import reads decks on the device with [sql.js](https://github.com/sql-js/sql.js) (MIT), [fflate](https://github.com/101arrowz/fflate) (MIT) and [fzstd](https://github.com/101arrowz/fzstd) (MIT).

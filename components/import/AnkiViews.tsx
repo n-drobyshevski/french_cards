@@ -17,7 +17,7 @@ import { wordsRu } from "./rows";
 import type { AnkiImportState } from "./use-anki-import";
 
 export const ANKI_TITLE = "Импорт из Anki";
-export const ANKI_FOOTNOTE = "Переводы, примеры, уровень сленга и темы дополним сами — перед добавлением всё можно проверить.";
+export const ANKI_FOOTNOTE = "Переводы, примеры, уровень сленга и темы дополним сами — перед добавлением всё можно проверить. Аудио и картинки не переносятся.";
 
 interface FrameProps {
   wide: boolean;
@@ -192,9 +192,9 @@ export function AnkiSetupView({ wide, state, onToggleDeck, onCarry, onStart, onP
           lang="fr"
           className="m-0 border-b border-rule pb-3 font-serif text-[22px] leading-7 font-medium tracking-[-0.01em] text-ink"
         >
-          {deck.decks[0]?.name ?? "Колода"}
-          <span className="ml-2 font-mono text-[11px] font-normal tracking-normal text-muted tabular-nums">
-            {deck.decks[0]?.count ?? 0}
+          {deck.decks[0]?.name ?? "Колода"}{" "}
+          <span className="ml-1 font-mono text-[11px] font-normal tracking-normal text-muted tabular-nums">
+            · {notesRu(deck.decks[0]?.count ?? 0)}
           </span>
         </p>
       )}

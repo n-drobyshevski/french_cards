@@ -422,7 +422,7 @@ export function DeskReviewView({
             <Icon name="chevron" size={14} strokeWidth={1.75} className="-ml-1 text-muted" />
           </button>
           <p className="m-0 min-w-0 flex-1 text-[12px] leading-4 text-muted">
-            <span className={WIDE_ONLY}>{IMPORT_FOOTNOTE}</span>
+            <span className={WIDE_ONLY}>{deck ? "Аудио и картинки из колоды не переносятся." : IMPORT_FOOTNOTE}</span>
           </p>
           <button
             type="button"

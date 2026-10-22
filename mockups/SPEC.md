@@ -287,3 +287,9 @@ Pixel-careful, consistent spacing (8px grid), real hierarchy, nothing overlappin
 ### Examples — «другой пример» and «+ Ещё пример» (added 2026-10-22)
 - Wherever a word's example shows (word detail, add form, edit forms), each example has a small ↻ icon button «Другой пример» (16px refresh glyph, muted, spins while loading) and the list ends with a text button «+ Ещё пример» (13px, ink, 500); with no example yet it reads «Подобрать пример». Up to 5 examples; in edit forms each also has × «Убрать пример». No «ИИ» wording; errors are one muted 12px line («Другого хорошего примера не нашлось.»).
 
+### Импорт из Anki (added 2026-10-22; built on the screenshot import, no separate board)
+- Entry: a quiet row «Колода Anki · .apkg или текстовый экспорт» under the screenshot pick (phone), a «Импорт из Anki» button in the margin notes (desktop), the row «Импорт из Anki» in Настройки → Данные, and a dropped .apkg/.txt/.csv anywhere on desktop.
+- Setup («Импорт из Anki», file name in mono): decks with checkboxes and counts (one deck: its name in serif + count), status line «К дополнению N · уже есть K» (known words never leave the device), at most 300 per run with a note about the rest, switch «Перенести прогресс из Anki» (only when the deck has reviews, on by default), footnote, primary «Дополнить N карточек», secondary «Другой файл».
+- Enriching: status line «Дополняем карточки» with «done / total» and the determinate bar, skeleton rows, «Стоп»; stopped → «Дальше с N словами»; failure → «Повторить» / «Другой файл»; a rate-limit wait reads «Много запросов — продолжим через N с».
+- Review: the screenshot list unchanged (ДОГАДКА for translations the deck lacked); the screenshot summary/column is replaced by the deck title and «N карточек из Anki · пропущено M · прогресс переносится».
+
