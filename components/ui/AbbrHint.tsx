@@ -6,6 +6,9 @@ import { cx } from "./cx";
 
 /** Gutter the hint keeps from the screen edges. */
 const EDGE = 16;
+/** Mouse hover: open after this pause, close this long after leaving (so the pointer can cross the gap). */
+const HOVER_OPEN_MS = 250;
+const HOVER_CLOSE_MS = 120;
 
 export interface AbbrHintProps {
   /** The abbreviation as printed: «n. m.», «loc.», «arg.»… */
@@ -19,14 +22,17 @@ export interface AbbrHintProps {
 
 /**
  * A dictionary abbreviation that explains itself on a tap: «n. m.» → «nom masculin ·
- * Существительное мужского рода». Taps and keys stay inside, so it works on the review card
- * (which flips on a tap) and in sheets (where Escape would close the sheet). Unknown
- * abbreviations render as plain text.
+ * Существительное мужского рода». With a mouse it also opens on hover; a click pins it. Taps and
+ * keys stay inside, so it works on the review card (which flips on a tap) and in sheets (where
+ * Escape would close the sheet). Unknown abbreviations render as plain text.
  */
 export function AbbrHint({ abbr, className, lang = "fr", align = "start" }: AbbrHintProps) {
   const entry = abbrEntry(abbr);
   const id = useId();
-  const [open, setOpen] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const open = pinned || hovered;
   const wrap = useRef<HTMLSpanElement>(null);
   const bubble = useRef<HTMLSpanElement>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -46,11 +52,20 @@ export function AbbrHint({ abbr, className, lang = "fr", align = "start" }: Abbr
   useEffect(() => {
     if (!open) return;
     const close = (event: PointerEvent) => {
-      if (!wrap.current?.contains(event.target as Node)) setOpen(false);
+      if (wrap.current?.contains(event.target as Node)) return;
+      setPinned(false);
+      setHovered(false);
     };
     document.addEventListener("pointerdown", close, true);
     return () => document.removeEventListener("pointerdown", close, true);
   }, [open]);
+
+  useEffect(
+    () => () => {
+      if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    },
+    [],
+  );
 
   if (!entry) {
     return (
@@ -66,13 +81,28 @@ export function AbbrHint({ abbr, className, lang = "fr", align = "start" }: Abbr
     event.stopPropagation();
     if (event.key === "Escape" && open) {
       event.preventDefault();
-      setOpen(false);
+      setPinned(false);
+      setHovered(false);
       button.current?.focus();
     }
   };
 
+  const hoverTo = (next: boolean) => (event: { pointerType: string }) => {
+    if (event.pointerType !== "mouse") return;
+    if (hoverTimer.current) clearTimeout(hoverTimer.current);
+    hoverTimer.current = setTimeout(() => setHovered(next), next ? HOVER_OPEN_MS : HOVER_CLOSE_MS);
+  };
+
   return (
-    <span ref={wrap} className="relative inline-flex" onClick={stop} onPointerDown={stop} onKeyDown={onKeyDown}>
+    <span
+      ref={wrap}
+      className="relative inline-flex"
+      onClick={stop}
+      onPointerDown={stop}
+      onKeyDown={onKeyDown}
+      onPointerEnter={hoverTo(true)}
+      onPointerLeave={hoverTo(false)}
+    >
       <button
         ref={button}
         type="button"
@@ -80,7 +110,11 @@ export function AbbrHint({ abbr, className, lang = "fr", align = "start" }: Abbr
         aria-expanded={open}
         aria-describedby={open ? id : undefined}
         aria-label={`${abbr} — ${entry.full}`}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          // A click pins a hovered hint open; a click on a pinned one closes it.
+          if (pinned) setHovered(false);
+          setPinned(!pinned);
+        }}
         className={cx(
           "abbr -my-1 cursor-help bg-transparent p-0 py-1 underline decoration-rule decoration-dotted decoration-1 underline-offset-[3px] active:text-ink",
           open && "text-ink decoration-ink",

@@ -90,6 +90,16 @@ const PATHS = {
       <path d="M15 18h8" />
     </>
   ),
+  /** Order: a down arrow beside lines of falling length. */
+  sort: (
+    <>
+      <path d="M7 4v16" />
+      <path d="m3 16 4 4 4-4" />
+      <path d="M13 6h8" />
+      <path d="M13 12h6" />
+      <path d="M13 18h4" />
+    </>
+  ),
   sliders: (
     <>
       <path d="M4 7h10" />

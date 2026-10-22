@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useRef, useState, type MouseEvent, type ReactNode, type RefObject } from "react";
 import { bottomBarRef } from "@/components/ui/bottom-clearance";
 import { Chip } from "@/components/ui/Chip";
 import { cx } from "@/components/ui/cx";
@@ -8,13 +8,15 @@ import { Icon } from "@/components/ui/Icons";
 import { FlatKey, Kbd } from "@/components/ui/Kbd";
 import type { Folder } from "@/lib/types";
 import { nWords } from "./format";
+import { Menu, MenuItem } from "./Menu";
 import { INBOX_KEY, ThemeSquare } from "./MoveMenu";
 import { SLANG_KEYS, slangKeyLabel, slangChipLabel, type SlangKey } from "./SlangFilter";
+import { DEFAULT_SORT, ORDER_MENU, orderLabel, type SortKey, type SortState } from "./table";
 
 // Pieces of the desktop library (DESKTOP-SPEC §5 #6–10): the text filter strip with its «Сленг ▾»
 // popover, the bulk bar, the selection summary and the empty detail pane.
 
-export type StatusFilter = "all" | "due" | "difficult";
+export type StatusFilter = "all" | "due" | "difficult" | "new";
 
 /** Tertiary text link-button: 13px 500 underlined. */
 export function TextLink({ onClick, children, className, ...rest }: { onClick: () => void; children: ReactNode; className?: string; "aria-haspopup"?: "dialog" }) {
@@ -41,11 +43,11 @@ function StripItem({
   ...rest
 }: {
   active: boolean;
-  onClick: () => void;
+  onClick: (event: MouseEvent<HTMLButtonElement>) => void;
   count?: number;
   children: ReactNode;
   "aria-expanded"?: boolean;
-  "aria-haspopup"?: "dialog";
+  "aria-haspopup"?: "dialog" | "menu";
   "aria-controls"?: string;
 }) {
   const pressed = rest["aria-expanded"] === undefined ? active : undefined;
@@ -66,7 +68,10 @@ function StripItem({
   );
 }
 
-/** «Все · К повторению 23 · Трудные 9 · Сленг ▾» (text filter strip token). */
+/**
+ * «Все · К повторению 23 · Трудные 9 · Новые 4 · Сленг ▾ · Порядок ▾» (text filter strip token): the
+ * phone's ledger strip and «Фильтр и порядок» sheet in one row.
+ */
 export function FilterStrip({
   status,
   onStatus,
@@ -74,6 +79,9 @@ export function FilterStrip({
   onSlang,
   dueCount,
   difficultCount,
+  newCount,
+  sort,
+  onOrder,
 }: {
   status: StatusFilter;
   onStatus: (s: StatusFilter) => void;
@@ -81,10 +89,16 @@ export function FilterStrip({
   onSlang: (keys: SlangKey[]) => void;
   dueCount: number;
   difficultCount: number;
+  newCount: number;
+  /** null: not read yet (the first frame), the label keeps its place blank. */
+  sort: SortState | null;
+  onOrder: (key: SortKey) => void;
 }) {
   const popId = useId();
   const wrap = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useOpenState(wrap);
+  const orderId = useId();
+  const [orderAnchor, setOrderAnchor] = useState<HTMLElement | null>(null);
 
   return (
     <div role="group" aria-label="Фильтр" className="flex min-w-0 items-center gap-5">
@@ -102,6 +116,9 @@ export function FilterStrip({
       </StripItem>
       <StripItem active={status === "difficult"} count={difficultCount} onClick={() => onStatus(status === "difficult" ? "all" : "difficult")}>
         Трудные
+      </StripItem>
+      <StripItem active={status === "new"} count={newCount} onClick={() => onStatus(status === "new" ? "all" : "new")}>
+        Новые
       </StripItem>
       <div ref={wrap} className="relative">
         <StripItem active={slang.length > 0} aria-expanded={open} aria-haspopup="dialog" aria-controls={popId} onClick={() => setOpen(!open)}>
@@ -153,6 +170,30 @@ export function FilterStrip({
           </div>
         )}
       </div>
+      {/* «Порядок»: a compact button (the strip shares its row with the search); the order is named
+          in its tooltip and in the menu. Ink while the order is not the default one. */}
+      <button
+        type="button"
+        aria-label={`Порядок: ${orderLabel(sort ?? DEFAULT_SORT)}`}
+        title={`Порядок: ${orderLabel(sort ?? DEFAULT_SORT)}`}
+        aria-haspopup="menu"
+        aria-expanded={!!orderAnchor}
+        aria-controls={orderAnchor ? orderId : undefined}
+        onClick={(e) => setOrderAnchor(orderAnchor ? null : e.currentTarget)}
+        className={cx(
+          "-ml-2 inline-flex size-9 shrink-0 items-center justify-center rounded-[4px] bg-transparent hoverable:bg-hover aria-expanded:bg-hover pointer-coarse:size-11",
+          sort && (sort.key !== DEFAULT_SORT.key || sort.dir !== DEFAULT_SORT.dir) ? "text-ink" : "text-muted",
+        )}
+      >
+        <Icon name="sort" size={18} />
+      </button>
+      <Menu id={orderId} open={!!orderAnchor} anchor={orderAnchor ? { element: orderAnchor } : null} onClose={() => setOrderAnchor(null)} label="Порядок">
+        {ORDER_MENU.map((o) => (
+          <MenuItem key={o.key} checked={sort?.key === o.key && sort.dir === 1} onSelect={() => onOrder(o.key)}>
+            {o.label}
+          </MenuItem>
+        ))}
+      </Menu>
     </div>
   );
 }

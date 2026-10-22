@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { AbbrHint } from "@/components/ui/AbbrHint";
+import { IconButton } from "@/components/ui/Button";
 import { Kbd } from "@/components/ui/Kbd";
 import { SkeletonBar } from "@/components/ui/Skeleton";
 import { SlangMeter } from "@/components/ui/SlangMeter";
@@ -158,6 +159,10 @@ export interface ReviewCardProps {
   remaining?: number;
   /** Replaces the loading placeholder: the text fades in over the same frame (R1). */
   enter?: boolean;
+  /** Pencil in the answer side's header: «Изменить карточку» (opens the word's sheet). */
+  onEdit?: () => void;
+  /** `E` opens it too (single-letter keys on); named in the pencil's tooltip. */
+  editKey?: boolean;
 }
 
 /**
@@ -181,6 +186,8 @@ export function ReviewCard({
   number,
   remaining = 0,
   enter = false,
+  onEdit,
+  editKey = false,
 }: ReviewCardProps) {
   const swipe = useSwipe({ enabled: swipeEnabled, haptics, onDecide: onSwipe });
   const { dx, width, mode } = swipe.view;
@@ -308,7 +315,28 @@ export function ReviewCard({
           )}
         >
           <CardHeader label={<CallNumber side={label} number={number} />}>
-            <SlangMeter level={word.slang_level} verlan={word.verlan} hints hintAlign="end" />
+            <span className="flex items-center gap-1">
+              <SlangMeter level={word.slang_level} verlan={word.verlan} hints hintAlign="end" />
+              {onEdit && (
+                <>
+                  <span aria-hidden="true" className="ml-2 h-5 w-px bg-rule" />
+                  {/* Its own tap: neither a flip back nor the start of a swipe. */}
+                  <IconButton
+                    icon="pencil"
+                    label="Изменить карточку"
+                    title={editKey ? "Изменить карточку (E)" : "Изменить карточку"}
+                    aria-keyshortcuts={editKey ? "E" : undefined}
+                    iconSize={18}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit();
+                    }}
+                    className="-mr-3 text-muted md:-mr-2 md:size-9 hoverable:bg-hover-surface hoverable:text-ink"
+                  />
+                </>
+              )}
+            </span>
           </CardHeader>
 
           {/* The scroller needs pan-y too: touch-action is resolved up to the nearest scroll container,
@@ -404,17 +432,9 @@ export function ReviewCard({
 function Tracings({ folderName, word }: { folderName: string; word: Word }) {
   const items: ReactNode[] = [
     folderName,
-    <span key="level" lang={word.slang_level === 0 ? undefined : "fr"} className="font-serif text-[14px] italic">
-      {SLANG_LABELS[word.slang_level]}
-    </span>,
+    <AbbrHint key="level" abbr={SLANG_LABELS[word.slang_level]} lang={word.slang_level === 0 ? "ru" : "fr"} className="text-[14px]" />,
   ];
-  if (word.verlan) {
-    items.push(
-      <span key="verlan" lang="fr" className="font-serif text-[14px] italic">
-        verl.
-      </span>,
-    );
-  }
+  if (word.verlan) items.push(<AbbrHint key="verlan" abbr="verl." className="text-[14px]" />);
   return (
     <span className="flex min-w-0 items-baseline gap-4 truncate max-md:hidden">
       {items.map((item, i) => (

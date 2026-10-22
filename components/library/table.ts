@@ -4,7 +4,8 @@
 import { compareFr } from "@/lib/text";
 import type { LibraryWord } from "./useLibraryWords";
 
-export type SortKey = "fr" | "ru" | "level" | "theme" | "due";
+/** Column heads, plus the phone's two orders that have no column: «Сначала новые», «Сначала трудные». */
+export type SortKey = "fr" | "ru" | "level" | "theme" | "due" | "added" | "difficult";
 export type SortDir = 1 | -1;
 export interface SortState {
   key: SortKey;
@@ -12,6 +13,32 @@ export interface SortState {
 }
 
 export const DEFAULT_SORT: SortState = { key: "fr", dir: 1 };
+
+export const SORT_KEYS: readonly SortKey[] = ["fr", "ru", "level", "theme", "due", "added", "difficult"];
+
+/** «Порядок ▾» in the filter strip: the phone's «Фильтр и порядок» orders, same names. */
+export const ORDER_MENU: readonly { key: SortKey; label: string }[] = [
+  { key: "added", label: "Сначала новые" },
+  { key: "due", label: "По следующему показу" },
+  { key: "fr", label: "По алфавиту" },
+  { key: "difficult", label: "Сначала трудные" },
+];
+
+/** The strip's name for the current order (a column head picked in the table counts too). */
+export function orderLabel(sort: SortState): string {
+  const fromMenu = ORDER_MENU.find((o) => o.key === sort.key);
+  if (fromMenu && sort.dir === 1) return fromMenu.label;
+  const column: Record<SortKey, string> = {
+    fr: "По алфавиту",
+    ru: "По переводу",
+    level: "По уровню",
+    theme: "По теме",
+    due: "По следующему показу",
+    added: "Сначала новые",
+    difficult: "Сначала трудные",
+  };
+  return sort.dir === 1 ? column[sort.key] : `${column[sort.key]} ↓`;
+}
 
 const ruCollator = new Intl.Collator("ru", { sensitivity: "base", numeric: true });
 
@@ -42,11 +69,20 @@ export function sortWords(items: readonly LibraryWord[], sort: SortState, folder
         const [rb, db] = dueRank(b);
         return ra - rb || da - db;
       }
+      case "added":
+        return newestFirst(a, b);
+      case "difficult":
+        // Difficult words first, newest first inside each group (as on phones).
+        return Number(b.schedule.status === "difficult") - Number(a.schedule.status === "difficult") || newestFirst(a, b);
       default:
         return 0;
     }
   };
   return [...items].sort((a, b) => sort.dir * (compare(a, b) || compareFr(a.word.fr, b.word.fr)) || a.word.id.localeCompare(b.word.id));
+}
+
+function newestFirst(a: LibraryWord, b: LibraryWord): number {
+  return a.word.created_at === b.word.created_at ? 0 : a.word.created_at > b.word.created_at ? -1 : 1;
 }
 
 /** Clicking a column head: the same column flips the direction, another starts ascending. */
