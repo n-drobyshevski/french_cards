@@ -35,9 +35,11 @@ import { matchesSearch } from "@/lib/text";
 import type { Folder } from "@/lib/types";
 import { useFinePointer, useLayoutClass, useMediaQuery } from "@/lib/use-media";
 import { moveWords, restoreMoves, restoreWords, softDeleteWords } from "@/lib/words";
+import { takeSkeletonHandoff } from "./DeskPlaceholder";
 import { BulkBar, EmptyPane, FilterStrip, SelectionSummary, summaryTargets, TextLink, type StatusFilter } from "./DeskParts";
 import { DisbandSheet, disbandMessage } from "./DisbandSheet";
 import { EnrichPlanSheet } from "./EnrichPlanSheet";
+import { cachedFolder, rememberLibrary } from "./first-paint";
 import { FolderFormSheet } from "./FolderFormSheet";
 import { nWords, plural, practiceHref, reviewHref } from "./format";
 import { Menu, MenuCheckboxItem, MenuItem, MenuSeparator, type MenuAnchor } from "./Menu";
@@ -48,6 +50,7 @@ import {
   cursorAfterRemoval,
   DEFAULT_SORT,
   guideRange,
+  INITIAL_TABLE_INNER,
   listKeyAction,
   nextSort,
   rangeIds,
@@ -134,6 +137,9 @@ function Desk({ scope }: { scope: LibraryScope }) {
   }, [folderId]);
   const folder: Folder | null = theme && theme.folder !== "missing" ? theme.folder : null;
   const folders = useMemo(() => words?.folders ?? [], [words]);
+  useEffect(() => {
+    if (stats) rememberLibrary(stats);
+  }, [stats]);
 
   // ----- Filters and sorting
   const searchRef = useRef<HTMLInputElement>(null);
@@ -229,7 +235,9 @@ function Desk({ scope }: { scope: LibraryScope }) {
 
   // ----- Measurements: column rules by inner width, guide words by the visible rows
   const loaded = words !== undefined;
-  const [inner, setInner] = useState(744);
+  const [inner, setInner] = useState(INITIAL_TABLE_INNER);
+  // Right after DeskPlaceholder: its skeleton timer carries on (no blink at the hand-over).
+  const [skeletonStyle] = useState(takeSkeletonHandoff);
   const [view, setView] = useState({ top: 0, height: 600 });
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -556,7 +564,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
     );
   }
 
-  const title = scope.kind === "all" ? "Библиотека" : scope.kind === "inbox" ? "Входящие" : (folder?.name ?? "");
+  const title = scope.kind === "all" ? "Библиотека" : scope.kind === "inbox" ? "Входящие" : (folder?.name ?? cachedFolder(scope.id)?.name ?? "");
   const hasWords = !!scopeRows && scopeRows.length > 0;
   const emptyScope = !!scopeRows && scopeRows.length === 0;
   const selectedRows = rows.filter((r) => selection.has(r.word.id));
@@ -588,7 +596,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
       scope.kind === "inbox" ? (
         sortLink
       ) : (
-        <span className="inline-flex flex-wrap items-baseline gap-x-6">
+        <span className="inline-flex flex-wrap items-center gap-x-6">
           <span>
             {nWords(scopeStats.total)}
             {scopeStats.due > 0 && (
@@ -667,8 +675,9 @@ function Desk({ scope }: { scope: LibraryScope }) {
         onNewTheme={() => setFolderForm({ mode: "new", moveIds: targetIds() })}
       />
     ) : cursorItem ? (
+      // Not keyed by the word: the previous word stays until the next one is read, then swaps in
+      // one frame (D3).
       <WordDetailBody
-        key={cursorItem.word.id}
         wordId={cursorItem.word.id}
         variant="pane"
         onClose={noop}
@@ -739,11 +748,12 @@ function Desk({ scope }: { scope: LibraryScope }) {
               </button>
             )}
           </div>
-          <p className="m-0 mt-1 min-h-5 text-[13px] leading-5 text-muted tabular-nums">{subline}</p>
+          <p className="m-0 mt-1 flex min-h-5 items-center text-[13px] leading-5 text-muted tabular-nums">{subline}</p>
           <div className="mt-1 flex h-4 items-center text-[12px] leading-4">{line2}</div>
 
-          {/* Toolbar: theme filter (medium), search, filter strip */}
-          {(hasWords || listMode) && (
+          {/* Toolbar: theme filter (medium), search, filter strip — there while the words load too,
+              so nothing below it moves when they arrive (D4) */}
+          {(scopeRows === undefined || hasWords || listMode) && (
             <div className="mt-3 flex h-9 items-center gap-6 pointer-coarse:gap-5">
               {layout !== "expanded" && (
                 <button
@@ -837,6 +847,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
               fine={fine}
               label={`Слова: ${title}`}
               loading={capped === undefined}
+              skeletonStyle={skeletonStyle}
               handlers={handlers}
               onSelectAll={(all) => {
                 setSelection(all ? new Set(ids) : EMPTY_SET);

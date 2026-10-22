@@ -11,6 +11,7 @@ import { DataSection } from "./DataSection";
 import { CheckboxRow, DeskRow, DeskSection, DeskStepper, DirectionSelect, TextOptions } from "./DesktopControls";
 import { NEW_PER_DAY_MAX, stepNewPerDay } from "./format";
 import { useSectionSpy } from "./useSectionSpy";
+import { Valued } from "./Valued";
 
 export const DESK_SECTIONS = [
   { id: "set-review", title: "Повторение" },
@@ -54,7 +55,8 @@ const SINGLE_KEYS = ["N", "/", "J", "K", "X", "M"];
 
 export interface DesktopSettingsProps {
   settings: Settings;
-  loading: boolean;
+  /** False until the stored values (or their mirror) are read: controls are drawn without values. */
+  known: boolean;
   save: (patch: Partial<Omit<Settings, "id">>) => void;
   onTheme: (theme: Settings["theme"]) => void;
   onDirection: (direction: Direction) => void;
@@ -90,7 +92,7 @@ function SectionNav() {
   );
 }
 
-export function DesktopSettings({ settings, loading, save, onTheme, onDirection }: DesktopSettingsProps) {
+export function DesktopSettings({ settings, known, save, onTheme, onDirection }: DesktopSettingsProps) {
   const { openShortcuts } = useShell();
   return (
     <main
@@ -104,154 +106,156 @@ export function DesktopSettings({ settings, loading, save, onTheme, onDirection 
       <div className="mt-9 flex items-start gap-12">
         <SectionNav />
         <div className="w-full max-w-[640px] min-w-0">
-          <DeskSection id="set-review" title="Повторение" first>
-            <DeskRow label="Направление по умолчанию" labelId="set-dir-label">
-              <DirectionSelect value={settings.default_direction} onChange={onDirection} labelId="set-dir-label" disabled={loading} />
-            </DeskRow>
-            <DeskRow label="Новых карточек в день" labelId="set-new-label">
-              <DeskStepper
-                labelledBy="set-new-label"
-                value={settings.new_per_day}
-                max={NEW_PER_DAY_MAX}
-                disabled={loading}
-                onStep={(delta) => save({ new_per_day: stepNewPerDay(settings.new_per_day, delta) })}
+          <Valued known={known}>
+            <DeskSection id="set-review" title="Повторение" first>
+              <DeskRow label="Направление по умолчанию" labelId="set-dir-label">
+                <DirectionSelect value={settings.default_direction} onChange={onDirection} labelId="set-dir-label" />
+              </DeskRow>
+              <DeskRow label="Новых карточек в день" labelId="set-new-label">
+                <DeskStepper
+                  labelledBy="set-new-label"
+                  value={settings.new_per_day}
+                  max={NEW_PER_DAY_MAX}
+               
+                  onStep={(delta) => save({ new_per_day: stepNewPerDay(settings.new_per_day, delta) })}
+                />
+              </DeskRow>
+              <DeskRow label="Кнопки оценки" labelId="set-grade-label">
+                <TextOptions
+                  ariaLabelledby="set-grade-label"
+                  options={GRADE_OPTIONS}
+                  value={settings.grade_buttons}
+               
+                  onChange={(value) => save({ grade_buttons: value })}
+                />
+              </DeskRow>
+              <CheckboxRow
+                label="Свайпы для оценки"
+                checked={settings.swipe_grading}
+             
+                onCheckedChange={(checked) => save({ swipe_grading: checked })}
               />
-            </DeskRow>
-            <DeskRow label="Кнопки оценки" labelId="set-grade-label">
-              <TextOptions
-                ariaLabelledby="set-grade-label"
-                options={GRADE_OPTIONS}
-                value={settings.grade_buttons}
-                disabled={loading}
-                onChange={(value) => save({ grade_buttons: value })}
-              />
-            </DeskRow>
-            <CheckboxRow
-              label="Свайпы для оценки"
-              checked={settings.swipe_grading}
-              disabled={loading}
-              onCheckedChange={(checked) => save({ swipe_grading: checked })}
-            />
-          </DeskSection>
+            </DeskSection>
 
-          <DeskSection id="set-look" title="Оформление">
-            <DeskRow label="Тема" labelId="set-theme-label">
-              <TextOptions ariaLabelledby="set-theme-label" options={THEME_OPTIONS} value={settings.theme} disabled={loading} onChange={onTheme} />
-            </DeskRow>
-          </DeskSection>
+            <DeskSection id="set-look" title="Оформление">
+              <DeskRow label="Тема" labelId="set-theme-label">
+                <TextOptions ariaLabelledby="set-theme-label" options={THEME_OPTIONS} value={settings.theme} onChange={onTheme} />
+              </DeskRow>
+            </DeskSection>
 
-          <DeskSection id="set-hints" title="ИИ">
-            <CheckboxRow
-              label="Автоподсказки при вводе"
-              checked={settings.suggestions_enabled}
-              disabled={loading}
-              onCheckedChange={(checked) => save({ suggestions_enabled: checked })}
-            />
-            <CheckboxRow
-              label="Определять уровень сленга"
-              checked={settings.slang_detect_enabled}
-              disabled={loading}
-              onCheckedChange={(checked) => save({ slang_detect_enabled: checked })}
-            />
-            <CheckboxRow
-              label="Подбирать примеры"
-              checked={settings.examples_enabled}
-              disabled={loading}
-              onCheckedChange={(checked) => save({ examples_enabled: checked })}
-            />
-            <CheckboxRow
-              label="Раскладывать по темам автоматически"
-              checked={settings.auto_sort_enabled}
-              disabled={loading}
-              onCheckedChange={(checked) => save({ auto_sort_enabled: checked })}
-            />
-            <CheckboxRow
-              label="Писать заметки"
-              checked={settings.notes_enabled}
-              disabled={loading}
-              onCheckedChange={(checked) => save({ notes_enabled: checked })}
-            />
-            <DeskRow label="Вариантов" labelId="set-count-label">
-              <TextOptions
-                ariaLabelledby="set-count-label"
-                options={COUNT_OPTIONS}
-                value={settings.suggest_count}
-                disabled={loading}
-                onChange={(suggest_count) => save({ suggest_count })}
+            <DeskSection id="set-hints" title="ИИ">
+              <CheckboxRow
+                label="Автоподсказки при вводе"
+                checked={settings.suggestions_enabled}
+             
+                onCheckedChange={(checked) => save({ suggestions_enabled: checked })}
               />
-            </DeskRow>
-            <DeskRow label="Регистр вариантов" labelId="set-register-label">
-              <TextOptions
-                ariaLabelledby="set-register-label"
-                options={REGISTER_OPTIONS}
-                value={settings.suggest_register}
-                disabled={loading}
-                onChange={(suggest_register) => save({ suggest_register })}
+              <CheckboxRow
+                label="Определять уровень сленга"
+                checked={settings.slang_detect_enabled}
+             
+                onCheckedChange={(checked) => save({ slang_detect_enabled: checked })}
               />
-            </DeskRow>
-            <DeskRow label="Модель: подсказки" labelId="set-model-label">
-              <TextOptions
-                ariaLabelledby="set-model-label"
-                options={MODEL_OPTIONS}
-                value={settings.ai_model}
-                disabled={loading}
-                onChange={(ai_model) => save({ ai_model })}
+              <CheckboxRow
+                label="Подбирать примеры"
+                checked={settings.examples_enabled}
+             
+                onCheckedChange={(checked) => save({ examples_enabled: checked })}
               />
-            </DeskRow>
-            <DeskRow label="Модель: скриншоты" labelId="set-model-extract-label">
-              <TextOptions
-                ariaLabelledby="set-model-extract-label"
-                options={MODEL_OPTIONS}
-                value={settings.ai_model_extract}
-                disabled={loading}
-                onChange={(ai_model_extract) => save({ ai_model_extract })}
+              <CheckboxRow
+                label="Раскладывать по темам автоматически"
+                checked={settings.auto_sort_enabled}
+             
+                onCheckedChange={(checked) => save({ auto_sort_enabled: checked })}
               />
-            </DeskRow>
-            <p className="mt-3 mb-0 text-[12px] leading-4 text-muted">
-              «Точнее» отвечает медленнее, зато реже ошибается с переводом и уровнем сленга.
-            </p>
-            <p className="mt-1 mb-0 text-[12px] leading-4 text-muted">
-              Слова и скриншоты отправляются в Anthropic (Claude) для подсказок и не хранятся там.
-            </p>
-          </DeskSection>
+              <CheckboxRow
+                label="Писать заметки"
+                checked={settings.notes_enabled}
+             
+                onCheckedChange={(checked) => save({ notes_enabled: checked })}
+              />
+              <DeskRow label="Вариантов" labelId="set-count-label">
+                <TextOptions
+                  ariaLabelledby="set-count-label"
+                  options={COUNT_OPTIONS}
+                  value={settings.suggest_count}
+               
+                  onChange={(suggest_count) => save({ suggest_count })}
+                />
+              </DeskRow>
+              <DeskRow label="Регистр вариантов" labelId="set-register-label">
+                <TextOptions
+                  ariaLabelledby="set-register-label"
+                  options={REGISTER_OPTIONS}
+                  value={settings.suggest_register}
+               
+                  onChange={(suggest_register) => save({ suggest_register })}
+                />
+              </DeskRow>
+              <DeskRow label="Модель: подсказки" labelId="set-model-label">
+                <TextOptions
+                  ariaLabelledby="set-model-label"
+                  options={MODEL_OPTIONS}
+                  value={settings.ai_model}
+               
+                  onChange={(ai_model) => save({ ai_model })}
+                />
+              </DeskRow>
+              <DeskRow label="Модель: скриншоты" labelId="set-model-extract-label">
+                <TextOptions
+                  ariaLabelledby="set-model-extract-label"
+                  options={MODEL_OPTIONS}
+                  value={settings.ai_model_extract}
+               
+                  onChange={(ai_model_extract) => save({ ai_model_extract })}
+                />
+              </DeskRow>
+              <p className="mt-3 mb-0 text-[12px] leading-4 text-muted">
+                «Точнее» отвечает медленнее, зато реже ошибается с переводом и уровнем сленга.
+              </p>
+              <p className="mt-1 mb-0 text-[12px] leading-4 text-muted">
+                Слова и скриншоты отправляются в Anthropic (Claude) для подсказок и не хранятся там.
+              </p>
+            </DeskSection>
 
-          <DeskSection id="set-keys" title="Клавиши">
-            <CheckboxRow
-              label="Однобуквенные сочетания"
-              caption={
-                <>
-                  {SINGLE_KEYS.map((k, i) => (
-                    <span key={k}>
-                      {i > 0 && ", "}
-                      <FlatKey className="leading-none">{k}</FlatKey>
-                    </span>
-                  ))}{" "}
-                  и другие. Выключите, если мешают экранному диктору.
-                </>
-              }
-              checked={settings.shortcuts}
-              disabled={loading}
-              onCheckedChange={(checked) => save({ shortcuts: checked })}
-            />
-            <CheckboxRow
-              label="Подсказки клавиш при повторении"
-              checked={settings.key_hints}
-              disabled={loading}
-              onCheckedChange={(checked) => save({ key_hints: checked })}
-            />
-            <DeskRow label="Все клавиши" labelId="set-keys-all">
-              <button
-                type="button"
-                aria-label="Все клавиши"
-                aria-keyshortcuts={settings.shortcuts ? "Shift+Slash" : undefined}
-                title={settings.shortcuts ? "Все клавиши (?)" : "Все клавиши"}
-                onClick={openShortcuts}
-                className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[4px] border border-boundary bg-surface p-0 font-mono text-[13px] text-ink hoverable:bg-hover-surface"
-              >
-                ?
-              </button>
-            </DeskRow>
-          </DeskSection>
+            <DeskSection id="set-keys" title="Клавиши">
+              <CheckboxRow
+                label="Однобуквенные сочетания"
+                caption={
+                  <>
+                    {SINGLE_KEYS.map((k, i) => (
+                      <span key={k}>
+                        {i > 0 && ", "}
+                        <FlatKey className="leading-none">{k}</FlatKey>
+                      </span>
+                    ))}{" "}
+                    и другие. Выключите, если мешают экранному диктору.
+                  </>
+                }
+                checked={settings.shortcuts}
+             
+                onCheckedChange={(checked) => save({ shortcuts: checked })}
+              />
+              <CheckboxRow
+                label="Подсказки клавиш при повторении"
+                checked={settings.key_hints}
+             
+                onCheckedChange={(checked) => save({ key_hints: checked })}
+              />
+              <DeskRow label="Все клавиши" labelId="set-keys-all">
+                <button
+                  type="button"
+                  aria-label="Все клавиши"
+                  aria-keyshortcuts={settings.shortcuts ? "Shift+Slash" : undefined}
+                  title={settings.shortcuts ? "Все клавиши (?)" : "Все клавиши"}
+                  onClick={openShortcuts}
+                  className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-[4px] border border-boundary bg-surface p-0 font-mono text-[13px] text-ink hoverable:bg-hover-surface"
+                >
+                  ?
+                </button>
+              </DeskRow>
+            </DeskSection>
+          </Valued>
 
           <DataSection desktop />
         </div>

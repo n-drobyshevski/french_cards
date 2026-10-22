@@ -116,6 +116,7 @@ export function CheckboxRow({
       <span className="mt-[3px] flex shrink-0">
         <span
           aria-hidden="true"
+          data-check=""
           className={cx(
             "inline-flex size-3.5 items-center justify-center rounded-[2px] border",
             checked ? "border-ink bg-ink text-on-ink" : "border-muted bg-surface",
@@ -186,6 +187,7 @@ export function TextOptions<T extends string | number>({
               }}
               type="button"
               role="radio"
+              data-text-option=""
               aria-checked={selected}
               aria-label={option.ariaLabel}
               tabIndex={selected ? 0 : -1}
@@ -359,7 +361,7 @@ export function DirectionSelect({
         }}
         className="inline-flex h-8 cursor-pointer items-center gap-2 rounded-[4px] border border-boundary bg-surface pr-2 pl-2.5 font-mono text-[12px] font-medium tracking-[.06em] whitespace-nowrap text-ink hoverable:bg-hover-surface disabled:cursor-default disabled:opacity-40"
       >
-        <span>{DIRECTION_LABELS[value]}</span>
+        <span data-value="">{DIRECTION_LABELS[value]}</span>
         <Icon name="chevron" size={14} className="text-muted" />
       </button>
       {open && (

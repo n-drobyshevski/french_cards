@@ -1,6 +1,5 @@
 "use client";
 
-import { useLiveQuery } from "dexie-react-hooks";
 import { useState } from "react";
 import { InstallHint } from "@/components/pwa/InstallHint";
 import { applyTheme } from "@/components/providers/theme";
@@ -13,15 +12,17 @@ import { Segmented } from "@/components/ui/Segmented";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { Toggle } from "@/components/ui/Toggle";
 import { haptic, hapticSupport } from "@/lib/haptics";
-import { getSettings, updateSettings } from "@/lib/settings";
+import { updateSettings } from "@/lib/settings";
 import { DEFAULT_SETTINGS, type Direction, type Settings } from "@/lib/types";
 import { useLayoutClass } from "@/lib/use-media";
+import { useSettings } from "@/lib/use-settings";
 import { DataSection } from "./DataSection";
 import { DesktopSettings } from "./DesktopSettings";
 import { DirectionSheet } from "./DirectionSheet";
 import { NEW_PER_DAY_MAX, stepNewPerDay } from "./format";
 import { SettingsButtonRow, SettingsRow, SettingsSection } from "./SettingsList";
 import { Stepper } from "./Stepper";
+import { Valued } from "./Valued";
 
 const THEME_OPTIONS = [
   { value: "system", label: "Система" },
@@ -58,9 +59,11 @@ const GRADE_OPTIONS = [
  * so a wide window never flashes the phone layout.
  */
 export function SettingsScreen() {
-  const stored = useLiveQuery(() => getSettings(), []);
-  const settings: Settings = stored ?? DEFAULT_SETTINGS;
-  const loading = stored === undefined;
+  // Stored values, or their localStorage mirror in the first frame (L2); with neither (first run,
+  // server render) the rows show valueless controls until Dexie answers (T1).
+  const current = useSettings().settings;
+  const settings: Settings = current ?? DEFAULT_SETTINGS;
+  const known = current !== undefined;
   const toast = useSnackbar();
   const layout = useLayoutClass();
 
@@ -77,21 +80,22 @@ export function SettingsScreen() {
   };
 
   if (layout !== "compact") {
-    return <DesktopSettings settings={settings} loading={loading} save={save} onTheme={onTheme} onDirection={onDirection} />;
+    return <DesktopSettings settings={settings} known={known} save={save} onTheme={onTheme} onDirection={onDirection} />;
   }
-  return <PhoneSettings settings={settings} loading={loading} save={save} onTheme={onTheme} onDirection={onDirection} />;
+  return <PhoneSettings settings={settings} known={known} save={save} onTheme={onTheme} onDirection={onDirection} />;
 }
 
 interface ScreenProps {
   settings: Settings;
-  loading: boolean;
+  /** False until the stored values (or their mirror) are read: controls are drawn without values. */
+  known: boolean;
   save: (patch: Partial<Omit<Settings, "id">>) => void;
   onTheme: (theme: Settings["theme"]) => void;
   onDirection: (direction: Direction) => void;
 }
 
 /** The phone list (< 768), unchanged from before the desktop layout. */
-function PhoneSettings({ settings, loading, save, onTheme, onDirection }: ScreenProps) {
+function PhoneSettings({ settings, known, save, onTheme, onDirection }: ScreenProps) {
   const [directionOpen, setDirectionOpen] = useState(false);
   const toast = useSnackbar();
 
@@ -99,158 +103,160 @@ function PhoneSettings({ settings, loading, save, onTheme, onDirection }: Screen
     <div className="contents md:hidden">
       <Header title="Настройки" fallbackHref="/" />
       <main className="flex flex-1 flex-col px-4 pb-6">
-        <SettingsSection title="Повторение">
-          <SettingsButtonRow
-            label="Направление по умолчанию"
-            aria-haspopup="dialog"
-            disabled={loading}
-            onClick={() => setDirectionOpen(true)}
-            trailing={
-              <>
-                <span className="font-mono text-[12px] leading-4 tracking-[.06em] whitespace-nowrap text-muted">
-                  {DIRECTION_LABELS[settings.default_direction]}
-                </span>
-                <Icon name="chevron-right" size={14} strokeWidth={2} className="text-muted" />
-              </>
+        <Valued known={known}>
+          <SettingsSection title="Повторение">
+            <SettingsButtonRow
+              label="Направление по умолчанию"
+              aria-haspopup="dialog"
+           
+              onClick={() => setDirectionOpen(true)}
+              trailing={
+                <>
+                  <span data-value="" className="font-mono text-[12px] leading-4 tracking-[.06em] whitespace-nowrap text-muted">
+                    {DIRECTION_LABELS[settings.default_direction]}
+                  </span>
+                  <Icon name="chevron-right" size={14} strokeWidth={2} className="text-muted" />
+                </>
+              }
+            />
+            <SettingsRow label="Новых карточек в день">
+              <Stepper
+                label="Новых карточек в день"
+                value={settings.new_per_day}
+                max={NEW_PER_DAY_MAX}
+             
+                onStep={(delta) => save({ new_per_day: stepNewPerDay(settings.new_per_day, delta) })}
+              />
+            </SettingsRow>
+            <SettingsRow label="Кнопки оценки" labelId="grade-buttons-label">
+              <Segmented
+                mono
+                ariaLabelledby="grade-buttons-label"
+                options={GRADE_OPTIONS}
+                value={settings.grade_buttons}
+                onChange={(value) => save({ grade_buttons: value })}
+              />
+            </SettingsRow>
+            <SettingsRow label="Свайпы для оценки" labelId="swipe-label">
+              <Toggle
+                aria-labelledby="swipe-label"
+                checked={settings.swipe_grading}
+             
+                onCheckedChange={(checked) => save({ swipe_grading: checked })}
+              />
+            </SettingsRow>
+            <SettingsRow label="Вибрация при свайпах" labelId="haptics-label">
+              <Button
+                variant="tertiary"
+                size="sm"
+                className="text-[13px]"
+                disabled={!settings.haptics || !settings.swipe_grading}
+                onClick={() => {
+                  if (hapticSupport() === "none") toast.show({ message: "Этот браузер не умеет вибрировать" });
+                  else haptic("again");
+                }}
+              >
+                Проверить
+              </Button>
+              <Toggle
+                aria-labelledby="haptics-label"
+                checked={settings.haptics}
+                disabled={!settings.swipe_grading}
+                onCheckedChange={(checked) => save({ haptics: checked })}
+              />
+            </SettingsRow>
+          </SettingsSection>
+
+          <SettingsSection title="Оформление">
+            <SettingsRow label="Тема" labelId="theme-label">
+              <Segmented
+                ariaLabelledby="theme-label"
+                options={THEME_OPTIONS}
+                value={settings.theme}
+                onChange={onTheme}
+              />
+            </SettingsRow>
+          </SettingsSection>
+
+          <SettingsSection
+            title="ИИ"
+            footer={
+              <div className="flex flex-col gap-1 border-t border-rule pt-2 text-[12px] leading-4 text-muted">
+                <p className="m-0">«Точнее» отвечает медленнее, зато реже ошибается с переводом и уровнем сленга.</p>
+                <p className="m-0">Слова и скриншоты отправляются в Anthropic (Claude) для подсказок и не хранятся там.</p>
+              </div>
             }
-          />
-          <SettingsRow label="Новых карточек в день">
-            <Stepper
-              label="Новых карточек в день"
-              value={settings.new_per_day}
-              max={NEW_PER_DAY_MAX}
-              disabled={loading}
-              onStep={(delta) => save({ new_per_day: stepNewPerDay(settings.new_per_day, delta) })}
-            />
-          </SettingsRow>
-          <SettingsRow label="Кнопки оценки" labelId="grade-buttons-label">
-            <Segmented
-              mono
-              ariaLabelledby="grade-buttons-label"
-              options={GRADE_OPTIONS}
-              value={settings.grade_buttons}
-              onChange={(value) => save({ grade_buttons: value })}
-            />
-          </SettingsRow>
-          <SettingsRow label="Свайпы для оценки" labelId="swipe-label">
-            <Toggle
-              aria-labelledby="swipe-label"
-              checked={settings.swipe_grading}
-              disabled={loading}
-              onCheckedChange={(checked) => save({ swipe_grading: checked })}
-            />
-          </SettingsRow>
-          <SettingsRow label="Вибрация при свайпах" labelId="haptics-label">
-            <Button
-              variant="tertiary"
-              size="sm"
-              className="text-[13px]"
-              disabled={!settings.haptics || !settings.swipe_grading}
-              onClick={() => {
-                if (hapticSupport() === "none") toast.show({ message: "Этот браузер не умеет вибрировать" });
-                else haptic("again");
-              }}
-            >
-              Проверить
-            </Button>
-            <Toggle
-              aria-labelledby="haptics-label"
-              checked={settings.haptics}
-              disabled={loading || !settings.swipe_grading}
-              onCheckedChange={(checked) => save({ haptics: checked })}
-            />
-          </SettingsRow>
-        </SettingsSection>
-
-        <SettingsSection title="Оформление">
-          <SettingsRow label="Тема" labelId="theme-label">
-            <Segmented
-              ariaLabelledby="theme-label"
-              options={THEME_OPTIONS}
-              value={settings.theme}
-              onChange={onTheme}
-            />
-          </SettingsRow>
-        </SettingsSection>
-
-        <SettingsSection
-          title="ИИ"
-          footer={
-            <div className="flex flex-col gap-1 border-t border-rule pt-2 text-[12px] leading-4 text-muted">
-              <p className="m-0">«Точнее» отвечает медленнее, зато реже ошибается с переводом и уровнем сленга.</p>
-              <p className="m-0">Слова и скриншоты отправляются в Anthropic (Claude) для подсказок и не хранятся там.</p>
-            </div>
-          }
-        >
-          <SettingsRow label="Автоподсказки при вводе" labelId="hints-label">
-            <Toggle
-              aria-labelledby="hints-label"
-              checked={settings.suggestions_enabled}
-              disabled={loading}
-              onCheckedChange={(checked) => save({ suggestions_enabled: checked })}
-            />
-          </SettingsRow>
-          <SettingsRow label="Определять уровень сленга" labelId="slang-detect-label">
-            <Toggle
-              aria-labelledby="slang-detect-label"
-              checked={settings.slang_detect_enabled}
-              disabled={loading}
-              onCheckedChange={(checked) => save({ slang_detect_enabled: checked })}
-            />
-          </SettingsRow>
-          <SettingsRow label="Подбирать примеры" labelId="examples-label">
-            <Toggle
-              aria-labelledby="examples-label"
-              checked={settings.examples_enabled}
-              disabled={loading}
-              onCheckedChange={(checked) => save({ examples_enabled: checked })}
-            />
-          </SettingsRow>
-          <SettingsRow label="Раскладывать по темам автоматически" labelId="sort-label">
-            <Toggle
-              aria-labelledby="sort-label"
-              checked={settings.auto_sort_enabled}
-              disabled={loading}
-              onCheckedChange={(checked) => save({ auto_sort_enabled: checked })}
-            />
-          </SettingsRow>
-          <SettingsRow label="Писать заметки" labelId="notes-label">
-            <Toggle
-              aria-labelledby="notes-label"
-              checked={settings.notes_enabled}
-              disabled={loading}
-              onCheckedChange={(checked) => save({ notes_enabled: checked })}
-            />
-          </SettingsRow>
-          <SettingsRow label="Вариантов" labelId="count-label">
-            <Segmented
-              ariaLabelledby="count-label"
-              options={COUNT_OPTIONS}
-              value={settings.suggest_count}
-              onChange={(suggest_count) => save({ suggest_count })}
-              mono
-            />
-          </SettingsRow>
-          <SettingsRow label="Регистр вариантов" labelId="register-label">
-            <Segmented
-              ariaLabelledby="register-label"
-              options={REGISTER_OPTIONS}
-              value={settings.suggest_register}
-              onChange={(suggest_register) => save({ suggest_register })}
-            />
-          </SettingsRow>
-          <SettingsRow label="Модель: подсказки" labelId="model-label">
-            <Segmented ariaLabelledby="model-label" options={MODEL_OPTIONS} value={settings.ai_model} onChange={(ai_model) => save({ ai_model })} />
-          </SettingsRow>
-          <SettingsRow label="Модель: скриншоты" labelId="model-extract-label">
-            <Segmented
-              ariaLabelledby="model-extract-label"
-              options={MODEL_OPTIONS}
-              value={settings.ai_model_extract}
-              onChange={(ai_model_extract) => save({ ai_model_extract })}
-            />
-          </SettingsRow>
-        </SettingsSection>
+          >
+            <SettingsRow label="Автоподсказки при вводе" labelId="hints-label">
+              <Toggle
+                aria-labelledby="hints-label"
+                checked={settings.suggestions_enabled}
+             
+                onCheckedChange={(checked) => save({ suggestions_enabled: checked })}
+              />
+            </SettingsRow>
+            <SettingsRow label="Определять уровень сленга" labelId="slang-detect-label">
+              <Toggle
+                aria-labelledby="slang-detect-label"
+                checked={settings.slang_detect_enabled}
+             
+                onCheckedChange={(checked) => save({ slang_detect_enabled: checked })}
+              />
+            </SettingsRow>
+            <SettingsRow label="Подбирать примеры" labelId="examples-label">
+              <Toggle
+                aria-labelledby="examples-label"
+                checked={settings.examples_enabled}
+             
+                onCheckedChange={(checked) => save({ examples_enabled: checked })}
+              />
+            </SettingsRow>
+            <SettingsRow label="Раскладывать по темам автоматически" labelId="sort-label">
+              <Toggle
+                aria-labelledby="sort-label"
+                checked={settings.auto_sort_enabled}
+             
+                onCheckedChange={(checked) => save({ auto_sort_enabled: checked })}
+              />
+            </SettingsRow>
+            <SettingsRow label="Писать заметки" labelId="notes-label">
+              <Toggle
+                aria-labelledby="notes-label"
+                checked={settings.notes_enabled}
+             
+                onCheckedChange={(checked) => save({ notes_enabled: checked })}
+              />
+            </SettingsRow>
+            <SettingsRow label="Вариантов" labelId="count-label">
+              <Segmented
+                ariaLabelledby="count-label"
+                options={COUNT_OPTIONS}
+                value={settings.suggest_count}
+                onChange={(suggest_count) => save({ suggest_count })}
+                mono
+              />
+            </SettingsRow>
+            <SettingsRow label="Регистр вариантов" labelId="register-label">
+              <Segmented
+                ariaLabelledby="register-label"
+                options={REGISTER_OPTIONS}
+                value={settings.suggest_register}
+                onChange={(suggest_register) => save({ suggest_register })}
+              />
+            </SettingsRow>
+            <SettingsRow label="Модель: подсказки" labelId="model-label">
+              <Segmented ariaLabelledby="model-label" options={MODEL_OPTIONS} value={settings.ai_model} onChange={(ai_model) => save({ ai_model })} />
+            </SettingsRow>
+            <SettingsRow label="Модель: скриншоты" labelId="model-extract-label">
+              <Segmented
+                ariaLabelledby="model-extract-label"
+                options={MODEL_OPTIONS}
+                value={settings.ai_model_extract}
+                onChange={(ai_model_extract) => save({ ai_model_extract })}
+              />
+            </SettingsRow>
+          </SettingsSection>
+        </Valued>
 
         <DataSection />
 

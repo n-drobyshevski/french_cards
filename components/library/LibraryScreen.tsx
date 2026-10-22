@@ -2,13 +2,14 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAddSheet } from "@/components/providers/AddSheetContext";
 import { useAppReady } from "@/components/providers/AppProviders";
 import { Button, IconButton } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { KEYBOARD_MIN, useVisualViewport } from "@/components/ui/Sheet";
+import { SkeletonRow } from "@/components/ui/Skeleton";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { countEnrichCandidates, enrichPreferences } from "@/lib/enrich";
 import { deleteFolder, getLibraryStats, restoreFolder, type FolderWithStats } from "@/lib/folders";
@@ -16,9 +17,11 @@ import { getSettings, updateSettings } from "@/lib/settings";
 import type { Settings } from "@/lib/types";
 import { getUndoableRun, undoReorgRun } from "@/lib/reorg";
 import { useLayoutClass } from "@/lib/use-media";
+import { useSettings } from "@/lib/use-settings";
 import { DeskPlaceholder } from "./DeskPlaceholder";
 import { DisbandSheet, disbandMessage } from "./DisbandSheet";
 import { EnrichPlanSheet } from "./EnrichPlanSheet";
+import { rememberLibrary, rememberLibraryShape, useLibraryShape, useRevealClass, type LibraryShape } from "./first-paint";
 import { FolderFormSheet } from "./FolderFormSheet";
 import { FolderMenuSheet } from "./FolderMenuSheet";
 import { FolderTile, NewFolderTile, TileSkeleton } from "./FolderTile";
@@ -65,15 +68,30 @@ export function LibraryScreen() {
   );
 }
 
+/**
+ * Everything the themes view shows, in one query, so the tiles, «Входящие» and the upkeep rows
+ * arrive in the same frame instead of popping in one by one (MOTION-SPEC L1).
+ */
+async function getLibraryOverview() {
+  const [stats, lastRun, settings] = await Promise.all([getLibraryStats(), getUndoableRun(), getSettings()]);
+  const toEnrich = await countEnrichCandidates(enrichPreferences(settings));
+  return { stats, lastRun, toEnrich };
+}
+
 function PhoneLibrary() {
   const ready = useAppReady();
   const snackbar = useSnackbar();
   const addSheet = useAddSheet();
-  const stats = useLiveQuery(() => getLibraryStats(), []);
-  const settings = useLiveQuery(getSettings);
-  const view: LibraryView = settings?.library_view ?? "themes";
-  const lastRun = useLiveQuery(() => getUndoableRun(), []);
-  const toEnrich = useLiveQuery(async () => countEnrichCandidates(enrichPreferences(await getSettings())), []);
+  const overview = useLiveQuery(getLibraryOverview, []);
+  // Counts wait for the first-run seed, so a new device never flashes «0 слов» (L3).
+  const loaded = ready && overview !== undefined ? overview : undefined;
+  const stats = loaded?.stats;
+  const lastRun = loaded?.lastRun;
+  const toEnrich = loaded?.toEnrich;
+  // The stored view, or its localStorage mirror on the first frame (L2); undefined only during
+  // the server render and hydration, where neither view is drawn.
+  const view: LibraryView | undefined = useSettings().settings?.library_view;
+  const shape = useLibraryShape();
 
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
@@ -102,7 +120,50 @@ function PhoneLibrary() {
 
   const totals = stats?.totals;
   const inbox = stats?.inbox;
-  const loading = !stats || !ready;
+  const tilesReveal = useRevealClass(!!stats);
+
+  const undoLastRun = async () => {
+    if (!lastRun) return;
+    const { restored } = await undoReorgRun(lastRun.id);
+    snackbar.show({ message: restored ? "Сортировка отменена" : "Отменять нечего: слова уже перемещены" });
+  };
+
+  const upkeep: ReactNode[] = [];
+  if (totals && totals.total > 0) {
+    if (inbox && inbox.total === 0) {
+      upkeep.push(<UpkeepRow key="sort" ai caption="Все слова разложены" action="Разложить по темам" onClick={() => setSortOpen(true)} />);
+    }
+    if (toEnrich && toEnrich.total > 0) {
+      upkeep.push(
+        <UpkeepRow
+          key="enrich"
+          caption={toEnrich.noExample > 0 ? `${nWords(toEnrich.noExample)} без примера` : `Уровень сленга для ${nWords(toEnrich.total)}`}
+          ai
+          action="Дополнить карточки"
+          onClick={() => setEnrichOpen(true)}
+        />,
+      );
+    }
+    if (lastRun) {
+      upkeep.push(
+        <UpkeepRow
+          key="run"
+          caption={`Последняя раскладка: ${lastRun.moves.length} ${plural(lastRun.moves.length, ["перемещение", "перемещения", "перемещений"])}`}
+          action="Отменить"
+          onClick={() => void undoLastRun()}
+        />,
+      );
+    }
+  }
+
+  // Remember the shape for the next visit's reserved blanks, and the themes for their pages (L6).
+  const shapeNow: LibraryShape | null = stats ? { tiles: stats.folders.length, inbox: stats.inbox.total > 0, upkeep: upkeep.length } : null;
+  useEffect(() => {
+    if (shapeNow) rememberLibraryShape(shapeNow);
+  });
+  useEffect(() => {
+    if (stats) rememberLibrary(stats);
+  }, [stats]);
 
   const setView = (next: LibraryView) => void updateSettings({ library_view: next });
   const toggleStatus = (status: StatusFilter) => setFilter((f) => ({ ...f, status: f.status === status ? "all" : status }));
@@ -133,12 +194,6 @@ function PhoneLibrary() {
     } catch (e) {
       snackbar.show({ message: e instanceof Error ? e.message : "Не получилось удалить тему" });
     }
-  };
-
-  const undoLastRun = async () => {
-    if (!lastRun) return;
-    const { restored } = await undoReorgRun(lastRun.id);
-    snackbar.show({ message: restored ? "Сортировка отменена" : "Отменять нечего: слова уже перемещены" });
   };
 
   const themeName =
@@ -205,7 +260,7 @@ function PhoneLibrary() {
               {!results
                 ? filtered
                   ? "Ищем…"
-                  : "Загружаем…"
+                  : "Все слова"
                 : !filtered
                   ? `Все слова · ${results.length}`
                   : results.length
@@ -224,6 +279,14 @@ function PhoneLibrary() {
               )
             )}
           </div>
+          {!results && (
+            // Reserved list; rows only if the read is still pending at 300 ms (L4).
+            <div aria-hidden="true" className="delayed-in flex flex-col">
+              {Array.from({ length: 8 }, (_, i) => (
+                <SkeletonRow key={i} index={i} height={64} meter fade />
+              ))}
+            </div>
+          )}
           {results && words && (
             <WordList
               items={results.slice(0, shown)}
@@ -263,11 +326,12 @@ function PhoneLibrary() {
             </div>
           )}
         </section>
-      ) : (
+      ) : view === "themes" ? (
         <>
-          {/* «Входящие»: only while something is unsorted */}
+          {/* «Входящие»: only while something is unsorted (reserved blank if it was there last time) */}
+          {!stats && shape.inbox && <div aria-hidden="true" className="mt-2 h-12 shrink-0" />}
           {inbox && inbox.total > 0 && (
-            <div className="mt-2 flex h-12 shrink-0 items-center gap-2 rounded-card border border-dashed border-muted pr-1 pl-3">
+            <div className={cx("mt-2 flex h-12 shrink-0 items-center gap-2 rounded-card border border-dashed border-muted pr-1 pl-3", tilesReveal)}>
               <Link
                 href={folderHref(null)}
                 aria-label={`Входящие: ${nWords(inbox.total)} без темы, нужно разобрать`}
@@ -287,10 +351,16 @@ function PhoneLibrary() {
             </div>
           )}
 
-          {/* Themes */}
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {loading ? (
-              Array.from({ length: 6 }, (_, i) => <TileSkeleton key={i} tall />)
+          {/* Themes: the last known number of tiles is reserved blank; skeletons only if the read is
+              still pending at 300 ms (cold start, first-run seed) — L3 */}
+          <div aria-busy={!stats || undefined} className={cx("mt-3 grid grid-cols-2 gap-2", tilesReveal)}>
+            {!stats ? (
+              <>
+                <TileSkeleton wide className="delayed-in" />
+                {Array.from({ length: shape.tiles + 1 }, (_, i) => (
+                  <TileSkeleton key={i} index={i} tall className="delayed-in" />
+                ))}
+              </>
             ) : (
               <>
                 <button
@@ -316,30 +386,9 @@ function PhoneLibrary() {
           </div>
 
           {/* Card upkeep: quiet rows under the themes */}
-          {totals && totals.total > 0 && (
-            <div className="mt-6 flex flex-col border-t border-ink">
-              {inbox && inbox.total === 0 && (
-                <UpkeepRow ai caption="Все слова разложены" action="Разложить по темам" onClick={() => setSortOpen(true)} />
-              )}
-              {toEnrich && toEnrich.total > 0 && (
-                <UpkeepRow
-                  caption={toEnrich.noExample > 0 ? `${nWords(toEnrich.noExample)} без примера` : `Уровень сленга для ${nWords(toEnrich.total)}`}
-                  ai
-                  action="Дополнить карточки"
-                  onClick={() => setEnrichOpen(true)}
-                />
-              )}
-              {lastRun && (
-                <UpkeepRow
-                  caption={`Последняя раскладка: ${lastRun.moves.length} ${plural(lastRun.moves.length, ["перемещение", "перемещения", "перемещений"])}`}
-                  action="Отменить"
-                  onClick={() => void undoLastRun()}
-                />
-              )}
-            </div>
-          )}
+          <UpkeepBlock rows={stats ? upkeep : null} reserve={shape.upkeep} reveal={tilesReveal} />
         </>
-      )}
+      ) : null}
 
       <div aria-hidden="true" className="h-6 shrink-0" />
       <SearchBar
@@ -440,9 +489,61 @@ function LedgerCell({ value, label, ariaLabel, pressed, attention = false, onCli
         pressed ? "bg-ink text-on-ink" : "bg-transparent text-ink active:bg-surface-2",
       )}
     >
-      <span className={cx("font-serif text-[26px] leading-7 font-medium", !pressed && attention && "text-red")}>{value ?? "–"}</span>
+      <span className={cx("h-7 min-w-[2ch] font-serif text-[26px] leading-7 font-medium tabular-nums", !pressed && attention && "text-red")}>{value}</span>
       <span className={cx("font-mono text-[11px] leading-4 tracking-[.06em] uppercase", pressed ? "opacity-80" : "text-muted")}>{label}</span>
     </button>
+  );
+}
+
+/** One upkeep row: 44px including its hairline. */
+const UPKEEP_ROW_H = 44;
+/** The block's 24px top gap and its 1px ink rule. */
+const UPKEEP_HEAD_H = 25;
+const upkeepHeight = (rows: number) => (rows > 0 ? UPKEEP_HEAD_H + rows * UPKEEP_ROW_H : 0);
+
+/**
+ * The upkeep rows under the tiles (L1). Until the overview resolves the block reserves the last
+ * known height; the rows then fade in together, and if their number changed the block resizes
+ * once (`--dur-move`) instead of jumping.
+ */
+function UpkeepBlock({ rows, reserve, reveal }: { rows: ReactNode[] | null; reserve: number; reveal?: string }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const loaded = rows !== null;
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || !loaded) return;
+    const from = upkeepHeight(reserve);
+    const to = el.scrollHeight;
+    if (from === to || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    el.style.overflow = "hidden";
+    el.style.height = `${from}px`;
+    void el.offsetHeight;
+    el.style.height = `${to}px`;
+    const done = () => {
+      el.style.height = "";
+      el.style.overflow = "";
+    };
+    el.addEventListener("transitionend", done, { once: true });
+    const fallback = window.setTimeout(done, 400);
+    return () => {
+      window.clearTimeout(fallback);
+      el.removeEventListener("transitionend", done);
+    };
+  }, [loaded, reserve]);
+
+  return (
+    <div
+      ref={ref}
+      aria-hidden={!loaded || undefined}
+      style={loaded ? undefined : { height: upkeepHeight(reserve) }}
+      className="shrink-0 transition-[height] duration-(--dur-move) ease-standard"
+    >
+      {rows && rows.length > 0 && (
+        <div className={cx("pt-6", reveal)}>
+          <div className="flex flex-col border-t border-ink">{rows}</div>
+        </div>
+      )}
+    </div>
   );
 }
 

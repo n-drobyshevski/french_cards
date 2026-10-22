@@ -77,6 +77,9 @@ export interface Columns {
   template: string;
 }
 
+/** Inner width assumed until the list is measured (the desk's first frame and DeskPlaceholder). */
+export const INITIAL_TABLE_INNER = 744;
+
 /** Fluid column rules by the list's inner width (DESKTOP-SPEC §2). */
 export function tableColumns({ inner, layout, coarse, themeColumn }: ColumnInput): Columns {
   const medium = layout === "medium";
