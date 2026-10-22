@@ -1,6 +1,6 @@
 ---
 name: kartochki
-description: Conventions for the user's «Карточки» flashcard app for colloquial French (the user is a Russian speaker). Use whenever the user wants to add, find, fix, sort or delete French words or slang, asks what to review today («что повторить сегодня»), sends a French text, chat, song or screenshot to turn into cards, or mentions карточки, темы or «Входящие». Covers card format (dictionary form, Russian translation in the same register, example), the slang level rubric 0–3 with verlan, theme choice, when to ask before changing anything, and step-by-step recipes for the Kartochki connector tools (search_words, add_words, update_word, move_words, restore_moves, delete_words, restore_words, create_folder, list_folders, list_fields, create_field, update_field, delete_field, restore_field, study_summary). Needs the Kartochki connector; without it, explain that it must be added first.
+description: Conventions for the user's «Карточки» flashcard app for colloquial French (the user is a Russian speaker). Use whenever the user wants to add, find, fix, sort or delete French words or slang, asks what to review today («что повторить сегодня»), sends a French text, chat, song or screenshot to turn into cards, or mentions карточки, темы or «Входящие». Covers card format (dictionary form, Russian translation in the same register, example), the slang level rubric 0–3 with verlan, theme choice, when to ask before changing anything, and step-by-step recipes for the Kartochki connector tools (search_words, add_words, update_word, move_words, restore_moves, delete_words, restore_words, create_folder, update_folder, delete_folder, restore_folder, list_folders, list_fields, create_field, update_field, delete_field, restore_field, study_summary). Needs the Kartochki connector; without it, explain that it must be added first.
 ---
 
 # Карточки: working with the user's French cards
@@ -57,6 +57,7 @@ Most verlan is level 2; a few words are now level 1 (meuf, ouf, relou). Plain ab
 - Call `list_folders` to see the themes and their descriptions before choosing one.
 - `folder_chosen_by_user: true` only when the user named the theme («добавь в Эмоции»). When you picked it, send `false`: the app then knows it may re-sort the word later. In a mixed call, set it per word next to the per-word `folder`. When no theme fits well, leave the word in «Входящие» rather than force it.
 - Create a theme (`create_folder`) only when the user asks, or after proposing it and getting a yes. Give it a Russian name of one or two capitalised words and a one-sentence description.
+- Rename, re-describe, lock or reorder a theme with `update_folder`; delete one with `delete_folder` (its words go to «Входящие»). Both only after naming the change (and, for a delete, how many words the theme holds) and getting a yes. Undo: `update_folder` with `previous`, `restore_folder` with the delete's `undo`.
 
 ## Ask first
 

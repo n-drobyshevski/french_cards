@@ -41,6 +41,9 @@ An optional skill (`claude/skills/kartochki/`) teaches Claude the card conventio
 | `delete_words` | write | Soft-deletes words and their cards. |
 | `restore_words` | write | Undoes `delete_words`, with the old progress. |
 | `create_folder` | write | New theme, same rules as in the app (unique name, slug, colour, order). |
+| `update_folder` | write | Rename a theme, change its description, lock/unlock it or move it (`position`, 1-based); the slug and the words stay. Returns `previous` for undo. «Входящие» can't be changed. |
+| `delete_folder` | write | Soft-deletes a theme; its words move to «Входящие» (as in the app). Undo: `restore_folder` with the returned `undo`. |
+| `restore_folder` | write | Brings a deleted theme back and returns its words to it (only those still in «Входящие»). |
 
 Themes can be named by id, slug, Russian name, or `inbox`.
 

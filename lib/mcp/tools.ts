@@ -1086,6 +1086,144 @@ export const createFolder = tool({
   },
 });
 
+const folderView = (f: Folder) => ({ id: f.id, slug: f.slug, name: f.name, description: f.description, locked: f.locked });
+
+/** A live theme (not «Входящие», which is built in). */
+function resolveTheme(selector: string, folders: readonly Folder[]): Folder {
+  const folder = resolveFolder(selector, folders);
+  if (!folder) throw new ToolError(`«${INBOX_NAME}» is built in: it can't be renamed or deleted.`);
+  return folder;
+}
+
+/** Writes one theme; a stale write (the app changed it meanwhile) comes back as the stored row. */
+async function writeFolder(deps: ToolDeps, row: Folder): Promise<Folder> {
+  const [stored] = await deps.repo.upsert("folders", [row]);
+  if (!stored || stored.updated_at !== row.updated_at) throw new ToolError("The theme was changed in the app at the same time. Call list_folders and try again.");
+  return stored;
+}
+
+export const updateFolder = tool({
+  name: "update_folder",
+  title: "Change a theme",
+  description:
+    "Rename a theme, change its description (automatic sorting reads it), lock or unlock it (automatic sorting never moves words into or out of a locked theme), or move it to another place in the list (position 1 = first). Its words stay. Undo by calling update_folder again with the returned `previous` values.",
+  input: z.object({
+    folder: folderSelector.describe("The theme: its id, slug or current Russian name (from list_folders)."),
+    name: z.string().trim().min(1).max(60).optional().describe("New Russian name."),
+    description: z.string().max(300).nullable().optional().describe("New description; null removes it."),
+    locked: z.boolean().optional(),
+    position: z.number().int().min(1).max(200).optional().describe("New place in the list, 1-based."),
+  }),
+  write: true,
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  async run(deps, args) {
+    const folders = await deps.repo.folders();
+    const current = resolveTheme(args.folder, folders);
+    const live = liveFolders(folders);
+    const now = deps.now();
+    const next: Folder = { ...current };
+    if (args.name !== undefined) {
+      const name = cleanText(args.name);
+      if (!name) throw new ToolError("The theme name is empty.");
+      if (name.toLowerCase() === INBOX_SELECTOR || sameName(name, INBOX_NAME)) throw new ToolError(`«${INBOX_NAME}» is built in; pick another name.`);
+      const dup = live.find((f) => f.id !== current.id && sameName(f.name, name));
+      if (dup) throw new ToolError(`A theme named «${dup.name}» already exists (id ${dup.id}).`);
+      next.name = name;
+    }
+    if (args.description !== undefined) next.description = cleanText(args.description);
+    if (args.locked !== undefined) next.locked = args.locked;
+    const others: Folder[] = [];
+    if (args.position !== undefined) {
+      const order = live.filter((f) => f.id !== current.id);
+      order.splice(Math.min(args.position, order.length + 1) - 1, 0, next);
+      order.forEach((f, i) => {
+        if (f.id === current.id) next.sort = i;
+        else if (f.sort !== i) others.push({ ...f, sort: i, updated_at: stampAfter(now, f.updated_at) });
+      });
+    }
+    const position = (f: Folder, list: readonly Folder[]) => list.findIndex((x) => x.id === f.id) + 1;
+    const changed = (["name", "description", "locked", "sort"] as const).some((k) => next[k] !== current[k]);
+    if (!changed) return { folder: { ...folderView(current), position: position(current, live) }, result: "unchanged" };
+    next.updated_at = stampAfter(now, current.updated_at);
+    if (others.length > 0) await deps.repo.upsert("folders", others);
+    const stored = await writeFolder(deps, next);
+    const after = liveFolders(live.map((f) => (f.id === stored.id ? stored : (others.find((o) => o.id === f.id) ?? f))));
+    return {
+      folder: { ...folderView(stored), position: position(stored, after) },
+      previous: { name: current.name, description: current.description, locked: current.locked, position: position(current, live) },
+      note: SYNC_NOTE,
+    };
+  },
+});
+
+export const deleteFolder = tool({
+  name: "delete_folder",
+  title: "Delete a theme",
+  description: `Delete a theme. Its words are not deleted: they move to «${INBOX_NAME}», where automatic sorting can file them again. Name the theme and how many words it holds to the user and get their OK first. Undo with restore_folder and the returned \`undo\` (it also puts the words back).`,
+  input: z.object({ folder: folderSelector.describe("The theme: its id, slug or Russian name (from list_folders).") }),
+  write: true,
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  async run(deps, args) {
+    const [folders, words] = await Promise.all([deps.repo.folders(), deps.repo.words()]);
+    const current = resolveTheme(args.folder, folders);
+    const now = deps.now();
+    const stamp = stampAfter(now, current.updated_at);
+    const stored = await writeFolder(deps, { ...current, deleted_at: stamp, updated_at: stamp });
+    const inside = words.filter((w) => w.deleted_at === null && w.folder_id === current.id);
+    const changes = inside.map((w) =>
+      change(w, { ...w, folder_id: null, folder_source: "auto" as const, folder_confidence: null, updated_at: stampAfter(now, w.updated_at) }),
+    );
+    const outcome = await writeWords(deps.repo, changes);
+    const { conflicts } = outcome;
+    const moves: Placement[] = inside
+      .filter((w) => !conflicts.has(w.id))
+      .map((w) => ({ id: w.id, folder_id: w.folder_id, folder_source: w.folder_source, folder_confidence: w.folder_confidence }));
+    return {
+      deleted: folderView(stored),
+      moved_to_inbox: moves.length,
+      conflicts: [...conflicts],
+      ...failedPart(outcome),
+      undo: { tool: "restore_folder", id: stored.id, moves },
+      note: SYNC_NOTE,
+    };
+  },
+});
+
+export const restoreFolder = tool({
+  name: "restore_folder",
+  title: "Restore a deleted theme",
+  description: "Undo delete_folder: bring the theme back and put its words back in it. Pass delete_folder's `undo` (id and moves) unchanged.",
+  input: z.object({
+    id: z.string().trim().min(1).describe("The theme id from delete_folder's `undo`."),
+    moves: z.array(placementSchema).max(5000).default([]).describe("delete_folder's `undo.moves`, as returned."),
+  }),
+  write: true,
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  async run(deps, args) {
+    const folders = await deps.repo.folders();
+    const current = folders.find((f) => f.id === args.id);
+    if (!current) throw new ToolError(`No theme with id "${args.id}".`);
+    let restored = current;
+    if (current.deleted_at !== null) {
+      const dup = liveFolders(folders).find((f) => sameName(f.name, current.name));
+      if (dup) throw new ToolError(`A theme named «${dup.name}» exists again (id ${dup.id}); rename one of them first.`);
+      restored = await writeFolder(deps, { ...current, deleted_at: null, updated_at: stampAfter(deps.now(), current.updated_at) });
+    }
+    // Only words still in «Входящие» go back: one moved elsewhere since stays where the user put it.
+    const found = args.moves.length > 0 ? await deps.repo.wordsByIds(args.moves.map((m) => m.id)) : [];
+    const stillInbox = new Set(found.filter((w) => w.deleted_at === null && w.folder_id === null).map((w) => w.id));
+    const back = args.moves.filter((m) => m.folder_id === current.id && stillInbox.has(m.id));
+    const words = back.length > 0 ? await restoreMoves.run(deps, { moves: back }) : null;
+    return {
+      restored: folderView(restored),
+      words_back: words?.restored.length ?? 0,
+      left_elsewhere: args.moves.length - back.length,
+      ...(words && words.conflicts.length > 0 ? { conflicts: words.conflicts } : {}),
+      note: SYNC_NOTE,
+    };
+  },
+});
+
 // ---------------------------------------------------------------------------------------------
 // Execution and registration
 
@@ -1143,6 +1281,9 @@ export const TOOL_NAMES = [
   deleteWords.name,
   restoreWords.name,
   createFolder.name,
+  updateFolder.name,
+  deleteFolder.name,
+  restoreFolder.name,
 ] as const;
 
 export function registerTools(server: McpServer, deps: ToolDeps): void {
@@ -1161,6 +1302,9 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   register(server, deps, deleteWords);
   register(server, deps, restoreWords);
   register(server, deps, createFolder);
+  register(server, deps, updateFolder);
+  register(server, deps, deleteFolder);
+  register(server, deps, restoreFolder);
 }
 
 export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard app for colloquial French; the user is a Russian speaker. A card is a French word or phrase (fr) with its Russian translation (ru). Words are grouped into themes («темы»); «${INBOX_NAME}» (inbox) holds words without a theme.
@@ -1168,8 +1312,8 @@ export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard
 - For each new word give the dictionary form, one to three Russian equivalents in the same register, slang_level (0 neutral, 1 familier, 2 argot, 3 vulgaire), verlan (true for verlan forms such as meuf, relou, chelou), pos, gender for nouns, and a short everyday example_fr with its example_ru. Vulgar words are legitimate vocabulary: translate them with the same strength and mark them 3.
 - Set folder_chosen_by_user to true only when the user named the theme; otherwise pick a fitting theme yourself, or leave the word in the inbox.
 - Cards can carry the user's custom fields («Свои поля»): list_fields shows the shared ones and what to write in each. Set them by name with custom_fields in add_words or update_word (null clears one); search_words shows them. Use a name not in list_fields only when the user asks for a field on that one word. create_field, update_field and delete_field manage the shared fields; ask the user before creating or deleting one.
-- Before adding more than 5 words, and before any move or delete, list what will change and wait for the user's OK.
-- After a change, say what changed and how to undo it with the result's \`undo\` (delete_words, restore_words, restore_moves, delete_field or restore_field).
+- Before adding more than 5 words, and before any move, delete, or renaming or deleting a theme (update_folder, delete_folder), list what will change and wait for the user's OK.
+- After a change, say what changed and how to undo it with the result's \`undo\` (delete_words, restore_words, restore_moves, restore_folder, delete_field or restore_field).
 - Make write calls one at a time, never in parallel: each reads the current rows first, and parallel writes to the same words conflict or slip past the duplicate check.
 - Changes reach the app on its next sync (when it is opened or focused). Reviewing and grading cards happen in the app only.
 - Talk about the app's features plainly; never call them "AI".`;

@@ -13,18 +13,21 @@ import {
   createField,
   createFolder,
   deleteField,
+  deleteFolder,
   deleteWords,
   listFields,
   listFolders,
   moveWords,
   resolveFolder,
   restoreField,
+  restoreFolder,
   restoreMoves,
   restoreWords,
   searchWords,
   stampAfter,
   studySummary,
   updateField,
+  updateFolder,
   updateWord,
   type ToolSpec,
 } from "./tools";
@@ -700,6 +703,47 @@ describe("managing custom fields", () => {
     await ok(restoreField, fake, { id: "a" });
     expect(live(fake).map((d) => d.name)).toEqual(["Синонимы"]);
     expect((await callTool(deleteField, deps(fake), { field: "нет такого" })).isError).toBe(true);
+  });
+});
+
+describe("changing and deleting themes", () => {
+  const liveNames = (fake: FakeRepo) =>
+    [...fake.tables.folders.values()].filter((f) => f.deleted_at === null).sort((a, b) => a.sort - b.sort).map((f) => f.name);
+
+  it("update_folder renames, describes, locks and moves a theme, and reports the previous values", async () => {
+    const fake = createFakeRepo({ folders: FOLDERS });
+    const out = await ok(updateFolder, fake, { folder: "эмоции", name: "Чувства", description: "Эмоции и реакции", locked: true, position: 1 });
+    expect(out.folder).toMatchObject({ id: "f-emotsii", slug: "emotsii", name: "Чувства", description: "Эмоции и реакции", locked: true, position: 1 });
+    expect(out.previous).toEqual({ name: "Эмоции", description: null, locked: false, position: 2 });
+    expect(liveNames(fake)).toEqual(["Чувства", "Деньги", "Замок"]);
+    expect((await callTool(updateFolder, deps(fake), { folder: "Деньги", name: "замок" })).isError).toBe(true);
+    expect((await callTool(updateFolder, deps(fake), { folder: "inbox", name: "Новое" })).isError).toBe(true);
+    expect(await ok(updateFolder, fake, { folder: "Деньги", name: "Деньги" })).toMatchObject({ result: "unchanged" });
+  });
+
+  it("delete_folder moves its words to the inbox; restore_folder brings the theme and those words back", async () => {
+    const fake = createFakeRepo({
+      folders: FOLDERS,
+      words: [
+        word("a", "le fric", "бабки", { folder_id: "f-dengi", folder_source: "user" }),
+        word("b", "la thune", "деньги", { folder_id: "f-dengi", folder_source: "auto", folder_confidence: "high" }),
+        word("c", "chelou", "странный", { folder_id: "f-emotsii" }),
+      ],
+    });
+    const out = await ok(deleteFolder, fake, { folder: "Деньги" });
+    expect(out).toMatchObject({ deleted: { id: "f-dengi" }, moved_to_inbox: 2 });
+    expect(liveNames(fake)).toEqual(["Эмоции", "Замок"]);
+    const w = (id: string) => fake.tables.words.get(id)!;
+    expect([w("a").folder_id, w("b").folder_id, w("c").folder_id]).toEqual([null, null, "f-emotsii"]);
+
+    // A word the user filed elsewhere in the meantime stays there.
+    await ok(moveWords, fake, { ids: ["b"], folder: "Эмоции" });
+    const back = await ok(restoreFolder, fake, out.undo);
+    expect(back).toMatchObject({ restored: { id: "f-dengi" }, words_back: 1, left_elsewhere: 1 });
+    expect(liveNames(fake)).toEqual(["Деньги", "Эмоции", "Замок"]);
+    expect(w("a")).toMatchObject({ folder_id: "f-dengi", folder_source: "user" });
+    expect(w("b").folder_id).toBe("f-emotsii");
+    expect((await callTool(deleteFolder, deps(fake), { folder: "inbox" })).isError).toBe(true);
   });
 });
 
