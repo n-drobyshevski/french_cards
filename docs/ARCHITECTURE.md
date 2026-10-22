@@ -10,7 +10,7 @@ Read with `docs/plan.md` (scope and phases), `mockups/SPEC.md` (the v3 visual de
 - **Data:** Dexie 4 (`lib/db.ts`) is the on-device source of truth. The UI reads it with `useLiveQuery` from `dexie-react-hooks`, so screens that use it are client components (`"use client"`).
 - **Scheduling:** `ts-fsrs@5`, used only through `lib/scheduler.ts`.
 - **Sync and auth:** Supabase (`@supabase/ssr` + `@supabase/supabase-js`).
-  - Login is an email OTP code typed into the app (never a magic link), and only `ALLOWED_EMAIL` may sign in.
+  - Login is email + password (works inside the iOS home-screen app and needs no custom SMTP); only `ALLOWED_EMAIL` may sign in. Password reset links land on `/auth/confirm` → `/auth/reset`.
   - Sync is last-write-wins on `updated_at` with soft deletes (`deleted_at`). `review_log` rows are only ever soft-deleted (undo).
 - **AI:**
   - Packages: `ai@7`, `@ai-sdk/anthropic@4`, `zod@4`.

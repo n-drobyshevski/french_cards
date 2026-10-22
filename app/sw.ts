@@ -24,7 +24,8 @@ const SHELL_ROUTES = ["/", "/library", "/settings", "/import", "/login"];
 
 const DAY = 24 * 60 * 60;
 
-const isApi = (pathname: string) => pathname === "/api" || pathname.startsWith("/api/");
+// /auth/* (email links, password reset) is treated like the API: always network, never cached.
+const isApi = (pathname: string) => pathname === "/api" || pathname.startsWith("/api/") || pathname.startsWith("/auth/");
 const isRsc = (request: Request) => request.headers.get("RSC") === "1";
 const isWorkerFile = (pathname: string) => pathname.startsWith("/serwist/");
 
