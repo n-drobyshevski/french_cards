@@ -56,7 +56,8 @@ export function WordRowContent({ item, showFolder }: { item: LibraryWord; showFo
   );
 }
 
-function rowLabel(item: LibraryWord, showFolder?: boolean): string {
+/** Accessible row name: «la thune — бабки, деньги, arg., выучено, следующий показ через 4 д». */
+export function rowLabel(item: LibraryWord, showFolder?: boolean): string {
   const { word, schedule } = item;
   const parts = [`${word.fr} — ${word.ru}`, slangAbbr(word.slang_level, word.verlan), STATUS_LABELS[schedule.status]];
   if (schedule.tone === "due") parts.push("к повторению");

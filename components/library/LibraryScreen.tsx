@@ -20,6 +20,9 @@ import { matchesSlang, SlangFilterChip, SlangFilterPanel, type SlangKey } from "
 import { EnrichPlanSheet } from "./EnrichPlanSheet";
 import { SortPlanSheet } from "./SortPlanSheet";
 import { useLibraryWords } from "./useLibraryWords";
+import { DeskPlaceholder } from "./DeskPlaceholder";
+import { LibraryDesk } from "./LibraryDesk";
+import { useLayoutClass } from "@/lib/use-media";
 import { WordList } from "./WordList";
 
 type StatusFilter = "all" | "due" | "difficult";
@@ -27,8 +30,25 @@ type StatusFilter = "all" | "due" | "difficult";
 /** Search results are capped so a short query does not render thousands of rows. */
 const RESULTS_MAX = 200;
 
-/** Библиотека: counts, search, filters, «Разложить по темам» and the theme tiles. */
+/**
+ * Библиотека. Phones (< 768): counts, search, filters, «Разложить по темам» and the theme tiles.
+ * From 768 up: the desktop table with the detail pane (LibraryDesk). The layout class is
+ * «compact» on the server and during hydration, so CSS keeps the phone UI off wide screens until then.
+ */
 export function LibraryScreen() {
+  const layout = useLayoutClass();
+  if (layout !== "compact") return <LibraryDesk scope={{ kind: "all" }} />;
+  return (
+    <>
+      <div className="contents md:hidden">
+        <PhoneLibrary />
+      </div>
+      <DeskPlaceholder title="Библиотека" />
+    </>
+  );
+}
+
+function PhoneLibrary() {
   const ready = useAppReady();
   const snackbar = useSnackbar();
   const addSheet = useAddSheet();

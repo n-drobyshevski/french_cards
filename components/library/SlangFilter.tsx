@@ -7,8 +7,12 @@ import { SLANG_LABELS, type SlangLevel, type Word } from "@/lib/types";
 /** A slang level, or "verl" for verlan words. */
 export type SlangKey = SlangLevel | "verl";
 
-const KEYS: readonly SlangKey[] = [0, 1, 2, 3, "verl"];
-const label = (k: SlangKey) => (k === "verl" ? "verl." : SLANG_LABELS[k]);
+/** Filter choices in display order. */
+export const SLANG_KEYS: readonly SlangKey[] = [0, 1, 2, 3, "verl"];
+const KEYS = SLANG_KEYS;
+/** «нейтр.», «fam.», …, «verl.» */
+export const slangKeyLabel = (k: SlangKey) => (k === "verl" ? "verl." : SLANG_LABELS[k]);
+const label = slangKeyLabel;
 
 /** Selected levels are OR-ed; «verl.» additionally requires a verlan word. */
 export function matchesSlang(word: Pick<Word, "slang_level" | "verlan">, keys: readonly SlangKey[]): boolean {

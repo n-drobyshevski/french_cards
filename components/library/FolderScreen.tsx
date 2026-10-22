@@ -15,7 +15,10 @@ import { Toggle } from "@/components/ui/Toggle";
 import { deleteFolder, getFolder, getLibraryStats, restoreFolder, updateFolder } from "@/lib/folders";
 import { getSessionCounts } from "@/lib/session";
 import type { Folder } from "@/lib/types";
+import { useLayoutClass } from "@/lib/use-media";
+import { DeskPlaceholder } from "./DeskPlaceholder";
 import { FolderFormSheet } from "./FolderFormSheet";
+import { LibraryDesk } from "./LibraryDesk";
 import { nWords, reviewHref } from "./format";
 import { useLibraryWords } from "./useLibraryWords";
 import { WordList } from "./WordList";
@@ -23,8 +26,24 @@ import { WordList } from "./WordList";
 /** The route segment for «Входящие». */
 export const INBOX_SEGMENT = "inbox";
 
-/** /library/[id]: a theme (or «Входящие») with its words, stats and «Повторить тему». */
+/**
+ * /library/[id]: a theme (or «Входящие») with its words, stats and «Повторить тему». Phones get
+ * the list below; from 768 up the desktop table (LibraryDesk).
+ */
 export function FolderScreen({ id }: { id: string }) {
+  const layout = useLayoutClass();
+  if (layout !== "compact") return <LibraryDesk scope={id === INBOX_SEGMENT ? { kind: "inbox" } : { kind: "folder", id }} />;
+  return (
+    <>
+      <div className="contents md:hidden">
+        <PhoneFolder id={id} />
+      </div>
+      <DeskPlaceholder title={id === INBOX_SEGMENT ? "Входящие" : ""} />
+    </>
+  );
+}
+
+function PhoneFolder({ id }: { id: string }) {
   const folderId = id === INBOX_SEGMENT ? null : id;
   const router = useRouter();
   const snackbar = useSnackbar();
