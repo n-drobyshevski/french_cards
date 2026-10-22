@@ -92,9 +92,11 @@ export function useSwipe({
     if (next.phase === "released" && next.outcome) {
       const outcome = next.outcome;
       if (haptics) haptic(outcome);
-      const off = Math.sign(next.dx) * next.width * 1.4;
+      // Reduced motion: no fly-out; the card fades where it was let go (ReviewCard).
+      const reduced = reducedMotion();
+      const off = reduced ? next.dx : Math.sign(next.dx) * next.width * 1.4;
       setView({ dx: off, width: next.width, mode: "flying" });
-      window.setTimeout(() => onDecide(outcome), reducedMotion() ? 0 : FLY_OUT_MS);
+      window.setTimeout(() => onDecide(outcome), reduced ? 0 : FLY_OUT_MS);
       return;
     }
     settle();

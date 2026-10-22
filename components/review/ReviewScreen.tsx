@@ -17,6 +17,7 @@ import { previewIntervals, reviewStateId, type Rating } from "@/lib/scheduler";
 import { advancePractice, buildPracticeQueue, sessionFilterKey, startOfStudyDay, type QueueItem, type SessionFilter } from "@/lib/session";
 import { listReviewSets, setIdOf, setSessionFilter } from "@/lib/review-sets";
 import { getSettings } from "@/lib/settings";
+import { useDelayedFlag } from "@/lib/use-delayed-flag";
 import { useFinePointer, useLayoutClass } from "@/lib/use-media";
 import { getLastReview, getWord, gradeCard, undoLastReview } from "@/lib/words";
 import { loadReviewScreen, type ReviewScreenData } from "./data";
@@ -27,8 +28,8 @@ import { DIRECTION_LABELS, DIRECTION_NAMES, GRADE_LABELS, formatProgress, progre
 import { GradeBar } from "./GradeBar";
 import { HINT_LINE_CSS, HintLine } from "./HintLine";
 import { isTypingTarget, keepsActivationKeys, reviewKeyAction } from "./keys";
-import { REVIEW_DESK_CSS, ReviewCard, ReviewCardPlaceholder } from "./ReviewCard";
-import { ReviewTopBar, type ReviewProgress } from "./ReviewTopBar";
+import { REVIEW_DESK_CSS, ReviewCard, ReviewCardPlaceholder, WRITE_IN } from "./ReviewCard";
+import { PENDING_PROGRESS, ReviewTopBar, type ReviewProgress } from "./ReviewTopBar";
 import { SessionDone } from "./SessionDone";
 import { useInlineSnackbar } from "./useInlineSnackbar";
 import { useReviewFilter } from "./useReviewFilter";
@@ -63,6 +64,12 @@ interface Awaiting {
   data: ReviewScreenData | undefined;
   key: string | null;
   updatedAt: string | null;
+  /**
+   * Set while the outgoing card is held: it stays as it was (answer side, or flown out after a
+   * swipe) until the newer read lands, then the card resets to `pinned` in the same render, so no
+   * blank card shows between two cards (MOTION-SPEC R2).
+   */
+  hold?: { pinned: Pinned | null };
 }
 
 interface Practice {
@@ -179,7 +186,19 @@ export function ReviewScreen() {
   }, []);
 
   const live = isFresh(data, awaiting) ? data : undefined;
-  const queue = practice ? practice.queue : live?.session.queue;
+  if (awaiting?.hold && live) {
+    // The newer read is in: move on in this render, before anything paints.
+    setAwaiting({ ...awaiting, hold: undefined });
+    setPinned(awaiting.hold.pinned);
+    setInstance((n) => n + 1);
+  }
+  /** The graded (or undone-from) card is held until the next one is ready; input is ignored meanwhile. */
+  const holding = !!awaiting?.hold && !live;
+  /** A read that takes longer than --loading-delay swaps the held card for the placeholder (no
+      minimum: the next card replaces the same-shaped placeholder at once). */
+  const slowHold = useDelayedFlag(holding, { min: 0 });
+  const heldQueue = holding ? awaiting?.data?.session.queue : undefined;
+  const queue = practice ? practice.queue : (live?.session.queue ?? heldQueue);
   const current = queue ? ((pinned && queue.find((i) => i.key === pinned.key)) ?? queue[0]) : undefined;
   const revealed = !!current && pinned?.key === current.key && pinned.revealed;
   const hasNext = !!queue && queue.some((i) => i.key !== current?.key);
@@ -193,9 +212,10 @@ export function ReviewScreen() {
 
   const shown = live ?? awaiting?.data;
   const loading = !practice && (!loaded || shown === undefined);
-  const emptyLibrary = !practice && !!live && live.libraryWords === 0;
-  const emptyFolder = !practice && !!live && !emptyLibrary && live.filterWords === 0;
-  const done = !practice && !!live && !emptyLibrary && !emptyFolder && live.session.queue.length === 0;
+  // While a card is held the screen stays as it was (e.g. «Готово на сегодня» until an undo lands).
+  const emptyLibrary = !practice && !!shown && shown.libraryWords === 0;
+  const emptyFolder = !practice && !!shown && !emptyLibrary && shown.filterWords === 0;
+  const done = !practice && !!shown && !emptyLibrary && !emptyFolder && shown.session.queue.length === 0;
 
   // Desktop input guard: a screen change (done, practice start/end) ignores keys for 400ms, also
   // key presses that began before it (e.g. a held «3» on the last card landing on «Готово»).
@@ -230,20 +250,20 @@ export function ReviewScreen() {
   };
 
   const reveal = () => {
-    if (!current) return;
+    if (!current || holding) return;
     if (focusInCard()) refocus.current = "answer";
     setPinned({ key: current.key, revealed: true, revealedAt: Date.now(), flip: "up" });
   };
 
   /** Back to the question side; the answer can be flipped again with fresh intervals. */
   const hide = () => {
-    if (!current) return;
+    if (!current || holding) return;
     if (focusInCard()) refocus.current = "reveal";
     setPinned({ key: current.key, revealed: false, revealedAt: 0, flip: "down" });
   };
 
   const undo = async () => {
-    if (busy.current) return;
+    if (busy.current || holding) return;
     if (practice) {
       setPractice((p) => {
         const previous = p?.history.at(-1);
@@ -258,9 +278,9 @@ export function ReviewScreen() {
     try {
       const result = await undoLastReview();
       if (!result) return;
-      setAwaiting({ data: before, key: null, updatedAt: null });
-      setPinned({ key: reviewStateId(result.log.word_id, result.log.direction), revealed: false, revealedAt: 0 });
-      setInstance((n) => n + 1);
+      // The current card stays until the read with the restored one lands.
+      const pinned = { key: reviewStateId(result.log.word_id, result.log.direction), revealed: false, revealedAt: 0 };
+      setAwaiting({ data: before, key: null, updatedAt: null, hold: { pinned } });
       const word = await getWord(result.log.word_id);
       snackbar.show({
         message: word ? (
@@ -283,12 +303,12 @@ export function ReviewScreen() {
 
   /** A swipe grades from either side; buttons and keys only from the answer. */
   const grade = async (rating: Rating, swiped = false) => {
-    if (!current || (!revealed && !swiped) || busy.current) return;
+    if (!current || (!revealed && !swiped) || busy.current || holding) return;
     const item = current;
     if (focusInCard()) refocus.current = "reveal";
-    resetCard();
 
     if (practice) {
+      resetCard();
       const nextQueue = advancePractice(practice.queue, rating);
       if (nextQueue.length === 0) {
         setPractice(null);
@@ -301,11 +321,14 @@ export function ReviewScreen() {
     }
 
     busy.current = true;
-    setAwaiting({ data: latestData.current, key: item.key, updatedAt: item.state.updated_at });
+    // The graded card stays (held) until the read without it lands; then the next one shows.
+    setAwaiting({ data: latestData.current, key: item.key, updatedAt: item.state.updated_at, hold: { pinned: null } });
     try {
       await gradeCard(item.word.id, item.direction, rating);
       snackbar.hide();
     } catch (error) {
+      // Nothing was saved: the card stays as it was, ready for another try.
+      refocus.current = null;
       setAwaiting(null);
       snackbar.show({ message: errorText(error) });
     } finally {
@@ -443,7 +466,8 @@ export function ReviewScreen() {
 
   useEffect(() => {
     const target = refocus.current;
-    if (!target) return;
+    // While a graded card is held the focus stays where it is; it moves once the next card shows.
+    if (!target || holding) return;
     // Desktop «Готово на сегодня» places focus itself (on «Повторить ошибки»).
     if (desktop && done) {
       refocus.current = null;
@@ -494,20 +518,40 @@ export function ReviewScreen() {
   /** Cards after this one (the desktop stack shows up to two outlines). */
   const remaining = queue && current ? new Set(queue.map((i) => i.key)).size - 1 : 0;
   const cardsShown = !loading && !emptyLibrary && !emptyFolder && !done;
+  /** The card on screen; none while loading or when a held card waits too long (the placeholder shows). */
+  const card = !loading && !(holding && slowHold) ? current : undefined;
+  const cardKey = card ? `${card.key}:${instance}` : null;
+
+  // R1: the card that replaces the placeholder writes its text in; later cards swap in one frame.
+  const [afterPlaceholder, setAfterPlaceholder] = useState(true);
+  const [writeInKey, setWriteInKey] = useState<string | null>(null);
+  if (loading || cardsShown) {
+    if (!cardKey && !afterPlaceholder) setAfterPlaceholder(true);
+    if (cardKey && afterPlaceholder) {
+      setAfterPlaceholder(false);
+      setWriteInKey(cardKey);
+    }
+  }
 
   // overflow-clip: the flip and fly-out transforms must never widen the page (mobile browsers
   // zoom out to fit and stay zoomed). clip, unlike hidden, does not create a scroll container.
   // data-wide: from 768 up the screen lays itself out over the whole content area (running head,
   // the card centred under it); phones keep the 16px-gutter column.
   return (
-    <main ref={mainRef} data-review="" data-wide="" className="flex flex-1 flex-col overflow-clip px-4 pb-4 md:p-0">
+    <main
+      ref={mainRef}
+      data-review=""
+      data-wide=""
+      aria-busy={loading || undefined}
+      className="flex flex-1 flex-col overflow-clip px-4 pb-4 md:p-0"
+    >
       <style>{REVIEW_DESK_CSS + HINT_LINE_CSS}</style>
       <ReviewTopBar
         canUndo={canUndo}
         onUndo={() => void undo()}
         letters={letters}
         hideOnDesktop={done || emptyLibrary}
-        progress={cardsShown ? progress : null}
+        progress={loading ? PENDING_PROGRESS : cardsShown ? progress : null}
         heading={cardsShown ? <h1 className="sr-only">Повторение</h1> : null}
       >
         {practice ? (
@@ -546,14 +590,6 @@ export function ReviewScreen() {
         )}
       </ReviewTopBar>
 
-      {loading && (
-        <div className={DESK}>
-          <ReviewCardPlaceholder />
-          {/* The grade row's place, so the card does not move when it loads. */}
-          <div aria-hidden="true" className="mt-8 h-14 max-md:hidden" />
-        </div>
-      )}
-
       {emptyLibrary && <EmptyLibrary onAdd={() => addSheet.open()} />}
 
       {emptyFolder && <EmptyFolder folderName={folderLabel} onShowAll={() => setFolder("all")} onAdd={() => addSheet.open()} />}
@@ -572,24 +608,27 @@ export function ReviewScreen() {
         />
       )}
 
-      {cardsShown && (
+      {/* Loading uses the same layout as the cards (R1): the placeholder in the card's slot, the
+          hint row and the grade bar's space reserved, so nothing moves when the queue arrives. */}
+      {(loading || cardsShown) && (
         <div className={DESK}>
-          {current ? (
+          {card && cardKey ? (
             <ReviewCard
-              key={`${current.key}:${instance}`}
-              word={current.word}
-              direction={current.direction}
+              key={cardKey}
+              word={card.word}
+              direction={card.direction}
               revealed={revealed}
               onReveal={reveal}
               onHide={hide}
-              flip={pinned?.key === current.key ? pinned.flip : undefined}
+              flip={pinned?.key === card.key ? pinned.flip : undefined}
               haptics={hapticsEnabled}
-              folderName={(current.word.folder_id && folderNames.get(current.word.folder_id)) || "Входящие"}
+              folderName={(card.word.folder_id && folderNames.get(card.word.folder_id)) || "Входящие"}
               swipeEnabled={cardSwipe}
               onSwipe={(outcome) => void grade(outcome === "good" ? 3 : 1, true)}
               hasNext={hasNext}
               number={ordinal ? cardNumber(ordinal) : undefined}
               remaining={remaining}
+              enter={writeInKey === cardKey}
             />
           ) : (
             <ReviewCardPlaceholder />
@@ -599,24 +638,27 @@ export function ReviewScreen() {
           {swipeEnabled && (
             <p
               aria-hidden="true"
-              className="meta mt-4 mb-0 flex h-4 shrink-0 justify-between leading-4 md:hidden"
+              className={cx("meta mt-4 mb-0 flex h-4 shrink-0 justify-between leading-4 md:hidden", card ? WRITE_IN : "invisible")}
             >
               <span>← {GRADE_LABELS[1]}</span>
               <span>{revealed ? "тап — вопрос" : "тап — ответ"}</span>
               <span>{GRADE_LABELS[3]} →</span>
             </p>
           )}
-          {snackbar.render()}
-          <div
-            ref={bottomBarRef}
-            data-review-focus=""
-            inert={!revealed}
-            aria-hidden={revealed ? undefined : true}
-            className={cx("mt-4 shrink-0 md:mt-8 md:w-(--card-w) md:max-w-full", !revealed && "invisible")}
-          >
-            <GradeBar buttons={gradeButtons} intervals={intervals} flash={flash} onGrade={(r) => void grade(r)} />
+          {/* The snackbar overlays the card's footer zone just above the grade bar (R9). */}
+          <div className="relative mt-4 shrink-0 md:mt-8 md:w-(--card-w) md:max-w-full">
+            {snackbar.render()}
+            <div
+              ref={bottomBarRef}
+              data-review-focus=""
+              inert={!card || !revealed}
+              aria-hidden={card && revealed ? undefined : true}
+              className={cx((!card || !revealed) && "invisible")}
+            >
+              <GradeBar buttons={gradeButtons} intervals={intervals} flash={flash} onGrade={(r) => void grade(r)} />
+            </div>
           </div>
-          {keyHints && current && (
+          {keyHints && card && (
             <HintLine revealed={revealed} practice={!!practice} letters={letters} gradeButtons={gradeButtons} />
           )}
         </div>

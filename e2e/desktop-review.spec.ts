@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { openReview, questionCard } from "./fixtures";
+import { slowDatabase } from "./review-loading";
 
 // Desktop review (mockups/DESKTOP-SPEC.md §5 #1–#4): running head, the landscape index card centred
 // in the content area, grade buttons with key caps, the hint line, practice and «Готово на сегодня».
@@ -11,6 +12,24 @@ const doneHeading = (page: Page) => page.getByRole("heading", { name: "Гото�
 
 /** Content area right of the 248px sidebar. */
 const CONTENT = { left: 248, width: 1440 - 248 };
+
+test("loading: the placeholder is the index card at its final place under the drawn running head (R1)", async ({ page }) => {
+  await slowDatabase(page, 1500);
+  await page.goto("/");
+  const placeholder = page.locator("[data-review-placeholder]");
+  await expect(placeholder).toBeVisible();
+  const slot = (await placeholder.boundingBox())!;
+  expect(slot.width).toBe(720);
+  expect(slot.height).toBe(432);
+  await expect(page.getByRole("button", { name: "Все клавиши" })).toBeVisible();
+  await expect(placeholder.locator(".delayed-in").first()).toHaveCSS("opacity", "1");
+
+  await expect(questionCard(page)).toBeVisible();
+  await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
+  expect(await questionCard(page).boundingBox()).toEqual(slot);
+  // CLS 0 in practice; allow sub-pixel noise (the old placeholder scored > 0.1).
+  expect(await page.evaluate(() => window.__cls)).toBeLessThan(0.001);
+});
 
 test("the card is a 720×432 index card centred under the running head", async ({ page }) => {
   await openReview(page);
