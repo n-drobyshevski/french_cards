@@ -1,0 +1,419 @@
+"use client";
+
+import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { cx } from "@/components/ui/cx";
+import { SLANG_NAMES_RU } from "@/components/ui/SlangMeter";
+import { Icon } from "@/components/ui/Icons";
+import { SLANG_LABELS, type Folder, type SlangLevel } from "@/lib/types";
+import type { DuplicateInfo } from "./data";
+import type { WordFormProps } from "./WordForm";
+import { CheckBox, DESK_INPUT, DeskFieldError, DeskFrame, FIELD_LABEL, HIDDEN_CONTROL_FOCUS, HintLine, KeyButton, ThemeSquare, type Hint } from "./desk-parts";
+import { choiceKey, choiceName, INBOX_CHOICE, sameChoice, type FolderChoice } from "./folder-choice";
+import { cardNumber } from "./match";
+
+export interface DeskWordFormProps extends Omit<WordFormProps, "onSubmit" | "onAddAnyway"> {
+  /** «Добавить» (andMore = «Добавить и ещё»). */
+  onSave: (andMore: boolean) => void;
+  saving: boolean;
+  saveError: string | null;
+  /** Footer status after «Добавить и ещё» (replaces the key line). */
+  status?: ReactNode;
+}
+
+const FORM_HINTS: readonly Hint[] = [
+  [["Tab"], "дальше"],
+  [["Escape"], "к поиску"],
+];
+
+const isEnter = (e: KeyboardEvent) => e.key === "Enter" && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey && !e.nativeEvent.isComposing;
+
+/**
+ * D-Add-Form: the picked suggestion (or a manual entry) as a two-column form. Tab runs
+ * Французский → Русский → Заметка → Пример FR → RU → level → verl. → theme → «Другие темы» →
+ * «в обе стороны» → «Добавить и ещё» → «Добавить». ⌘↵ / ⇧⌘↵ and Esc are handled by the dialog.
+ */
+export function DeskWordForm({
+  draft,
+  onChange,
+  folders,
+  errors,
+  frRef,
+  ruRef,
+  duplicate,
+  onOpenWord,
+  enriching = false,
+  onSave,
+  saving,
+  saveError,
+  status,
+}: DeskWordFormProps) {
+  const id = useId();
+  const ids = {
+    fr: `${id}-fr`,
+    ru: `${id}-ru`,
+    frError: `${id}-fr-err`,
+    ruError: `${id}-ru-err`,
+    dup: `${id}-dup`,
+    note: `${id}-note`,
+    example: `${id}-ex`,
+    level: `${id}-lvl`,
+    theme: `${id}-theme`,
+  };
+  const hasExample = Boolean(draft.example_fr.trim() || draft.example_ru.trim());
+  const slangCaption = enriching && !draft.slang_touched ? "определяется…" : draft.slang_auto ? "определён автоматически" : null;
+
+  const footer = (
+    <>
+      {status ??
+        (saveError ? (
+          <p role="alert" className="m-0 min-w-0 flex-1 truncate text-[13px] leading-5 text-again">
+            {saveError}
+          </p>
+        ) : (
+          <HintLine hints={FORM_HINTS} />
+        ))}
+      <KeyButton variant="secondary" keys="Shift+Mod+Enter" busy={saving} onClick={() => onSave(true)}>
+        Добавить и ещё
+      </KeyButton>
+      <KeyButton keys="Mod+Enter" busy={saving} onClick={() => onSave(false)}>
+        {duplicate ? "Добавить всё равно" : "Добавить"}
+      </KeyButton>
+    </>
+  );
+
+  return (
+    <DeskFrame footer={footer} tall bodyClassName="pb-3">
+      <form aria-label="Новое слово" onSubmit={(e) => e.preventDefault()} className="m-0 flex flex-col">
+        <div className="grid grid-cols-2 gap-x-4">
+          <div className="min-w-0">
+            <label htmlFor={ids.fr} className={FIELD_LABEL}>
+              Французский
+            </label>
+            <input
+              ref={frRef}
+              id={ids.fr}
+              type="text"
+              lang="fr"
+              value={draft.fr}
+              onChange={(e) => onChange({ fr: e.target.value })}
+              onKeyDown={(e) => {
+                if (!isEnter(e)) return;
+                e.preventDefault();
+                document.getElementById(ids.ru)?.focus();
+              }}
+              placeholder="По-французски"
+              autoComplete="off"
+              spellCheck={false}
+              aria-invalid={errors.fr ? true : undefined}
+              aria-describedby={[errors.fr && ids.frError, duplicate && ids.dup].filter(Boolean).join(" ") || undefined}
+              className={cx(DESK_INPUT, "font-serif text-[20px] font-medium placeholder:font-sans placeholder:text-[15px] placeholder:font-normal")}
+            />
+            <DeskFieldError id={ids.frError}>{errors.fr}</DeskFieldError>
+            {duplicate && <DuplicateLine id={ids.dup} info={duplicate} onOpen={() => onOpenWord(duplicate.word.id)} />}
+          </div>
+          <div className="min-w-0">
+            <label htmlFor={ids.ru} className={FIELD_LABEL}>
+              Русский
+            </label>
+            <input
+              ref={ruRef}
+              id={ids.ru}
+              type="text"
+              lang="ru"
+              value={draft.ru}
+              onChange={(e) => onChange({ ru: e.target.value })}
+              onKeyDown={(e) => {
+                if (!isEnter(e)) return;
+                e.preventDefault();
+                onSave(false);
+              }}
+              placeholder="Перевод"
+              autoComplete="off"
+              aria-invalid={errors.ru ? true : undefined}
+              aria-describedby={errors.ru ? ids.ruError : undefined}
+              className={DESK_INPUT}
+            />
+            <DeskFieldError id={ids.ruError}>{errors.ru}</DeskFieldError>
+          </div>
+        </div>
+
+        <label htmlFor={ids.note} className={cx(FIELD_LABEL, "mt-4")}>
+          Заметка
+        </label>
+        <textarea
+          id={ids.note}
+          rows={2}
+          lang="ru"
+          value={draft.note}
+          onChange={(e) => onChange({ note: e.target.value })}
+          placeholder="Оттенок, синонимы, происхождение"
+          className={cx(DESK_INPUT, "h-16 resize-none py-[9px] leading-[22px]")}
+        />
+
+        <span id={ids.example} className={cx(FIELD_LABEL, "mt-4")}>
+          Пример
+        </span>
+        <div role="group" aria-labelledby={ids.example} className="grid grid-cols-2 gap-x-4">
+          <input
+            type="text"
+            lang="fr"
+            aria-label="Пример по-французски"
+            value={draft.example_fr}
+            onChange={(e) => onChange({ example_fr: e.target.value, example_touched: true, example_auto: false })}
+            placeholder="Фраза по-французски"
+            autoComplete="off"
+            className={cx(DESK_INPUT, "font-serif text-[17px] italic placeholder:font-sans placeholder:text-[15px] placeholder:not-italic")}
+          />
+          <input
+            type="text"
+            lang="ru"
+            aria-label="Перевод примера"
+            value={draft.example_ru}
+            onChange={(e) => onChange({ example_ru: e.target.value, example_touched: true, example_auto: false })}
+            placeholder="Перевод примера"
+            autoComplete="off"
+            className={DESK_INPUT}
+          />
+        </div>
+        {draft.example_auto && hasExample && <span className="mt-1 text-[12px] leading-4 text-muted">подобран автоматически</span>}
+
+        <span id={ids.level} className={cx(FIELD_LABEL, "mt-4")}>
+          Уровень сленга
+        </span>
+        <div className="flex h-8 items-center">
+          <LevelOptions
+            labelledBy={ids.level}
+            value={draft.slang_level}
+            onChange={(slang_level) => onChange({ slang_level, slang_auto: false, slang_touched: true })}
+          />
+          <label className={cx("relative ml-1 inline-flex h-8 cursor-pointer items-center gap-2 rounded-[4px] px-1", HIDDEN_CONTROL_FOCUS)}>
+            <input
+              type="checkbox"
+              aria-label="верлан"
+              checked={draft.verlan}
+              onChange={(e) => onChange({ verlan: e.target.checked, slang_auto: false, slang_touched: true })}
+              className="absolute top-0 left-0 m-0 size-px opacity-0"
+            />
+            <CheckBox checked={draft.verlan} />
+            <span lang="fr" className={cx("font-serif text-[14px] font-medium italic", draft.verlan ? "text-ink" : "text-muted")}>
+              verl.
+            </span>
+          </label>
+          {slangCaption && (
+            <span role={enriching ? "status" : undefined} className="ml-4 text-[12px] leading-4 text-muted">
+              {slangCaption}
+            </span>
+          )}
+        </div>
+
+        <span id={ids.theme} className={cx(FIELD_LABEL, "mt-4")}>
+          Тема
+        </span>
+        <ThemeChips
+          labelledBy={ids.theme}
+          value={draft.folder}
+          onChange={(folder) => onChange({ folder, folder_touched: true })}
+          folders={folders}
+          auto={draft.auto?.auto ?? null}
+          alternatives={draft.auto?.alternatives ?? []}
+          proposal={draft.auto?.proposal ?? null}
+        />
+
+        <label className={cx("relative -mx-2 mt-1 flex min-h-11 cursor-pointer items-start gap-3 rounded-[4px] px-2 py-3", HIDDEN_CONTROL_FOCUS)}>
+          <input
+            type="checkbox"
+            checked={draft.both_directions}
+            onChange={(e) => onChange({ both_directions: e.target.checked })}
+            className="absolute top-0 left-0 m-0 size-px opacity-0"
+          />
+          <CheckBox checked={draft.both_directions} className="mt-[3px]" />
+          <span className="text-[15px] leading-5 text-ink">
+            Карточки в обе стороны
+            <span className="ml-2.5 font-mono text-[12px] text-muted">FR → RU · RU → FR</span>
+          </span>
+        </label>
+      </form>
+    </DeskFrame>
+  );
+}
+
+function DuplicateLine({ id, info, onOpen }: { id: string; info: DuplicateInfo; onOpen: () => void }) {
+  const where = info.folderName ? `в «${info.folderName}»` : "во «Входящих»";
+  return (
+    <p id={id} className="m-0 mt-1 flex items-baseline gap-1.5 text-[12px] leading-4 whitespace-nowrap text-warn">
+      <span className="min-w-0 truncate">
+        «<span lang="fr">{info.word.fr}</span>» уже есть {where}.
+      </span>
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`Открыть ${cardNumber(info.ordinal)}`}
+        className="shrink-0 bg-transparent p-0 font-mono text-[11px] text-warn tabular-nums underline decoration-1 underline-offset-[3px]"
+      >
+        {cardNumber(info.ordinal)}
+      </button>
+    </p>
+  );
+}
+
+/** Roving tabindex + arrows for a row of radios (APG radio group). */
+function onRadioKeys<T>(e: KeyboardEvent<HTMLElement>, values: readonly T[], current: number, select: (v: T, index: number) => void) {
+  const delta = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+  if (!delta || values.length === 0) return;
+  e.preventDefault();
+  const next = (Math.max(current, 0) + delta + values.length) % values.length;
+  select(values[next], next);
+}
+
+const focusRadio = (group: HTMLElement | null, index: number) =>
+  requestAnimationFrame(() => group?.querySelectorAll<HTMLElement>('[role="radio"]')[index]?.focus());
+
+/** нейтр. | fam. | arg. | vulg. — text options with hairline separators. */
+function LevelOptions({ labelledBy, value, onChange }: { labelledBy: string; value: SlangLevel; onChange: (v: SlangLevel) => void }) {
+  const group = useRef<HTMLDivElement>(null);
+  const levels = [0, 1, 2, 3] as const;
+  return (
+    <div
+      ref={group}
+      role="radiogroup"
+      aria-labelledby={labelledBy}
+      className="-ml-3 flex items-center"
+      onKeyDown={(e) =>
+        onRadioKeys(e, levels, value, (v, i) => {
+          onChange(v);
+          focusRadio(group.current, i);
+        })
+      }
+    >
+      {levels.map((l) => (
+        <span key={l} className="flex items-center">
+          {l > 0 && <span aria-hidden="true" className="h-4 w-px bg-rule" />}
+          <button
+            type="button"
+            role="radio"
+            aria-checked={value === l}
+            aria-label={SLANG_NAMES_RU[l]}
+            tabIndex={value === l ? 0 : -1}
+            lang={l === 0 ? undefined : "fr"}
+            onClick={() => onChange(l)}
+            className={cx(
+              "h-8 bg-transparent px-3 font-serif text-[14px] font-medium italic",
+              value === l ? "text-ink underline decoration-1 underline-offset-4" : "text-muted hoverable:text-ink",
+            )}
+          >
+            {SLANG_LABELS[l]}
+          </button>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+const CHIP =
+  "inline-flex h-8 shrink-0 items-center gap-1.5 rounded-[4px] border pr-2.5 pl-[9px] text-[13px] leading-4 whitespace-nowrap";
+
+/**
+ * «Тема»: the automatic pick (caption «подобрано автоматически» under it), its alternatives, the
+ * dashed «+ новая тема: X», and «Другие темы ▾» (a native select in folder order) for the rest.
+ * Without an automatic pick: «Входящие» and every theme.
+ */
+function ThemeChips({
+  labelledBy,
+  value,
+  onChange,
+  folders,
+  auto,
+  alternatives,
+  proposal,
+}: {
+  labelledBy: string;
+  value: FolderChoice;
+  onChange: (choice: FolderChoice) => void;
+  folders: readonly Folder[];
+  auto: FolderChoice | null;
+  alternatives: readonly FolderChoice[];
+  proposal: FolderChoice | null;
+}) {
+  const group = useRef<HTMLDivElement>(null);
+  const captionId = useId();
+  const all: FolderChoice[] = [INBOX_CHOICE, ...folders.map((f): FolderChoice => ({ kind: "folder", id: f.id }))];
+  const chips: FolderChoice[] = auto ? [auto, ...alternatives] : all;
+  if (proposal && !chips.some((c) => sameChoice(c, proposal))) chips.push(proposal);
+  // A theme picked from «Другие темы» joins the chips.
+  if (!chips.some((c) => sameChoice(c, value))) chips.splice(auto ? 1 + alternatives.length : chips.length, 0, value);
+  const rest = auto ? all.filter((c) => !chips.some((s) => sameChoice(s, c))) : [];
+  const autoSelected = auto !== null && sameChoice(value, auto);
+  const current = chips.findIndex((c) => sameChoice(c, value));
+
+  return (
+    <div className={cx("flex items-start gap-1.5", autoSelected && "pb-5")}>
+      <div
+        ref={group}
+        role="radiogroup"
+        aria-labelledby={labelledBy}
+        className="flex min-w-0 flex-wrap items-start gap-x-1.5 gap-y-2"
+        onKeyDown={(e) =>
+          onRadioKeys(e, chips, current, (c, i) => {
+            onChange(c);
+            focusRadio(group.current, i);
+          })
+        }
+      >
+        {chips.map((c, i) => {
+          const selected = i === current;
+          const isNew = c.kind === "new";
+          const isAuto = autoSelected && i === 0;
+          return (
+            <span key={choiceKey(c)} className="relative flex">
+              <button
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                aria-describedby={isAuto ? captionId : undefined}
+                tabIndex={selected || (current === -1 && i === 0) ? 0 : -1}
+                onClick={() => onChange(c)}
+                className={cx(
+                  CHIP,
+                  isNew && "border-dashed pl-2.5",
+                  selected ? "border-ink bg-ink text-on-ink" : "border-boundary bg-surface text-ink hoverable:bg-hover-surface",
+                )}
+              >
+                <ThemeSquare choice={c} folders={folders} onInk={selected} />
+                <span>{isNew ? `+ новая тема: ${c.name}` : choiceName(c, folders)}</span>
+              </button>
+              {isAuto && (
+                <span id={captionId} className="absolute top-9 left-0 text-[12px] leading-4 whitespace-nowrap text-muted">
+                  подобрано автоматически
+                </span>
+              )}
+            </span>
+          );
+        })}
+      </div>
+      {rest.length > 0 && (
+        <span className={cx("relative", CHIP, "gap-1 border-boundary bg-surface pr-2 pl-2.5 text-ink hoverable:bg-hover-surface", HIDDEN_CONTROL_FOCUS)}>
+          <span>Другие темы</span>
+          <Icon name="chevron" size={14} strokeWidth={1.75} className="text-muted" />
+          <select
+            aria-label="Другие темы"
+            value=""
+            onChange={(e) => {
+              const next = rest.find((c) => choiceKey(c) === e.target.value);
+              if (next) onChange(next);
+            }}
+            className="absolute inset-0 size-full cursor-pointer appearance-none opacity-0"
+          >
+            <option value="" disabled>
+              Другие темы
+            </option>
+            {rest.map((c) => (
+              <option key={choiceKey(c)} value={choiceKey(c)}>
+                {choiceName(c, folders)}
+              </option>
+            ))}
+          </select>
+        </span>
+      )}
+    </div>
+  );
+}
