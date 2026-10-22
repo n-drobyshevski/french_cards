@@ -303,6 +303,24 @@ body {
   }
 }
 
+/* The import scan line (with its veil) travels over the thumbnail top↔bottom; use with .motion-loop
+   (reduced motion: it stays where its inline translate puts it, at the bar's %). */
+@keyframes scan-travel {
+  from {
+    translate: 0 0;
+  }
+  to {
+    translate: 0 calc(100% - 1px);
+  }
+}
+
+/* Something pushed down in the layout slides from its old place: set --slide-from (e.g. -56px). */
+@keyframes slide-from {
+  from {
+    translate: 0 calc(var(--slide-from, 0px) * var(--motion-scale));
+  }
+}
+
 /* An indicator that is always mounted but should only paint when the wait is slow (§3.1). */
 .delayed-in {
   animation: fade-in var(--dur-quick) var(--ease-enter) var(--loading-delay) both;

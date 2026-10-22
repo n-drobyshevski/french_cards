@@ -633,11 +633,38 @@ async function pool<T, R>(items: readonly T[], limit: number, fn: (item: T) => P
   return out;
 }
 
+/**
+ * Where a re-sort is (MOTION-SPEC S1): pass A «01 Темы» has no total; pass B «02 Слова · 24 / 48»
+ * counts the words whose assign batch has come back.
+ */
+export interface ReorgProgress {
+  stage: "taxonomy" | "assign";
+  /** Words the plan may move (the «/ 48»). */
+  words: number;
+  /** Words whose assign batch has finished. */
+  wordsDone: number;
+  /** Assign batches finished / in total (0 / 0 during the taxonomy pass). */
+  done: number;
+  total: number;
+}
+
+/** Share of the taxonomy pass on the determinate bar: it fills 0 → 20 % only when the pass ends. */
+export const TAXONOMY_SHARE = 0.2;
+
+/** 0–1 for the 1px bar: 0 during the taxonomy pass, then 20 % plus the finished assign batches. */
+export function reorgFraction(p: ReorgProgress): number {
+  if (p.stage === "taxonomy") return 0;
+  if (p.total === 0) return 1;
+  return TAXONOMY_SHARE + (1 - TAXONOMY_SHARE) * Math.min(1, p.done / p.total);
+}
+
 export interface RunReorgOptions extends ClassifyOptions {
   /** Settings «Модель для подсказок»; read from Settings when omitted. */
   model?: ModelTierInput;
   /** Called as assign chunks finish: (done, total). */
   onProgress?: (done: number, total: number) => void;
+  /** Called when the taxonomy pass starts, when it ends (assign 0 / n) and as each assign chunk finishes. */
+  onStage?: (progress: ReorgProgress) => void;
   /** Injected for tests. */
   snapshot?: ReorgSnapshot;
   now?: Date;
@@ -650,18 +677,25 @@ export async function runReorg(opts: RunReorgOptions = {}): Promise<ReorgPlan> {
   const { movable } = partition(snap);
   if (movable.length === 0) return buildPlan(snap, [], [], now);
 
+  const words = movable.length;
+  opts.onStage?.({ stage: "taxonomy", words, wordsDone: 0, done: 0, total: 0 });
   const model = opts.model ?? (await getSettings()).ai_model;
   const taxonomy = await postClassify<TaxonomyResponse>({ ...buildTaxonomyRequest(snap), model }, opts);
   const targets = assignTargets(snap, taxonomy);
   const requests = buildAssignRequests(snap, targets);
   let done = 0;
+  let wordsDone = 0;
   opts.onProgress?.(0, requests.length);
+  opts.onStage?.({ stage: "assign", words, wordsDone, done, total: requests.length });
   const results = await pool(
     requests,
     ASSIGN_CONCURRENCY,
     async (req) => {
       const res = await postClassify<AssignResponse>({ ...req, model }, opts);
-      opts.onProgress?.(++done, requests.length);
+      done++;
+      wordsDone += req.words.length;
+      opts.onProgress?.(done, requests.length);
+      opts.onStage?.({ stage: "assign", words, wordsDone, done, total: requests.length });
       return res.assignments;
     },
     opts.signal,

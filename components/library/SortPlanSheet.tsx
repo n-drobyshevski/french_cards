@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icons";
 import { Kbd } from "@/components/ui/Kbd";
 import { DialogChrome, Sheet, SheetCloseButton, SheetTitle } from "@/components/ui/Sheet";
+import { SKELETON_WIDTHS, SkeletonBar } from "@/components/ui/Skeleton";
 import { useSnackbar } from "@/components/ui/Snackbar";
+import { StatusLine } from "@/components/ui/StatusLine";
 import { Toggle } from "@/components/ui/Toggle";
 import { cx } from "@/components/ui/cx";
 import { NEW_FOLDER_MIN_WORDS } from "@/lib/ai/schemas";
@@ -16,6 +18,7 @@ import {
   planSummary,
   REORG_UNDO_DAYS,
   ReorgError,
+  reorgFraction,
   retargetMove,
   runReorg,
   setTargetEnabled,
@@ -24,6 +27,7 @@ import {
   type PlanMove,
   type PlanTarget,
   type ReorgPlan,
+  type ReorgProgress,
 } from "@/lib/reorg";
 import { useFormatKeys } from "@/lib/key-names";
 import { useLayoutClass } from "@/lib/use-media";
@@ -68,8 +72,8 @@ export function SortPlanSheet({ open, onOpenChange }: SortPlanSheetProps) {
     const controller = new AbortController();
     runReorg({
       signal: controller.signal,
-      onProgress: (done, total) => {
-        if (!controller.signal.aborted) setPhase({ status: "loading", done, total });
+      onStage: (progress) => {
+        if (!controller.signal.aborted) setPhase({ status: "loading", progress });
       },
     })
       .then((plan) => {
@@ -141,12 +145,15 @@ export function SortPlanSheet({ open, onOpenChange }: SortPlanSheetProps) {
   } else {
     footer = (
       <>
-        {summary && <p className="m-0 -mt-1.5 mb-2 text-[12px] leading-4 text-muted">Можно отменить в течение {REORG_UNDO_DAYS} дней.</p>}
+        <p className="m-0 -mt-1.5 mb-2 text-[12px] leading-4 text-muted">
+          {summary ? `Можно отменить в течение ${REORG_UNDO_DAYS} дней.` : NOT_READY}
+        </p>
         <div className="grid grid-cols-[112px_minmax(0,1fr)] gap-2">
           <Button variant="tertiary" onClick={close}>
             Отмена
           </Button>
           <Button
+            className={CANT_APPLY}
             disabled={!plan || !summary || summary.apply === 0}
             pending={applying}
             pendingLabel="Применяем…"
@@ -192,11 +199,7 @@ export function SortPlanSheet({ open, onOpenChange }: SortPlanSheetProps) {
           />
         }
       >
-        {phase.status === "loading" && (
-          <p className="m-0 px-6 pt-4 text-[13px] leading-5 text-muted" role="status" aria-busy="true">
-            Составляем план{phase.total > 1 ? ` · ${phase.done} / ${phase.total}` : "…"}
-          </p>
-        )}
+        {phase.status === "loading" && <PlanProgress progress={phase.progress} desk />}
         {phase.status === "error" && (
           <p role="alert" className="m-0 px-6 pt-4 text-[15px] leading-[22px]">
             {phase.message}
@@ -235,28 +238,7 @@ export function SortPlanSheet({ open, onOpenChange }: SortPlanSheetProps) {
         <SheetCloseButton />
       </div>
 
-      {phase.status === "loading" && (
-        <div aria-busy="true">
-          <p className="meta m-0 px-4" role="status">
-            Составляем план{phase.total > 1 ? ` · ${phase.done} / ${phase.total}` : "…"}
-          </p>
-          <div className="mt-3 flex flex-col px-4" aria-hidden="true">
-            {[3, 2, 3].map((rows, g) => (
-              <div key={g} className={cx("border-t", g === 0 ? "border-ink" : "border-rule")}>
-                <div className="flex h-11 items-center">
-                  <span className="h-3 w-28 rounded-[2px] bg-surface-2" />
-                </div>
-                {Array.from({ length: rows }, (_, i) => (
-                  <div key={i} className="flex h-11 items-center gap-3 border-t border-surface-2 pl-[22px]">
-                    <span className="h-2.5 w-24 rounded-[2px] bg-surface-2" />
-                    <span className="h-2.5 w-16 rounded-[2px] bg-surface-2" />
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {phase.status === "loading" && <PlanProgress progress={phase.progress} />}
 
       {phase.status === "error" && (
         <p role="alert" className="m-0 mt-2 px-4 text-[15px] leading-[22px]">
@@ -288,6 +270,7 @@ export function SortPlanSheet({ open, onOpenChange }: SortPlanSheetProps) {
                 key={g.target.key}
                 group={g}
                 first={i === 0}
+                style={writeIn(i)}
                 onToggle={(on) => update((p) => setTargetEnabled(p, g.target.key, on))}
                 onPick={(move) => {
                   setPicking(move);
@@ -314,11 +297,93 @@ export function SortPlanSheet({ open, onOpenChange }: SortPlanSheetProps) {
 }
 
 type Phase =
-  | { status: "loading"; done: number; total: number }
+  /** progress is null until the words are counted (a local read, before the first request). */
+  | { status: "loading"; progress: ReorgProgress | null }
   | { status: "error"; message: string }
   | { status: "ready"; plan: ReorgPlan };
 
-const LOADING: Phase = { status: "loading", done: 0, total: 0 };
+const LOADING: Phase = { status: "loading", progress: null };
+const NOT_READY = "Можно применить, когда план готов";
+/** «Применить» that can't: white, #8a8a85 text, rule border — not a greyed ink slab (MOTION-SPEC §3.5). */
+const CANT_APPLY = "disabled:border-rule disabled:bg-surface disabled:text-boundary disabled:opacity-100!";
+
+/** Groups write in as blocks when the plan is ready: 40 ms apart, at most 300 ms (MOTION-SPEC §3.6). */
+function writeIn(index: number): CSSProperties {
+  return { animation: `enter-rise var(--dur-enter) var(--ease-enter) ${Math.min(index * 40, 300)}ms both` };
+}
+
+type StepState = "done" | "active" | "pending";
+
+function PlanStep({ n, label, state, last, desk }: { n: string; label: string; state: StepState; last?: boolean; desk?: boolean }) {
+  return (
+    <li
+      aria-current={state === "active" ? "step" : undefined}
+      className={cx("flex items-center gap-2 border-t border-rule", desk ? "h-9" : "h-7", last && "border-b")}
+    >
+      <span className={cx("w-5 font-mono text-[11px] tracking-[.06em] tabular-nums", state === "active" ? "text-ink" : "text-muted")}>{n}</span>
+      <span
+        className={cx(
+          "min-w-0 flex-1 truncate leading-5 tabular-nums",
+          desk ? "text-[14px]" : "text-[13px]",
+          state === "active" && "font-medium text-ink",
+          state === "done" && "text-ink",
+          state === "pending" && "text-muted",
+        )}
+      >
+        {label}
+      </span>
+      {state === "done" && <Icon name="check" size={14} strokeWidth={2} label="готово" />}
+      {state === "active" && <span className="font-mono text-[11px] tracking-[.06em] text-red">ИДЁТ</span>}
+    </li>
+  );
+}
+
+/**
+ * The plan being built (MOTION-SPEC S1): «01 Темы» (taxonomy pass, no total: ink run on the status
+ * line) and «02 Слова · 24 / 48» (assign batches: a determinate 1px bar, 20 % → 100 %), elapsed after
+ * 3 s, and three static skeleton groups in the real group geometry.
+ */
+function PlanProgress({ progress, desk = false }: { progress: ReorgProgress | null; desk?: boolean }) {
+  const assigning = progress?.stage === "assign";
+  const count = progress ? `${progress.wordsDone} / ${progress.words}` : null;
+  const pad = desk ? "px-6" : "px-4";
+  return (
+    <div aria-busy="true" className={cx("flex flex-col", desk ? "pt-4" : "pt-0")}>
+      <p className={cx("m-0 h-5 text-[13px] leading-5 text-muted", pad)}>{progress ? `${nWords(progress.words)} без ручной темы` : ""}</p>
+      <ol aria-label="Этапы" className={cx("m-0 mt-3 list-none p-0", pad)}>
+        <PlanStep n="01" label="Темы" state={assigning ? "done" : "active"} desk={desk} />
+        <PlanStep n="02" label={count ? `Слова · ${count}` : "Слова"} state={assigning ? "active" : "pending"} last desk={desk} />
+      </ol>
+      <StatusLine
+        className={cx("mt-3", desk ? "mx-6" : "mx-4")}
+        text={assigning ? "Раскладываем слова" : "Составляем план"}
+        count={assigning ? count : undefined}
+        announce={assigning ? `Раскладываем слова · ${count}` : "Составляем план"}
+        active
+        progress={assigning && progress ? reorgFraction(progress) : undefined}
+      />
+      <div aria-hidden="true" className={cx("mt-3 flex flex-col", pad)}>
+        {[3, 2, 3].map((rows, g) => (
+          <div key={g} className={cx("border-t", g === 0 ? "border-ink" : "border-rule")}>
+            <div className={cx("flex items-center gap-3", desk ? "h-9 pl-8" : "h-11")}>
+              <SkeletonBar width={120} />
+              <SkeletonBar width={16} height={6} />
+            </div>
+            {Array.from({ length: rows }, (_, i) => {
+              const [a, b] = SKELETON_WIDTHS[(g + i) % SKELETON_WIDTHS.length];
+              return (
+                <div key={i} className={cx("flex items-center gap-3 border-t border-surface-2", desk ? "h-8 pl-8" : "h-11 pl-[22px]")}>
+                  <SkeletonBar width={a + 24} />
+                  <SkeletonBar width={b} height={6} />
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 const MOVE_FORMS = ["перемещение", "перемещения", "перемещений"] as const;
 const NEW_FOLDER_FORMS = ["новая тема", "новые темы", "новых тем"] as const;
 
@@ -329,11 +394,13 @@ function groupAria(target: PlanTarget): string {
 function Group({
   group,
   first,
+  style,
   onToggle,
   onPick,
 }: {
   group: PlanGroup;
   first: boolean;
+  style?: CSSProperties;
   onToggle: (on: boolean) => void;
   onPick: (move: PlanMove) => void;
 }) {
@@ -342,7 +409,11 @@ function Group({
   const dim = !stay && (!enabled || tooSmall);
   const missing = NEW_FOLDER_MIN_WORDS - moves.length;
   return (
-    <section aria-label={stay ? "Остаются на месте" : `${target.name}: ${nWords(moves.length)}`} className={cx("border-t", first ? "border-ink" : "border-rule")}>
+    <section
+      aria-label={stay ? "Остаются на месте" : `${target.name}: ${nWords(moves.length)}`}
+      className={cx("border-t", first ? "border-ink" : "border-rule")}
+      style={style}
+    >
       <div className="flex min-h-11 items-center gap-3">
         <span className={cx("flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-0.5 py-2", dim && "opacity-45")}>
           <span className="min-w-0 truncate font-serif text-[19px] leading-6 font-medium">
@@ -459,7 +530,9 @@ function DeskFooter({
   );
   return (
     <div className="flex items-center gap-4">
-      <p className="m-0 min-w-0 flex-1 text-[13px] leading-5 text-muted">{ready ? `Можно отменить в течение ${REORG_UNDO_DAYS} дней.` : ""}</p>
+      <p className="m-0 min-w-0 flex-1 text-[13px] leading-5 text-muted">
+        {ready ? `Можно отменить в течение ${REORG_UNDO_DAYS} дней.` : phase.status === "loading" ? NOT_READY : ""}
+      </p>
       {cancel}
       {phase.status === "error" ? (
         <button type="button" onClick={onRetry} className="inline-flex h-10 items-center gap-2 rounded-[6px] border border-ink bg-ink px-4 text-[14px] font-medium text-on-ink">
@@ -545,13 +618,13 @@ function DeskPlan({
         <span>Куда</span>
       </div>
       <div onKeyDown={onKeyDown} className="flex flex-col">
-        {sorted.map((g) => {
+        {sorted.map((g, index) => {
           const { target, moves, enabled, tooSmall } = g;
           const stay = target.kind === "stay";
           const on = enabled && !tooSmall;
           const dim = !stay && !on;
           return (
-            <section key={target.key} aria-label={stay ? "Остаются на месте" : `${target.name}: ${nWords(moves.length)}`}>
+            <section key={target.key} aria-label={stay ? "Остаются на месте" : `${target.name}: ${nWords(moves.length)}`} style={writeIn(index)}>
               <div
                 data-plan-row=""
                 tabIndex={0}

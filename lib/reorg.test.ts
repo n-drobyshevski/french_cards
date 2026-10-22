@@ -20,6 +20,8 @@ import {
   planSummary,
   postClassify,
   ReorgError,
+  reorgFraction,
+  type ReorgProgress,
   retargetMove,
   runReorg,
   setTargetEnabled,
@@ -416,6 +418,59 @@ describe("network", () => {
     expect(calls.map((c) => c.mode)).toEqual(["taxonomy", "assign"]);
     expect(planSummary(plan)).toMatchObject({ total: 3, newFolders: 1 });
     expect(progress).toEqual([0, 1]);
+  });
+
+  it("reports the taxonomy pass and every assign batch through onStage", async () => {
+    const f = await fixture();
+    // 8 movable words in the fixture + 150 more → two assign batches (150 + 8).
+    await addWords(
+      Array.from({ length: 150 }, (_, i) => ({ fr: `mot ${i}`, ru: `слово ${i}` })),
+      T0,
+    );
+    const movable = 8 + 150;
+    const stages: ReorgProgress[] = [];
+    let taxonomySeen = false;
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as TaxonomyRequest | AssignRequest;
+      if (body.mode === "taxonomy") {
+        // The sheet shows «01 Темы · ИДЁТ» before the first request returns.
+        taxonomySeen = stages.length === 1 && stages[0].stage === "taxonomy";
+        return json(taxonomyFor(f));
+      }
+      return json({ assignments: body.words.map((w) => ({ id: w.id, folder: "INBOX", confidence: "high" })) });
+    }) as unknown as typeof fetch;
+
+    await runReorg({ fetchImpl, now: T1, model: "fast", onStage: (p) => stages.push(p) });
+
+    expect(taxonomySeen).toBe(true);
+    expect(stages[0]).toEqual({ stage: "taxonomy", words: movable, wordsDone: 0, done: 0, total: 0 });
+    expect(stages[1]).toEqual({ stage: "assign", words: movable, wordsDone: 0, done: 0, total: 2 });
+    expect(stages).toHaveLength(4);
+    expect(stages.slice(2).map((p) => p.done)).toEqual([1, 2]);
+    expect(stages[3]).toMatchObject({ wordsDone: movable, done: 2, total: 2 });
+    // Never backwards.
+    const fractions = stages.map(reorgFraction);
+    expect(fractions).toEqual([...fractions].sort((a, b) => a - b));
+    expect(fractions[0]).toBe(0);
+    expect(fractions[1]).toBeCloseTo(0.2);
+    expect(fractions[2]).toBeCloseTo(0.6);
+    expect(fractions[3]).toBe(1);
+  });
+
+  it("reports nothing when no word can move", async () => {
+    const f = await fixture();
+    const snap: ReorgSnapshot = { folders: [f.money], words: [(await db.words.get(f.words["la thune"].id))!] };
+    const onStage = vi.fn();
+    await runReorg({ fetchImpl: vi.fn() as unknown as typeof fetch, snapshot: snap, onStage });
+    expect(onStage).not.toHaveBeenCalled();
+  });
+
+  it("reorgFraction: 0 during the taxonomy pass, 20 % after it, full when there is nothing to assign", () => {
+    const base = { words: 48, wordsDone: 0 };
+    expect(reorgFraction({ ...base, stage: "taxonomy", done: 0, total: 0 })).toBe(0);
+    expect(reorgFraction({ ...base, stage: "assign", done: 0, total: 4 })).toBeCloseTo(0.2);
+    expect(reorgFraction({ ...base, stage: "assign", done: 2, total: 4 })).toBeCloseTo(0.6);
+    expect(reorgFraction({ ...base, stage: "assign", done: 0, total: 0 })).toBe(1);
   });
 
   it("returns an empty plan without calling the server when nothing can move", async () => {
