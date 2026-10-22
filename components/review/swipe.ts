@@ -6,8 +6,10 @@ export type SwipeOutcome = "again" | "good";
 
 /** Movement (px) before the gesture picks an axis. */
 export const SWIPE_SLOP = 10;
-/** Share of the card width to drag past to grade on release. */
+/** Share of the card width to drag past to grade on release… */
 export const SWIPE_THRESHOLD = 1 / 3;
+/** …but never more than this (px): the desktop card is 720+ wide, and a mouse drag of 240 is a long way. */
+export const SWIPE_MAX_THRESHOLD = 200;
 /** A release faster than this (px/ms) in the drag direction grades even below the threshold. */
 export const FLICK_VELOCITY = 0.5;
 /** …provided the card moved at least this far. */
@@ -78,11 +80,14 @@ export function swipeVelocity(samples: readonly SwipeSample[]): number {
   return dt > 0 ? (last.x - first.x) / dt : 0;
 }
 
+/** Travel (px) past which a release grades. */
+export const swipeThreshold = (width: number): number => Math.min(width * SWIPE_THRESHOLD, SWIPE_MAX_THRESHOLD);
+
 /** What releasing now would do. */
 export function swipeDecision(dx: number, width: number, velocity: number): SwipeOutcome | null {
   if (width <= 0 || dx === 0) return null;
   const sign = Math.sign(dx);
-  const far = Math.abs(dx) >= width * SWIPE_THRESHOLD;
+  const far = Math.abs(dx) >= swipeThreshold(width);
   const flick = Math.abs(dx) >= FLICK_MIN_DISTANCE && Math.sign(velocity) === sign && Math.abs(velocity) >= FLICK_VELOCITY;
   if (!far && !flick) return null;
   return sign > 0 ? "good" : "again";
@@ -143,7 +148,7 @@ export interface SwipeVisual {
 export function swipeVisual(dx: number, width: number): SwipeVisual {
   if (width <= 0 || dx === 0) return { rotate: 0, progress: 0, side: null, locked: false, stamp: 0 };
   const rotate = Math.max(-MAX_ROTATION, Math.min(MAX_ROTATION, (dx / width) * ROTATION_PER_WIDTH));
-  const threshold = width * SWIPE_THRESHOLD;
+  const threshold = swipeThreshold(width);
   const distance = Math.abs(dx);
   const progress = Math.min(1, distance / threshold);
   const locked = distance >= threshold;

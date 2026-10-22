@@ -104,7 +104,7 @@ menu or pane.
 | Dialogs | add 640, sort plan 760, shortcuts 800, theme form / zoom 440 / 720 | same | same | max = window − 48 |
 
 ### Library table columns (fluid)
-`select 32 · Слово minmax(160px,1fr) · Перевод minmax(160px,1fr) · Уровень 104 · Тема 112 · Показ 120`
+`select 32 · Слово minmax(160px,1fr) · Перевод minmax(160px,1fr) · Уровень 112 (Firefox sets «нейтр.» wider than Chromium) · Тема 112 · Показ 120`
 (Показ right-aligned). Rules by **inner list width**: < 720 → drop «Тема»; < 680 → «Уровень» = italic abbr only,
 56 wide, no meter. Single theme / «Входящие» shown → no «Тема». Medium: Слово/Перевод `minmax(150px,1fr)`,
 drop «Тема» below 960 inner, «Показ» → 72 (mono interval only, «трудн.» moves to the tooltip) below 760 inner.
@@ -775,7 +775,8 @@ Red marks: bar, Входящие = 2.
   - Повторение: «Направление по умолчанию» → select «FR → RU ▾» (popover 2 rows 44: mono `FR → RU` + 13 muted «с
     французского на русский» (checked), `RU → FR` + «с русского на французский»); «Новых карточек в день» →
     stepper (− mono 15 +, 32 buttons, 1px `#8a8a85`, aria «Меньше»/«Больше»); «Кнопки оценки» → text options
-    2 | 3 (3 selected); option row ☐ «Свайпы для оценки» (unchecked: off by default on fine pointers;
+    2 | 3 (3 selected); option row ☑ «Свайпы для оценки» (on: a mouse drags the card too: click and hold, then sideways past
+    min(⅓ card, 200px) or a flick; a vertical drag still selects text; a short drag springs back, a click flips;
     «Вибрация при свайпах» hidden on desktop).
   - Оформление: «Тема» → text options Система | Светлая | Тёмная.
   - Подсказки: ☑ «Автоподсказки при вводе»; ☑ «Раскладывать по темам автоматически»; 12 muted «Слова и
@@ -806,7 +807,7 @@ Red marks: rail bar, Входящие rail count, «Удалить слово» 
 - Content x 72–1024 (padding 24, inner 904 < 960 → no «Тема»): h1 «Библиотека»; subline «158 слов · 23 к
   повторению» + «7 слов без темы · Разложить по темам»; toolbar: text filter «Тема: все ▾», search 240 + `/`,
   strip Все / К повторению 23 / Трудные 9 / Сленг ▾.
-- Table: select 32 · Слово 1fr (324) · Перевод 1fr (324) · Уровень 104 · Показ 120 (= 904). Sorted «Слово ▲»
+- Table: select 32 · Слово 1fr (324) · Перевод 1fr (324) · Уровень 112 · Показ 120 (= 912). Sorted «Слово ▲»
   from the top: une blague … rows to the frame bottom (cut at a row boundary).
 - **Context menu** (right-click) on la galère: row in hover state; menu 240 at the pointer: «Открыть карточку»
   `↵` (highlighted `#f4f4f1`) · «Переместить в тему…» `M` · separator · «Удалить слово» (`#b3261e`) `⌘⌫`.

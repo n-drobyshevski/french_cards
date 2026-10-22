@@ -733,13 +733,13 @@ function Desk({ scope }: { scope: LibraryScope }) {
   const rowMenuItem = rowMenu ? byId.get(rowMenu.id) : undefined;
 
   return (
-    <main data-wide="" style={{ height: "calc(100dvh - env(safe-area-inset-top))" }} className="flex min-h-0 w-full flex-none overflow-hidden">
+    <main data-wide="" style={{ height: "calc(100dvh - var(--safe-top))" }} className="flex min-h-0 w-full flex-none overflow-hidden">
       <Suspense fallback={null}>
         <LibraryParams onParams={onParams} />
       </Suspense>
 
       {/* List pane */}
-      <section aria-label={title} className="relative flex min-w-0 flex-1 flex-col min-[1600px]:max-w-[1148px]">
+      <section aria-label={title} className="relative flex min-w-0 flex-1 flex-col min-[1600px]:max-w-[1148px] min-[1600px]:grow-0 min-[1600px]:basis-[1148px]">
         <header className="shrink-0 px-6 pt-5">
           <div className="flex h-9 items-center gap-3">
             <h1 className="m-0 min-w-0 truncate font-serif text-[28px] leading-9 font-medium tracking-[-0.015em]">{title}</h1>
@@ -973,7 +973,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
       {docked ? (
         <aside
           aria-label="Карточка слова"
-          className="flex w-[400px] shrink-0 flex-col overflow-y-auto overscroll-contain border-l border-rule px-6 pt-4 pb-8 min-[1200px]:max-[1439px]:w-[360px] min-[1600px]:flex-1"
+          className="flex w-[400px] shrink-0 flex-col overflow-y-auto overscroll-contain border-l border-rule px-6 pt-4 pb-8 min-[1200px]:max-[1439px]:w-[360px] min-[1600px]:min-w-[400px] min-[1600px]:flex-1"
         >
           <div className="w-full min-[1600px]:max-w-[560px]">{pane}</div>
         </aside>

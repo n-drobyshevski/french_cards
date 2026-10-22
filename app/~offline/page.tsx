@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 // Precached by the service worker and shown when a page that was never opened is requested offline.
 export default function OfflinePage() {
   return (
-    <main className="mx-auto flex w-full max-w-[440px] flex-1 flex-col px-4 md:max-h-[720px] md:max-w-[560px] md:justify-center pt-[calc(16px+env(safe-area-inset-top))] pb-[calc(16px+env(safe-area-inset-bottom))]">
+    <main className="mx-auto flex w-full max-w-[440px] flex-1 flex-col px-4 md:max-h-[720px] md:max-w-[560px] md:justify-center pt-[calc(16px+var(--safe-top))] pb-[calc(16px+env(safe-area-inset-bottom))]">
       <header className="flex h-11 shrink-0 items-center">
         <AppMark />
       </header>

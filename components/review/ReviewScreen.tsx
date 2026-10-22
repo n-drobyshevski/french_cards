@@ -20,7 +20,7 @@ import { advancePractice, buildPracticeQueue, sessionFilterKey, startOfStudyDay,
 import { listReviewSets, setIdOf, setSessionFilter } from "@/lib/review-sets";
 import { getSettings } from "@/lib/settings";
 import { useDelayedFlag } from "@/lib/use-delayed-flag";
-import { useFinePointer, useLayoutClass } from "@/lib/use-media";
+import { useLayoutClass } from "@/lib/use-media";
 import { getLastReview, getWord, gradeCard, undoLastReview } from "@/lib/words";
 import { returnSide, type CardArrival, type CardExit, type ReturnSide } from "./card-motion";
 import { loadDoneScreen, loadReviewScreen, type ReviewScreenData } from "./data";
@@ -159,7 +159,6 @@ export function ReviewScreen() {
   const guardUntil = useRef(0);
   const layout = useLayoutClass();
   const desktop = layout !== "compact";
-  const finePointer = useFinePointer();
   const shortcutsEnabled = useShortcutsEnabled();
   /** Single-letter keys (Z, P): settings.shortcuts on desktop; phones keep Z as before. */
   const letters = desktop ? shortcutsEnabled : true;
@@ -255,8 +254,8 @@ export function ReviewScreen() {
   const storedWord = useLiveQuery(() => (currentWordId ? getWord(currentWordId) : undefined), [currentWordId]);
   const gradeButtons = settings?.grade_buttons ?? 3;
   const swipeEnabled = settings?.swipe_grading ?? true;
-  // With a mouse or trackpad a drag does not grade: a click flips, keys and buttons grade.
-  const cardSwipe = swipeEnabled && !finePointer;
+  // A mouse drags the card too (click and hold, then drag sideways); a click still flips.
+  const cardSwipe = swipeEnabled;
   const keyHints = settings?.key_hints ?? true;
   const hapticsEnabled = settings?.haptics ?? true;
   const canUndo = practice ? practice.history.length > 0 : !!lastToday;

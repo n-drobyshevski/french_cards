@@ -16,7 +16,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/config";
  */
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="mx-auto flex w-full max-w-[440px] flex-1 flex-col pt-[env(safe-area-inset-top)] pb-(--shell-bottom) [--shell-bottom:env(safe-area-inset-bottom)] max-md:[&:has([data-tabbar])]:[--shell-bottom:calc(61px+env(safe-area-inset-bottom))] md:max-w-none md:flex-row md:pt-0">
+    <div className="mx-auto flex w-full max-w-[440px] flex-1 flex-col pt-(--safe-top) pb-(--shell-bottom) [--shell-bottom:env(safe-area-inset-bottom)] max-md:[&:has([data-tabbar])]:[--shell-bottom:calc(61px+env(safe-area-inset-bottom))] md:max-w-none md:flex-row md:pt-0">
       {/* Signed out with no cached session: off to /login before the app paints (U3). */}
       {isSupabaseConfigured() && <script dangerouslySetInnerHTML={{ __html: AUTH_INIT_SCRIPT }} />}
       <AppProviders>

@@ -35,6 +35,16 @@ describe("swipeDecision", () => {
     expect(swipeDecision(W / 3 - 1, W, 0)).toBeNull();
   });
 
+  it("caps the distance on a wide (desktop) card at 200 px", () => {
+    expect(swipeDecision(199, 720, 0)).toBeNull();
+    expect(swipeDecision(200, 720, 0)).toBe("good");
+    expect(swipeDecision(-200, 720, 0)).toBe("again");
+    // Phones keep a third of the card.
+    expect(swipeDecision(119, 360, 0)).toBeNull();
+    expect(swipeDecision(120, 360, 0)).toBe("good");
+    expect(swipeVisual(200, 720).locked).toBe(true);
+  });
+
   it("grades a fast flick below the threshold", () => {
     expect(swipeDecision(60, W, 0.8)).toBe("good");
     expect(swipeDecision(-60, W, -0.8)).toBe("again");

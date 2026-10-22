@@ -557,7 +557,7 @@ export function ReviewCard({
   return (
     <>
       {next && <StackCard face={next} style={stackStyle} drop={arriveOnMount?.kind === "return"} />}
-      <div ref={layerRef} data-review-card="" style={motion} className="absolute inset-0 will-change-transform">
+      <div ref={layerRef} data-review-card="" style={motion} className={cx("absolute inset-0 will-change-transform", mode === "dragging" && "cursor-grabbing select-none [&_*]:cursor-grabbing")}>
         <div data-pressed={pressed ? "" : undefined} className={CARD_PRESS}>
           {!revealed ? (
             <button
@@ -571,7 +571,7 @@ export function ReviewCard({
               aria-label={`Карточка ${prompt}, перевернуть`}
               aria-keyshortcuts="Space"
               data-review-reveal=""
-              className={cx(cardShell, "absolute inset-0 text-left", swipeEnabled && "touch-pan-y select-none")}
+              className={cx(cardShell, "absolute inset-0 text-left", swipeEnabled && "touch-pan-y pointer-coarse:select-none")}
             >
               <QuestionFace
                 word={word}
@@ -596,7 +596,7 @@ export function ReviewCard({
               data-review-answer=""
               tabIndex={-1}
               aria-label={`${word.fr} — ${word.ru}`}
-              className={cx(cardShell, "absolute inset-0 outline-none", swipeEnabled && "touch-pan-y select-none")}
+              className={cx(cardShell, "absolute inset-0 outline-none", swipeEnabled && "touch-pan-y pointer-coarse:select-none")}
             >
               <AnswerFace
                 word={word}
