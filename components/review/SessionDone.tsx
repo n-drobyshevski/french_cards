@@ -189,7 +189,8 @@ export function SessionDone({
                   P
                 </Kbd>
               )}
-              <span className="text-[12px] leading-4 text-muted">не влияет на расписание</span>
+              {/* At medium widths the row is too narrow for the note; it stays in the button's name. */}
+              <span className="text-[12px] leading-4 text-muted md:max-xl:sr-only">не влияет на расписание</span>
             </button>
             <Button
               variant="tertiary"
