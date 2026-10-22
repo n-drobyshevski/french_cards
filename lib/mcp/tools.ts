@@ -14,11 +14,13 @@ import {
   cleanCustomFields,
   cleanFieldLabel,
   cleanFieldValue,
+  FIELD_HINT_MAX,
   FIELD_LABEL_MAX,
   FIELD_VALUE_MAX,
   fieldDefByName,
   fieldsForDisplay,
   liveFieldDefs,
+  MAX_FIELD_DEFS,
   MAX_WORD_FIELDS,
   withFieldValue,
 } from "@/lib/core/custom-fields";
@@ -434,16 +436,159 @@ export const listFields = tool({
   name: "list_fields",
   title: "List custom fields",
   description:
-    "List the user's shared custom fields («Свои поля») in display order: each has a name, a hint on what to write in it, and auto_fill (true: the app fills it in itself where it is empty, e.g. with «Дополнить карточки»). Values are per word: search_words shows them, add_words and update_word set them by name.",
+    "List the user's shared custom fields («Свои поля») in display order (create_field, update_field and delete_field change them): each has an id, a name, a hint on what to write in it, and auto_fill (true: the app fills it in itself where it is empty, e.g. with «Дополнить карточки»). Values are per word: search_words shows them, add_words and update_word set them by name.",
   input: z.object({}),
   write: false,
   annotations: READ,
   async run(deps) {
     const defs = liveFieldDefs(await deps.repo.fieldDefs());
     return {
-      fields: defs.map((d) => ({ name: d.name, hint: d.hint, auto_fill: d.ai_fill })),
+      fields: defs.map(fieldView),
       note: "Values are stored per word and set by field name in add_words and update_word (null clears one). A name not listed here is allowed: it creates a field on that word only, so use one only when the user asks for it.",
     };
+  },
+});
+
+// Shared custom fields: create, change, delete (soft, words keep their values) and restore.
+
+const fieldView = (d: FieldDef) => ({ id: d.id, name: d.name, hint: d.hint, auto_fill: d.ai_fill });
+const fieldName = z.string().trim().min(1).max(FIELD_LABEL_MAX);
+const fieldHint = z.string().max(FIELD_HINT_MAX).nullable().optional();
+const cleanHint = (s: string | null | undefined) => cleanText(s)?.slice(0, FIELD_HINT_MAX) ?? null;
+
+/** The live definition by id or name (any case). */
+function resolveFieldDef(selector: string, defs: readonly FieldDef[]): FieldDef {
+  const live = liveFieldDefs(defs);
+  const found = live.find((d) => d.id === selector) ?? fieldDefByName(live, selector);
+  if (!found) throw new ToolError(`Unknown custom field "${selector}". Call list_fields for the user's fields.`);
+  return found;
+}
+
+/** Writes one definition; a stale write (the app changed it meanwhile) comes back as the stored row. */
+async function writeFieldDef(deps: ToolDeps, row: FieldDef): Promise<FieldDef> {
+  const [stored] = await deps.repo.upsert("field_defs", [row]);
+  if (!stored || stored.updated_at !== row.updated_at) throw new ToolError("The field was changed in the app at the same time. Call list_fields and try again.");
+  return stored;
+}
+
+export const createField = tool({
+  name: "create_field",
+  title: "Create a custom field",
+  description: `Create a shared custom field («Своё поле») that every card gets, e.g. «Синонимы» or «Мнемоника». \`hint\` says what to write in it (the app's automatic fill and you read it). auto_fill (default true): the app fills it in itself where it is empty. At most ${MAX_FIELD_DEFS} fields; fails when one with that name exists. Ask the user before creating a field they didn't ask for. Undo with delete_field.`,
+  input: z.object({
+    name: fieldName.describe("Russian label, e.g. «Синонимы»."),
+    hint: fieldHint.describe("What to write there, in Russian, e.g. «2–3 синонима на французском»."),
+    auto_fill: z.boolean().default(true),
+  }),
+  write: true,
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  async run(deps, args) {
+    const name = cleanFieldLabel(args.name);
+    if (!name) throw new ToolError("The field name is empty.");
+    const live = liveFieldDefs(await deps.repo.fieldDefs());
+    const dup = fieldDefByName(live, name);
+    if (dup) throw new ToolError(`A field named «${dup.name}» already exists.`);
+    if (live.length >= MAX_FIELD_DEFS) throw new ToolError(`The user already has ${MAX_FIELD_DEFS} fields, the maximum. Delete one first (with the user's OK).`);
+    const def: FieldDef = {
+      id: newId(),
+      name,
+      hint: cleanHint(args.hint),
+      ai_fill: args.auto_fill,
+      sort: (live.at(-1)?.sort ?? 0) + 1,
+      updated_at: deps.now().toISOString(),
+      deleted_at: null,
+    };
+    const stored = await writeFieldDef(deps, def);
+    return { field: fieldView(stored), undo: { tool: "delete_field", field: stored.id }, note: SYNC_NOTE };
+  },
+});
+
+export const updateField = tool({
+  name: "update_field",
+  title: "Change a custom field",
+  description:
+    "Rename a shared custom field, change its hint or auto_fill, or move it to another place in the list (position 1 = first). Values already on cards stay and follow the new name. Undo by calling update_field again with the returned `previous` values.",
+  input: z.object({
+    field: z.string().trim().min(1).describe("The field's current name (any case) or id."),
+    name: fieldName.optional().describe("New name."),
+    hint: fieldHint.describe("New hint; null removes it."),
+    auto_fill: z.boolean().optional(),
+    position: z.number().int().min(1).max(MAX_FIELD_DEFS).optional().describe("New place in the list, 1-based."),
+  }),
+  write: true,
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  async run(deps, args) {
+    const defs = await deps.repo.fieldDefs();
+    const current = resolveFieldDef(args.field, defs);
+    const live = liveFieldDefs(defs);
+    const now = deps.now();
+    const next: FieldDef = { ...current };
+    if (args.name !== undefined) {
+      const name = cleanFieldLabel(args.name);
+      if (!name) throw new ToolError("The field name is empty.");
+      const dup = fieldDefByName(live, name);
+      if (dup && dup.id !== current.id) throw new ToolError(`A field named «${dup.name}» already exists.`);
+      next.name = name;
+    }
+    if (args.hint !== undefined) next.hint = cleanHint(args.hint);
+    if (args.auto_fill !== undefined) next.ai_fill = args.auto_fill;
+    const others: FieldDef[] = [];
+    if (args.position !== undefined) {
+      const order = live.filter((d) => d.id !== current.id);
+      order.splice(Math.min(args.position, order.length + 1) - 1, 0, next);
+      order.forEach((d, i) => {
+        if (d.id === current.id) next.sort = i + 1;
+        else if (d.sort !== i + 1) others.push({ ...d, sort: i + 1, updated_at: stampAfter(now, d.updated_at) });
+      });
+    }
+    const changed = (["name", "hint", "ai_fill", "sort"] as const).some((k) => next[k] !== current[k]);
+    if (!changed) return { field: fieldView(current), result: "unchanged" };
+    next.updated_at = stampAfter(now, current.updated_at);
+    if (others.length > 0) await deps.repo.upsert("field_defs", others);
+    const stored = await writeFieldDef(deps, next);
+    const position = liveFieldDefs([...others, stored, ...live.filter((d) => d.id !== stored.id && !others.some((o) => o.id === d.id))]).findIndex((d) => d.id === stored.id) + 1;
+    return {
+      field: { ...fieldView(stored), position },
+      previous: { name: current.name, hint: current.hint, auto_fill: current.ai_fill, position: live.findIndex((d) => d.id === current.id) + 1 },
+      note: SYNC_NOTE,
+    };
+  },
+});
+
+export const deleteField = tool({
+  name: "delete_field",
+  title: "Delete a custom field",
+  description:
+    "Delete a shared custom field. Cards keep their values, shown as a field of that one card under the old name. Ask the user first. Undo with restore_field and the returned id.",
+  input: z.object({ field: z.string().trim().min(1).describe("The field's name (any case) or id.") }),
+  write: true,
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  async run(deps, args) {
+    const current = resolveFieldDef(args.field, await deps.repo.fieldDefs());
+    const stamp = stampAfter(deps.now(), current.updated_at);
+    const stored = await writeFieldDef(deps, { ...current, deleted_at: stamp, updated_at: stamp });
+    return { deleted: fieldView(stored), undo: { tool: "restore_field", id: stored.id }, note: SYNC_NOTE };
+  },
+});
+
+export const restoreField = tool({
+  name: "restore_field",
+  title: "Restore a deleted custom field",
+  description: "Undo delete_field: bring a deleted shared custom field back; cards' values join it again.",
+  input: z.object({ id: z.string().trim().min(1).describe("The id from delete_field's `undo`.") }),
+  write: true,
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  async run(deps, args) {
+    const defs = await deps.repo.fieldDefs();
+    const current = defs.find((d) => d.id === args.id);
+    if (!current) throw new ToolError(`No custom field with id "${args.id}".`);
+    if (current.deleted_at === null) return { field: fieldView(current), result: "unchanged" };
+    const live = liveFieldDefs(defs);
+    const dup = fieldDefByName(live, current.name);
+    if (dup) throw new ToolError(`A field named «${dup.name}» exists again; rename one of them first.`);
+    if (live.length >= MAX_FIELD_DEFS) throw new ToolError(`The user already has ${MAX_FIELD_DEFS} fields, the maximum.`);
+    const stored = await writeFieldDef(deps, { ...current, deleted_at: null, updated_at: stampAfter(deps.now(), current.updated_at) });
+    return { restored: fieldView(stored), note: SYNC_NOTE };
   },
 });
 
@@ -986,6 +1131,10 @@ export const TOOL_NAMES = [
   searchWords.name,
   listFolders.name,
   listFields.name,
+  createField.name,
+  updateField.name,
+  deleteField.name,
+  restoreField.name,
   studySummary.name,
   addWords.name,
   updateWord.name,
@@ -1000,6 +1149,10 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   register(server, deps, searchWords);
   register(server, deps, listFolders);
   register(server, deps, listFields);
+  register(server, deps, createField);
+  register(server, deps, updateField);
+  register(server, deps, deleteField);
+  register(server, deps, restoreField);
   register(server, deps, studySummary);
   register(server, deps, addWords);
   register(server, deps, updateWord);
@@ -1014,9 +1167,9 @@ export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard
 - Before adding, search_words for the word; add_words also skips French forms that are already saved.
 - For each new word give the dictionary form, one to three Russian equivalents in the same register, slang_level (0 neutral, 1 familier, 2 argot, 3 vulgaire), verlan (true for verlan forms such as meuf, relou, chelou), pos, gender for nouns, and a short everyday example_fr with its example_ru. Vulgar words are legitimate vocabulary: translate them with the same strength and mark them 3.
 - Set folder_chosen_by_user to true only when the user named the theme; otherwise pick a fitting theme yourself, or leave the word in the inbox.
-- Cards can carry the user's custom fields («Свои поля»): list_fields shows the shared ones and what to write in each. Set them by name with custom_fields in add_words or update_word (null clears one); search_words shows them. Use a name not in list_fields only when the user asks for a field on that one word.
+- Cards can carry the user's custom fields («Свои поля»): list_fields shows the shared ones and what to write in each. Set them by name with custom_fields in add_words or update_word (null clears one); search_words shows them. Use a name not in list_fields only when the user asks for a field on that one word. create_field, update_field and delete_field manage the shared fields; ask the user before creating or deleting one.
 - Before adding more than 5 words, and before any move or delete, list what will change and wait for the user's OK.
-- After a change, say what changed and how to undo it with the result's \`undo\` (delete_words, restore_words or restore_moves).
+- After a change, say what changed and how to undo it with the result's \`undo\` (delete_words, restore_words, restore_moves, delete_field or restore_field).
 - Make write calls one at a time, never in parallel: each reads the current rows first, and parallel writes to the same words conflict or slip past the duplicate check.
 - Changes reach the app on its next sync (when it is opened or focused). Reviewing and grading cards happen in the app only.
 - Talk about the app's features plainly; never call them "AI".`;

@@ -17,7 +17,7 @@ An optional skill (`claude/skills/kartochki/`) teaches Claude the card conventio
   - The `kartochki_stamp_row` trigger still runs: it stamps `synced_at`, so devices pull Claude's changes on their next sync (on open, on focus, or within about 5 minutes while the app is visible).
   - Writes follow the app's rules (`lib/mcp/tools.ts`): new words get both review cards (written before the word) and `source = "chat"` («из чата» in the word sheet); rewrites stamp `updated_at` past the stored value; nothing is hard-deleted.
   - Rewrites of a word are compare-and-set: the row is written only if its `updated_at` is still the one read just before. If the phone synced a change, or another call changed the word, in between, Claude gets a `conflict` instead of overwriting it.
-  - Migration `0005_connector_grants.sql` grants `service_role` the table rights the connector needs, so it does not depend on the project's default privileges. Migration `0006_custom_fields.sql` adds `words.custom_fields` and the `field_defs` table, with `select` only for `service_role`: the connector reads the shared field definitions but never edits them. Without 0006, `search_words`, `update_word`, `list_fields` and `add_words` with `custom_fields` fail with a database error.
+  - Migration `0005_connector_grants.sql` grants `service_role` the table rights the connector needs, so it does not depend on the project's default privileges. Migration `0006_custom_fields.sql` adds `words.custom_fields` and the `field_defs` table, with `select` for `service_role`; `0007_connector_field_writes.sql` adds `insert, update` so the connector can manage the shared fields (deletes stay soft). Without 0006, `search_words`, `update_word`, `list_fields` and `add_words` with `custom_fields` fail with a database error.
 - **No subscriptions:** the server's tool list never changes, so it refuses `subscriptions/listen` streams (`maxSubscriptions: 0`) instead of holding a function open.
 - **Rate limit:** write tools take a token from the in-memory `mcp` bucket (`lib/ai/rate-limit.ts`, 20 in a burst, then one per 3 s). An exhausted bucket gives an `isError` tool result; `initialize` and `tools/list` are never limited.
 - **«Сегодня»:** `study_summary` computes the 04:00-to-04:00 study day in `MCP_TIMEZONE` (`lib/mcp/study-day.ts`). The device's «Новых в день» setting is not synced, so Claude assumes 15 unless told otherwise.
@@ -28,7 +28,11 @@ An optional skill (`claude/skills/kartochki/`) teaches Claude the card conventio
 |---|---|---|
 | `search_words` | read | Accent-insensitive search over French, Russian, note, tags and custom field values; filter by theme and status (new, learning, mastered, due); pages of up to 100 with `offset`/`next_offset`. |
 | `list_folders` | read | Themes in order with word and due counts, plus «Входящие» (which includes words whose theme was deleted). |
-| `list_fields` | read | The shared custom fields («Свои поля») in order: `{ name, hint, auto_fill }`, deleted ones left out, plus a note on one-off fields. |
+| `list_fields` | read | The shared custom fields («Свои поля») in order: `{ id, name, hint, auto_fill }`, deleted ones left out, plus a note on one-off fields. |
+| `create_field` | write | A new shared field `{ name, hint?, auto_fill = true }` at the end of the list (at most 10, unique names). Undo: `delete_field`. |
+| `update_field` | write | Rename a field, change its hint or auto_fill, or move it (`position`, 1-based); returns `previous` for undo. Values on cards follow the new name. |
+| `delete_field` | write | Soft-deletes a shared field; cards keep their values as one-off fields. Undo: `restore_field`. |
+| `restore_field` | write | Brings a deleted field back by id. |
 | `study_summary` | read | Cards due today, new cards left, reviews done, words by status, words due soonest. |
 | `add_words` | write | 1–50 words with every field, custom fields included; skips duplicates by lemma (`on_duplicate: "add"` overrides); `folder_chosen_by_user` (per call, or per word) decides `folder_source`. Returns the ids for undo. |
 | `update_word` | write | Patches one word's text, example, note, tags, part of speech, level, verlan or custom fields; `both_directions` adds or removes the RU→FR card. |
@@ -60,7 +64,7 @@ The shared definitions are edited in the app (Settings → «Свои поля»
    - `MCP_TIMEZONE` (optional): your IANA time zone, for example `Europe/Moscow`. The default is `Europe/Paris`.
 
    Then redeploy.
-   Apply `supabase/migrations/0005_connector_grants.sql` and `0006_custom_fields.sql` if you haven't (README, step 1).
+   Apply `supabase/migrations/0005_connector_grants.sql`, `0006_custom_fields.sql` and `0007_connector_field_writes.sql` if you haven't (README, step 1).
 3. Check the endpoint. A wrong key must give `404`, with no redirect:
    ```sh
    curl -s -o /dev/null -w "%{http_code}\n" -X POST https://frenchcards.vercel.app/api/mcp/wrong

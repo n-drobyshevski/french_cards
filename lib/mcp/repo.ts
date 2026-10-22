@@ -24,7 +24,7 @@ export interface TableRows {
   field_defs: FieldDef;
 }
 
-export type WritableTable = "folders" | "words" | "review_state";
+export type WritableTable = "folders" | "words" | "review_state" | "field_defs";
 
 export interface McpRepo {
   /** Every folder, tombstones included. */

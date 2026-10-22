@@ -10,17 +10,21 @@ import { RepoError } from "./repo";
 import {
   addWords,
   callTool,
+  createField,
   createFolder,
+  deleteField,
   deleteWords,
   listFields,
   listFolders,
   moveWords,
   resolveFolder,
+  restoreField,
   restoreMoves,
   restoreWords,
   searchWords,
   stampAfter,
   studySummary,
+  updateField,
   updateWord,
   type ToolSpec,
 } from "./tools";
@@ -635,10 +639,67 @@ describe("custom fields («Свои поля»)", () => {
   it("list_fields lists the live definitions in order, without deleted ones", async () => {
     const out = await ok(listFields, createFakeRepo({ field_defs: DEFS }), {});
     expect(out.fields).toEqual([
-      { name: "Синонимы", hint: "2–3 синонима на французском", auto_fill: false },
-      { name: "Антонимы", hint: "1–2 антонима", auto_fill: true },
+      { id: "d-syn", name: "Синонимы", hint: "2–3 синонима на французском", auto_fill: false },
+      { id: "d-ant", name: "Антонимы", hint: "1–2 антонима", auto_fill: true },
     ]);
     expect(out.note).toMatch(/that word only/);
+  });
+});
+
+describe("managing custom fields", () => {
+  const def = (id: string, name: string, sort: number, extra: Partial<FieldDef> = {}): FieldDef => ({
+    id,
+    name,
+    hint: null,
+    ai_fill: true,
+    sort,
+    updated_at: OLD.toISOString(),
+    deleted_at: null,
+    ...extra,
+  });
+  const live = (fake: FakeRepo) =>
+    [...fake.tables.field_defs.values()].filter((d) => d.deleted_at === null).sort((a, b) => a.sort - b.sort);
+
+  it("create_field adds a field at the end, refuses repeats and the limit", async () => {
+    const fake = createFakeRepo({ field_defs: [def("a", "Синонимы", 1)] });
+    const out = await ok(createField, fake, { name: " Мнемоника ", hint: "  как запомнить ", auto_fill: false });
+    expect(out.field).toMatchObject({ name: "Мнемоника", hint: "как запомнить", auto_fill: false });
+    expect(out.undo).toEqual({ tool: "delete_field", field: out.field.id });
+    expect(live(fake).map((d) => [d.name, d.sort])).toEqual([
+      ["Синонимы", 1],
+      ["Мнемоника", 2],
+    ]);
+    expect((await callTool(createField, deps(fake), { name: "синонимы" })).isError).toBe(true);
+    const full = createFakeRepo({ field_defs: Array.from({ length: 10 }, (_, i) => def(`d${i}`, `Поле ${i}`, i)) });
+    const res = await callTool(createField, deps(full), { name: "Ещё" });
+    expect(res.isError).toBe(true);
+    expect(JSON.stringify(res.content)).toMatch(/maximum/);
+  });
+
+  it("update_field renames, changes hint and auto_fill, moves, and reports the previous values", async () => {
+    const fake = createFakeRepo({ field_defs: [def("a", "Синонимы", 1), def("b", "Мнемоника", 2), def("c", "Антонимы", 3)] });
+    const out = await ok(updateField, fake, { field: "антонимы", name: "Противоположное", hint: "1 слово", auto_fill: false, position: 1 });
+    expect(out.field).toMatchObject({ id: "c", name: "Противоположное", hint: "1 слово", auto_fill: false, position: 1 });
+    expect(out.previous).toEqual({ name: "Антонимы", hint: null, auto_fill: true, position: 3 });
+    expect(live(fake).map((d) => d.name)).toEqual(["Противоположное", "Синонимы", "Мнемоника"]);
+    expect((await callTool(updateField, deps(fake), { field: "Синонимы", name: "мнемоника" })).isError).toBe(true);
+    expect(await ok(updateField, fake, { field: "Синонимы", name: "Синонимы" })).toMatchObject({ result: "unchanged" });
+  });
+
+  it("delete_field is soft (cards keep their values) and restore_field brings it back", async () => {
+    const fake = createFakeRepo({
+      field_defs: [def("a", "Синонимы", 1)],
+      words: [word("w", "chelou", "странный", { custom_fields: [{ field_id: "a", label: "Синонимы", value: "bizarre" }] })],
+    });
+    const out = await ok(deleteField, fake, { field: "Синонимы" });
+    expect(out.undo).toEqual({ tool: "restore_field", id: "a" });
+    expect(live(fake)).toEqual([]);
+    expect([...fake.tables.words.values()][0].custom_fields).toEqual([{ field_id: "a", label: "Синонимы", value: "bizarre" }]);
+    const search = await ok(searchWords, fake, { query: "chelou" });
+    expect(search.words[0].custom_fields).toEqual({ Синонимы: "bizarre" });
+    await ok(restoreField, fake, { id: "a" });
+    expect(live(fake).map((d) => d.name)).toEqual(["Синонимы"]);
+    expect((await callTool(deleteField, deps(fake), { field: "нет такого" })).isError).toBe(true);
   });
 });
 
