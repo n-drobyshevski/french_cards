@@ -1,11 +1,14 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cx } from "@/components/ui/cx";
 
-/** Section label with the ink rule under it; rows are separated by hairlines. */
-export function SettingsSection({ title, children, footer }: { title: string; children: ReactNode; footer?: ReactNode }) {
+/**
+ * Section label with the ink rule under it; rows are separated by hairlines. `anchor`: the section's
+ * id, a link target («/settings#set-data» from the library's sync mark, T7).
+ */
+export function SettingsSection({ title, children, footer, anchor }: { title: string; children: ReactNode; footer?: ReactNode; anchor?: string }) {
   const id = `settings-${title}`;
   return (
-    <section aria-labelledby={id} className="mt-4 shrink-0">
+    <section id={anchor} aria-labelledby={id} className="mt-4 shrink-0">
       <h2
         id={id}
         className="m-0 border-b border-ink pb-2 font-mono text-[11px] leading-4 font-medium tracking-[.06em] text-muted uppercase"
