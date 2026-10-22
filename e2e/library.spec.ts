@@ -163,3 +163,57 @@ test("a tap on an abbreviation in the word sheet explains it", async ({ page }) 
   await expect(sheet.getByRole("tooltip")).toHaveCount(0);
   await expect(sheet).toBeVisible();
 });
+
+/** A held finger: touch start, wait past the long-press delay, touch end (CDP, like a real phone). */
+async function longPress(page: import("@playwright/test").Page, locator: import("@playwright/test").Locator) {
+  const box = (await locator.boundingBox())!;
+  const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [point] });
+  await page.waitForTimeout(700);
+  await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+}
+
+test("a long press on a theme opens its actions instead of the theme", async ({ page }) => {
+  await page.goto("/library");
+  const tile = page.getByRole("link", { name: /^Эмоции:/ });
+  await longPress(page, tile);
+
+  const menu = page.getByRole("dialog", { name: "Эмоции" });
+  await expect(menu).toBeVisible();
+  await expect(page).toHaveURL(/\/library$/);
+  await expect(menu.getByRole("link", { name: /Повторить тему/ })).toBeVisible();
+  await expect(menu.getByRole("switch", { name: "Закрепить тему" })).toBeVisible();
+
+  await menu.getByRole("link", { name: "Открыть тему" }).click();
+  await expect(page.getByRole("heading", { name: "Эмоции" })).toBeVisible();
+  await expect(page).toHaveURL(/\/library\/.+/);
+});
+
+test("deleting a theme from its long-press menu can be undone", async ({ page }) => {
+  await page.goto("/library");
+  // The context-menu event (Android's long press, the keyboard's menu key) opens the menu too.
+  await page.getByRole("link", { name: /^Еда:/ }).dispatchEvent("contextmenu");
+  const menu = page.getByRole("dialog", { name: "Еда" });
+  await menu.getByRole("button", { name: "Удалить тему" }).click();
+  await expect(menu).toBeHidden();
+
+  await expect(page.getByText("Тема «Еда» удалена · 1 слово во «Входящих»")).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Еда:/ })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /^Входящие:/ })).toBeVisible();
+
+  await page.getByRole("button", { name: "Отменить", exact: true }).click();
+  await expect(page.getByRole("link", { name: /^Еда:/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Входящие:/ })).toHaveCount(0);
+});
+
+test("«Название, описание и цвет» from the long-press menu renames the theme", async ({ page }) => {
+  await page.goto("/library");
+  await longPress(page, page.getByRole("link", { name: /^Полиция:/ }));
+  await page.getByRole("dialog", { name: "Полиция" }).getByRole("button", { name: "Название, описание и цвет" }).click();
+  const form = page.getByRole("dialog", { name: "Изменить тему" });
+  const name = form.getByRole("textbox").first();
+  await name.fill("Менты");
+  await form.getByRole("button", { name: "Сохранить" }).click();
+  await expect(page.getByRole("link", { name: /^Менты:/ })).toBeVisible();
+});

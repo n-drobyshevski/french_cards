@@ -11,7 +11,7 @@ import { Icon } from "@/components/ui/Icons";
 import { KEYBOARD_MIN, useVisualViewport } from "@/components/ui/Sheet";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { countEnrichCandidates, enrichPreferences } from "@/lib/enrich";
-import { getLibraryStats } from "@/lib/folders";
+import { deleteFolder, getLibraryStats, restoreFolder, type FolderWithStats } from "@/lib/folders";
 import { getSettings, updateSettings } from "@/lib/settings";
 import type { Settings } from "@/lib/types";
 import { getUndoableRun, undoReorgRun } from "@/lib/reorg";
@@ -19,6 +19,7 @@ import { useLayoutClass } from "@/lib/use-media";
 import { DeskPlaceholder } from "./DeskPlaceholder";
 import { EnrichPlanSheet } from "./EnrichPlanSheet";
 import { FolderFormSheet } from "./FolderFormSheet";
+import { FolderMenuSheet } from "./FolderMenuSheet";
 import { FolderTile, NewFolderTile, TileSkeleton } from "./FolderTile";
 import { folderHref, nWords, plural } from "./format";
 import { LibraryDesk } from "./LibraryDesk";
@@ -80,6 +81,10 @@ function PhoneLibrary() {
   const [createOpen, setCreateOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const [enrichOpen, setEnrichOpen] = useState(false);
+  // Long press on a theme tile: its actions, then maybe the edit form.
+  const [menuFolderId, setMenuFolderId] = useState<string | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const searching = query.trim() !== "";
   const filtered = searching || narrows(filter);
@@ -105,6 +110,26 @@ function PhoneLibrary() {
       setView("words");
     } else {
       setView(view === "words" ? "themes" : "words");
+    }
+  };
+
+  // The live theme, so the menu follows «Закрепить» and renames.
+  const menuFolder: FolderWithStats | undefined = stats?.folders.find((f) => f.id === menuFolderId);
+  const openMenu = (folder: FolderWithStats) => {
+    setMenuFolderId(folder.id);
+    setMenuOpen(true);
+  };
+  const removeFolder = async (folder: FolderWithStats) => {
+    setMenuOpen(false);
+    try {
+      const moves = await deleteFolder(folder.id);
+      snackbar.show({
+        message: moves.length ? `Тема «${folder.name}» удалена · ${nWords(moves.length)} во «Входящих»` : `Тема «${folder.name}» удалена`,
+        actionLabel: "Отменить",
+        onAction: () => void restoreFolder(folder.id, moves),
+      });
+    } catch (e) {
+      snackbar.show({ message: e instanceof Error ? e.message : "Не получилось удалить тему" });
     }
   };
 
@@ -280,7 +305,7 @@ function PhoneLibrary() {
                   <Icon name="chevron-right" size={18} />
                 </button>
                 {stats.folders.map((f) => (
-                  <FolderTile key={f.id} folder={f} samples />
+                  <FolderTile key={f.id} folder={f} samples onLongPress={() => openMenu(f)} />
                 ))}
                 <NewFolderTile tall onClick={() => setCreateOpen(true)} />
               </>
@@ -334,6 +359,27 @@ function PhoneLibrary() {
           setFilterOpen(false);
         }}
       />
+      {menuFolder && (
+        <>
+          <FolderMenuSheet
+            open={menuOpen}
+            onOpenChange={setMenuOpen}
+            folder={menuFolder}
+            navigation
+            onEdit={() => {
+              setMenuOpen(false);
+              setEditOpen(true);
+            }}
+            onDelete={() => void removeFolder(menuFolder)}
+          />
+          <FolderFormSheet
+            open={editOpen}
+            onOpenChange={setEditOpen}
+            folder={menuFolder}
+            usedColors={stats?.folders.filter((f) => f.id !== menuFolder.id).map((f) => f.color)}
+          />
+        </>
+      )}
       <FolderFormSheet
         open={createOpen}
         onOpenChange={setCreateOpen}
