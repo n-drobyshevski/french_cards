@@ -41,3 +41,22 @@ describe("word editor: conjugation", () => {
     expect(conjDraftError({ ...filled, tenses: { ...filled.tenses, futur: ["", "", ...six("kiffera").slice(2)] } })).toBe("Заполните все формы — не хватает 2");
   });
 });
+
+describe("«+ Поле» kinds", () => {
+  it("offers «Спряжение» only for a verb with no conjugation anywhere; shows the field when there is one", async () => {
+    const { offersConjugation, conjugationShown } = await import("./WordConjugation");
+    const six = (v: string) => [`je ${v}`, `tu ${v}`, `il ${v}`, `nous ${v}`, `vous ${v}`, `ils ${v}`];
+    const conj = { auxiliary: "avoir" as const, remark: null, tenses: { present: six("x"), passe_compose: six("a x"), imparfait: six("x"), futur: six("x") } };
+    const verb = buildWord({ fr: "bédave", ru: "курить", pos: "verb" }, new Date());
+    const noun = buildWord({ fr: "la thune", ru: "бабки", pos: "noun" }, new Date());
+    expect(offersConjugation(verb, null)).toBe(true);
+    expect(offersConjugation(verb, undefined)).toBe(false); // still loading
+    expect(offersConjugation(verb, conj)).toBe(false);
+    expect(offersConjugation({ ...verb, conjugation: conj }, null)).toBe(false);
+    expect(offersConjugation(noun, null)).toBe(false);
+    expect(conjugationShown(verb, null, null)).toBe(false);
+    expect(conjugationShown(verb, null, "conjugation")).toBe(true);
+    expect(conjugationShown(verb, conj, null)).toBe(true);
+    expect(conjugationShown(noun, conj, null)).toBe(false);
+  });
+});

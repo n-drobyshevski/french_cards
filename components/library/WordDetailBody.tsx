@@ -36,7 +36,7 @@ import { useDelayedFlag } from "@/lib/use-delayed-flag";
 import { formatDueIn, formatStability, wordStatus, type CardStatus } from "@/lib/scheduler";
 import { findDuplicate, normalizeLemma } from "@/lib/text";
 import { FIELD_LABEL_MAX, FIELD_VALUE_MAX, useFieldDefs } from "@/lib/custom-fields";
-import { SLANG_LABELS, type Direction, type FieldDef, type Folder, type ReviewLog, type SlangLevel, type Word } from "@/lib/types";
+import { SLANG_LABELS, type Conjugation, type Direction, type FieldDef, type Folder, type ReviewLog, type SlangLevel, type Word } from "@/lib/types";
 import {
   getWordHistory,
   getWordStates,
@@ -65,8 +65,9 @@ import { LifeExamplesLink } from "@/components/context/ContextLink";
 import { ExampleList, toDrafts, type ExampleDraft } from "@/components/examples/ExampleList";
 import { examplesPatch, wordExamples } from "@/lib/examples";
 import { conjDraftError, draftOf, isDirty, patchFor, undoFor, withConjugationDraft, type Draft, type Editing } from "./word-editor";
-import { ConjugationForm, ConjugationPreview, hasConjugationField, useBuiltinConjugation } from "./WordConjugation";
-import { cleanConjugation } from "@/lib/core/conjugate";
+import { Menu, MenuItem } from "./Menu";
+import { conjugationShown, ConjugationForm, ConjugationPreview, offersConjugation, useBuiltinConjugation } from "./WordConjugation";
+import { cleanConjugation, cleanOrigin } from "@/lib/core/conjugate";
 import { canAddField, fieldRows, fieldRowsError, newFieldRow, type FieldRow } from "./word-fields";
 
 // A word's entry, editable fields, schedule, history and actions. One body, two layouts: the
@@ -385,6 +386,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
     setFieldFocus(focus);
     editor.startFields(rows);
   };
+  const fieldKinds = addableKinds(w, builtin, editor, defs);
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
@@ -525,6 +527,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             <span className="text-[15px] leading-[22px] text-muted">Нет заметки</span>
           )}
         </SheetField>
+        {(w.origin || editing === "origin") && (
         <SheetField
           label="Происхождение"
           editLabel="Изменить происхождение"
@@ -539,6 +542,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
                   onChange={(e) => set("origin", e.target.value)}
                   maxLength={ORIGIN_MAX}
                   placeholder="Например: верлан от lourd"
+                  autoFocus
                   className="mt-1 h-11 rounded-chip border border-rule bg-surface px-3 text-[15px] text-ink outline-none placeholder:text-muted focus:border-ink pointer-coarse:text-[16px]"
                 />
                 {errorLine}
@@ -547,13 +551,10 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             )
           }
         >
-          {w.origin ? (
-            <span className="text-[15px] leading-[22px]">{w.origin}</span>
-          ) : (
-            <span className="text-[15px] leading-[22px] text-muted">Не указано</span>
-          )}
+          <span className="text-[15px] leading-[22px]">{w.origin}</span>
         </SheetField>
-        {hasConjugationField(w, builtin) && (
+        )}
+        {conjugationShown(w, builtin, editing) && (
           <SheetField
             label="Спряжение"
             editLabel="Изменить спряжение"
@@ -612,7 +613,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
                 {editActions}
               </form>
             ) : (
-              <FieldsView size="sheet" rows={shownFields} onEdit={editFields} />
+              <FieldsView size="sheet" rows={shownFields} onEdit={editFields} extras={fieldKinds} />
             )}
           </div>
           {editing !== "fields" && shownFields.length > 0 && (
@@ -973,9 +974,9 @@ function PaneContent({
   );
   const origin = (
     <div data-refresh="origin" data-edited="origin" className="flex items-start gap-2">
-      <p className={cx("m-0 min-w-0 flex-1 text-[14px] leading-5", !w.origin && "text-muted")}>
+      <p className="m-0 min-w-0 flex-1 text-[14px] leading-5">
         <span className="meta mr-1.5">Откуда</span>
-        {w.origin || "не указано"}
+        {w.origin}
       </p>
       {!editing && pencil("Изменить происхождение", () => editor.start("origin"))}
     </div>
@@ -1011,7 +1012,12 @@ function PaneContent({
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <span className="text-[12px] leading-4 text-muted">Свои поля</span>
           {/* While another part is edited: what is filled, read-only (like the pencils, the rest waits). */}
-          <FieldsView size="pane" rows={editing ? shownFields.filter((f) => f.value) : shownFields} onEdit={editing ? undefined : editFields} />
+          <FieldsView
+            size="pane"
+            rows={editing ? shownFields.filter((f) => f.value) : shownFields}
+            onEdit={editing ? undefined : editFields}
+            extras={addableKinds(w, builtin, editor, defs)}
+          />
         </div>
         {!editing && shownFields.length > 0 && pencil("Изменить свои поля", () => editFields(null))}
       </div>
@@ -1192,9 +1198,9 @@ function PaneContent({
                   {formActions}
                 </form>
               ) : (
-                origin
+                w.origin && origin
               )}
-              {hasConjugationField(w, builtin) &&
+              {conjugationShown(w, builtin, editing) &&
                 (editing === "conjugation" && draft ? (
                   <form onSubmit={(e) => void submit(e)} onKeyDown={formKeys} aria-label="Изменить спряжение" className="flex flex-col">
                     <ConjugationForm draft={draft.conjugation} onChange={(next) => set("conjugation", next)} word={w} onReset={editor.cancel} size="pane" />
@@ -1825,21 +1831,70 @@ type FieldsSize = "sheet" | "pane";
 /** Opens the fields editor, focusing `focus` (a row's key); `rows` replaces the word's rows («+ Поле»). */
 type EditFields = (focus: string | null, rows?: FieldRow[]) => void;
 
-function AddFieldButton({ onClick }: { onClick: () => void }) {
+/** What «+ Поле» offers besides «Своё поле»: «Происхождение» while empty, «Спряжение» for a verb without one. */
+function addableKinds(
+  w: Word,
+  builtin: Conjugation | null | undefined,
+  editor: { start: (what: Exclude<Editing, null>, from?: Draft) => void },
+  defs: readonly FieldDef[],
+): FieldKind[] {
+  const out: FieldKind[] = [];
+  if (!cleanOrigin(w.origin)) out.push({ label: "Происхождение", caption: "откуда слово, верлан, заимствование", onSelect: () => editor.start("origin") });
+  if (offersConjugation(w, builtin)) {
+    out.push({
+      label: "Спряжение",
+      caption: "4 времени, по 6 форм",
+      onSelect: () => editor.start("conjugation", withConjugationDraft(draftOf(w, defs), null)),
+    });
+  }
+  return out;
+}
+
+/** A field the word card can add besides a one-off «своё поле»: shown in the «+ Поле» menu. */
+interface FieldKind {
+  label: string;
+  caption: string;
+  onSelect: () => void;
+}
+
+/**
+ * «+ Поле». With other kinds to offer (origin, a verb's conjugation) it opens a menu of them and
+ * «Своё поле»; otherwise it adds a one-off field straight away (`onCustom`, null at the 12-field cap).
+ */
+function AddFieldButton({ onClick, onCustom, extras = [] }: { onClick?: () => void; onCustom?: (() => void) | null; extras?: readonly FieldKind[] }) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const custom = onCustom === undefined ? onClick : (onCustom ?? undefined);
+  const menu = extras.length > 0;
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="relative mt-1 inline-flex h-9 items-center gap-1.5 self-start bg-transparent text-[13px] leading-5 font-medium text-ink before:absolute before:-inset-y-1 before:inset-x-0"
-    >
-      <Icon name="plus" size={14} strokeWidth={1.75} />
-      Поле
-    </button>
+    <>
+      <button
+        type="button"
+        aria-haspopup={menu ? "menu" : undefined}
+        aria-expanded={menu ? !!anchor : undefined}
+        onClick={(e) => (menu ? setAnchor(anchor ? null : e.currentTarget) : custom?.())}
+        className="relative mt-1 inline-flex h-9 items-center gap-1.5 self-start bg-transparent text-[13px] leading-5 font-medium text-ink before:absolute before:-inset-y-1 before:inset-x-0"
+      >
+        <Icon name="plus" size={14} strokeWidth={1.75} />
+        Поле
+      </button>
+      {menu && (
+        <Menu open={!!anchor} anchor={anchor ? { element: anchor } : null} onClose={() => setAnchor(null)} label="Какое поле" width={240}>
+          {extras.map((k) => (
+            <MenuItem key={k.label} caption={k.caption} onSelect={k.onSelect}>
+              {k.label}
+            </MenuItem>
+          ))}
+          <MenuItem caption={custom ? "название и значение" : "не больше 12 полей"} disabled={!custom} onSelect={() => custom?.()}>
+            Своё поле
+          </MenuItem>
+        </Menu>
+      )}
+    </>
   );
 }
 
 /** The fields as label / value rows. Without `onEdit` (the desktop card while its entry is edited) only filled ones, read-only. */
-function FieldsView({ size, rows, onEdit }: { size: FieldsSize; rows: readonly FieldRow[]; onEdit?: EditFields }) {
+function FieldsView({ size, rows, onEdit, extras = [] }: { size: FieldsSize; rows: readonly FieldRow[]; onEdit?: EditFields; extras?: readonly FieldKind[] }) {
   const pane = size === "pane";
   return (
     <div className="flex flex-col">
@@ -1875,12 +1930,17 @@ function FieldsView({ size, rows, onEdit }: { size: FieldsSize; rows: readonly F
           ))}
         </dl>
       )}
-      {onEdit && canAddField(rows) && (
+      {onEdit && (canAddField(rows) || extras.length > 0) && (
         <AddFieldButton
-          onClick={() => {
-            const row = newFieldRow();
-            onEdit(row.key, [...rows, row]);
-          }}
+          extras={extras}
+          onCustom={
+            canAddField(rows)
+              ? () => {
+                  const row = newFieldRow();
+                  onEdit(row.key, [...rows, row]);
+                }
+              : null
+          }
         />
       )}
     </div>

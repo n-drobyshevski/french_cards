@@ -16,9 +16,16 @@ import { CONJ_TENSE_KEYS, type ConjDraft } from "./word-editor";
 
 const PERSONS = ["je", "tu", "il", "nous", "vous", "ils"] as const;
 
-/** Verbs, and expressions the dictionary or the word itself conjugates. */
-export const hasConjugationField = (word: Pick<Word, "pos" | "conjugation">, builtin: Conjugation | null | undefined) =>
-  word.pos === "verb" || (word.pos === "expression" && (!!cleanConjugation(word.conjugation) || !!builtin));
+/** The field shows when there is a conjugation to show (the word's own or the dictionary's), or while it is edited. */
+export const conjugationShown = (
+  word: Pick<Word, "pos" | "conjugation">,
+  builtin: Conjugation | null | undefined,
+  editing: string | null,
+) => editing === "conjugation" || !!cleanConjugation(word.conjugation) || ((word.pos === "verb" || word.pos === "expression") && !!builtin);
+
+/** «+ Поле» offers «Спряжение» for a verb that has none (neither its own nor the dictionary's). */
+export const offersConjugation = (word: Pick<Word, "pos" | "conjugation">, builtin: Conjugation | null | undefined) =>
+  word.pos === "verb" && !cleanConjugation(word.conjugation) && builtin === null;
 
 /** The conjugation built on the device from Lexique; undefined while the table loads. */
 export function useBuiltinConjugation(word: Pick<Word, "fr" | "pos">): Conjugation | null | undefined {

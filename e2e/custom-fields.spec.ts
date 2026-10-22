@@ -45,6 +45,7 @@ test("a shared field is filled on the word, shown on the card back and outlives 
 
   // A one-off field of this word.
   await sheet.getByRole("button", { name: "Поле", exact: true }).click();
+  await page.getByRole("menu", { name: "Какое поле" }).getByRole("menuitem", { name: /^Своё поле/ }).click();
   await expect(sheet.getByRole("textbox", { name: "Название поля" })).toBeFocused();
   await sheet.getByRole("textbox", { name: "Название поля" }).fill("Произношение");
   await sheet.getByRole("textbox", { name: "Значение поля" }).fill("[yn blag]");

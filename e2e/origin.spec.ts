@@ -69,12 +69,22 @@ test("the origin is edited by hand in the word card and shows on the answer side
   await page.getByRole("searchbox", { name: "Поиск по FR и RU" }).fill("blague");
   await page.getByText("une blague", { exact: true }).click();
   const card = page.getByRole("dialog", { name: "Карточка слова" });
-  await expect(card.getByText("Не указано")).toBeVisible();
-  await card.getByRole("button", { name: "Изменить происхождение" }).click();
+  // Empty, the field is not shown: «+ Поле» offers it (a noun: no «Спряжение»).
+  await expect(card.getByRole("button", { name: "Изменить происхождение" })).toHaveCount(0);
+  await card.getByRole("button", { name: "Поле", exact: true }).click();
+  const menu = page.getByRole("menu", { name: "Какое поле" });
+  await expect(menu.getByRole("menuitem")).toHaveText([/^Происхождение/, /^Своё поле/]);
+  await menu.getByRole("menuitem", { name: /^Происхождение/ }).click();
   await card.getByRole("textbox", { name: "Происхождение" }).fill("  от blaguer   „шутить“ ");
   await card.getByRole("button", { name: "Сохранить" }).click();
   await expect(card.getByText(ORIGIN)).toBeVisible();
   await expect(card.getByRole("textbox", { name: "Происхождение" })).toHaveCount(0);
+  // Filled, it is a field with its pencil and no longer in the menu.
+  await expect(card.getByRole("button", { name: "Изменить происхождение" })).toBeVisible();
+  await card.getByRole("button", { name: "Поле", exact: true }).click();
+  await expect(page.getByRole("menu", { name: "Какое поле" })).toHaveCount(0);
+  await expect(card.getByPlaceholder("Название")).toBeVisible();
+  await card.getByRole("button", { name: "Отмена" }).click();
 
   await openReview(page);
   await questionCard(page).click();

@@ -10,8 +10,9 @@ test("the origin is edited in the detail pane and shows in the table", async ({ 
   await page.goto("/library");
   await row(page, "les flics").click();
   await expect(pane(page).getByRole("heading", { name: "les flics" })).toBeVisible();
-  await expect(pane(page).getByText("не указано")).toBeVisible();
-  await pane(page).getByRole("button", { name: "Изменить происхождение" }).click();
+  await expect(pane(page).getByRole("button", { name: "Изменить происхождение" })).toHaveCount(0);
+  await pane(page).getByRole("button", { name: "Поле", exact: true }).click();
+  await page.getByRole("menu", { name: "Какое поле" }).getByRole("menuitem", { name: /^Происхождение/ }).click();
   const input = pane(page).getByRole("textbox", { name: "Происхождение" });
   await expect(input).toBeFocused();
   await input.fill("от flicaille, арго XIX века");
