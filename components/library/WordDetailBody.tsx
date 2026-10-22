@@ -25,6 +25,7 @@ import { AbbrHint } from "@/components/ui/AbbrHint";
 import { SlangMeter } from "@/components/ui/SlangMeter";
 import { Toggle } from "@/components/ui/Toggle";
 import { cx } from "@/components/ui/cx";
+import { ORIGIN_MAX } from "@/lib/core/conjugate";
 import { readNdjson } from "@/lib/ai/ndjson";
 import type { AiErrorBody, SuggestLine, Suggestion } from "@/lib/ai/schemas";
 import { db } from "@/lib/db";
@@ -480,7 +481,6 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
           <p data-refresh="ru" data-edited="entry" className="m-0 mt-1 text-[18px] leading-6">
             {w.ru}
           </p>
-          {w.origin && <p className="m-0 mt-1.5 text-[14px] leading-5 text-muted">{w.origin}</p>}
         </>
       )}
 
@@ -512,6 +512,34 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             <span className="text-[15px] leading-[22px] whitespace-pre-line">{w.note}</span>
           ) : (
             <span className="text-[15px] leading-[22px] text-muted">Нет заметки</span>
+          )}
+        </SheetField>
+        <SheetField
+          label="Происхождение"
+          editLabel="Изменить происхождение"
+          editing={editing === "origin"}
+          onEdit={() => editor.start("origin")}
+          form={
+            draft && (
+              <form onSubmit={save} className="flex flex-col" aria-label="Изменить происхождение">
+                <input
+                  aria-label="Происхождение"
+                  value={draft.origin}
+                  onChange={(e) => set("origin", e.target.value)}
+                  maxLength={ORIGIN_MAX}
+                  placeholder="Например: верлан от lourd"
+                  className="mt-1 h-11 rounded-chip border border-rule bg-surface px-3 text-[15px] text-ink outline-none placeholder:text-muted focus:border-ink pointer-coarse:text-[16px]"
+                />
+                {errorLine}
+                {editActions}
+              </form>
+            )
+          }
+        >
+          {w.origin ? (
+            <span className="text-[15px] leading-[22px]">{w.origin}</span>
+          ) : (
+            <span className="text-[15px] leading-[22px] text-muted">Не указано</span>
           )}
         </SheetField>
         <SheetField
@@ -910,6 +938,15 @@ function PaneContent({
       {!editing && pencil("Изменить заметку", () => editor.start("note"))}
     </div>
   );
+  const origin = (
+    <div data-refresh="origin" data-edited="origin" className="flex items-start gap-2">
+      <p className={cx("m-0 min-w-0 flex-1 text-[14px] leading-5", !w.origin && "text-muted")}>
+        <span className="meta mr-1.5">Откуда</span>
+        {w.origin || "не указано"}
+      </p>
+      {!editing && pencil("Изменить происхождение", () => editor.start("origin"))}
+    </div>
+  );
   const example = (
     <div data-refresh="example" data-edited="example" className="flex items-start gap-2">
       <ExampleList
@@ -1073,7 +1110,6 @@ function PaneContent({
               <p data-refresh="ru" data-edited="entry" className="m-0 mt-2 text-[18px] leading-6 font-medium">
                 {w.ru}
               </p>
-              {w.origin && <p className="m-0 mt-1.5 text-[14px] leading-5 text-muted">{w.origin}</p>}
               <RefreshResult refresh={refresh} />
             </>
           )}
@@ -1081,6 +1117,7 @@ function PaneContent({
           {editing === "entry" ? (
             <div className="mt-5 flex flex-col gap-3 border-t border-rule pt-4">
               {w.note && <p className="m-0 text-[14px] leading-5 whitespace-pre-line">{w.note}</p>}
+              {w.origin && <p className="m-0 text-[14px] leading-5 text-muted">{w.origin}</p>}
               {wordExamples(w).map((e, i) => (
                 <div key={i} className="flex flex-col">
                   <span lang="fr" className="font-serif text-[16px] leading-6 italic">
@@ -1107,6 +1144,22 @@ function PaneContent({
                 </form>
               ) : (
                 note
+              )}
+              {editing === "origin" && draft ? (
+                <form onSubmit={(e) => void submit(e)} onKeyDown={formKeys} aria-label="Изменить происхождение" className="flex flex-col">
+                  <input
+                    aria-label="Происхождение"
+                    value={draft.origin}
+                    onChange={(e) => set("origin", e.target.value)}
+                    maxLength={ORIGIN_MAX}
+                    placeholder="Например: верлан от lourd"
+                    autoFocus
+                    className={cx(fieldInput, "text-[14px]")}
+                  />
+                  {formActions}
+                </form>
+              ) : (
+                origin
               )}
               {editing === "example" && draft ? (
                 <form onSubmit={(e) => void submit(e)} onKeyDown={formKeys} aria-label="Изменить пример" className="flex flex-col">

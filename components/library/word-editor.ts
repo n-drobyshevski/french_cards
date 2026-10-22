@@ -6,7 +6,7 @@ import type { WordPatch } from "@/lib/core/words";
 import type { FieldDef, SlangLevel, Word } from "@/lib/types";
 import { fieldRows, rowsToValues, sameFieldValues, type FieldRow } from "./word-fields";
 
-export type Editing = null | "entry" | "note" | "example" | "fields";
+export type Editing = null | "entry" | "note" | "origin" | "example" | "fields";
 
 export interface Draft {
   fr: string;
@@ -14,6 +14,8 @@ export interface Draft {
   slang_level: SlangLevel;
   verlan: boolean;
   note: string;
+  /** «Происхождение»: one line (also written from the chat). */
+  origin: string;
   examples: ExampleDraft[];
   /** «Свои поля»: shared fields (empty ones too), then the word's one-off fields. */
   fields: FieldRow[];
@@ -25,6 +27,7 @@ export const draftOf = (w: Word, defs: readonly FieldDef[]): Draft => ({
   slang_level: w.slang_level,
   verlan: w.verlan,
   note: w.note ?? "",
+  origin: w.origin ?? "",
   examples: toDrafts(wordExamples(w)),
   fields: fieldRows(w, defs),
 });
@@ -32,6 +35,7 @@ export const draftOf = (w: Word, defs: readonly FieldDef[]): Draft => ({
 export function patchFor(editing: Exclude<Editing, null>, draft: Draft): WordPatch {
   if (editing === "entry") return { fr: draft.fr, ru: draft.ru, slang_level: draft.slang_level, verlan: draft.verlan };
   if (editing === "note") return { note: draft.note };
+  if (editing === "origin") return { origin: draft.origin };
   if (editing === "fields") return { custom_fields: rowsToValues(draft.fields) };
   return examplesPatch(draft.examples);
 }
