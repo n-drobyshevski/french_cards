@@ -29,8 +29,8 @@ export function ShellProvider({ children }: { children: ReactNode }) {
 
 /**
  * settings.shortcuts: single-key shortcuts (N, /, ?, G…, [, and screen keys like J/K/X/M) are on.
- * True until settings load. Screens with their own single-letter keys should check it too.
+ * False until settings load. Screens with their own single-letter keys should check it too.
  */
 export function useShortcutsEnabled(): boolean {
-  return useLiveQuery(async () => (await getSettings()).shortcuts, [], true);
+  return useLiveQuery(async () => (await getSettings()).shortcuts, [], false);
 }
