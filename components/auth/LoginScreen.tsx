@@ -7,7 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { isSupabaseConfigured, normalizeEmail, publicAllowedEmail } from "@/lib/supabase/config";
+import { isSupabaseConfigured, normalizeEmail, prefillEmail, publicAllowedEmail } from "@/lib/supabase/config";
 import { authErrorMessage, EMAIL_RE, EXISTING_ACCOUNT, MIN_PASSWORD_LENGTH, NOT_ALLOWED, newPasswordProblem } from "./messages";
 import { PasswordField } from "./PasswordField";
 import { checkSession, passesEmailHint, rememberSignedIn } from "./session";
@@ -46,7 +46,7 @@ export function LoginScreen() {
   const configured = isSupabaseConfigured();
 
   const [mode, setMode] = useState<Mode>("signin");
-  const [email, setEmail] = useState(() => publicAllowedEmail().split(",")[0]?.trim() ?? "");
+  const [email, setEmail] = useState(() => prefillEmail(publicAllowedEmail()));
   const [password, setPassword] = useState("");
   const [repeat, setRepeat] = useState("");
   const [busy, setBusy] = useState(false);
