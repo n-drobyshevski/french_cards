@@ -156,12 +156,11 @@ test("pasting an image elsewhere in the app starts the import", async ({ page })
       [png, selector] as const,
     );
 
-  const field = await page.locator("input[type=search], input[type=text]").count();
-  if (field > 0) {
-    await pasteInto("input[type=search], input[type=text]");
-    await page.waitForTimeout(300);
-    await expect(page).toHaveURL(/\/library/);
-  }
+  // The desk replaces its placeholder (no input) once the words are read; wait for the real field.
+  await expect(page.locator("main input[type=search]")).toBeVisible();
+  await pasteInto("main input[type=search]");
+  await page.waitForTimeout(300);
+  await expect(page).toHaveURL(/\/library/);
 
   await pasteInto(null);
   await expect(page).toHaveURL(/\/import/);
