@@ -215,12 +215,14 @@ export function ReviewView({
           "after:absolute after:inset-x-0 after:top-full after:h-(--shell-bottom) after:bg-surface after:content-['']",
         )}
       >
+        {/* While «Добавляем…» is pending the sibling is blocked but keeps its look (MOTION-SPEC §3.5). */}
         <button
           type="button"
           aria-haspopup="dialog"
           disabled={selected === 0}
-          onClick={() => openPicker({ kind: "all" })}
-          className="flex h-11 shrink-0 items-center bg-transparent p-0 disabled:opacity-40"
+          aria-disabled={saving || undefined}
+          onClick={() => !saving && openPicker({ kind: "all" })}
+          className={cx("flex h-11 shrink-0 items-center bg-transparent p-0 disabled:opacity-40", saving && "pointer-events-none")}
         >
           <span className="inline-flex h-[30px] items-center gap-1 rounded-chip border border-rule bg-surface pr-2 pl-2.5 text-[13px] leading-4 whitespace-nowrap text-ink">
             Тема для всех

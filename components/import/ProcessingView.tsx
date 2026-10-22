@@ -1,10 +1,13 @@
 "use client";
 
+import { useState, type CSSProperties } from "react";
 import { bottomBarRef } from "@/components/ui/bottom-clearance";
 import { Button } from "@/components/ui/Button";
 import { Header } from "@/components/ui/Header";
 import { Icon } from "@/components/ui/Icons";
+import { SkeletonRow } from "@/components/ui/Skeleton";
 import { SlangMeter } from "@/components/ui/SlangMeter";
+import { StatusLine } from "@/components/ui/StatusLine";
 import { cx } from "@/components/ui/cx";
 import type { VocabItem } from "@/lib/ai/schemas";
 import type { ExtractPhase } from "@/lib/use-extract";
@@ -12,16 +15,83 @@ import { fragmentsRu, screenshotsRu, wordsRu } from "./rows";
 
 export const IMPORT_FOOTNOTE = "Скриншот не сохраняется — только слова.";
 
-/** Rough progress: there is no total until the stream ends, so rows fill the bar asymptotically. */
+/** Step names say what is happening, not what has been found (MOTION-SPEC I1). */
+export const IMPORT_STEPS = ["Читаем скриншот", "Слова, перевод и уровень", "Проверка повторов"] as const;
+
+/**
+ * The bar moves only on real events: preparing 8 %, uploaded 20 %, first row 30 %, then rows
+ * fill it asymptotically towards 90 % (the stream has no known length), checking 96 %, done 100 %.
+ */
 export function processingProgress(phase: ExtractPhase, rows: number, checking: boolean): number {
   if (checking) return 0.96;
-  if (phase === "preparing") return 0.06;
-  if (phase === "uploading") return 0.16;
-  if (phase === "streaming") return 0.22 + 0.68 * (1 - Math.exp(-rows / 8));
+  if (phase === "preparing") return 0.08;
+  if (phase === "uploading" || phase === "streaming") {
+    return rows === 0 ? 0.2 : 0.3 + 0.6 * (1 - Math.exp(-(rows - 1) / 8));
+  }
   return 1;
 }
 
-type StepState = "done" | "active" | "pending";
+export type StepState = "done" | "active" | "pending";
+
+export interface ImportStage {
+  progress: number;
+  steps: [StepState, StepState, StepState];
+  /** Uploaded, no row yet: the scan line travels over the thumbnail. */
+  waitingFirst: boolean;
+  title: string;
+  /** Status line: the stage in words and a real count. */
+  status: string;
+  count?: number;
+  announce: string;
+}
+
+export function importStage(phase: ExtractPhase, rows: number, checking: boolean): ImportStage {
+  const progress = processingProgress(phase, rows, checking);
+  const reading = !checking && rows === 0;
+  const steps: ImportStage["steps"] = checking
+    ? ["done", "done", "active"]
+    : reading
+      ? ["active", "pending", "pending"]
+      : ["done", "active", "pending"];
+  const title = phase === "preparing" ? "Готовим скриншот…" : checking ? "Проверяем повторы…" : "Распознаём слова…";
+  if (checking) return { progress, steps, waitingFirst: false, title, status: `Найдено ${wordsRu(rows)}`, announce: `Найдено ${wordsRu(rows)}` };
+  if (phase === "preparing") return { progress, steps, waitingFirst: false, title, status: "Готовим скриншот", announce: "Готовим скриншот" };
+  if (rows === 0) return { progress, steps, waitingFirst: true, title, status: "Читаем скриншот", announce: "Читаем скриншот" };
+  return { progress, steps, waitingFirst: false, title, status: "Найдено", count: rows, announce: `Найдено ${wordsRu(rows)}` };
+}
+
+/**
+ * Streamed rows (MOTION-SPEC §3.6): the index of the first row that arrived with the latest render,
+ * so rows arriving in the same frame stagger 40 ms (capped at 200 ms) and older rows do not replay.
+ */
+export function useArrivals(count: number): number {
+  const [seen, setSeen] = useState({ count, base: count });
+  if (seen.count !== count) {
+    const next = { count, base: count > seen.count ? seen.count : count };
+    setSeen(next);
+    return next.base;
+  }
+  return seen.base;
+}
+
+/** Inline style for a streamed row: 4 px rise + fade, `--dur-enter`, staggered within one arrival. */
+export function arrivalStyle(index: number, base: number): CSSProperties {
+  const delay = index >= base ? Math.min((index - base) * 40, 200) : 0;
+  return { animation: `enter-rise var(--dur-enter) var(--ease-enter) ${delay}ms both` };
+}
+
+/**
+ * The trailing skeleton stack slides down one row each time rows arrive (it is re-keyed, so the
+ * slide replays), and leaves with an opacity fade when the stream ends.
+ */
+export function stackStyle(rows: number, rowHeight: number, leaving: boolean): CSSProperties {
+  if (leaving) return { animation: "fade-out var(--dur-exit) var(--ease-exit) both" };
+  if (rows === 0) return {};
+  return {
+    "--slide-from": `-${rowHeight}px`,
+    animation: "slide-from var(--dur-move) var(--ease-standard) both",
+  } as CSSProperties;
+}
 
 function Step({ n, label, state, last }: { n: string; label: string; state: StepState; last?: boolean }) {
   return (
@@ -46,24 +116,25 @@ function Step({ n, label, state, last }: { n: string; label: string; state: Step
   );
 }
 
-const SKELETONS = [
-  { a: "w-[72px]", b: "w-[88px]", o: "" },
-  { a: "w-24", b: "w-16", o: "opacity-75" },
-  { a: "w-14", b: "w-[104px]", o: "opacity-50" },
-  { a: "w-20", b: "w-[72px]", o: "opacity-30" },
-];
-
-function SkeletonRow({ a, b, o }: { a: string; b: string; o: string }) {
+/**
+ * The red scan line with the paper veil below it (the part not yet read). While the first row is
+ * awaited it travels top↔bottom (the screen's one loop); otherwise, and under reduced motion, it
+ * stands at the bar's %.
+ */
+export function ScanLine({ percent, travel, veil = true, thick = false }: { percent: number; travel: boolean; veil?: boolean; thick?: boolean }) {
   return (
-    <li aria-hidden="true" className={cx("flex h-14 items-center gap-3 border-b border-rule", o)}>
-      <span className={cx("h-2 bg-surface-2", a)} />
-      <span className={cx("h-1.5 bg-surface-2", b)} />
-      <span className="ml-auto inline-flex gap-[2px]">
-        {[0, 1, 2, 3].map((i) => (
-          <span key={i} className="h-[3px] w-2.5 bg-surface-2" />
-        ))}
-      </span>
-    </li>
+    <div
+      aria-hidden="true"
+      data-scan={travel ? "travel" : "static"}
+      className={cx(
+        "pointer-events-none absolute inset-0 transition-[translate] duration-(--dur-move) ease-standard",
+        travel && "motion-loop animate-[scan-travel_2400ms_linear_infinite_alternate]",
+      )}
+      style={{ translate: `0 ${percent}%` }}
+    >
+      {veil && <div className="absolute inset-0 bg-paper/55" />}
+      <div className={cx("absolute inset-x-0 top-0 bg-red", thick ? "h-0.5" : "h-px")} />
+    </div>
   );
 }
 
@@ -79,49 +150,36 @@ export interface ProcessingViewProps {
   onStop: () => void;
 }
 
+const ROW_HEIGHT = 56;
+
 /** Screenshot being read: thumbnail with a scan line, steps, rows as they stream in, «Стоп». */
 export function ProcessingView({ phase, items, images, tiles, thumbs, checking, onStop }: ProcessingViewProps) {
-  const progress = processingProgress(phase, items.length, checking);
-  const reading = !checking && items.length === 0;
-  const steps: StepState[] = checking
-    ? ["done", "done", "active"]
-    : reading
-      ? ["active", "pending", "pending"]
-      : ["done", "active", "pending"];
-  const title = phase === "preparing" ? "Готовим скриншот…" : checking ? "Проверяем повторы…" : "Распознаём слова…";
+  const stage = importStage(phase, items.length, checking);
   const sub = tiles > 0 ? `${screenshotsRu(images)} · ${fragmentsRu(tiles)}` : screenshotsRu(images);
-  const percent = Math.round(progress * 100);
+  const percent = Math.round(stage.progress * 100);
+  const base = useArrivals(items.length);
 
   return (
     <>
       <Header title="Импорт со скриншота" fallbackHref="/library" />
       <main className="flex flex-1 flex-col px-4 pt-2">
         <section aria-label="Обработка скриншота" className="flex gap-4">
-          <div
-            aria-hidden="true"
-            className="relative h-[220px] w-[120px] shrink-0 overflow-hidden rounded-chip border border-rule bg-surface"
-          >
+          <div className="relative h-[220px] w-[120px] shrink-0 overflow-hidden rounded-chip border border-rule bg-surface" aria-hidden="true">
             {thumbs[0] && (
               // Local object URL; next/image does not apply.
               // eslint-disable-next-line @next/next/no-img-element
               <img src={thumbs[0]} alt="" className="size-full object-cover object-top" />
             )}
+            <ScanLine percent={percent} travel={stage.waitingFirst} />
             {images > 1 && (
               <span className="absolute top-1.5 right-1.5 rounded-[2px] bg-ink px-1 font-mono text-[10px] leading-[14px] text-on-ink">
                 1/{images}
               </span>
             )}
-            <div
-              className="absolute inset-x-0 bottom-0 bg-paper/60 transition-[top] duration-500 ease-out"
-              style={{ top: `${percent}%` }}
-            />
-            <div className="absolute inset-x-0 h-px bg-red transition-[top] duration-500 ease-out" style={{ top: `${percent}%` }} />
           </div>
 
           <div className="flex min-w-0 flex-1 flex-col">
-            <p className="m-0 text-[17px] leading-6 font-medium text-ink" aria-live="polite">
-              {title}
-            </p>
+            <p className="m-0 text-[17px] leading-6 font-medium text-ink">{stage.title}</p>
             <p className="m-0 mt-1 text-[13px] leading-5 text-muted">{sub}</p>
             <div
               role="progressbar"
@@ -132,26 +190,45 @@ export function ProcessingView({ phase, items, images, tiles, thumbs, checking, 
               className="relative mt-4 h-[5px]"
             >
               <div className="absolute inset-x-0 top-0.5 h-px bg-rule" />
-              <div className="absolute top-0.5 left-0 h-px bg-ink transition-[width] duration-500" style={{ width: `${percent}%` }} />
-              <div className="absolute top-0 h-[5px] w-px bg-ink transition-[left] duration-500" style={{ left: `${percent}%` }} />
+              <div
+                className="absolute top-0.5 left-0 h-px w-full origin-left bg-ink transition-transform duration-(--dur-move) ease-standard"
+                style={{ transform: `scaleX(${stage.progress})` }}
+              />
+              <div
+                className="absolute top-0 h-[5px] w-px bg-ink transition-[left] duration-(--dur-move) ease-standard"
+                style={{ left: `${percent}%` }}
+              />
             </div>
-            <p className="meta m-0 mt-2 leading-4">{items.length > 0 ? wordsRu(items.length) : "Ищем слова"}</p>
 
-            <ol className="m-0 mt-auto flex list-none flex-col p-0 pt-4">
-              <Step n="01" label="Текст найден" state={steps[0]} />
-              <Step n="02" label="Перевод и уровень" state={steps[1]} />
-              <Step n="03" label="Проверка повторов" state={steps[2]} last />
+            <ol aria-label="Этапы" className="m-0 mt-auto flex list-none flex-col p-0 pt-4">
+              {IMPORT_STEPS.map((label, i) => (
+                <Step key={label} n={`0${i + 1}`} label={label} state={stage.steps[i]} last={i === IMPORT_STEPS.length - 1} />
+              ))}
             </ol>
           </div>
         </section>
 
-        <div className="mt-8 flex items-baseline justify-between border-b border-ink pb-2">
+        {/* No ink run: the scan line over the thumbnail is the screen's one loop. */}
+        <StatusLine
+          className="mt-3"
+          text={stage.status}
+          count={stage.count}
+          active={!checking}
+          announce={stage.announce}
+          noRun
+        />
+
+        <div className="mt-4 flex items-baseline justify-between border-b border-ink pb-2">
           <h2 className="meta m-0 leading-4 font-medium">Найдено</h2>
           <span className="meta leading-4">По мере распознавания</span>
         </div>
         <ul aria-label="Распознанные слова" aria-busy={!checking} className="m-0 list-none p-0">
           {items.map((it, i) => (
-            <li key={i} className="flex h-14 items-center justify-between gap-4 border-b border-rule">
+            <li
+              key={i}
+              className="flex h-14 items-center justify-between gap-4 border-b border-rule"
+              style={arrivalStyle(i, base)}
+            >
               <span className="flex min-w-0 items-baseline gap-2">
                 <span lang="fr" className="truncate font-serif text-[19px] leading-6 font-medium text-ink">
                   {it.fr}
@@ -161,7 +238,11 @@ export function ProcessingView({ phase, items, images, tiles, thumbs, checking, 
               <SlangMeter level={it.slang_level} verlan={it.verlan} />
             </li>
           ))}
-          {!checking && SKELETONS.map((s, i) => <SkeletonRow key={i} {...s} />)}
+          <li key={`stack-${items.length}`} aria-hidden="true" data-skeleton-stack="" style={stackStyle(items.length, ROW_HEIGHT, checking)}>
+            {[0, 1, 2, 3].map((i) => (
+              <SkeletonRow key={i} height={ROW_HEIGHT} index={i} meter fade />
+            ))}
+          </li>
         </ul>
       </main>
 

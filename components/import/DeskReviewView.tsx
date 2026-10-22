@@ -401,9 +401,10 @@ export function DeskReviewView({
             aria-haspopup="menu"
             aria-expanded={menu?.key === null}
             disabled={selected === 0}
+            aria-disabled={saving || undefined}
             title={selected === 0 ? "Отметьте хотя бы одно слово" : undefined}
-            onClick={(e) => setMenu({ key: null, anchor: e.currentTarget })}
-            className={deskButton("tertiary", "-ml-2")}
+            onClick={(e) => !saving && setMenu({ key: null, anchor: e.currentTarget })}
+            className={deskButton("tertiary", cx("-ml-2", saving && "pointer-events-none"))}
           >
             Тема для всех
             <Icon name="chevron" size={14} strokeWidth={1.75} className="-ml-1 text-muted" />
@@ -413,16 +414,17 @@ export function DeskReviewView({
           </p>
           <button
             type="button"
-            aria-disabled={selected === 0 || saving || undefined}
+            aria-disabled={selected === 0 || undefined}
             aria-busy={saving || undefined}
             aria-keyshortcuts={mac ? "Meta+Enter" : "Control+Enter"}
             title={selected === 0 ? "Отметьте хотя бы одно слово" : undefined}
             onClick={() => {
               if (selected > 0 && !saving) onAdd();
             }}
-            className={deskButton("primary")}
+            // Pending keeps full contrast (not the greyed «disabled» look); the label dims to 72 %.
+            className={deskButton("primary", saving ? "pointer-events-none" : undefined)}
           >
-            <span>{addLabel}</span>
+            <span className={saving ? "opacity-72" : undefined}>{addLabel}</span>
             {selected > 0 && !saving && (
               <Kbd tone="ink" aria-hidden="true">
                 {keys("Mod+Enter")}

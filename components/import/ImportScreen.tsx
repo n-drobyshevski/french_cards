@@ -1,9 +1,8 @@
 "use client";
 
 import { useLiveQuery } from "dexie-react-hooks";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { listFolders } from "@/lib/folders";
 import { getSettings } from "@/lib/settings";
@@ -20,7 +19,7 @@ import { DeskStatusView } from "./DeskStatusView";
 import { PickView } from "./PickView";
 import { ProcessingView } from "./ProcessingView";
 import { ReviewView } from "./ReviewView";
-import { buildRows, proposalsOf, type ImportRow } from "./rows";
+import { buildRows, proposalsOf, wordsRu, type ImportRow } from "./rows";
 import { SharedImages } from "./SharedImages";
 import { StatusView } from "./StatusView";
 
@@ -169,40 +168,35 @@ export function ImportScreen() {
   const add = async () => {
     if (!rows || saving) return;
     setSaving(true);
+    let result: Awaited<ReturnType<typeof commitImport>>;
     try {
-      const result = await commitImport(rows);
-      if (result.words.length === 0) {
-        snackbar.show({ message: result.skipped > 0 ? "Эти слова уже есть в библиотеке" : "Нечего добавить" });
-        return;
-      }
-      let id = 0;
-      id = snackbar.show({
-        message: (
-          <>
-            Добавлено {result.words.length} ·{" "}
-            <Link
-              href="/"
-              onClick={() => snackbar.hide(id)}
-              className="text-on-ink underline decoration-1 underline-offset-[3px]"
-            >
-              Повторить сейчас
-            </Link>
-          </>
-        ),
-        actionLabel: "Отменить",
-        onAction: () => {
-          undoImport(result)
-            .then(() => snackbar.show({ message: "Импорт отменён" }))
-            .catch(() => snackbar.show({ message: "Не удалось отменить" }));
-        },
-      });
+      result = await commitImport(rows);
+    } catch (error) {
+      setSaving(false);
+      snackbar.show({ message: error instanceof Error && error.message ? error.message : "Не удалось добавить слова" });
+      return;
+    }
+    if (result.words.length === 0) {
+      setSaving(false);
+      snackbar.show({ message: result.skipped > 0 ? "Эти слова уже есть в библиотеке" : "Нечего добавить" });
+      return;
+    }
+    snackbar.show({
+      message: `Добавлено ${wordsRu(result.words.length)}`,
+      actionLabel: "Отменить",
+      onAction: () => {
+        undoImport(result)
+          .then(() => snackbar.show({ message: "Импорт отменён" }))
+          .catch(() => snackbar.show({ message: "Не удалось отменить" }));
+      },
+    });
+    // «Добавляем…» stays until the library is on screen: the reset rides the navigation's
+    // transition, so the pick screen never flashes in between (MOTION-SPEC I7).
+    startTransition(() => {
+      setSaving(false);
       restart();
       router.replace("/library");
-    } catch (error) {
-      snackbar.show({ message: error instanceof Error && error.message ? error.message : "Не удалось добавить слова" });
-    } finally {
-      setSaving(false);
-    }
+    });
   };
 
   let view: ReactNode;
