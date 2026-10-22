@@ -40,6 +40,7 @@ import {
   updateWord,
   type WordPatch,
 } from "@/lib/words";
+import { cardNumber } from "@/components/add/match";
 import { CheckMark } from "./Checkbox";
 import { formatDate, plural, posAbbr, SOURCE_LABELS, STATUS_LABELS } from "./format";
 import { INBOX_KEY, MoveMenu, ThemeSquare } from "./MoveMenu";
@@ -804,7 +805,7 @@ function PaneBody({ wordId, onClose, onPrev, onNext, onOpenWord, onNewTheme, edi
         className="mt-4 flex flex-col rounded-[6px] border border-rule bg-surface focus-visible:outline-offset-2"
       >
         <div className="flex h-10 items-center justify-between px-5">
-          <span className="font-mono text-[11px] text-muted tabular-nums">FR · № {String(data.number ?? 1).padStart(3, "0")}</span>
+          <span className="font-mono text-[11px] text-muted tabular-nums">FR · {cardNumber(data.number ?? 1)}</span>
           <SlangMeter level={w.slang_level} verlan={false} />
         </div>
         <div aria-hidden="true" className="h-0.5 bg-red" />

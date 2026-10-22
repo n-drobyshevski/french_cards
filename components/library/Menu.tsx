@@ -37,6 +37,8 @@ export interface MenuProps {
   label: string;
   /** Min width (default 220). */
   width?: number;
+  /** Keep exactly `width` (long captions wrap). */
+  exactWidth?: boolean;
   /** Where focus goes after closing; default: what had focus when the menu opened. */
   returnFocus?: HTMLElement | null;
   /** Element id for aria-controls on the trigger. */
@@ -67,7 +69,7 @@ function portalContainer(anchor: MenuAnchor | null): HTMLElement | null {
   return (from?.closest?.("[role='dialog']") as HTMLElement | null) ?? document.body;
 }
 
-export function Menu({ open, anchor, onClose, label, width = 220, returnFocus, id, className, children }: MenuProps) {
+export function Menu({ open, anchor, onClose, label, width = 220, exactWidth = false, returnFocus, id, className, children }: MenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const fine = useFinePointer();
   const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
@@ -129,8 +131,13 @@ export function Menu({ open, anchor, onClose, label, width = 220, returnFocus, i
       if (a && "element" in a && target && a.element.contains(target)) return;
       close("outside");
     };
+    // Close when the page under the menu scrolls (the anchor moves), not on a stray late scroll event.
+    const a0 = anchorRef.current;
+    const anchorEl = a0 ? ("element" in a0 ? a0.element : a0.container) : null;
+    const top0 = anchorEl?.getBoundingClientRect().top;
     const onScroll = (event: Event) => {
       if (ref.current && event.target instanceof Node && ref.current.contains(event.target)) return;
+      if (event.type === "scroll" && anchorEl && top0 !== undefined && Math.abs(anchorEl.getBoundingClientRect().top - top0) < 2) return;
       close("outside");
     };
     document.addEventListener("pointerdown", onPointerDown, true);
@@ -206,7 +213,7 @@ export function Menu({ open, anchor, onClose, label, width = 220, returnFocus, i
         tabIndex={-1}
         onKeyDown={onKeyDown}
         onContextMenu={(e) => e.preventDefault()}
-        style={{ minWidth: width, left: pos?.left ?? -9999, top: pos?.top ?? -9999 }}
+        style={{ minWidth: width, width: exactWidth ? width : undefined, left: pos?.left ?? -9999, top: pos?.top ?? -9999 }}
         className={cx(
           "fixed z-[70] flex max-h-[min(480px,calc(100dvh-16px))] flex-col overflow-y-auto rounded-[6px] border border-ink bg-surface p-1 text-ink outline-none",
           className,
@@ -227,7 +234,7 @@ function useMenu(): MenuCtx {
 
 const itemClass = (coarse: boolean, danger?: boolean) =>
   cx(
-    "flex w-full shrink-0 items-center gap-2 rounded-[4px] border-0 bg-transparent px-2 text-left text-[14px] outline-none hoverable:bg-hover-surface focus-visible:bg-hover-surface focus-visible:outline-none",
+    "flex w-full shrink-0 items-center gap-2 rounded-[4px] border-0 bg-transparent px-2 text-left text-[14px] outline-none hoverable:bg-hover-surface focus:bg-hover-surface focus-visible:outline-none",
     coarse ? "min-h-11" : "min-h-8",
     danger ? "text-again" : "text-ink",
     "aria-disabled:text-muted aria-disabled:hoverable:bg-transparent",

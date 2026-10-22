@@ -978,7 +978,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
       />
 
       {folder && (
-        <Menu open={!!themeMenu} anchor={themeMenu ? { element: themeMenu, align: "end" } : null} onClose={() => setThemeMenu(null)} label="Действия с темой" width={320}>
+        <Menu open={!!themeMenu} anchor={themeMenu ? { element: themeMenu, align: "end" } : null} onClose={() => setThemeMenu(null)} label="Действия с темой" width={320} exactWidth>
           <MenuItem icon="pencil" shortcut="F2" onSelect={() => setFolderForm({ mode: "edit" })}>
             Название, описание и цвет
           </MenuItem>

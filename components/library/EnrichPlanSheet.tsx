@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icons";
-import { Sheet, SheetCloseButton, SheetTitle } from "@/components/ui/Sheet";
+import { Kbd } from "@/components/ui/Kbd";
+import { DialogChrome, Sheet, SheetCloseButton, SheetTitle } from "@/components/ui/Sheet";
 import { SlangMeter } from "@/components/ui/SlangMeter";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { Toggle } from "@/components/ui/Toggle";
@@ -20,7 +21,10 @@ import {
   type EnrichField,
   type EnrichPlan,
 } from "@/lib/enrich";
+import { useFormatKeys } from "@/lib/key-names";
+import { useLayoutClass } from "@/lib/use-media";
 import { updateWords } from "@/lib/words";
+import { CheckMark } from "./Checkbox";
 import { nWords } from "./format";
 
 export interface EnrichPlanSheetProps {
@@ -42,6 +46,7 @@ const LOADING: Phase = { status: "loading", done: 0, total: 0 };
  */
 export function EnrichPlanSheet({ open, onOpenChange }: EnrichPlanSheetProps) {
   const snackbar = useSnackbar();
+  const desktop = useLayoutClass() !== "compact";
   const [session, setSession] = useState(0);
   const [wasOpen, setWasOpen] = useState(false);
   const [phase, setPhase] = useState<Phase>(LOADING);
@@ -156,6 +161,129 @@ export function EnrichPlanSheet({ open, onOpenChange }: EnrichPlanSheetProps) {
           Применить
         </Button>
       </div>
+    );
+  }
+
+  if (desktop) {
+    const groups = plan
+      ? ([
+          ["example", "Примеры", plan.examples],
+          ["slang", "Уровень сленга", plan.slang],
+        ] as const).filter(([, , changes]) => changes.length > 0)
+      : [];
+    return (
+      <Sheet
+        open={open}
+        onOpenChange={onOpenChange}
+        height="full"
+        dialogWidth={760}
+        description="Примеры и уровень сленга для карточек"
+        header={<DialogChrome label="Библиотека" title="Дополнить карточки" />}
+        footer={
+          <DeskEnrichFooter
+            ready={!!plan && !empty}
+            error={phase.status === "error"}
+            count={picked.length}
+            applying={applying}
+            onClose={close}
+            onRetry={retry}
+            onApply={() => void apply()}
+          />
+        }
+      >
+        {phase.status === "loading" && (
+          <p className="m-0 px-6 pt-4 text-[13px] leading-5 text-muted" role="status" aria-busy="true">
+            Подбираем примеры{phase.total > 0 ? ` · ${phase.done} / ${phase.total}` : "…"}
+          </p>
+        )}
+        {phase.status === "error" && (
+          <p role="alert" className="m-0 px-6 pt-4 text-[15px] leading-[22px]">
+            {phase.message}
+          </p>
+        )}
+        {empty && (
+          <div className="px-6 pt-4">
+            <p className="m-0 font-serif text-[19px] leading-6">Дополнять нечего</p>
+            <p className="m-0 mt-1 text-[13px] leading-5 text-muted">У карточек уже есть примеры и уровень сленга.</p>
+          </div>
+        )}
+        {plan && !empty && (
+          <div className="flex flex-col pb-4">
+            <p className="m-0 px-6 pt-4 text-[13px] leading-5 text-muted">
+              Отмеченное запишется после «Применить». Заполненные вручную поля не меняются.
+              {phase.status === "ready" && phase.more > 0 && ` Ещё ${nWords(phase.more)} — откройте снова после применения.`}
+            </p>
+            <div role="row" className="mt-3 grid h-8 items-center border-b border-ink px-6 font-mono text-[11px] tracking-[.06em] text-muted uppercase" style={{ gridTemplateColumns: ENRICH_LEDGER }}>
+              <span />
+              <span>Слово</span>
+              <span>Перевод</span>
+              <span>Предложение</span>
+            </div>
+            {groups.map(([field, title, changes]) => {
+              const keys = changes.map((c) => c.key);
+              const on = keys.filter((k) => !off.has(k)).length;
+              return (
+                <section key={field} aria-label={`${title}: ${changes.length}`}>
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={on === changes.length ? true : on > 0 ? "mixed" : false}
+                    aria-label={`${title}: применить все`}
+                    onClick={() => toggle(keys, on === 0)}
+                    className="grid h-9 w-full items-center border-b border-rule bg-transparent px-6 text-left text-ink hoverable:bg-hover-surface"
+                    style={{ gridTemplateColumns: "32px minmax(0,1fr)" }}
+                  >
+                    <CheckMark checked={on === changes.length} indeterminate={on > 0 && on < changes.length} />
+                    <span className="flex items-baseline gap-2">
+                      <span className="font-serif text-[19px] leading-6 font-medium">{title}</span>
+                      <span className="font-mono text-[11px] text-muted tabular-nums">{on === changes.length ? changes.length : `${on} из ${changes.length}`}</span>
+                    </span>
+                  </button>
+                  {changes.map((c) => {
+                    const checked = !off.has(c.key);
+                    return (
+                      <button
+                        key={c.key}
+                        type="button"
+                        role="checkbox"
+                        aria-checked={checked}
+                        onClick={() => toggle([c.key], !checked)}
+                        className={cx(
+                          "grid min-h-8 w-full items-center border-b border-rule bg-transparent px-6 py-1 text-left text-ink hoverable:bg-hover-surface",
+                          !checked && "text-muted",
+                        )}
+                        style={{ gridTemplateColumns: ENRICH_LEDGER }}
+                      >
+                        <CheckMark checked={checked} />
+                        <span lang="fr" className="truncate pr-3 font-serif text-[16px] leading-5 font-medium">
+                          {c.word.fr}
+                        </span>
+                        <span className="truncate pr-3 text-[13px] text-muted">{c.word.ru}</span>
+                        {field === "example" ? (
+                          <span className="flex min-w-0 flex-col">
+                            <span lang="fr" className="truncate font-serif text-[15px] leading-5 italic">
+                              {c.patch.example_fr}
+                            </span>
+                            {c.patch.example_ru && <span className="truncate text-[12px] leading-4 text-muted">{c.patch.example_ru}</span>}
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-2">
+                            <SlangMeter level={c.word.slang_level} verlan={c.word.verlan} size="sm" />
+                            <span aria-hidden="true" className="text-muted">
+                              →
+                            </span>
+                            <SlangMeter level={c.patch.slang_level ?? c.word.slang_level} verlan={c.patch.verlan ?? c.word.verlan} size="sm" />
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </section>
+              );
+            })}
+          </div>
+        )}
+      </Sheet>
     );
   }
 
@@ -312,5 +440,82 @@ function ChangeRow({ change, field, checked, onToggle }: { change: EnrichChange;
         )}
       </span>
     </button>
+  );
+}
+
+const ENRICH_LEDGER = "32px 180px 160px minmax(0,1fr)";
+
+function DeskEnrichFooter({
+  ready,
+  error,
+  count,
+  applying,
+  onClose,
+  onRetry,
+  onApply,
+}: {
+  ready: boolean;
+  error: boolean;
+  count: number;
+  applying: boolean;
+  onClose: () => void;
+  onRetry: () => void;
+  onApply: () => void;
+}) {
+  const keys = useFormatKeys();
+  const disabled = !ready || count === 0;
+  const applyRef = useRef(onApply);
+  useEffect(() => {
+    applyRef.current = onApply;
+  });
+  useEffect(() => {
+    if (disabled || applying) return;
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !e.repeat) {
+        e.preventDefault();
+        applyRef.current();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [disabled, applying]);
+  return (
+    <div className="flex items-center justify-end gap-4">
+      <button
+        type="button"
+        onClick={onClose}
+        aria-keyshortcuts="Escape"
+        className="inline-flex h-10 items-center gap-2 rounded-[6px] bg-transparent px-2 text-[14px] font-medium text-ink hoverable:bg-hover-surface"
+      >
+        {ready ? "Отмена" : "Закрыть"}
+        <Kbd aria-hidden="true">Esc</Kbd>
+      </button>
+      {error ? (
+        <Button size="sm" className="h-10 px-4 text-[14px]" icon="refresh" onClick={onRetry}>
+          Повторить
+        </Button>
+      ) : (
+        ready && (
+          <button
+            type="button"
+            onClick={() => !disabled && !applying && onApply()}
+            aria-disabled={disabled || undefined}
+            aria-busy={applying || undefined}
+            aria-keyshortcuts="Meta+Enter Control+Enter"
+            title={disabled ? "Отметьте хотя бы одно слово" : undefined}
+            className={cx(
+              "inline-flex h-10 items-center gap-2.5 rounded-[6px] border px-4 text-[14px] font-medium",
+              disabled ? "cursor-default border-rule bg-transparent text-boundary" : "border-ink bg-ink text-on-ink",
+            )}
+          >
+            Применить
+            <span className="font-mono text-[13px] tabular-nums">{count}</span>
+            <Kbd tone={disabled ? "paper" : "ink"} aria-hidden="true">
+              {keys("Mod+Enter")}
+            </Kbd>
+          </button>
+        )
+      )}
+    </div>
   );
 }
