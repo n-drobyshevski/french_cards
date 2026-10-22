@@ -1,8 +1,10 @@
 "use client";
 
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useRef, useState, type PointerEvent as ReactPointerEvent, type TouchEvent as ReactTouchEvent } from "react";
 import {
+  canFlipBackFrom,
   FLIP_DAMPING,
+  flipBackDecision,
   flipDecision,
   flipVelocity,
   IDLE_SWIPE,
@@ -204,5 +206,77 @@ export function useSwipeUp({ enabled, onFlip }: { enabled: boolean; onFlip: () =
       return was;
     },
     handlers: enabled ? { onPointerDown, onPointerMove, onPointerUp, onPointerCancel } : {},
+  };
+}
+
+/**
+ * Swipe down on the answer side to flip back. Uses touch events, not pointer events: the answer
+ * body scrolls (touch-action: pan-y), so the browser owns vertical drags and cancels pointer
+ * events, but touch events keep arriving. Only counts when the answer text is scrolled to the
+ * top (the scroller is marked with `data-answer-scroll`); otherwise the drag just scrolls.
+ */
+export function useSwipeDown({ enabled, onFlipBack }: { enabled: boolean; onFlipBack: () => void }) {
+  const gesture = useRef<{ x: number; y: number; height: number; armed: boolean; samples: FlipSample[] } | null>(null);
+  const [pull, setPull] = useState(0);
+  const [settling, setSettling] = useState(false);
+
+  const end = () => {
+    gesture.current = null;
+    setSettling(true);
+    setPull(0);
+  };
+
+  const onTouchStart = (event: ReactTouchEvent<HTMLElement>) => {
+    if (!enabled || event.touches.length !== 1) {
+      gesture.current = null;
+      return;
+    }
+    const touch = event.touches[0];
+    const scroller = (event.target as Element).closest?.("[data-answer-scroll]");
+    gesture.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      height: event.currentTarget.getBoundingClientRect().height,
+      armed: canFlipBackFrom(scroller ? scroller.scrollTop : 0),
+      samples: [{ y: touch.clientY, t: event.timeStamp }],
+    };
+  };
+
+  const onTouchMove = (event: ReactTouchEvent<HTMLElement>) => {
+    const g = gesture.current;
+    if (!g?.armed) return;
+    const touch = event.touches[0];
+    if (!touch) return;
+    const dx = touch.clientX - g.x;
+    const dy = touch.clientY - g.y;
+    g.samples = [...g.samples.filter((s) => event.timeStamp - s.t <= VELOCITY_WINDOW_MS), { y: touch.clientY, t: event.timeStamp }];
+    if (dy > 0 && dy > Math.abs(dx)) {
+      setSettling(false);
+      setPull(dy * FLIP_DAMPING);
+    } else if (pull !== 0) {
+      setPull(0);
+    }
+  };
+
+  const onTouchEnd = (event: ReactTouchEvent<HTMLElement>) => {
+    const g = gesture.current;
+    if (!g) return;
+    const touch = event.changedTouches[0];
+    if (!g.armed || !touch) {
+      end();
+      return;
+    }
+    const dx = touch.clientX - g.x;
+    const dy = touch.clientY - g.y;
+    const samples = [...g.samples, { y: touch.clientY, t: event.timeStamp }];
+    const flip = flipBackDecision(dx, dy, g.height, flipVelocity(samples, event.timeStamp));
+    end();
+    if (flip) onFlipBack();
+  };
+
+  return {
+    pull,
+    settling,
+    handlers: enabled ? { onTouchStart, onTouchMove, onTouchEnd, onTouchCancel: end } : {},
   };
 }

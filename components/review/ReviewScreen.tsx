@@ -439,7 +439,7 @@ export function ReviewScreen() {
           {revealed && swipeEnabled && (
             <p aria-hidden="true" className="meta mt-4 mb-0 flex h-4 shrink-0 justify-between leading-4">
               <span>← {GRADE_LABELS[1]}</span>
-              <span>тап — вопрос</span>
+              <span>тап / ↓ — вопрос</span>
               <span>{GRADE_LABELS[3]} →</span>
             </p>
           )}

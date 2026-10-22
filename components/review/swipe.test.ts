@@ -3,6 +3,8 @@ import {
   FLICK_MIN_DISTANCE,
   FLIP_DISTANCE,
   FLIP_SHARE,
+  canFlipBackFrom,
+  flipBackDecision,
   flipDecision,
   flipVelocity,
   IDLE_SWIPE,
@@ -167,5 +169,20 @@ describe("flipVelocity", () => {
   it("measures recent vertical speed, negative upwards", () => {
     expect(flipVelocity([{ y: 300, t: 0 }, { y: 250, t: 50 }, { y: 200, t: 100 }], 100)).toBe(-1);
     expect(flipVelocity([{ y: 300, t: 0 }], 0)).toBe(0);
+  });
+});
+
+describe("flipBackDecision", () => {
+  it("mirrors the swipe-up thresholds downwards", () => {
+    expect(flipBackDecision(0, FLIP_DISTANCE, 480, 0)).toBe(true);
+    expect(flipBackDecision(0, FLIP_DISTANCE - 1, 480, 0)).toBe(false);
+    expect(flipBackDecision(0, FLICK_MIN_DISTANCE, 480, 0.6)).toBe(true);
+    expect(flipBackDecision(0, -120, 480, -1)).toBe(false);
+    expect(flipBackDecision(150, 100, 480, 1)).toBe(false);
+  });
+
+  it("only starts from the top of the answer text", () => {
+    expect(canFlipBackFrom(0)).toBe(true);
+    expect(canFlipBackFrom(24)).toBe(false);
   });
 });

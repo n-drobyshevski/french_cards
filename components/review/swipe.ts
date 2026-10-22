@@ -167,3 +167,16 @@ export function flipDecision(dx: number, dy: number, height: number, velocity: n
   const flick = -dy >= FLICK_MIN_DISTANCE && velocity <= -FLIP_FLICK_VELOCITY;
   return far || flick;
 }
+
+/** Swipe down on the answer side flips back: the same thresholds as the swipe up, mirrored. */
+export function flipBackDecision(dx: number, dy: number, height: number, velocity: number): boolean {
+  return flipDecision(dx, -dy, height, -velocity);
+}
+
+/**
+ * A downward drag on the answer only flips back when its scrollable text is at the top;
+ * otherwise the drag scrolls the text as usual.
+ */
+export function canFlipBackFrom(scrollTop: number): boolean {
+  return scrollTop <= 0;
+}

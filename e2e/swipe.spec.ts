@@ -100,3 +100,15 @@ test("Space flips the card both ways", async ({ page }) => {
   await page.keyboard.press("Space");
   await expect(questionCard(page)).toBeVisible();
 });
+
+test("swiping the answer down flips the card back to the question", async ({ page }) => {
+  await openReview(page);
+  await questionCard(page).tap();
+  await expect(page.locator("[data-review-answer]")).toBeVisible();
+
+  await touchDrag(page, "[data-review-answer]", 4, 160);
+  await expect(questionCard(page)).toBeVisible();
+  await expect(page.locator("[data-review-answer]")).toHaveCount(0);
+  await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+});

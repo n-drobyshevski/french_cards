@@ -8,7 +8,7 @@ import type { Direction, Word } from "@/lib/types";
 import { posAbbr } from "./format";
 import type { SwipeOutcome } from "./swipe";
 import { swipeVisual } from "./swipe";
-import { useSwipe, useSwipeUp } from "./useSwipe";
+import { useSwipe, useSwipeDown, useSwipeUp } from "./useSwipe";
 
 /** Index-card shell: white, radius 6, 1px rule, the red header rule 44px from the top. */
 const cardShell = "flex flex-col overflow-hidden rounded-card border border-rule bg-surface text-ink";
@@ -44,10 +44,11 @@ export interface ReviewCardProps {
   hasNext: boolean;
 }
 
-/** The review card: question side (tap or swipe up to flip) or answer side (swipe to grade, tap to flip back). */
+/** The review card: question side (tap or swipe up to flip) or answer side (swipe sideways to grade, tap or swipe down to flip back). */
 export function ReviewCard({ word, direction, revealed, onReveal, onHide, folderName, swipeEnabled, onSwipe, hasNext }: ReviewCardProps) {
   const swipe = useSwipe({ enabled: revealed && swipeEnabled, onDecide: onSwipe });
   const swipeUp = useSwipeUp({ enabled: !revealed && swipeEnabled, onFlip: onReveal });
+  const swipeDown = useSwipeDown({ enabled: revealed && swipeEnabled, onFlipBack: onHide });
   const { dx, width, mode } = swipe.view;
   const visual = swipeVisual(dx, width || 1);
   const moving = mode !== "idle" || dx !== 0;
@@ -62,7 +63,12 @@ export function ReviewCard({ word, direction, revealed, onReveal, onHide, folder
         transform: `translateX(${dx}px) rotate(${visual.rotate}deg)`,
         transition: mode === "dragging" ? "none" : "transform 180ms ease-out",
       }
-    : undefined;
+    : swipeDown.pull || swipeDown.settling
+      ? {
+          transform: `translateY(${swipeDown.pull}px)`,
+          transition: swipeDown.settling ? "transform 180ms ease-out" : "none",
+        }
+      : undefined;
 
   return (
     <div data-review-focus="" className="relative mt-4 flex min-h-[280px] flex-1 flex-col">
@@ -114,6 +120,7 @@ export function ReviewCard({ word, direction, revealed, onReveal, onHide, folder
       ) : (
         <article
           {...swipe.handlers}
+          {...swipeDown.handlers}
           onClick={() => {
             if (!swipe.consumeClick()) onHide();
           }}
@@ -134,6 +141,7 @@ export function ReviewCard({ word, direction, revealed, onReveal, onHide, folder
           {/* The scroller needs pan-y too: touch-action is resolved up to the nearest scroll container,
               so without it the browser claims horizontal drags (back gesture) and cancels the swipe. */}
           <div
+            data-answer-scroll=""
             className={cx(
               "flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-6 pt-6 pb-4",
               swipeEnabled && "touch-pan-y",
