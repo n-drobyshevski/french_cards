@@ -64,16 +64,16 @@ export function DeskPlaceholder({ title, scope = "all" }: { title: string; scope
           </div>
           <p className="m-0 mt-1 flex min-h-5 items-center text-[13px] leading-5" />
           <div className="mt-1 flex h-4" />
-          <div className="mt-3 flex h-9 items-center gap-6 pointer-coarse:gap-5">
+          <div className="mt-3 flex min-h-9 flex-wrap items-center gap-x-6 gap-y-1 pointer-coarse:gap-x-5">
             <span className="inline-flex h-9 shrink-0 items-center gap-1 text-[14px] font-medium text-ink xl:hidden">
               Тема: {scope === "all" ? "все" : title}
               <Icon name="chevron" size={14} />
             </span>
-            <span className="flex h-9 w-[240px] shrink-0 items-center gap-2 rounded-[4px] border border-boundary bg-surface pr-1.5 pl-2.5 text-[14px] text-muted pointer-coarse:w-[208px] xl:w-[300px] xl:pointer-coarse:w-[300px]">
+            <span className="flex h-9 w-[240px] shrink-0 items-center gap-2 rounded-[4px] border border-boundary bg-surface pr-1.5 pl-2.5 text-[14px] text-muted pointer-coarse:w-[208px] xl:w-auto xl:max-w-[300px] xl:grow xl:basis-[220px] xl:pointer-coarse:w-auto">
               <Icon name="search" size={16} />
               Поиск по FR и RU
             </span>
-            <FilterStrip status="all" onStatus={noop} slang={[]} onSlang={noop} dueCount={0} difficultCount={0} />
+            <FilterStrip status="all" onStatus={noop} slang={[]} onSlang={noop} dueCount={0} difficultCount={0} newCount={0} sort={null} onOrder={noop} />
           </div>
         </header>
         <div className="mt-3 flex min-h-0 flex-1 flex-col">

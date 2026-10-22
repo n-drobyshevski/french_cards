@@ -11,7 +11,8 @@ import { PendingDots, UnknownMeter, useFieldSpotlight } from "./parts";
 import { detectionStates, type WordFormProps } from "./WordForm";
 import { CheckBox, DESK_INPUT, DeskFieldError, DeskFrame, FIELD_LABEL, HIDDEN_CONTROL_FOCUS, HintLine, KeyButton, ThemeSquare, type Hint } from "./desk-parts";
 import { choiceKey, choiceName, INBOX_CHOICE, sameChoice, type FolderChoice } from "./folder-choice";
-import { cardNumber } from "./match";
+import { AbbrHint } from "@/components/ui/AbbrHint";
+import { cardNumber, posAbbr } from "./match";
 
 export interface DeskWordFormProps extends Omit<WordFormProps, "onSubmit" | "onAddAnyway"> {
   /** «Добавить» (andMore = «Добавить и ещё»). */
@@ -70,6 +71,7 @@ export function DeskWordForm({
     theme: `${id}-theme`,
   };
   const hasExample = Boolean(draft.example_fr.trim() || draft.example_ru.trim());
+  const abbr = draft.fr.trim() ? posAbbr(draft) : null;
   const slangCaption = states.slangPending
     ? "определяется…"
     : states.slangFailed
@@ -112,9 +114,13 @@ export function DeskWordForm({
       <form ref={root} aria-label="Новое слово" onSubmit={(e) => e.preventDefault()} className="m-0 flex flex-col">
         <div className="grid grid-cols-2 gap-x-4">
           <div className="min-w-0">
-            <label htmlFor={ids.fr} className={FIELD_LABEL}>
-              Французский
-            </label>
+            {/* The part of speech sits on the label row and explains itself, as on the phone form. */}
+            <div className="flex items-baseline justify-between gap-2">
+              <label htmlFor={ids.fr} className={FIELD_LABEL}>
+                Французский
+              </label>
+              {abbr && <AbbrHint abbr={abbr} align="end" className="text-[14px] leading-5" />}
+            </div>
             <input
               ref={frRef}
               id={ids.fr}

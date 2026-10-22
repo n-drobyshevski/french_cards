@@ -107,6 +107,7 @@ export function DeskListPanel({
                   folders={folders}
                   showSlang={show.slang}
                   pending={!!detection?.waiting && !row.enrich}
+                  showExample={show.examples}
                   last={i === rows.length - 1}
                   onToggle={() => onToggle(row.key)}
                 />
@@ -124,6 +125,7 @@ function ParseRow({
   folders,
   showSlang,
   pending,
+  showExample,
   last,
   onToggle,
 }: {
@@ -132,6 +134,8 @@ function ParseRow({
   showSlang: boolean;
   /** Detection still on its way (A10): the meter's unknown state. */
   pending: boolean;
+  /** The example found for the row, after the translation on the same line (rows keep their 40px). */
+  showExample: boolean;
   last: boolean;
   onToggle: () => void;
 }) {
@@ -177,6 +181,14 @@ function ParseRow({
             {" "}
             · {existing.folderName ?? "Входящие"}, <span className="font-mono text-[11px] tabular-nums">{cardNumber(existing.ordinal)}</span>
           </span>
+        )}
+        {!existing && showExample && row.enrich?.example_fr && (
+          <>
+            {" · "}
+            <span lang="fr" className="font-serif text-[14px] italic">
+              {row.enrich.example_fr}
+            </span>
+          </>
         )}
       </span>
       <span className="flex items-center gap-3 self-center justify-self-end">

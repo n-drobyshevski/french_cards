@@ -19,8 +19,9 @@ import { Icon } from "@/components/ui/Icons";
 import { Kbd } from "@/components/ui/Kbd";
 import { Segmented } from "@/components/ui/Segmented";
 import { SheetCloseButton } from "@/components/ui/Sheet";
+import { SkeletonBar } from "@/components/ui/Skeleton";
 import { AbbrHint } from "@/components/ui/AbbrHint";
-import { SlangMeter, slangAbbr } from "@/components/ui/SlangMeter";
+import { SlangMeter } from "@/components/ui/SlangMeter";
 import { Toggle } from "@/components/ui/Toggle";
 import { cx } from "@/components/ui/cx";
 import { readNdjson } from "@/lib/ai/ndjson";
@@ -32,7 +33,7 @@ import { spotlight } from "@/lib/motion";
 import { useDelayedFlag } from "@/lib/use-delayed-flag";
 import { formatDueIn, formatStability, wordStatus, type CardStatus } from "@/lib/scheduler";
 import { findDuplicate, normalizeLemma } from "@/lib/text";
-import type { Direction, Folder, ReviewLog, SlangLevel, Word } from "@/lib/types";
+import { SLANG_LABELS, type Direction, type Folder, type ReviewLog, type SlangLevel, type Word } from "@/lib/types";
 import {
   getWordHistory,
   getWordStates,
@@ -52,6 +53,7 @@ import { INBOX_KEY, MoveMenu, ThemeSquare } from "./MoveMenu";
 import { alphaNeighbours, type Neighbour } from "./table";
 import { folderOptions, TargetPickerSheet } from "./TargetPickerSheet";
 import { TextOptions } from "./TextOptions";
+import { useTranslationProposal, type TranslationProposal } from "./translation-proposal";
 import { useUndoSnackbar } from "./undo";
 import { ExampleList, toDrafts, type ExampleDraft } from "@/components/examples/ExampleList";
 import { examplesPatch, wordExamples } from "@/lib/examples";
@@ -317,6 +319,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
   const editor = useWordEditor(word, folders);
   const actions = useWordActions(word, folders, onClose);
   const saveExamples = useExampleSaver(word);
+  const proposal = useTranslationProposal(editor.draft?.fr ?? "", editor.draft?.ru ?? "", editor.editing === "entry");
   const [pickerOpen, setPickerOpen] = useState(false);
   useCloseWhenGone(data, onClose);
 
@@ -388,6 +391,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             autoComplete="off"
             className="mt-2 h-12 rounded-chip border border-rule bg-surface px-3 text-[16px] text-ink outline-none focus:border-ink"
           />
+          <ProposalLine proposal={proposal} onUse={(ru) => set("ru", ru)} />
           <span id={`${id}-slang`} className="meta mt-4">
             Уровень сленга
           </span>
@@ -573,6 +577,36 @@ function SheetField({
   );
 }
 
+/**
+ * «Вариант» under «Русский»: the translation proposed for the French as it is now, with «Подставить».
+ * Its row is kept while proposals are on, so the form does not move when one arrives; a request
+ * that takes a while shows a static bar (MOTION-SPEC §3.1), never «думает…».
+ */
+function ProposalLine({ proposal, onUse }: { proposal: TranslationProposal; onUse: (ru: string) => void }) {
+  if (!proposal.enabled) return null;
+  const { ru } = proposal;
+  return (
+    <div role="status" className="mt-2 flex min-h-8 items-center gap-3">
+      {ru ? (
+        <>
+          <span className="meta shrink-0">Вариант</span>
+          <span className="min-w-0 flex-1 text-[15px] leading-5 break-words">{ru}</span>
+          <Button variant="secondary" size="sm" onClick={() => onUse(ru)}>
+            Подставить
+          </Button>
+        </>
+      ) : (
+        proposal.pending && (
+          <>
+            <span className="meta shrink-0">Вариант</span>
+            <SkeletonBar width="40%" height={6} className="delayed-in" />
+          </>
+        )
+      )}
+    </div>
+  );
+}
+
 function HistoryStrip({ history }: { history: readonly ReviewLog[] }) {
   const label =
     history.length === 0
@@ -661,6 +695,7 @@ function PaneContent({
   const refresh = useRefresh(word, refreshAnchor);
   const showUndo = useUndoSnackbar();
   const saveExamples = useExampleSaver(word);
+  const proposal = useTranslationProposal(editor.draft?.fr ?? "", editor.draft?.ru ?? "", editor.editing === "entry");
   const [themeMenu, setThemeMenu] = useState<HTMLElement | null>(null);
   const ruRef = useRef<HTMLInputElement>(null);
 
@@ -701,7 +736,8 @@ function PaneContent({
   const { folder } = actions;
   const { editing, draft, set } = editor;
   const abbr = posAbbr(w);
-  const grammar = coarse ? abbr : [abbr, slangAbbr(w.slang_level, w.verlan)].filter(Boolean).join(" · ");
+  // The grammar line: part of speech, then (fine pointer) the slang level; each explains itself.
+  const showGrammar = !!abbr || !coarse;
 
   const submit = async (event?: FormEvent) => {
     event?.preventDefault();
@@ -834,7 +870,7 @@ function PaneContent({
       >
         <div data-refresh="slang" className="flex h-10 items-center justify-between px-5">
           <span className="font-mono text-[11px] text-muted tabular-nums">FR · {cardNumber(data.number ?? 1)}</span>
-          <SlangMeter level={w.slang_level} verlan={false} />
+          <SlangMeter level={w.slang_level} verlan={false} hints hintAlign="end" />
         </div>
         <div aria-hidden="true" className="h-0.5 bg-red" />
         <div className="flex flex-col p-5">
@@ -867,6 +903,7 @@ function PaneContent({
                 autoComplete="off"
                 className={cx(fieldInput, "mt-1.5 text-[16px]")}
               />
+              <ProposalLine proposal={proposal} onUse={(ru) => set("ru", ru)} />
               <span id={`${id}-slang`} className="mt-4 text-[12px] leading-4 text-muted">
                 Уровень сленга
               </span>
@@ -906,9 +943,19 @@ function PaneContent({
                 </h2>
                 <span className="mt-1.5">{pencil("Изменить слово и перевод", () => editor.start("entry"), "E")}</span>
               </div>
-              {grammar && (
-                <p lang="fr" data-refresh="pos slang" className="abbr m-0 mt-1 text-[15px] leading-5">
-                  {grammar}
+              {showGrammar && (
+                <p data-refresh="pos slang" className="m-0 mt-1 flex flex-wrap items-baseline gap-x-1 text-[15px] leading-5">
+                  {abbr && <AbbrHint abbr={abbr} />}
+                  {!coarse && (
+                    <>
+                      {abbr && (
+                        <span aria-hidden="true" className="abbr">
+                          ·
+                        </span>
+                      )}
+                      <SlangHints word={w} />
+                    </>
+                  )}
                 </p>
               )}
               <p data-refresh="ru" className="m-0 mt-2 text-[18px] leading-6 font-medium">
@@ -969,11 +1016,8 @@ function PaneContent({
           {coarse && (
             <p className="m-0 mt-5 flex gap-4 border-t border-rule pt-4 text-[13px] leading-5 text-muted">
               <span>1. {folder?.name ?? "Входящие"}</span>
-              <span>
-                2.{" "}
-                <span lang="fr" className="font-serif italic">
-                  {slangAbbr(w.slang_level, w.verlan)}
-                </span>
+              <span className="inline-flex items-baseline gap-1">
+                2. <SlangHints word={w} />
               </span>
             </p>
           )}
@@ -1102,6 +1146,23 @@ function PaneContent({
         onNewTheme={onNewTheme ? () => onNewTheme([w.id]) : undefined}
       />
     </div>
+  );
+}
+
+/** «arg.» and «verl.» as hints (the slang level without the meter). */
+function SlangHints({ word }: { word: Pick<Word, "slang_level" | "verlan"> }) {
+  return (
+    <>
+      <AbbrHint abbr={SLANG_LABELS[word.slang_level]} lang={word.slang_level === 0 ? "ru" : "fr"} />
+      {word.verlan && (
+        <>
+          <span aria-hidden="true" className="abbr">
+            ·
+          </span>
+          <AbbrHint abbr="verl." />
+        </>
+      )}
+    </>
   );
 }
 

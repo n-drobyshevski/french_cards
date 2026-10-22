@@ -588,14 +588,16 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
     });
 
   // Desktop keys (DESKTOP-SPEC §4 «Add dialog»): ⌘↵ «Добавить», ⇧⌘↵ «Добавить и ещё»; Esc from
-  // the form goes back to the search (draft kept), else closes. Anything typed makes the dialog
-  // ignore scrim clicks and Radix's own Esc, so Esc is handled here, one layer per press.
+  // the form or «Несколько слов» goes back to the search (draft and list kept), else closes.
+  // Anything typed makes the dialog ignore scrim clicks and Radix's own Esc, so Esc is handled
+  // here, one layer per press.
   const dirty = mode === "form" || draft !== null || (mode === "search" ? trimmed !== "" : listText.trim() !== "");
   const onDeskKey = useEffectEvent((e: KeyboardEvent) => {
     if (e.isComposing || e.keyCode === 229) return;
     if (e.key === "Escape") {
       if (e.repeat) return;
-      if (mode === "form") {
+      if (mode !== "search") {
+        // Form and «Несколько слов» step back to the search (what was typed stays); then Esc closes.
         e.preventDefault();
         backToSearch();
       } else if (dirty) {
@@ -724,7 +726,8 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
         onOpenChange={handleOpenChange}
         height="large"
         dialogWidth={640}
-        dismissible={!dirty}
+        // In «Несколько слов» Esc steps back to the search (handled above), even with nothing pasted.
+        dismissible={!dirty && mode !== "list"}
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           inputRef.current?.focus();
@@ -733,9 +736,9 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
           <DeskChrome
             label={label}
             title={mode === "list" ? "Несколько слов" : "Новое слово"}
-            onBack={mode === "form" ? backToSearch : undefined}
-            onScreenshot={() => handleOpenChange(false)}
-            onList={mode === "search" ? () => openList() : undefined}
+            onBack={mode === "search" ? undefined : backToSearch}
+            onScreenshot={mode === "list" ? undefined : () => handleOpenChange(false)}
+            onList={mode === "list" ? undefined : () => openList()}
           />
         }
       >

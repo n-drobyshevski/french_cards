@@ -1,0 +1,134 @@
+import { expect, test, type Page } from "@playwright/test";
+import { addSheet, gateSuggest, LA_THUNE, mockEnrich, mockSuggest, openReview, questionCard } from "./fixtures";
+
+// What phones can do, desktop can do too (parity audit 2026-10-22): the done screen keeps its
+// running head, the library's «Новые» filter and phone orders, theme actions from the sidebar and
+// at medium width, practice and «Добавить слово» for «Входящие», help hints on hover, and the add
+// dialog's way back from «Несколько слов», «Стереть» and the duplicate notice in the quick form.
+// Runs in the desktop-chromium project (1440×800, mouse) on the first-run seed words.
+
+const grid = (page: Page) => page.getByRole("grid", { name: /^Слова/ });
+const row = (page: Page, fr: string) => grid(page).getByRole("row", { name: new RegExp(`^${fr} —`) });
+const pane = (page: Page) => page.getByRole("complementary", { name: "Карточка слова" });
+const themes = (page: Page) => page.getByRole("complementary", { name: "Разделы" }).getByRole("list", { name: "Темы" });
+const headword = (page: Page) => addSheet(page).getByRole("combobox", { name: "Слово или выражение — FR или RU" });
+
+async function openLibrary(page: Page) {
+  await page.goto("/library");
+  await expect(row(page, "vas-y")).toBeVisible();
+}
+
+async function openAdd(page: Page) {
+  await openReview(page);
+  await expect(async () => {
+    if (!(await addSheet(page).isVisible())) await page.keyboard.press("n");
+    await expect(addSheet(page)).toBeVisible({ timeout: 1000 });
+  }).toPass();
+}
+
+test("«Готово на сегодня» keeps the running head: what to review, direction and undo", async ({ page }) => {
+  await openReview(page);
+  const done = page.getByRole("heading", { name: "Готово на сегодня" });
+  for (let i = 0; i < 60; i++) {
+    await expect(questionCard(page).or(done)).toBeVisible();
+    if (await done.isVisible()) break;
+    await page.keyboard.press("Space");
+    await expect(page.locator("[data-review-answer]")).toBeVisible();
+    await page.keyboard.press("3");
+    await expect(page.locator("[data-review-answer]")).toHaveCount(0);
+  }
+  await expect(done).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Направление/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Отменить последний ответ" })).toBeEnabled();
+  await page.getByRole("button", { name: "Все темы" }).click();
+  await expect(page.getByRole("dialog", { name: /Что повторять/ })).toBeVisible();
+});
+
+test("library: «Новые» filter and the phone's orders in «Порядок ▾»", async ({ page }) => {
+  await openLibrary(page);
+  const strip = page.getByRole("group", { name: "Фильтр" });
+  const fresh = strip.getByRole("button", { name: /^Новые/ });
+  await expect(fresh).toContainText("11");
+  await fresh.click();
+  await expect(fresh).toHaveAttribute("aria-pressed", "true");
+
+  const order = strip.getByRole("button", { name: /^Порядок: По алфавиту/ });
+  await order.click();
+  const menu = page.getByRole("menu", { name: "Порядок" });
+  await expect(menu.getByRole("menuitemradio")).toHaveText(["Сначала новые", "По следующему показу", "По алфавиту", "Сначала трудные"]);
+  await menu.getByRole("menuitemradio", { name: "Сначала новые" }).click();
+  await expect(strip.getByRole("button", { name: /^Порядок: Сначала новые/ })).toBeVisible();
+  await expect(grid(page).getByRole("columnheader", { name: /Слово/ })).toHaveAttribute("aria-sort", "none");
+});
+
+test("a right click on a sidebar theme opens its actions", async ({ page }) => {
+  await openLibrary(page);
+  await themes(page).getByRole("link", { name: /^Повседневное/ }).click({ button: "right" });
+  const menu = page.getByRole("menu", { name: "Действия с темой «Повседневное»" });
+  await expect(menu.getByRole("menuitem", { name: "Открыть тему" })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: /Повторить тему/ })).toBeVisible();
+  await expect(menu.getByRole("menuitem", { name: /Тренировка всей темы/ })).toBeVisible();
+  await expect(menu.getByRole("menuitemcheckbox", { name: /Закрепить тему/ })).toBeVisible();
+  await menu.getByRole("menuitem", { name: "Название, описание и цвет" }).click();
+  await expect(page.getByRole("dialog", { name: /Изменить тему/ })).toBeVisible();
+});
+
+test("medium width: «Новая тема…» in the «Тема:» menu", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await openLibrary(page);
+  await page.getByRole("button", { name: /^Тема: все/ }).click();
+  await page.getByRole("menuitem", { name: "Новая тема…" }).click();
+  await expect(page.getByRole("dialog", { name: /Новая тема/ })).toBeVisible();
+});
+
+test("an empty «Входящие» offers «Добавить слово»", async ({ page }) => {
+  await page.goto("/library/inbox");
+  await expect(page.getByText("Здесь пусто — все слова разложены по темам.")).toBeVisible();
+  await page.getByRole("button", { name: "Добавить слово" }).last().click();
+  await expect(addSheet(page)).toBeVisible();
+});
+
+test("help hints open on hover in the word pane", async ({ page }) => {
+  await openLibrary(page);
+  await row(page, "une blague").click();
+  const abbr = pane(page).getByRole("button", { name: /^n\. f\. —/ });
+  await abbr.hover();
+  await expect(pane(page).getByRole("tooltip")).toContainText("nom féminin");
+  await page.mouse.move(5, 5);
+  await expect(pane(page).getByRole("tooltip")).toHaveCount(0);
+  // The slang level explains itself too.
+  await pane(page).getByRole("button", { name: /^нейтр\. —/ }).first().click();
+  await expect(pane(page).getByRole("tooltip")).toContainText("Нейтральное слово");
+});
+
+test("add dialog: back from «Несколько слов» (button and Esc), the text stays", async ({ page }) => {
+  await mockSuggest(page, [LA_THUNE]);
+  await mockEnrich(page, () => null);
+  await openAdd(page);
+  await addSheet(page).getByRole("button", { name: "Список" }).click();
+  const list = page.getByRole("dialog", { name: "Несколько слов" });
+  await list.getByRole("textbox", { name: /по одному на строку/ }).fill("bosser — работать");
+  await list.getByRole("button", { name: "Назад к поиску" }).click();
+  await expect(page.getByRole("dialog", { name: "Новое слово" })).toBeVisible();
+  await expect(headword(page)).toBeFocused();
+
+  await addSheet(page).getByRole("button", { name: "Список" }).click();
+  await expect(list.getByRole("textbox", { name: /по одному на строку/ })).toHaveValue("bosser — работать");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "Новое слово" })).toBeVisible();
+});
+
+test("add dialog: «Стереть» clears the headword; the quick form warns about a duplicate", async ({ page }) => {
+  const suggest = await gateSuggest(page, () => 500);
+  await mockEnrich(page, () => null);
+  await openAdd(page);
+  await headword(page).fill("abc");
+  await addSheet(page).getByRole("button", { name: "Стереть" }).click();
+  await expect(headword(page)).toHaveValue("");
+  await expect(headword(page)).toBeFocused();
+
+  await headword(page).fill("une blague");
+  suggest.release();
+  await expect(addSheet(page).getByRole("textbox", { name: "Русский" })).toBeVisible();
+  await expect(addSheet(page).getByRole("note", { name: "Повтор" })).toContainText("Уже есть в теме «Повседневное»");
+});

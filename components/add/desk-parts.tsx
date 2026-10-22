@@ -15,7 +15,7 @@ import type { Folder } from "@/lib/types";
 import { choiceKey, choiceName, INBOX_CHOICE, type FolderChoice } from "./folder-choice";
 
 // ---------------------------------------------------------------------------------------
-// Chrome: «Карточка № 159  Скриншот · Список» / back arrow + label, title, red rule.
+// Chrome: [back arrow] «Карточка № 159  Скриншот · Список», title, red rule.
 
 const TEXT_LINK =
   "inline-flex h-8 items-center bg-transparent p-0 text-[13px] leading-4 font-medium whitespace-nowrap text-ink underline decoration-1 underline-offset-[3px] hoverable:decoration-2";
@@ -29,40 +29,44 @@ export function DeskChrome({
 }: {
   label: string;
   title: string;
-  /** Form: the back arrow before the label («Назад к поиску», Esc). */
+  /** Form and list: the back arrow before the label («Назад к поиску», Esc). */
   onBack?: () => void;
-  /** «Скриншот» → /import (the dialog closes). */
-  onScreenshot: () => void;
+  /** «Скриншот» → /import (the dialog closes); omitted in the list, as on phones. */
+  onScreenshot?: () => void;
   /** «Список» (hidden while the list is shown). */
   onList?: () => void;
 }) {
   const mono = <span className="font-mono text-[11px] whitespace-nowrap text-muted tabular-nums">{label}</span>;
-  const tools = onBack ? (
-    <span className="inline-flex items-center gap-2">
-      <button
-        type="button"
-        onClick={onBack}
-        aria-label="Назад к поиску"
-        title="Назад к поиску (Esc)"
-        aria-keyshortcuts="Escape"
-        className="-ml-2 inline-flex size-8 shrink-0 items-center justify-center rounded-[4px] bg-transparent text-ink hoverable:bg-hover-surface"
-      >
-        <Icon name="back" size={20} strokeWidth={1.5} />
-      </button>
-      {mono}
-    </span>
-  ) : (
+  const tools = (
     <span className="inline-flex items-center gap-4">
-      {mono}
       <span className="inline-flex items-center gap-2">
-        <Link href="/import" onClick={onScreenshot} className={TEXT_LINK}>
-          Скриншот
-        </Link>
+        {onBack && (
+          <button
+            type="button"
+            onClick={onBack}
+            aria-label="Назад к поиску"
+            title="Назад к поиску (Esc)"
+            aria-keyshortcuts="Escape"
+            className="-ml-2 inline-flex size-8 shrink-0 items-center justify-center rounded-[4px] bg-transparent text-ink hoverable:bg-hover-surface"
+          >
+            <Icon name="back" size={20} strokeWidth={1.5} />
+          </button>
+        )}
+        {mono}
+      </span>
+      <span className="inline-flex items-center gap-2">
+        {onScreenshot && (
+          <Link href="/import" onClick={onScreenshot} className={TEXT_LINK}>
+            Скриншот
+          </Link>
+        )}
         {onList && (
           <>
-            <span aria-hidden="true" className="text-[13px] text-muted">
-              ·
-            </span>
+            {onScreenshot && (
+              <span aria-hidden="true" className="text-[13px] text-muted">
+                ·
+              </span>
+            )}
             <button type="button" onClick={onList} className={TEXT_LINK}>
               Список
             </button>
