@@ -28,7 +28,7 @@ import { rememberLibrary, rememberLibraryShape, STALE_DIM, useLibraryShape, useR
 import { FolderFormSheet } from "./FolderFormSheet";
 import { FolderMenuSheet } from "./FolderMenuSheet";
 import { FolderTile, NAV_FORWARD, NewFolderTile, TileSkeleton } from "./FolderTile";
-import { folderHref, nWords, plural } from "./format";
+import { enrichCaption, folderHref, nWords, plural } from "./format";
 import { LibraryDesk } from "./LibraryDesk";
 import { LibraryFilterSheet } from "./LibraryFilterSheet";
 import {
@@ -163,7 +163,7 @@ function PhoneLibrary() {
       upkeep.push(
         <UpkeepRow
           key="enrich"
-          caption={toEnrich.noExample > 0 ? `${nWords(toEnrich.noExample)} без примера` : `Уровень сленга для ${nWords(toEnrich.total)}`}
+          caption={enrichCaption(toEnrich)}
           ai
           action="Дополнить карточки"
           onClick={() => setEnrichOpen(true)}

@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { readAnkiFile } from "@/lib/anki/apkg";
 import { enrichAnkiNotes } from "@/lib/anki/enrich";
 import type { AnkiDeck, AnkiItem } from "@/lib/anki/types";
+import { listFieldDefs } from "@/lib/custom-fields";
+import { autoFillFields } from "@/lib/enrich";
 import { listFolders } from "@/lib/folders";
 import { getSettings } from "@/lib/settings";
 import { findDuplicates } from "@/lib/text";
@@ -113,10 +115,12 @@ export function useAnkiImport() {
     const items: AnkiItem[] = [];
     setState((s) => ({ ...s, phase: "enriching", done: 0, total: send.length, items: [], retryIn: null, error: null }));
     try {
-      const [folders, settings] = await Promise.all([listFolders(), getSettings()]);
+      const [folders, settings, defs] = await Promise.all([listFolders(), getSettings(), listFieldDefs()]);
       await enrichAnkiNotes(send, {
         folders: foldersForExtract(folders),
         model: settings.ai_model,
+        // «Свои поля» marked for the automatic fill are filled for each card.
+        fields: autoFillFields(defs),
         signal: controller.signal,
         onItems: (batch) => {
           items.push(...batch);

@@ -2,7 +2,7 @@
 // ANKI_CHUNK_MAX, a few requests at a time; the items come back in note order. Errors are
 // AnkiEnrichError (an AiClientError) with a message ready to show.
 import { AiClientError, postAiJson, type AiClientErrorCode, type AiPostOptions } from "@/lib/ai-client";
-import type { AnkiRequestNote, AnkiResponse, FolderInput, ModelTierInput } from "@/lib/ai/schemas";
+import type { AnkiRequestNote, AnkiResponse, CustomFieldInput, FolderInput, ModelTierInput } from "@/lib/ai/schemas";
 import { ANKI_CHUNK_MAX, ANKI_FIELD_CHARS, ANKI_FIELDS_MAX, ANKI_TAGS_MAX, type AnkiItem, type AnkiNote } from "./types";
 
 export const ANKI_URL = "/api/ai/anki";
@@ -33,6 +33,8 @@ export interface AnkiEnrichOptions extends AiPostOptions {
   folders: readonly FolderInput[];
   /** Settings «Модель для подсказок». */
   model: ModelTierInput;
+  /** Custom fields to fill for each card (lib/enrich.ts autoFillFields); not sent when empty. */
+  fields?: readonly CustomFieldInput[];
   /** Called before the first request (0 / n) and as each chunk comes back: (notes done, notes total). */
   onProgress?: (done: number, total: number) => void;
   /** Each chunk's items as they come back (what a stopped run keeps). */
@@ -55,7 +57,7 @@ export function toAnkiRequestNote(note: AnkiNote): AnkiRequestNote | null {
 
 /** One request (≤ ANKI_CHUNK_MAX notes). */
 export async function postAnki(notes: readonly AnkiRequestNote[], opts: AnkiEnrichOptions): Promise<AnkiItem[]> {
-  const body = { notes, folders: opts.folders, model: opts.model };
+  const body = { notes, folders: opts.folders, ...(opts.fields?.length && { fields: opts.fields }), model: opts.model };
   const res = await postAiJson<AnkiResponse>(ANKI_URL, body, (code) => new AnkiEnrichError(code), opts);
   return res.items ?? [];
 }

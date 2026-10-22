@@ -28,6 +28,7 @@ import {
   choiceKey,
   choiceName,
   commonChoice,
+  moreFieldsRu,
   setAllChecked,
   updateRow,
   wordsRu,
@@ -125,6 +126,9 @@ function DeskRow({ row, folders, current, menuOpen, onFocusRow, onToggle, onEdit
               {row.exampleFr}
             </span>
           )}
+          {!dup && row.customFields?.length ? (
+            <span className="shrink-0 text-[12px] leading-5 text-muted">{moreFieldsRu(row.customFields.length)}</span>
+          ) : null}
           {dup && <DeskTag>УЖЕ ЕСТЬ</DeskTag>}
         </span>
         <span className="sr-only">, изменить</span>

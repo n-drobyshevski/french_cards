@@ -1,6 +1,6 @@
 // Shared shapes for the Anki import: the parser (lib/anki/apkg.ts, text.ts) produces an AnkiDeck,
 // /api/ai/anki turns its notes into vocabulary, lib/anki/progress.ts maps cards to ReviewState.
-import type { VocabItem } from "@/lib/ai/schemas";
+import type { CustomFill, VocabItem } from "@/lib/ai/schemas";
 
 /** Largest .apkg / .colpkg we try to open on a phone. */
 export const ANKI_MAX_FILE_BYTES = 200 * 1024 * 1024;
@@ -79,4 +79,11 @@ export interface AnkiItem extends VocabItem {
   skip: boolean;
   /** Name of the field the French term was read from (decides the direction of card ord 0). */
   fr_field: string | null;
+  /**
+   * Names of the note fields the card was made from (fr_field included), as the note has them;
+   * the other non-empty fields become custom fields of the word. Missing from older responses.
+   */
+  used_fields?: string[];
+  /** Custom fields filled for the definitions sent with the request (only those with a value). */
+  custom?: CustomFill[];
 }

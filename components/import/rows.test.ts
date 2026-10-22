@@ -13,6 +13,7 @@ import {
   choiceKey,
   choiceName,
   commonChoice,
+  moreFieldsRu,
   newFoldersNeeded,
   pluralRu,
   proposalsOf,
@@ -197,6 +198,14 @@ describe("toWordInput", () => {
   it("marks a hand-picked theme as placed by the user", () => {
     expect(toWordInput({ ...row, folderSource: "user" }, "f-ppl")).toMatchObject({ folder_source: "user", folder_confidence: null });
     expect(toWordInput(row, null)).toMatchObject({ folder_id: null, folder_confidence: null });
+  });
+
+  it("saves the row's custom fields; screenshot rows have none", () => {
+    expect(row.customFields).toBeUndefined();
+    expect(toWordInput(row, null)).not.toHaveProperty("custom_fields");
+    const customFields = [{ field_id: null, label: "Произношение", value: "[ʃəlu]" }];
+    expect(toWordInput({ ...row, customFields }, null, { source: "import" })).toMatchObject({ source: "import", custom_fields: customFields });
+    expect([1, 3, 5].map(moreFieldsRu)).toEqual(["+1 поле", "+3 поля", "+5 полей"]);
   });
 });
 

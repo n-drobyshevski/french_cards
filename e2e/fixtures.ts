@@ -155,6 +155,8 @@ export interface EnrichResultWire {
   folder: string | null;
   folder_alternatives: string[];
   new_folder: { slug: string; name: string; description: string } | null;
+  /** Filled custom fields («Свои поля»): definition id and value. */
+  custom?: { id: string; value: string }[];
 }
 
 export interface EnrichWordWire {
@@ -192,6 +194,10 @@ export interface AnkiItemWire extends VocabItemWire {
   ref: string;
   skip: boolean;
   fr_field: string | null;
+  /** Note fields the card was made from; the other ones become custom fields of the word. */
+  used_fields?: string[];
+  /** Filled custom fields («Свои поля»): definition id and value. */
+  custom?: { id: string; value: string }[];
 }
 
 /** Answers POST /api/ai/anki: `make` gives the card for each note sent (null = the model left it out). */

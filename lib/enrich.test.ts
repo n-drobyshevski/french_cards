@@ -3,9 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { EnrichResult } from "./ai/schemas";
 import { ENRICH_CHUNK_MAX } from "./ai/schemas";
 import { db } from "./db";
+import { createFieldDef, deleteFieldDef } from "./custom-fields";
 import { createFolder } from "./folders";
 import {
   applyEnrichChanges,
+  autoFillFields,
   buildEnrichPlan,
   countEnrichCandidates,
   EnrichError,
@@ -23,6 +25,7 @@ import {
   toEnrichWords,
 } from "./enrich";
 import { updateSettings } from "./settings";
+import type { FieldDef } from "./types";
 import { addWord, getWord, softDeleteWord, updateWord, updateWords } from "./words";
 
 const NOW = new Date("2026-10-22T10:00:00.000Z");
@@ -134,6 +137,51 @@ describe("enrichmentPatch", () => {
     const filled = { ...word, example_fr: "Le mien.", pos: "verb" as const, slang_level: 2 as const };
     expect(enrichmentPatch(filled, result("a"), { slang: true, example: true, pos: true })).toEqual({});
   });
+
+  it("fills only empty custom fields marked for the automatic fill; ignores other and unknown ids", () => {
+    const def = (id: string, name: string, extra: Partial<FieldDef> = {}): FieldDef => ({
+      id,
+      name,
+      hint: null,
+      ai_fill: true,
+      sort: 1,
+      updated_at: NOW.toISOString(),
+      deleted_at: null,
+      ...extra,
+    });
+    const defs = [
+      def("syn", "Синонимы"),
+      def("ipa", "Произношение", { sort: 2 }),
+      def("manual", "Заметки", { ai_fill: false, sort: 3 }),
+      def("gone", "Старое", { deleted_at: NOW.toISOString() }),
+    ];
+    const r = result("a", {
+      custom: [
+        { id: "syn", value: "louche, bizarre" },
+        { id: "ipa", value: "[ʃəlu]" },
+        { id: "manual", value: "нет" },
+        { id: "gone", value: "x" },
+        { id: "ghost", value: "y" },
+      ],
+    });
+    const none = { slang: false, example: false, pos: false };
+    const mine = { ...word, custom_fields: [{ field_id: "ipa", label: "Произношение", value: "[ʃlu]" }] };
+    expect(enrichmentPatch(mine, r, none, defs)).toEqual({
+      custom_fields: [
+        { field_id: "ipa", label: "Произношение", value: "[ʃlu]" },
+        { field_id: "syn", label: "Синонимы", value: "louche, bizarre" },
+      ],
+    });
+    // Everything filled already, no definitions, or no values: nothing to write.
+    const full = { ...word, custom_fields: [...mine.custom_fields, { field_id: "syn", label: "Синонимы", value: "mes synonymes" }] };
+    expect(enrichmentPatch(full, r, none, defs)).toEqual({});
+    expect(enrichmentPatch(word, r, none)).toEqual({});
+    expect(enrichmentPatch(word, result("a"), none, defs)).toEqual({});
+    expect(autoFillFields(defs)).toEqual([
+      { id: "syn", name: "Синонимы", hint: null },
+      { id: "ipa", name: "Произношение", hint: null },
+    ]);
+  });
 });
 
 describe("fillSavedWords", () => {
@@ -168,6 +216,33 @@ describe("fillSavedWords", () => {
     expect(body.model).toBe("accurate");
     expect(body.folders).toBeUndefined();
     expect(await getWord(word.id)).toMatchObject({ slang_level: 2, example_fr: null, folder_id: null });
+  });
+
+  it("fills the empty custom fields marked for the automatic fill, even with Settings «ИИ» off", async () => {
+    await updateSettings({ slang_detect_enabled: false, examples_enabled: false, auto_sort_enabled: false });
+    const syn = await createFieldDef({ name: "Синонимы", hint: "2–3 синонима на французском", ai_fill: true }, NOW);
+    await createFieldDef({ name: "Заметки", hint: null, ai_fill: false }, NOW);
+    const word = await addWord({ fr: "chelou", ru: "стрёмный" }, NOW);
+    let body: Record<string, unknown> = {};
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      const words = body.words as { id: string }[];
+      return Response.json({ results: words.map((w) => result(w.id, { custom: [{ id: syn.id, value: "louche, bizarre" }] })) });
+    });
+    const all = { slang: true, example: true, pos: true, folder: true };
+    expect(await fillSavedWords([{ word, scope: all }], { fetchImpl })).toBe(1);
+    expect(body.fields).toEqual([{ id: syn.id, name: "Синонимы", hint: "2–3 синонима на французском" }]);
+    expect(await getWord(word.id)).toMatchObject({
+      slang_level: 0,
+      example_fr: null,
+      custom_fields: [{ field_id: syn.id, label: "Синонимы", value: "louche, bizarre" }],
+    });
+
+    // A word whose fields are filled is not worth a request.
+    fetchImpl.mockClear();
+    const filled = await addWord({ fr: "relou", ru: "занудный", custom_fields: [{ field_id: syn.id, label: "Синонимы", value: "lourd" }] }, NOW);
+    expect(await fillSavedWords([{ word: filled, scope: all }], { fetchImpl })).toBe(0);
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it("keeps a level the user set in the form", async () => {
@@ -219,7 +294,7 @@ describe("«Дополнить карточки»", () => {
     const noExample = await addWord({ fr: "le keuf", ru: "мент", source: "suggest", slang_level: 2 }, new Date(NOW.getTime() + 1000));
     const candidates = await loadEnrichCandidates();
     expect(candidates.map((w) => w.id)).toEqual([noExample.id, manual.id]);
-    expect(await countEnrichCandidates()).toEqual({ total: 2, noExample: 2 });
+    expect(await countEnrichCandidates()).toEqual({ total: 2, noExample: 2, noFields: 0 });
     expect(candidates.some((w) => w.id === suggested.id)).toBe(false);
   });
 
@@ -228,12 +303,46 @@ describe("«Дополнить карточки»", () => {
     const suggested = await addWord({ fr: "le keuf", ru: "мент", source: "suggest", slang_level: 2 }, NOW);
     const onlySlang = { slang: true, examples: false };
     expect((await loadEnrichCandidates(onlySlang)).map((w) => w.id)).toEqual([manual.id]);
-    expect(await countEnrichCandidates(onlySlang)).toEqual({ total: 1, noExample: 0 });
+    expect(await countEnrichCandidates(onlySlang)).toEqual({ total: 1, noExample: 0, noFields: 0 });
     const results = new Map([[manual.id, result(manual.id)], [suggested.id, result(suggested.id)]]);
     const plan = buildEnrichPlan([manual, suggested], results, onlySlang);
     expect(plan.examples).toEqual([]);
     expect(plan.slang.map((c) => c.word.id)).toEqual([manual.id]);
-    expect(await countEnrichCandidates({ slang: false, examples: false })).toEqual({ total: 0, noExample: 0 });
+    expect(await countEnrichCandidates({ slang: false, examples: false })).toEqual({ total: 0, noExample: 0, noFields: 0 });
+  });
+
+  it("words with empty custom fields marked for the automatic fill are candidates; the plan fills them", async () => {
+    const syn = await createFieldDef({ name: "Синонимы", hint: null, ai_fill: true }, NOW);
+    const notes = await createFieldDef({ name: "Заметки", hint: null, ai_fill: false }, NOW);
+    const done = { source: "suggest" as const, slang_level: 2 as const, example_fr: "Il est chelou." };
+    const empty = await addWord({ fr: "chelou", ru: "стрёмный", ...done }, NOW);
+    await addWord({ fr: "relou", ru: "занудный", ...done, custom_fields: [{ field_id: syn.id, label: "Синонимы", value: "lourd" }] }, NOW);
+    const off = { slang: false, examples: false };
+    expect((await loadEnrichCandidates(off)).map((w) => w.id)).toEqual([empty.id]);
+    expect(await countEnrichCandidates(off)).toEqual({ total: 1, noExample: 0, noFields: 1 });
+
+    let body: Record<string, unknown> = {};
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      const custom = [
+        { id: syn.id, value: "louche" },
+        { id: notes.id, value: "не моё" },
+      ];
+      return Response.json({ results: (body.words as { id: string }[]).map((w) => result(w.id, { custom })) });
+    });
+    const run = await runEnrichPlan({ fetchImpl, model: "fast", prefs: off });
+    expect(body.fields).toEqual([{ id: syn.id, name: "Синонимы", hint: null }]);
+    expect(run.plan.examples).toEqual([]);
+    expect(run.plan.fields.map((c) => [c.key, c.filled])).toEqual([[`fields:${empty.id}`, [{ field_id: syn.id, label: "Синонимы", value: "louche" }]]]);
+
+    const undo = await applyEnrichChanges(planChanges(run.plan), new Date(NOW.getTime() + 5000));
+    expect((await getWord(empty.id))?.custom_fields).toEqual([{ field_id: syn.id, label: "Синонимы", value: "louche" }]);
+    await updateWords(undo);
+    expect((await getWord(empty.id))?.custom_fields).toEqual([]);
+
+    // A deleted definition is not filled any more.
+    await deleteFieldDef(syn.id, NOW);
+    expect(await countEnrichCandidates(off)).toEqual({ total: 0, noExample: 0, noFields: 0 });
   });
 
   it("runEnrichPlan: candidates, batches through onStage, then the plan", async () => {
