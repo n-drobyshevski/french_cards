@@ -6,7 +6,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { readNdjson } from "./ai/ndjson";
 import { dedupeKey, detectDirection } from "./ai/normalize";
-import { SUGGEST_MAX, type FolderInput, type SuggestLine, type Suggestion } from "./ai/schemas";
+import { SUGGEST_MAX, type FolderInput, type ModelTierInput, type SuggestLine, type SuggestRegister, type Suggestion } from "./ai/schemas";
 import { foldKey } from "./lexique";
 import type { Folder } from "./types";
 
@@ -20,6 +20,17 @@ export const SUGGEST_MAX_FOLDERS = 60;
 const CACHE_SIZE = 24;
 
 export type SuggestDirection = "fr" | "ru";
+
+/** Settings «ИИ» that shape «Варианты». */
+export interface SuggestPreferences {
+  model: ModelTierInput;
+  /** 1–3. */
+  max: number;
+  register: SuggestRegister;
+  notes: boolean;
+}
+
+export const DEFAULT_SUGGEST_PREFERENCES: SuggestPreferences = { model: "fast", max: SUGGEST_MAX, register: "any", notes: true };
 /** idle: nothing to ask (short query or switched off). loading: debouncing or streaming. */
 export type SuggestStatus = "idle" | "loading" | "done" | "error";
 /**
@@ -155,6 +166,7 @@ export class SuggestController {
   private basis: SuggestBasis | null = null;
   private readonly cache = new Map<string, readonly Suggestion[]>();
   private folders: FolderInput[] = [];
+  private preferences: SuggestPreferences = DEFAULT_SUGGEST_PREFERENCES;
   private enabled = true;
   private readonly fetchImpl: typeof fetch;
   private readonly url: string;
@@ -181,6 +193,16 @@ export class SuggestController {
 
   setFolders = (folders: FolderInput[]): void => {
     this.folders = folders;
+  };
+
+  /** New preferences make earlier answers stale: forget them and ask again for the current query. */
+  setPreferences = (preferences: SuggestPreferences): void => {
+    const p = this.preferences;
+    if (p.model === preferences.model && p.max === preferences.max && p.register === preferences.register && p.notes === preferences.notes) return;
+    this.preferences = preferences;
+    this.cache.clear();
+    this.basis = null;
+    if (this.snapshot.query) this.setQuery(this.snapshot.query, { force: true });
   };
 
   setEnabled = (enabled: boolean): void => {
@@ -272,6 +294,7 @@ export class SuggestController {
     this.inflight = controller;
     const { signal } = controller;
     const fresh: Suggestion[] = [];
+    const { max } = this.preferences;
     let ended: "done" | "error" | null = null;
     let errorKind: SuggestErrorKind = "failed";
 
@@ -279,7 +302,7 @@ export class SuggestController {
       const res = await this.fetchImpl(this.url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ q: query, direction: "auto", folders: this.folders }),
+        body: JSON.stringify({ q: query, direction: "auto", folders: this.folders, ...this.preferences }),
         signal,
       });
       if (!res.ok) {
@@ -289,9 +312,9 @@ export class SuggestController {
       for await (const line of readNdjson<SuggestLine>(res, signal)) {
         if (signal.aborted) return;
         if (line.type === "suggestion") {
-          if (fresh.length >= SUGGEST_MAX) continue;
+          if (fresh.length >= max) continue;
           fresh.push(line.suggestion);
-          this.set({ query, direction, results: mergeStreaming(fresh, kept), status: "loading", error: null });
+          this.set({ query, direction, results: mergeStreaming(fresh, kept, max), status: "loading", error: null });
         } else if (line.type === "done" || line.type === "error") {
           ended = line.type;
           break;
@@ -326,6 +349,8 @@ export interface UseSuggestOptions {
   folders: FolderInput[];
   /** settings.suggestions_enabled; when false nothing is requested. */
   enabled: boolean;
+  /** From Settings «ИИ»; defaults when not loaded yet. */
+  preferences?: SuggestPreferences;
 }
 
 export interface SuggestApi extends SuggestSnapshot {
@@ -336,12 +361,13 @@ export interface SuggestApi extends SuggestSnapshot {
 }
 
 /** Binds a SuggestController to the component. Retries automatically when the network comes back. */
-export function useSuggest({ folders, enabled }: UseSuggestOptions): SuggestApi {
+export function useSuggest({ folders, enabled, preferences = DEFAULT_SUGGEST_PREFERENCES }: UseSuggestOptions): SuggestApi {
   const [controller] = useState(() => new SuggestController());
   const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
 
   useEffect(() => controller.setFolders(folders), [controller, folders]);
   useEffect(() => controller.setEnabled(enabled), [controller, enabled]);
+  useEffect(() => controller.setPreferences(preferences), [controller, preferences]);
   useEffect(() => {
     const online = () => controller.retry();
     window.addEventListener("online", online);

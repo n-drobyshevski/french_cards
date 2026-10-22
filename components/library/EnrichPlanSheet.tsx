@@ -14,6 +14,7 @@ import {
   buildEnrichPlan,
   ENRICH_RUN_MAX,
   EnrichError,
+  enrichPreferences,
   enrichWords,
   loadEnrichCandidates,
   planChanges,
@@ -22,6 +23,7 @@ import {
   type EnrichPlan,
 } from "@/lib/enrich";
 import { useFormatKeys } from "@/lib/key-names";
+import { getSettings } from "@/lib/settings";
 import { useLayoutClass } from "@/lib/use-media";
 import { updateWords } from "@/lib/words";
 import { CheckMark } from "./Checkbox";
@@ -68,15 +70,18 @@ export function EnrichPlanSheet({ open, onOpenChange }: EnrichPlanSheetProps) {
     if (!open || session === 0) return;
     const controller = new AbortController();
     (async () => {
-      const candidates = await loadEnrichCandidates();
+      const settings = await getSettings();
+      const prefs = enrichPreferences(settings);
+      const candidates = await loadEnrichCandidates(prefs);
       const batch = candidates.slice(0, ENRICH_RUN_MAX);
       const results = await enrichWords(batch, {
         signal: controller.signal,
+        model: settings.ai_model,
         onProgress: (done, total) => {
           if (!controller.signal.aborted) setPhase({ status: "loading", done, total });
         },
       });
-      return { plan: buildEnrichPlan(batch, results), more: candidates.length - batch.length };
+      return { plan: buildEnrichPlan(batch, results, prefs), more: candidates.length - batch.length };
     })().then(
       ({ plan, more }) => {
         if (!controller.signal.aborted) setPhase({ status: "ready", plan, more });

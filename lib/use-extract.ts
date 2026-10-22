@@ -3,7 +3,7 @@
 // keeps the rows already received. A 413 answer is retried automatically with stronger compression.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { readNdjson } from "@/lib/ai/ndjson";
-import type { AiErrorBody, ExtractLine, FolderInput, VocabItem } from "@/lib/ai/schemas";
+import type { AiErrorBody, ExtractLine, FolderInput, ModelTierInput, VocabItem } from "@/lib/ai/schemas";
 import { ImagePrepError, PREP_LEVELS, prepareImages, type ImagePrepErrorCode, type PreparedBatch } from "@/lib/image-prep";
 
 export const EXTRACT_URL = "/api/ai/extract";
@@ -135,10 +135,23 @@ const NETWORK_ERROR: ExtractError = {
 };
 
 /** The multipart body: `images` repeated (top to bottom) and `folders` as a JSON string. */
-export function extractFormData(batch: Pick<PreparedBatch, "tiles">, folders: readonly FolderInput[]): FormData {
+/** Settings «ИИ» for screenshots. */
+export interface ExtractPreferences {
+  model?: ModelTierInput;
+  /** false: no usage notes. */
+  notes?: boolean;
+}
+
+export function extractFormData(
+  batch: Pick<PreparedBatch, "tiles">,
+  folders: readonly FolderInput[],
+  prefs: ExtractPreferences = {},
+): FormData {
   const form = new FormData();
   for (const tile of batch.tiles) form.append("images", tile.blob, tile.name);
   if (folders.length > 0) form.append("folders", JSON.stringify(folders));
+  if (prefs.model && prefs.model !== "fast") form.append("model", prefs.model);
+  if (prefs.notes === false) form.append("notes", "false");
   return form;
 }
 
@@ -176,9 +189,9 @@ async function readErrorBody(res: Response): Promise<AiErrorBody | null> {
 export async function* streamExtract(
   batch: Pick<PreparedBatch, "tiles">,
   folders: readonly FolderInput[],
-  { signal, fetchImpl = fetch }: { signal?: AbortSignal; fetchImpl?: typeof fetch } = {},
+  { signal, fetchImpl = fetch, prefs }: { signal?: AbortSignal; fetchImpl?: typeof fetch; prefs?: ExtractPreferences } = {},
 ): AsyncGenerator<ExtractLine> {
-  const res = await fetchImpl(EXTRACT_URL, { method: "POST", body: extractFormData(batch, folders), signal });
+  const res = await fetchImpl(EXTRACT_URL, { method: "POST", body: extractFormData(batch, folders, prefs), signal });
   if (!res.ok) {
     const retry = Number(res.headers.get("Retry-After"));
     throw new ExtractHttpError(res.status, await readErrorBody(res), Number.isFinite(retry) && retry > 0 ? retry : undefined);
@@ -192,7 +205,7 @@ const isAbort = (e: unknown) =>
 export interface UseExtract {
   state: ExtractState;
   /** Prepares and uploads the screenshots, streaming rows into `state.items`. Replaces any run in progress. */
-  start: (files: readonly File[], folders: readonly FolderInput[]) => Promise<void>;
+  start: (files: readonly File[], folders: readonly FolderInput[], prefs?: ExtractPreferences) => Promise<void>;
   /** «Стоп»: aborts; keeps received rows (phase "stopped"), or goes back to idle when there are none. */
   stop: () => void;
   /** Back to idle, dropping rows and errors. */
@@ -213,7 +226,7 @@ export function useExtract({ fetchImpl }: { fetchImpl?: typeof fetch } = {}): Us
   );
 
   const start = useCallback(
-    async (files: readonly File[], folders: readonly FolderInput[]) => {
+    async (files: readonly File[], folders: readonly FolderInput[], prefs?: ExtractPreferences) => {
       controller.current?.abort();
       const ctrl = new AbortController();
       controller.current = ctrl;
@@ -246,7 +259,7 @@ export function useExtract({ fetchImpl }: { fetchImpl?: typeof fetch } = {}): Us
         let finished = false;
         let failed = false;
         try {
-          for await (const line of streamExtract(batch, folders, { signal: ctrl.signal, fetchImpl })) {
+          for await (const line of streamExtract(batch, folders, { signal: ctrl.signal, fetchImpl, prefs })) {
             if (!live()) return;
             if (line.type === "meta") {
               update({ phase: "streaming" });

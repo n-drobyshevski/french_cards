@@ -163,6 +163,14 @@ describe("choice keys and names", () => {
 describe("toWordInput", () => {
   const [row] = buildRows([item("chelou", { folder: "emotsii", confidence: "med", note: "верлан от louche" })], folders, new Map());
 
+  it("leaves level and example to the user when they are switched off in Settings", () => {
+    const [r] = buildRows([item("chelou", { slang_level: 2, verlan: true, example_fr: "Il est chelou." })], folders, new Map(), {
+      slang: false,
+      examples: false,
+    });
+    expect(r).toMatchObject({ slang_level: 0, verlan: false, exampleFr: null, exampleRu: null });
+  });
+
   it("keeps the example read with the row", () => {
     const [withExample] = buildRows(
       [item("chelou", { example_fr: "Il est chelou, ton pote.", example_ru: "Стрёмный у тебя кореш." })],

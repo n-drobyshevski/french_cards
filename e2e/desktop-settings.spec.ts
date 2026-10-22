@@ -15,7 +15,7 @@ test("section nav with scroll-spy, form in a 640 column", async ({ page }) => {
   await openSettings(page);
   const nav = sectionNav(page);
   await expect(nav).toBeVisible();
-  for (const name of ["Повторение", "Оформление", "Подсказки", "Клавиши", "Данные"]) {
+  for (const name of ["Повторение", "Оформление", "ИИ", "Клавиши", "Данные"]) {
     await expect(nav.getByRole("link", { name })).toBeVisible();
   }
   await expect(nav.getByRole("link", { name: "Повторение" })).toHaveAttribute("aria-current", "true");

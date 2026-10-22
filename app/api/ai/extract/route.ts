@@ -1,6 +1,7 @@
 // POST /api/ai/extract — vocabulary rows from 1–4 screenshots, streamed as NDJSON as each row completes.
 // Request: multipart/form-data with `images` (1–4 PNG/JPEG/WebP files, ≤1.5 MB each) and optional
-// `folders` (JSON array of {slug,name,description}). Images are only held in memory for the call.
+// `folders` (JSON array of {slug,name,description}), `model` ("fast"|"accurate") and `notes` ("false" to
+// switch usage notes off). Images are only held in memory for the call.
 // Response lines: {type:"meta",images} · {type:"item",index,item} × ≤60 · {type:"done",count} | {type:"error",error}.
 import { Output, streamText, type FilePart, type TextPart } from "ai";
 import { guardAiRequest, jsonError, limitAiRequest } from "@/lib/ai/auth";
@@ -9,7 +10,15 @@ import { MAX_EXTRACT_BODY_BYTES, MAX_IMAGE_BYTES, MAX_IMAGES, readBodyWithLimit,
 import { ndjsonResponse } from "@/lib/ai/ndjson";
 import { dedupeKey, normalizeVocabItem } from "@/lib/ai/normalize";
 import { EXTRACT_SYSTEM, extractUserPrompt } from "@/lib/ai/prompts";
-import { buildVocabItemSchema, EXTRACT_MAX_ITEMS, ExtractFoldersSchema, type ExtractLine, type FolderInput } from "@/lib/ai/schemas";
+import {
+  buildVocabItemSchema,
+  EXTRACT_MAX_ITEMS,
+  ExtractFoldersSchema,
+  MODEL_TIERS,
+  type ExtractLine,
+  type FolderInput,
+  type ModelTierInput,
+} from "@/lib/ai/schemas";
 
 export const maxDuration = 60;
 
@@ -46,6 +55,13 @@ export async function POST(req: Request): Promise<Response> {
     folders = parsed.data;
   }
 
+  const modelField = form.get("model") ?? "fast";
+  if (typeof modelField !== "string" || !(MODEL_TIERS as readonly string[]).includes(modelField)) {
+    return jsonError(400, "bad_request", "model must be fast or accurate");
+  }
+  const model = modelField as ModelTierInput;
+  const notes = form.get("notes") !== "false";
+
   const files = form.getAll("images").filter((v): v is File => typeof v !== "string");
   if (files.length === 0) return jsonError(400, "bad_request", "no images");
   if (files.length > MAX_IMAGES) return jsonError(400, "bad_request", `at most ${MAX_IMAGES} images`);
@@ -72,10 +88,10 @@ export async function POST(req: Request): Promise<Response> {
     if (images.length > 1) content.push({ type: "text", text: `Image ${i + 1} of ${images.length}:` });
     content.push(image);
   });
-  content.push({ type: "text", text: extractUserPrompt({ imageCount: images.length, folders }) });
+  content.push({ type: "text", text: extractUserPrompt({ imageCount: images.length, folders, notes }) });
 
   const result = streamText({
-    model: modelFor("extract"),
+    model: modelFor("extract", model),
     instructions: cachedInstructions(EXTRACT_SYSTEM),
     messages: [{ role: "user", content }],
     output: Output.array({ element: buildVocabItemSchema(folders.map((f) => f.slug)), name: "vocabulary" }),
@@ -96,6 +112,7 @@ export async function POST(req: Request): Promise<Response> {
       for await (const raw of result.elementStream) {
         const item = normalizeVocabItem(raw, folderRefs);
         if (!item) continue;
+        if (!notes) item.note = null;
         const key = dedupeKey(item.fr);
         if (seen.has(key)) continue;
         seen.add(key);

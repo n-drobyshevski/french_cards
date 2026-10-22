@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useId, useState, type ClipboardEventHandler, type InputHTMLAttributes, type KeyboardEventHandler, type ReactNode, type Ref } from "react";
 import { Button, IconButton } from "@/components/ui/Button";
+import { AbbrHint } from "@/components/ui/AbbrHint";
 import { Chip } from "@/components/ui/Chip";
 import { Icon, type IconName } from "@/components/ui/Icons";
 import { Segmented } from "@/components/ui/Segmented";
@@ -140,8 +141,12 @@ export function HeadwordInput({
         )}
       />
       {trailing && (
-        <span lang="fr" aria-hidden="true" className="abbr shrink-0 pr-[15px] text-[15px] leading-5 whitespace-nowrap">
-          {trailing}
+        <span className="shrink-0 pr-[15px] whitespace-nowrap">
+          {typeof trailing === "string" ? (
+            <AbbrHint abbr={trailing} align="end" className="text-[15px] leading-5" />
+          ) : (
+            trailing
+          )}
         </span>
       )}
       {clearable && (
@@ -329,12 +334,15 @@ export function FolderSelect({
   folders,
   onChange,
   labelledBy,
+  auto,
 }: {
   id?: string;
   value: FolderChoice;
   folders: readonly Folder[];
   onChange: (choice: FolderChoice) => void;
   labelledBy?: string;
+  /** A first option «label» that stands for «each word to its own theme». */
+  auto?: { label: string; selected: boolean; onSelect: () => void };
 }) {
   const options: FolderChoice[] = [INBOX_CHOICE, ...folders.map((f): FolderChoice => ({ kind: "folder", id: f.id }))];
   if (value.kind === "new") options.push(value);
@@ -343,13 +351,15 @@ export function FolderSelect({
       <select
         id={id}
         aria-labelledby={labelledBy}
-        value={choiceKey(value)}
+        value={auto?.selected ? "auto" : choiceKey(value)}
         onChange={(e) => {
+          if (auto && e.target.value === "auto") return auto.onSelect();
           const next = options.find((o) => choiceKey(o) === e.target.value);
           if (next) onChange(next);
         }}
         className="h-[46px] w-full min-w-0 cursor-pointer appearance-none bg-transparent pr-6 text-[15px] leading-5 text-ink outline-none! pointer-coarse:text-[16px]"
       >
+        {auto && <option value="auto">{auto.label}</option>}
         {options.map((o) => (
           <option key={choiceKey(o)} value={choiceKey(o)}>
             {o.kind === "new" ? `Новая тема: ${o.name}` : choiceName(o, folders)}

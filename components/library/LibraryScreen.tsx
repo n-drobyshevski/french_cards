@@ -8,9 +8,12 @@ import { useAppReady } from "@/components/providers/AppProviders";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { Icon } from "@/components/ui/Icons";
+import { Segmented } from "@/components/ui/Segmented";
 import { useSnackbar } from "@/components/ui/Snackbar";
-import { countEnrichCandidates } from "@/lib/enrich";
+import { countEnrichCandidates, enrichPreferences } from "@/lib/enrich";
 import { getLibraryStats } from "@/lib/folders";
+import { getSettings, updateSettings } from "@/lib/settings";
+import type { Settings } from "@/lib/types";
 import { getUndoableRun, undoReorgRun } from "@/lib/reorg";
 import { matchesSearch } from "@/lib/text";
 import { FolderFormSheet } from "./FolderFormSheet";
@@ -27,13 +30,21 @@ import { WordList } from "./WordList";
 
 type StatusFilter = "all" | "due" | "difficult";
 
-/** Search results are capped so a short query does not render thousands of rows. */
-const RESULTS_MAX = 200;
+/** Rows rendered at first and added per «Показать ещё», so a big library does not render thousands at once. */
+const PAGE_SIZE = 200;
+
+type LibraryView = Settings["library_view"];
+
+const VIEW_OPTIONS = [
+  { value: "themes", label: "Темы" },
+  { value: "words", label: "Все слова" },
+] as const;
 
 /**
- * Библиотека. Phones (< 768): counts, search, filters, «Разложить по темам» and the theme tiles.
- * From 768 up: the desktop table with the detail pane (LibraryDesk). The layout class is
- * «compact» on the server and during hydration, so CSS keeps the phone UI off wide screens until then.
+ * Библиотека. Phones (< 768): counts, search, filters, and two views: theme tiles («Разложить по
+ * темам») or every word in one list, remembered on the device. From 768 up: the desktop table with
+ * the detail pane (LibraryDesk). The layout class is «compact» on the server and during hydration,
+ * so CSS keeps the phone UI off wide screens until then.
  */
 export function LibraryScreen() {
   const layout = useLayoutClass();
@@ -54,8 +65,10 @@ function PhoneLibrary() {
   const addSheet = useAddSheet();
   const slangPanelId = useId();
   const stats = useLiveQuery(() => getLibraryStats(), []);
+  const settings = useLiveQuery(getSettings);
+  const view: LibraryView = settings?.library_view ?? "themes";
   const lastRun = useLiveQuery(() => getUndoableRun(), []);
-  const toEnrich = useLiveQuery(() => countEnrichCandidates(), []);
+  const toEnrich = useLiveQuery(async () => countEnrichCandidates(enrichPreferences(await getSettings())), []);
 
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
@@ -66,8 +79,13 @@ function PhoneLibrary() {
   const [sortOpen, setSortOpen] = useState(false);
   const [enrichOpen, setEnrichOpen] = useState(false);
 
-  const listMode = query.trim() !== "" || status !== "all" || slang.length > 0;
+  const filtered = query.trim() !== "" || status !== "all" || slang.length > 0;
+  const listMode = filtered || view === "words";
   const words = useLibraryWords(undefined, listMode);
+  // «Показать ещё» starts over whenever the list changes.
+  const listKey = `${view}\u0001${deferredQuery}\u0001${status}\u0001${slang.join(",")}`;
+  const [page, setPage] = useState({ key: listKey, size: PAGE_SIZE });
+  const shown = page.key === listKey ? page.size : PAGE_SIZE;
 
   const results = useMemo(() => {
     if (!words) return null;
@@ -164,30 +182,62 @@ function PhoneLibrary() {
       </div>
       <SlangFilterPanel id={slangPanelId} value={slang} onChange={setSlang} open={slangOpen} onOpenChange={setSlangOpen} />
 
+      {/* View: theme tiles or every word; a search or filter always shows the matching words */}
+      {!filtered && (
+        <Segmented
+          options={VIEW_OPTIONS}
+          value={view}
+          onChange={(next) => void updateSettings({ library_view: next })}
+          ariaLabel="Показывать"
+          className="mt-3"
+        />
+      )}
+
       {listMode ? (
         <section aria-label="Слова" className="mt-6 flex flex-col">
           <div className="meta flex items-baseline justify-between border-b border-ink pb-2">
             <span className="font-medium text-ink" role="status">
-              {results ? (results.length ? `Найдено ${nWords(results.length)}` : "Ничего не найдено") : "Ищем…"}
+              {!results
+                ? filtered
+                  ? "Ищем…"
+                  : "Загружаем…"
+                : !filtered
+                  ? `Все слова · ${results.length}`
+                  : results.length
+                    ? `Найдено ${nWords(results.length)}`
+                    : "Ничего не найдено"}
             </span>
             <span>Уровень · показ</span>
           </div>
           {results && words && (
             <WordList
-              items={results.slice(0, RESULTS_MAX)}
+              items={results.slice(0, shown)}
               folders={words.folders}
               showFolder
-              label="Найденные слова"
+              label={filtered ? "Найденные слова" : "Все слова"}
               footer={
-                results.length > RESULTS_MAX ? (
-                  <p className="m-0 mt-3 text-[13px] leading-5 text-muted">
-                    Показаны первые {RESULTS_MAX}. Уточните поиск, чтобы увидеть остальные.
-                  </p>
+                results.length > shown ? (
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    className="mt-3 self-start"
+                    onClick={() => setPage({ key: listKey, size: shown + PAGE_SIZE })}
+                  >
+                    Показать ещё {Math.min(PAGE_SIZE, results.length - shown)} из {results.length - shown}
+                  </Button>
                 ) : null
               }
             />
           )}
-          {results && results.length === 0 && (
+          {results && results.length === 0 && !filtered && (
+            <div className="mt-4 flex flex-col items-start gap-3">
+              <p className="m-0 text-[15px] leading-[22px] text-muted">В библиотеке пока нет слов.</p>
+              <Button variant="secondary" size="md" icon="plus" onClick={() => addSheet.open()}>
+                Добавить слово
+              </Button>
+            </div>
+          )}
+          {results && results.length === 0 && filtered && (
             <div className="mt-4 flex flex-col items-start gap-3">
               <p className="m-0 text-[15px] leading-[22px] text-muted">
                 {query.trim()

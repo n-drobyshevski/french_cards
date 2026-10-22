@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EnrichResult, Suggestion } from "@/lib/ai/schemas";
 import { MANUAL_KEY, moveActive, resolveActive, variantKey } from "./combobox";
 import { applyEnrichment, draftFromSuggestion, draftToSaveRequest, enrichKey, enrichScope, manualDraft, validateDraft } from "./draft";
-import { choiceKey, choiceName, folderSource, foldersForSuggestion, INBOX_CHOICE } from "./folder-choice";
+import { choiceKey, choiceName, folderSource, foldersForSuggestion, INBOX_CHOICE, listFolderChoices } from "./folder-choice";
 import { cardNumber, nWords, posAbbr, splitTypedPrefix } from "./match";
 import { parseWordList } from "./parse-list";
 
@@ -153,6 +153,9 @@ describe("applyEnrichment", () => {
     example_fr: "Il a garé sa caisse.",
     example_ru: "Он припарковал тачку.",
     confidence: "high",
+    folder: null,
+    folder_alternatives: [],
+    new_folder: null,
   };
 
   it("waits for both sides of a manual draft", () => {
@@ -169,9 +172,23 @@ describe("applyEnrichment", () => {
 
   it("leaves what the user set by hand", () => {
     const touched = { ...manualDraft({ fr: "la caisse", ru: "тачка" }), slang_level: 3 as const, slang_touched: true, example_fr: "Ma caisse.", example_touched: true };
-    expect(enrichScope(touched)).toEqual({ slang: false, example: false, pos: true });
+    expect(enrichScope(touched)).toEqual({ slang: false, example: false, pos: true, folder: true });
     const d = applyEnrichment(touched, result);
     expect(d).toMatchObject({ slang_level: 3, slang_auto: false, example_fr: "Ma caisse.", example_auto: false, pos: "noun" });
+  });
+
+  it("fills only what Settings «ИИ» allow", () => {
+    const d = applyEnrichment(manualDraft({ fr: "la caisse", ru: "тачка" }), result, [], { slang: false, examples: true });
+    expect(d).toMatchObject({ slang_level: 0, slang_auto: false, example_fr: "Il a garé sa caisse.", pos: "noun" });
+    const e = applyEnrichment(manualDraft({ fr: "la caisse", ru: "тачка" }), result, [], { slang: true, examples: false });
+    expect(e).toMatchObject({ slang_level: 1, slang_auto: true, example_fr: "", example_auto: false });
+    expect(draftFromSuggestion(sug(), FOLDERS, { slang: false, examples: false })).toMatchObject({
+      slang_level: 0,
+      verlan: false,
+      slang_auto: false,
+      example_fr: "",
+      example_ru: "",
+    });
   });
 
   it("replaces its own example when the word changes, and clears it when there is none", () => {
@@ -179,6 +196,53 @@ describe("applyEnrichment", () => {
     const next = applyEnrichment(first, { ...result, example_fr: "Je vous attends à la caisse.", example_ru: "Жду у кассы.", slang_level: 0 });
     expect(next).toMatchObject({ example_fr: "Je vous attends à la caisse.", slang_level: 0 });
     expect(applyEnrichment(first, { ...result, example_fr: null, example_ru: null })).toMatchObject({ example_fr: "", example_auto: false });
+  });
+});
+
+describe("automatic theme for typed words", () => {
+  const base: EnrichResult = {
+    id: "w1",
+    pos: "noun",
+    gender: "f",
+    slang_level: 2,
+    verlan: false,
+    example_fr: null,
+    example_ru: null,
+    confidence: "high",
+    folder: "dengi",
+    folder_alternatives: ["povsednevnoe"],
+    new_folder: null,
+  };
+
+  it("preselects the detected theme of a manual draft like a suggestion's", () => {
+    const d = applyEnrichment(manualDraft({ fr: "la thune", ru: "бабки" }), base, FOLDERS);
+    expect(d.folder).toEqual({ kind: "folder", id: "f-den" });
+    expect(d.auto).toMatchObject({ auto: { kind: "folder", id: "f-den" }, alternatives: [{ kind: "folder", id: "f-pov" }], confidence: "high" });
+    expect(enrichScope(d).folder).toBe(false);
+    expect(draftToSaveRequest(d)).toMatchObject({ folderSource: "auto", folderConfidence: "high", newFolderCreatedBy: "auto" });
+  });
+
+  it("keeps a theme the user chose, and offers a proposed new one", () => {
+    const chosen = { ...manualDraft({ fr: "la thune", ru: "бабки" }), folder: { kind: "folder" as const, id: "f-emo" }, folder_touched: true };
+    expect(applyEnrichment(chosen, base, FOLDERS)).toMatchObject({ folder: { kind: "folder", id: "f-emo" }, auto: null });
+    const proposal = applyEnrichment(manualDraft({ fr: "la caisse", ru: "тачка" }), {
+      ...base,
+      folder: "NEW",
+      folder_alternatives: [],
+      new_folder: { slug: "transport", name: "Транспорт", description: "Машины и метро." },
+    }, FOLDERS);
+    expect(proposal.folder).toEqual({ kind: "new", name: "Транспорт", description: "Машины и метро." });
+    // No theme asked for: the folder stays as it was.
+    expect(applyEnrichment(manualDraft({ fr: "la caisse", ru: "тачка" }), { ...base, folder: null }, FOLDERS)).toMatchObject({ folder: INBOX_CHOICE, auto: null });
+  });
+
+  it("list rows: a new theme needs three rows, low confidence stays in «Входящие»", () => {
+    const transport = { slug: "transport", name: "Транспорт", description: "" };
+    const nu = { ...base, folder: "NEW", folder_alternatives: [], new_folder: transport };
+    const two = listFolderChoices([base, nu, nu, { ...base, confidence: "low" }, null], FOLDERS);
+    expect(two).toEqual([{ kind: "folder", id: "f-den" }, INBOX_CHOICE, INBOX_CHOICE, INBOX_CHOICE, null]);
+    const three = listFolderChoices([nu, nu, nu], FOLDERS);
+    expect(three.every((c) => c?.kind === "new" && c.name === "Транспорт")).toBe(true);
   });
 });
 

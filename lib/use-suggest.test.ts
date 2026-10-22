@@ -226,9 +226,32 @@ describe("SuggestController", () => {
     expect(calls).toHaveLength(0);
     vi.advanceTimersByTime(1);
     expect(calls).toHaveLength(1);
-    expect(calls[0].body).toEqual({ q: "se cas", direction: "auto", folders: [{ slug: "dengi", name: "Деньги", description: null }] });
+    expect(calls[0].body).toEqual({
+      q: "se cas",
+      direction: "auto",
+      folders: [{ slug: "dengi", name: "Деньги", description: null }],
+      model: "fast",
+      max: 3,
+      register: "any",
+      notes: true,
+    });
     await vi.waitFor(() => expect(c.getSnapshot().status).toBe("done"));
     expect(c.getSnapshot().results).toEqual([CASSER]);
+  });
+
+  it("new settings preferences ask again and cap the rows shown", async () => {
+    const { c, calls } = setup(() => streamed([CASSER, sug("se casser la tête", "ломать голову")]));
+    c.setQuery("se cas", { immediate: true });
+    await vi.waitFor(() => expect(c.getSnapshot().status).toBe("done"));
+    expect(c.getSnapshot().results).toHaveLength(2);
+    c.setPreferences({ model: "accurate", max: 1, register: "slang", notes: false });
+    expect(calls).toHaveLength(2);
+    expect(calls[1].body).toMatchObject({ model: "accurate", max: 1, register: "slang", notes: false });
+    await vi.waitFor(() => expect(c.getSnapshot().status).toBe("done"));
+    expect(c.getSnapshot().results).toEqual([CASSER]);
+    // Same preferences again: nothing to do.
+    c.setPreferences({ model: "accurate", max: 1, register: "slang", notes: false });
+    expect(calls).toHaveLength(2);
   });
 
   it("aborts the request in flight on the next keystroke", async () => {

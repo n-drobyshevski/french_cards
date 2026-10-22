@@ -1,6 +1,6 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { describe, expect, it, vi } from "vitest";
-import { isAiConfigured, providerFor } from "./model";
+import { ACCURATE_MODEL_ID, DEFAULT_MODEL_ID, isAiConfigured, modelIdFor, providerFor } from "./model";
 
 type Env = Record<string, string>;
 
@@ -34,5 +34,20 @@ describe("providerFor / isAiConfigured", () => {
 
   it("is not configured without any credential", () => {
     expect(isAiConfigured({ ANTHROPIC_API_KEY: " ", ANTHROPIC_AUTH_TOKEN: "" })).toBe(false);
+  });
+});
+
+describe("modelIdFor", () => {
+  it("maps the settings tier to a fixed model, keeping AI_MODEL_EXTRACT for fast screenshots", () => {
+    expect(modelIdFor("suggest")).toBe(DEFAULT_MODEL_ID);
+    expect(modelIdFor("suggest", "accurate")).toBe(ACCURATE_MODEL_ID);
+    vi.stubEnv("AI_MODEL_EXTRACT", "claude-sonnet-5-5");
+    try {
+      expect(modelIdFor("extract", "fast")).toBe("claude-sonnet-5-5");
+      expect(modelIdFor("enrich", "fast")).toBe(DEFAULT_MODEL_ID);
+      expect(modelIdFor("extract", "accurate")).toBe(ACCURATE_MODEL_ID);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

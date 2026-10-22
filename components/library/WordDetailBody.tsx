@@ -17,6 +17,7 @@ import { Icon } from "@/components/ui/Icons";
 import { Kbd } from "@/components/ui/Kbd";
 import { Segmented } from "@/components/ui/Segmented";
 import { SheetCloseButton } from "@/components/ui/Sheet";
+import { AbbrHint } from "@/components/ui/AbbrHint";
 import { SlangMeter, slangAbbr } from "@/components/ui/SlangMeter";
 import { Toggle } from "@/components/ui/Toggle";
 import { cx } from "@/components/ui/cx";
@@ -404,15 +405,13 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
           <div className="mt-2 flex h-5 items-center gap-2">
             {abbr && (
               <>
-                <span lang="fr" className="abbr text-[15px] leading-5">
-                  {abbr}
-                </span>
+                <AbbrHint abbr={abbr} className="text-[15px] leading-5" />
                 <span aria-hidden="true" className="abbr">
                   ·
                 </span>
               </>
             )}
-            <SlangMeter level={w.slang_level} verlan={w.verlan} />
+            <SlangMeter level={w.slang_level} verlan={w.verlan} hints />
           </div>
           <p className="m-0 mt-1 text-[18px] leading-6">{w.ru}</p>
         </>
