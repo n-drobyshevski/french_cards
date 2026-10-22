@@ -1,14 +1,25 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { QuickAddSheet } from "@/components/add/QuickAddSheet";
 import { SnackbarProvider } from "@/components/ui/Snackbar";
 import { seedIfNeeded } from "@/lib/seed";
 import { startSyncLoop } from "@/lib/sync";
-import { AddSheetProvider } from "./AddSheetContext";
+import { AddSheetProvider, useAddSheetState } from "./AddSheetContext";
 import { ThemeSync } from "./theme";
 
-export { useAddSheet, type AddSheetApi, type AddSheetInitial } from "./AddSheetContext";
+export {
+  useAddSheet,
+  useAddSheetActions,
+  useAddSheetState,
+  type AddSheetActions,
+  type AddSheetApi,
+  type AddSheetInitial,
+  type AddSheetState,
+} from "./AddSheetContext";
+
+// The whole add flow is its own chunk, kept out of the shell that every route parses before hydrating.
+const QuickAddSheet = dynamic(() => import("@/components/add/QuickAddSheet").then((m) => m.QuickAddSheet), { ssr: false });
 
 interface Boot {
   /** First-run setup has finished (or failed) on this device. */
@@ -69,6 +80,41 @@ function useBootstrap(): Boot {
   return useMemo(() => ({ ready, failed, retry }), [ready, failed, retry]);
 }
 
+/** Runs `run` when the browser is next idle (a timer where requestIdleCallback is missing, as on Safari). */
+function whenIdle(run: () => void): () => void {
+  if (typeof window.requestIdleCallback === "function") {
+    const id = window.requestIdleCallback(run, { timeout: 3000 });
+    return () => window.cancelIdleCallback(id);
+  }
+  const id = window.setTimeout(run, 1000);
+  return () => window.clearTimeout(id);
+}
+
+/**
+ * Mounts the quick-add sheet once the browser is idle, or at the first open if that comes sooner, so
+ * its chunk is in place before «+» is pressed and the open stays instant. The dictionary is warmed in
+ * the next idle slot, so its parse never lands in the sheet's slide. Until the first open the sheet
+ * runs no queries (QuickAddSheet mounts its session then).
+ */
+function LazyQuickAddSheet() {
+  const { session } = useAddSheetState();
+  const [warm, setWarm] = useState(false);
+
+  useEffect(() => {
+    let cancelNext: (() => void) | null = null;
+    const cancel = whenIdle(() => {
+      setWarm(true);
+      cancelNext = whenIdle(() => void import("@/lib/lexique").then((m) => m.loadLexique()).catch(() => {}));
+    });
+    return () => {
+      cancel();
+      cancelNext?.();
+    };
+  }, []);
+
+  return warm || session > 0 ? <QuickAddSheet /> : null;
+}
+
 /**
  * Client providers for the app shell: theme from settings, db seed + sync loop,
  * snackbar host and the quick-add sheet (opened with useAddSheet().open()).
@@ -81,7 +127,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
         <AddSheetProvider>
           <ThemeSync />
           {children}
-          <QuickAddSheet />
+          <LazyQuickAddSheet />
         </AddSheetProvider>
       </SnackbarProvider>
     </BootContext.Provider>
