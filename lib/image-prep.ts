@@ -335,10 +335,13 @@ export async function prepareImages(
 
   const bitmaps: ImageBitmap[] = [];
   try {
-    for (const file of files) {
-      if (signal?.aborted) throw new ImagePrepError("aborted");
-      bitmaps.push(await decode(file));
-    }
+    if (signal?.aborted) throw new ImagePrepError("aborted");
+    // Decodes run off the main thread, so all at once; allSettled so every bitmap that did decode
+    // is closed below when another fails. Tile encodes stay serial (canvas memory on iOS).
+    const decoded = await Promise.allSettled(files.map(decode));
+    for (const r of decoded) if (r.status === "fulfilled") bitmaps.push(r.value);
+    const failed = decoded.find((r) => r.status === "rejected");
+    if (failed) throw failed.reason;
     const counts = planBatch(
       bitmaps.map((b) => ({ width: b.width, height: b.height })),
       { level: lvl },

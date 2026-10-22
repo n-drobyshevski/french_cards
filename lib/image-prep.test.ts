@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ImagePrepError,
   MAX_LONG_EDGE,
@@ -14,6 +14,7 @@ import {
   patchCount,
   planBatch,
   planTiles,
+  prepareImages,
   tileByteBudget,
   tileOverlap,
   tileScale,
@@ -203,5 +204,76 @@ describe("accepted types", () => {
     const { accepted, rejected } = partitionImages(files);
     expect(accepted.map((f) => f.name)).toEqual(["1.png", "3.webp"]);
     expect(rejected.map((f) => f.name)).toEqual(["2.heic"]);
+  });
+});
+
+describe("prepareImages", () => {
+  /** createImageBitmap / OffscreenCanvas stand-ins: `sizes` by file name; names in `fail` do not decode. */
+  function stubCanvas(sizes: Record<string, [number, number]>, fail: string[] = []) {
+    const decoded: string[] = [];
+    const closed: string[] = [];
+    let pending = 0;
+    let peak = 0;
+    let encoding = 0;
+    let encodePeak = 0;
+    vi.stubGlobal("createImageBitmap", async (file: File) => {
+      peak = Math.max(peak, ++pending);
+      await new Promise((r) => setTimeout(r, 1));
+      pending--;
+      decoded.push(file.name);
+      if (fail.includes(file.name)) throw new Error("bad image");
+      const [width, height] = sizes[file.name];
+      return { width, height, close: () => closed.push(file.name) };
+    });
+    vi.stubGlobal(
+      "OffscreenCanvas",
+      class {
+        constructor(
+          public width: number,
+          public height: number,
+        ) {}
+        getContext() {
+          return { drawImage() {}, fillRect() {} };
+        }
+        async convertToBlob({ type }: { type: string }) {
+          encodePeak = Math.max(encodePeak, ++encoding);
+          await new Promise((r) => setTimeout(r, 1));
+          encoding--;
+          return new Blob(["x"], { type });
+        }
+      },
+    );
+    return { decoded, closed, peak: () => peak, encodePeak: () => encodePeak };
+  }
+
+  const png = (name: string) => new File(["x"], name, { type: "image/png" });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("decodes every file at once, encodes tiles one by one and closes the bitmaps", async () => {
+    const canvas = stubCanvas({ "a.png": [1000, 1000], "b.png": [800, 800] });
+    const batch = await prepareImages([png("a.png"), png("b.png")]);
+    expect(canvas.peak()).toBe(2);
+    expect(canvas.encodePeak()).toBe(1);
+    expect(batch.tiles.map((t) => [t.source, t.name])).toEqual([
+      [0, "screenshot-1-1.webp"],
+      [1, "screenshot-2-1.webp"],
+    ]);
+    expect(canvas.closed.sort()).toEqual(["a.png", "b.png"]);
+  });
+
+  it("closes the bitmaps that decoded when another file fails", async () => {
+    const canvas = stubCanvas({ "a.png": [100, 100], "c.png": [100, 100] }, ["b.png"]);
+    await expect(prepareImages([png("a.png"), png("b.png"), png("c.png")])).rejects.toMatchObject({ code: "decode" });
+    expect(canvas.decoded).toHaveLength(3);
+    expect(canvas.closed.sort()).toEqual(["a.png", "c.png"]);
+  });
+
+  it("does not decode once aborted", async () => {
+    const canvas = stubCanvas({ "a.png": [100, 100] });
+    const ctrl = new AbortController();
+    ctrl.abort();
+    await expect(prepareImages([png("a.png")], { signal: ctrl.signal })).rejects.toMatchObject({ code: "aborted" });
+    expect(canvas.decoded).toEqual([]);
   });
 });
