@@ -205,9 +205,8 @@ export interface RowEditorProps {
   onCancel: () => void;
 }
 
-/** Inline catalog-card form for one row (FR, RU, note, example, slang level). */
-export function RowEditor({ row, onSave, onCancel }: RowEditorProps) {
-  const id = useId();
+/** Edit state for one row (shared by the phone card form and the desktop inline row editor). */
+export function useRowDraft(row: ImportRow) {
   const [fr, setFr] = useState(row.fr);
   const [ru, setRu] = useState(row.ru);
   const [note, setNote] = useState(row.note ?? "");
@@ -217,10 +216,11 @@ export function RowEditor({ row, onSave, onCancel }: RowEditorProps) {
   const [verlan, setVerlan] = useState(row.verlan);
   const valid = fr.trim() !== "" && ru.trim() !== "";
 
-  const save = () => {
-    if (!valid) return;
+  /** The row patch to save, or null while FR or RU is empty. */
+  const patch = (): Partial<ImportRow> | null => {
+    if (!valid) return null;
     const ruChanged = ru.trim() !== row.ru.trim();
-    onSave({
+    return {
       fr: fr.replace(/\s+/g, " ").trim(),
       ru: ru.replace(/\s+/g, " ").trim(),
       note: note.trim() || null,
@@ -229,7 +229,38 @@ export function RowEditor({ row, onSave, onCancel }: RowEditorProps) {
       slang_level: level,
       verlan,
       ruGuess: row.ruGuess && !ruChanged ? row.ruGuess : false,
-    });
+    };
+  };
+
+  return {
+    fr,
+    setFr,
+    ru,
+    setRu,
+    note,
+    setNote,
+    exampleFr,
+    setExampleFr,
+    exampleRu,
+    setExampleRu,
+    level,
+    setLevel,
+    verlan,
+    setVerlan,
+    valid,
+    patch,
+  };
+}
+
+/** Inline catalog-card form for one row (FR, RU, note, example, slang level). */
+export function RowEditor({ row, onSave, onCancel }: RowEditorProps) {
+  const id = useId();
+  const { fr, setFr, ru, setRu, note, setNote, exampleFr, setExampleFr, exampleRu, setExampleRu, level, setLevel, verlan, setVerlan, valid, patch } =
+    useRowDraft(row);
+
+  const save = () => {
+    const p = patch();
+    if (p) onSave(p);
   };
 
   const fieldRow = "flex min-h-12 items-center border-b border-rule";

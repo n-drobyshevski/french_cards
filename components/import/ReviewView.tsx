@@ -78,6 +78,30 @@ function ScreenshotStrip({ thumbs, tiles }: { thumbs: readonly string[]; tiles: 
 
 type PickerTarget = { kind: "row"; key: string } | { kind: "all" } | null;
 
+/**
+ * Applies an edit to a row (the user has checked it, so it is no longer amber and gets checked),
+ * then looks the corrected word up in the library again.
+ */
+export async function saveRowEdit(
+  row: ImportRow,
+  patch: Partial<ImportRow>,
+  onRowsChange: ReviewViewProps["onRowsChange"],
+): Promise<void> {
+  const frChanged = patch.fr !== undefined && patch.fr !== row.fr;
+  onRowsChange((rs) => updateRow(rs, row.key, { ...patch, warn: false, checked: true }));
+  if (!frChanged && !row.duplicate) return;
+  // The corrected word may (or may no longer) be in the library.
+  const duplicate = (await findDuplicate(patch.fr ?? row.fr)) ?? null;
+  onRowsChange((rs) => updateRow(rs, row.key, duplicate ? { duplicate, checked: false } : { duplicate: null, checked: true }));
+}
+
+/** Line shown above the rows when the stream did not finish. */
+export function incompleteNotice(incomplete: ReviewViewProps["incomplete"]): string | null {
+  if (incomplete === "stopped") return "Распознавание остановлено — здесь то, что успели найти.";
+  if (incomplete === "cut") return "Распознано не всё: связь прервалась.";
+  return null;
+}
+
 /** «Найдено N слов»: check, fix and file the extracted words, then add them in one go. */
 export function ReviewView({
   rows,
@@ -113,20 +137,10 @@ export function ReviewView({
 
   const saveEdit = async (row: ImportRow, patch: Partial<ImportRow>) => {
     setEditing(null);
-    const frChanged = patch.fr !== undefined && patch.fr !== row.fr;
-    onRowsChange((rs) => updateRow(rs, row.key, { ...patch, warn: false, checked: true }));
-    if (!frChanged && !row.duplicate) return;
-    // The corrected word may (or may no longer) be in the library.
-    const duplicate = (await findDuplicate(patch.fr ?? row.fr)) ?? null;
-    onRowsChange((rs) => updateRow(rs, row.key, duplicate ? { duplicate, checked: false } : { duplicate: null, checked: true }));
+    await saveRowEdit(row, patch, onRowsChange);
   };
 
-  const notice =
-    incomplete === "stopped"
-      ? "Распознавание остановлено — здесь то, что успели найти."
-      : incomplete === "cut"
-        ? "Распознано не всё: связь прервалась."
-        : null;
+  const notice = incompleteNotice(incomplete);
 
   return (
     <>
