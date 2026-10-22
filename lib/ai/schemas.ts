@@ -292,6 +292,30 @@ export type AssignRequest = z.input<typeof AssignRequestSchema>;
 
 export const ClassifyRequestSchema = z.discriminatedUnion("mode", [TaxonomyRequestSchema, AssignRequestSchema]);
 
+/** How many existing examples the client may list for «другой пример» to avoid. */
+export const EXAMPLE_AVOID_MAX = 6;
+
+/** POST /api/ai/example: one more example for a card, unlike the ones it already has. */
+export const ExampleRequestSchema = z.object({
+  model: z.enum(MODEL_TIERS).default("fast"),
+  fr: shortText(120).min(1),
+  ru: shortText(160).min(1),
+  note: shortText(300).nullable().optional(),
+  avoid: z.array(shortText(300)).max(EXAMPLE_AVOID_MAX).default([]),
+});
+export type ExampleRequest = z.input<typeof ExampleRequestSchema>;
+
+export const ExampleModelSchema = z.object({
+  example_fr: z.string().nullable().describe("One short natural French sentence using the word in the given sense; null if none fits."),
+  example_ru: z.string().nullable().describe("Its Russian translation in the same register; null when example_fr is null."),
+});
+export type ExampleModel = z.infer<typeof ExampleModelSchema>;
+
+export interface ExampleResponse {
+  /** null when the model had nothing new to offer. */
+  example: { fr: string; ru: string | null } | null;
+}
+
 export const EnrichRequestSchema = z.object({
   words: z
     .array(

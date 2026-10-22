@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, type KeyboardEvent, type Ref } from "react";
+import { ExampleList } from "@/components/examples/ExampleList";
 import type { Folder } from "@/lib/types";
 import type { DuplicateInfo } from "./data";
 import type { DraftErrors, WordDraft } from "./draft";
@@ -115,28 +116,24 @@ export function WordForm({
         </FieldRow>
         <FieldRow label="Пример" align="start">
           <span className="flex min-w-0 flex-1 flex-col pb-1.5">
-            <input
-              type="text"
-              value={draft.example_fr}
-              onChange={(e) => onChange({ example_fr: e.target.value, example_touched: true, example_auto: false })}
-              placeholder="Фраза по-французски"
-              aria-label="Пример по-французски"
-              lang="fr"
-              autoComplete="off"
-              className="h-[46px] min-w-0 bg-transparent p-0 font-serif text-[17px] leading-6 text-ink italic outline-none! placeholder:font-sans placeholder:text-[15px] placeholder:not-italic placeholder:text-muted"
+            <ExampleList
+              editable
+              size="form"
+              card={{ fr: draft.fr, ru: draft.ru, note: draft.note }}
+              examples={[{ fr: draft.example_fr, ru: draft.example_ru }, ...draft.extra_examples]}
+              onChange={(next, change) => {
+                const [first = { fr: "", ru: "" }, ...rest] = next;
+                const firstChanged = change.index === 0 || change.kind === "remove";
+                onChange({
+                  example_fr: first.fr,
+                  example_ru: first.ru,
+                  extra_examples: rest,
+                  ...(firstChanged && { example_touched: true, example_auto: change.kind === "retry" }),
+                });
+              }}
+              frInputClass="h-[46px] min-w-0 bg-transparent p-0 font-serif text-[17px] leading-6 text-ink italic outline-none! placeholder:font-sans placeholder:text-[15px] placeholder:not-italic placeholder:text-muted"
+              ruInputClass="-mt-1.5 h-8 min-w-0 bg-transparent p-0 text-[14px] leading-5 text-muted outline-none! placeholder:text-muted pointer-coarse:text-[16px]"
             />
-            {(draft.example_fr.trim() || draft.example_ru.trim()) && (
-              <input
-                type="text"
-                value={draft.example_ru}
-                onChange={(e) => onChange({ example_ru: e.target.value, example_touched: true, example_auto: false })}
-                placeholder="Перевод примера"
-                aria-label="Перевод примера"
-                lang="ru"
-                autoComplete="off"
-                className="-mt-1.5 h-8 min-w-0 bg-transparent p-0 text-[14px] leading-5 text-muted outline-none! placeholder:text-muted pointer-coarse:text-[16px]"
-              />
-            )}
             {draft.example_auto && <span className="pb-1.5 text-[12px] leading-4 text-muted">подобран автоматически</span>}
           </span>
         </FieldRow>

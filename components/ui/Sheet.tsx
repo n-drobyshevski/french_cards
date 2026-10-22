@@ -49,7 +49,7 @@ export function useVisualViewport(active = true): ViewportBox | null {
 }
 
 /** Keyboard heights under this are browser chrome jitter, not a keyboard. */
-const KEYBOARD_MIN = 40;
+export const KEYBOARD_MIN = 40;
 /** Gap kept above a full-height sheet (mockups: sheet top at 56px). */
 const TOP_GAP = 56;
 

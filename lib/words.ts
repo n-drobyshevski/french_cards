@@ -1,6 +1,7 @@
 // Word CRUD and review persistence. Every write stamps updated_at; the outbox middleware
 // (lib/outbox.ts, installed in lib/db.ts) queues each written row for sync.
 import { db, newId } from "./db";
+import { cleanExamples } from "./examples";
 import { fromSnapshot, grade, newReviewState, resetState, reviewStateId, type GradeResult, type Rating } from "./scheduler";
 import type { Confidence, Direction, ReviewLog, ReviewState, Word } from "./types";
 
@@ -46,6 +47,7 @@ function buildWord(input: NewWordInput, now: Date): Word {
     note: cleanText(input.note),
     example_fr: cleanText(input.example_fr),
     example_ru: cleanText(input.example_ru),
+    extra_examples: cleanExamples(input.extra_examples),
     pos: input.pos ?? "other",
     gender: input.gender ?? "none",
     slang_level: input.slang_level ?? 0,
@@ -129,6 +131,7 @@ export async function updateWord(id: string, patch: WordPatch, now: Date = new D
     for (const key of ["note", "example_fr", "example_ru"] as const) {
       if (key in patch) next[key] = cleanText(patch[key]);
     }
+    if ("extra_examples" in patch) next.extra_examples = cleanExamples(patch.extra_examples);
     if (patch.tags) next.tags = [...new Set(patch.tags.map((t) => t.trim()).filter(Boolean))];
     if ("folder_id" in patch && patch.folder_id !== current.folder_id) {
       if (patch.folder_source === undefined) next.folder_source = "user";

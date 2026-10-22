@@ -181,6 +181,40 @@ export async function mockEnrich(
   });
 }
 
+/**
+ * Answers the assign pass of POST /api/ai/classify («Разложить по темам», «Расформировать»):
+ * `pick` returns a theme slug (or "INBOX") per word. `status` ≠ 200 fails every call.
+ */
+export async function mockClassifyAssign(
+  page: Page,
+  pick: (word: { fr: string; ru: string }, folders: readonly { slug: string; name: string }[]) => string,
+  opts: { status?: number; onRequest?: (body: { words: { fr: string }[]; folders: { slug: string; name: string }[] }) => void } = {},
+) {
+  await page.route("**/api/ai/classify", async (route: Route) => {
+    if (opts.status && opts.status !== 200) {
+      await route.fulfill({ status: opts.status, contentType: "application/json", body: JSON.stringify({ error: "not_configured" }) });
+      return;
+    }
+    const body = route.request().postDataJSON() as { words: { id: string; fr: string; ru: string }[]; folders: { slug: string; name: string }[] };
+    opts.onRequest?.(body);
+    const assignments = body.words.map((w) => ({ id: w.id, folder: pick(w, body.folders), confidence: "high" }));
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ assignments }) });
+  });
+}
+
+/** Answers POST /api/ai/example: `make` gets the request (card + examples to avoid). */
+export async function mockExample(
+  page: Page,
+  make: (body: { fr: string; ru: string; avoid: string[] }) => { fr: string; ru: string | null } | null,
+  onRequest?: (body: { fr: string; ru: string; avoid: string[] }) => void,
+) {
+  await page.route("**/api/ai/example", async (route: Route) => {
+    const body = route.request().postDataJSON() as { fr: string; ru: string; avoid: string[] };
+    onRequest?.(body);
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ example: make(body) }) });
+  });
+}
+
 /** Detected fields with an example built from the French side. */
 export const enriched = (word: EnrichWordWire, fields: Partial<Omit<EnrichResultWire, "id">> = {}): Omit<EnrichResultWire, "id"> => ({
   pos: "noun",

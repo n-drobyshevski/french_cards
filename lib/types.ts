@@ -28,12 +28,21 @@ export interface Folder extends Syncable {
   sort: number;
 }
 
+/** One example sentence and its translation. */
+export interface WordExample {
+  fr: string;
+  ru: string | null;
+}
+
 export interface Word extends Syncable {
   fr: string;
   ru: string;
   note: string | null;
+  /** The first example (also on the review card's answer side). */
   example_fr: string | null;
   example_ru: string | null;
+  /** Further examples after the first («+ Ещё пример»). Missing on rows written before them. */
+  extra_examples?: WordExample[];
   pos: PartOfSpeech;
   gender: Gender;
   slang_level: SlangLevel;
@@ -132,9 +141,31 @@ export interface Settings {
   ai_model_extract: "fast" | "accurate";
   /** Библиотека opens on the theme tiles or on the list of all words. */
   library_view: "themes" | "words";
+  /** «Мои наборы»: saved card sets for Повторение (device-local, like the rest of Settings). */
+  review_sets: ReviewSet[];
   last_sync_at: string | null;
   /** Pull cursors per synced table: the server `synced_at` of the last row received. Owned by lib/sync.ts. */
   sync_cursors?: Partial<Record<SyncTable, string>>;
+}
+
+/** A word's learning status, as lib/scheduler `wordStatus` reports it. */
+export type ReviewSetStatus = "new" | "learning" | "difficult" | "known";
+
+/** «Мои наборы»: a named card set for Повторение, built from filters (lib/review-sets.ts). */
+export interface ReviewSet {
+  id: string;
+  name: string;
+  /** Folder ids, "inbox" for «Входящие». Empty = every theme. */
+  folders: string[];
+  /** Word statuses. Empty = any. */
+  statuses: ReviewSetStatus[];
+  /** Slang levels and "verl" (OR-ed levels; "verl" also requires a verlan word). Empty = any. */
+  slang: (SlangLevel | "verl")[];
+  /** Words added in the last week or month, or any time. */
+  added: "all" | "week" | "month";
+  /** schedule: only cards that are due, graded as usual. practice: every card, the schedule untouched. */
+  mode: "schedule" | "practice";
+  created_at: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -157,6 +188,7 @@ export const DEFAULT_SETTINGS: Settings = {
   ai_model: "fast",
   ai_model_extract: "fast",
   library_view: "themes",
+  review_sets: [],
   last_sync_at: null,
 };
 

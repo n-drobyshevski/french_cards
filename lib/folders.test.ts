@@ -114,10 +114,19 @@ describe("getLibraryStats", () => {
     expect(m.fresh).toBe(0);
     expect(m.mastery).toBeGreaterThan(0.5);
     expect(m.mastery).toBeLessThanOrEqual(1);
-    expect(lib.inbox).toMatchObject({ total: 1, due: 0, fresh: 1, mastery: 0 });
+    expect(lib.inbox).toMatchObject({ total: 1, due: 0, fresh: 1, mastery: 0, samples: ["inbox"] });
+    expect(lib.folders.find((f) => f.id === money)!.stats.samples.sort()).toEqual(["la thune", "le fric"]);
+    expect(lib.totals.samples).toHaveLength(3);
     expect(lib.totals.total).toBe(3);
     expect(lib.folders.find((f) => f.slug === "eda")!.stats.total).toBe(0);
     expect(await getFolderStats(null, T0)).toEqual(lib.inbox);
+  });
+
+  it("previews the newest words of a theme, at most three", async () => {
+    const f = await createFolder({ name: "Tmp" }, T0);
+    for (let i = 0; i < 5; i++) await addWord({ fr: `w${i}`, ru: "x", folder_id: f.id }, new Date(T0.getTime() + i * 1000));
+    const lib = await getLibraryStats(T0);
+    expect(lib.folders.find((x) => x.id === f.id)!.stats.samples).toEqual(["w4", "w3", "w2"]);
   });
 
   it("treats words in a deleted folder as inbox", async () => {

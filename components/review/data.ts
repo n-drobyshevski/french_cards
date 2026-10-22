@@ -1,6 +1,6 @@
 // Live-query loaders for the review screen. Each runs as one read inside useLiveQuery.
 import { db } from "@/lib/db";
-import { endOfStudyDay, getDaySummary, loadSession, type DaySummary, type Session, type SessionFilter } from "@/lib/session";
+import { endOfStudyDay, getDaySummary, liveWords, loadSession, type DaySummary, type Session, type SessionFilter } from "@/lib/session";
 import type { Word } from "@/lib/types";
 
 export interface ReviewScreenData {
@@ -34,12 +34,9 @@ export function wordOrdinals(words: readonly Pick<Word, "id" | "created_at">[]):
 
 async function wordsMatching(filter: SessionFilter): Promise<{ all: Word[]; matching: Word[] }> {
   const all = await db.words.filter((w) => w.deleted_at === null).toArray();
-  if (filter.folderId === undefined) return { all, matching: all };
-  if (filter.folderId === null) {
-    const live = new Set((await db.folders.filter((f) => f.deleted_at === null).toArray()).map((f) => f.id));
-    return { all, matching: all.filter((w) => w.folder_id === null || !live.has(w.folder_id)) };
-  }
-  return { all, matching: all.filter((w) => w.folder_id === filter.folderId) };
+  const narrowed = filter.folderId !== undefined || !!filter.folderIds || !!filter.slang || !!filter.statuses || !!filter.addedSince;
+  if (!narrowed) return { all, matching: all };
+  return { all, matching: [...(await liveWords(filter)).values()] };
 }
 
 export async function loadReviewScreen(filter: SessionFilter, now: Date = new Date()): Promise<ReviewScreenData> {
