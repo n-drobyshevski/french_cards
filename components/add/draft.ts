@@ -1,6 +1,7 @@
 // The filled form's state: built from a picked suggestion or empty for manual entry, then
 // turned into a save request. Pure (no Dexie), so it is unit-tested.
 import type { EnrichResult, Suggestion } from "@/lib/ai/schemas";
+import { cleanExamples } from "@/lib/examples";
 import type { Confidence, Folder, Gender, PartOfSpeech, SlangLevel, WordSource } from "@/lib/types";
 import { folderSource, foldersForSuggestion, INBOX_CHOICE, type FolderChoice, type SuggestionFolders } from "./folder-choice";
 import type { SaveRequest } from "./save";
@@ -11,6 +12,8 @@ export interface WordDraft {
   note: string;
   example_fr: string;
   example_ru: string;
+  /** Examples after the first («+ Ещё пример»). */
+  extra_examples: { fr: string; ru: string }[];
   pos: PartOfSpeech;
   gender: Gender;
   slang_level: SlangLevel;
@@ -58,6 +61,7 @@ export function draftFromSuggestion(
     slang_touched: false,
     example_auto: false,
     example_touched: false,
+    extra_examples: [],
     both_directions: true,
     folder: autoSort ? picks.auto : INBOX_CHOICE,
     folder_touched: false,
@@ -81,6 +85,7 @@ export function manualDraft(init: { fr?: string; ru?: string; folder?: FolderCho
     slang_touched: false,
     example_auto: false,
     example_touched: false,
+    extra_examples: [],
     both_directions: true,
     folder: init.folder ?? INBOX_CHOICE,
     folder_touched: init.folder !== undefined && init.folder.kind !== "inbox",
@@ -172,6 +177,7 @@ export function draftToSaveRequest(d: WordDraft): SaveRequest {
         note: d.note,
         example_fr: d.example_fr,
         example_ru: d.example_fr.trim() ? d.example_ru : null,
+        extra_examples: cleanExamples(d.extra_examples),
         pos: d.pos,
         gender: d.pos === "noun" ? d.gender : "none",
         slang_level: d.slang_level,

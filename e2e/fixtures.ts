@@ -202,6 +202,19 @@ export async function mockClassifyAssign(
   });
 }
 
+/** Answers POST /api/ai/example: `make` gets the request (card + examples to avoid). */
+export async function mockExample(
+  page: Page,
+  make: (body: { fr: string; ru: string; avoid: string[] }) => { fr: string; ru: string | null } | null,
+  onRequest?: (body: { fr: string; ru: string; avoid: string[] }) => void,
+) {
+  await page.route("**/api/ai/example", async (route: Route) => {
+    const body = route.request().postDataJSON() as { fr: string; ru: string; avoid: string[] };
+    onRequest?.(body);
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ example: make(body) }) });
+  });
+}
+
 /** Detected fields with an example built from the French side. */
 export const enriched = (word: EnrichWordWire, fields: Partial<Omit<EnrichResultWire, "id">> = {}): Omit<EnrichResultWire, "id"> => ({
   pos: "noun",

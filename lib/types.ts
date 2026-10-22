@@ -28,12 +28,21 @@ export interface Folder extends Syncable {
   sort: number;
 }
 
+/** One example sentence and its translation. */
+export interface WordExample {
+  fr: string;
+  ru: string | null;
+}
+
 export interface Word extends Syncable {
   fr: string;
   ru: string;
   note: string | null;
+  /** The first example (also on the review card's answer side). */
   example_fr: string | null;
   example_ru: string | null;
+  /** Further examples after the first («+ Ещё пример»). Missing on rows written before them. */
+  extra_examples?: WordExample[];
   pos: PartOfSpeech;
   gender: Gender;
   slang_level: SlangLevel;
