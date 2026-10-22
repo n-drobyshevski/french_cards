@@ -14,7 +14,7 @@ Read with `docs/plan.md` (scope and phases), `mockups/SPEC.md` (the v3 visual de
   - Sync is last-write-wins on `updated_at` with soft deletes (`deleted_at`). `review_log` rows are only ever soft-deleted (undo).
 - **AI:**
   - Packages: `ai@7`, `@ai-sdk/anthropic@4`, `zod@4`.
-  - Model `claude-haiku-5-5` with `providerOptions.anthropic.thinking = {type:'disabled'}`. Never set temperature/top_p/top_k and never prefill.
+  - Model `claude-haiku-5-5`; «Точнее» is `claude-sonnet-5-5`. Provider options come from `providerOptionsFor(modelId)` (`lib/ai/model.ts`), chosen by the resolved model id: Haiku gets `thinking: {type:'disabled'}`; Sonnet 5.5 rejects `disabled`, so it gets `thinking: {type:'between_tools'}` with `effort: 'low'`. Keep them fixed per model (a changed effort breaks the prompt cache). Never set temperature/top_p/top_k and never prefill.
   - Use `streamText`/`generateText` with `output: Output.object|array(...)`.
   - Schemas: no `.min/.max/.length`, every field required (use `.nullable()`), confidence is an enum. Limits go in `.describe()` text, and results are sliced on the server.
   - The v7 API changed (`instructions`, `type:'file'` image parts, `Output`). Read the typings in `node_modules/ai` and `node_modules/@ai-sdk/anthropic` before writing calls.

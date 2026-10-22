@@ -40,10 +40,21 @@ export function modelFor(task: AiTask, tier: ModelTier = "fast") {
   return providerFor()(modelIdFor(task, tier));
 }
 
-/** Provider options for every call. Models that cannot disable thinking get it adjusted by the provider (with a warning). */
-export const providerOptions = {
-  anthropic: { thinking: { type: "disabled" } } satisfies AnthropicLanguageModelOptions,
-};
+const DEFAULT_OPTIONS = { anthropic: { thinking: { type: "disabled" } } } satisfies { anthropic: AnthropicLanguageModelOptions };
+const SONNET_OPTIONS = {
+  anthropic: { thinking: { type: "between_tools" }, effort: "low" },
+} satisfies { anthropic: AnthropicLanguageModelOptions };
+
+/**
+ * Provider options per resolved model id (AI_MODEL_EXTRACT can swap the model per task, so not
+ * per tier). Haiku: thinking off. Sonnet 5.5 rejects `disabled` and defaults to high effort, so it
+ * gets its lowest thinking setting (`between_tools`, valid up to high effort) at low effort. Other
+ * ids keep `disabled`; the provider adjusts it with a warning where a model cannot turn thinking off.
+ * Fixed per model, never per request: a changed effort invalidates the prompt cache.
+ */
+export function providerOptionsFor(modelId: string) {
+  return modelId.startsWith(ACCURATE_MODEL_ID) ? SONNET_OPTIONS : DEFAULT_OPTIONS;
+}
 
 /** A frozen system prompt marked as a prompt-cache breakpoint (the provider maps it to cache_control). */
 export function cachedInstructions(text: string): SystemModelMessage {
