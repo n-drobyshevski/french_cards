@@ -382,7 +382,7 @@ export function ReviewScreen() {
               <span>{DIRECTION_LABELS[direction]}</span>
               <Icon name="swap" size={14} className="text-muted" />
             </Chip>
-            <Chip dropdown aria-haspopup="dialog" onClick={() => setPickerOpen(true)} className="min-w-0 max-w-[62%]">
+            <Chip dropdown aria-haspopup="dialog" onClick={() => setPickerOpen(true)} className="min-w-0 shrink!">
               <span className="min-w-0 truncate">{folderLabel}</span>
             </Chip>
           </>

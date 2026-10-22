@@ -272,3 +272,4 @@ Intervals under grade buttons (FSRS): Не знаю «<1 мин», Сложно 
 
 ## Quality bar
 Pixel-careful, consistent spacing (8px grid), real hierarchy, nothing overlapping unintentionally, text never clipped mid-word inside fixed boxes (choose sizes so Russian fits), everything inside 390×844.
+- Review header in the built app: one row — direction + theme chips on the left, undo + settings on the right, no app mark (user request, 2026-10-22).

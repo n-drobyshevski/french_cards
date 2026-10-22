@@ -2,44 +2,39 @@
 
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { AppMark } from "@/components/ui/AppMark";
 import { IconButton } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icons";
 
 export interface ReviewTopBarProps {
   canUndo: boolean;
   onUndo: () => void;
-  /** The chip row under the mark (direction + theme, or the practice exit). */
+  /** Chips on the left of the row (direction + theme, or the practice exit). */
   children?: ReactNode;
 }
 
-/** «Карточки» mark, undo and settings; the chip row below it. */
+/** One row: chips on the left, undo and settings on the right. */
 export function ReviewTopBar({ canUndo, onUndo, children }: ReviewTopBarProps) {
   return (
-    <>
-      <header className="mt-4 flex h-11 shrink-0 items-center">
-        <AppMark />
-        <div className="flex-1" />
-        <div className="-mr-3 flex items-center">
-          <IconButton
-            icon="undo"
-            label="Отменить последний ответ"
-            strokeWidth={1.5}
-            disabled={!canUndo}
-            onClick={onUndo}
-            aria-keyshortcuts="Z"
-          />
-          <Link
-            href="/settings"
-            aria-label="Настройки"
-            className="inline-flex size-11 items-center justify-center rounded-chip text-ink active:bg-surface-2"
-          >
-            <Icon name="gear" size={20} strokeWidth={1.5} />
-          </Link>
-        </div>
-      </header>
-      {children && <div className="mt-2 flex min-w-0 items-center gap-2">{children}</div>}
-    </>
+    <header className="mt-4 flex h-11 shrink-0 items-center gap-2">
+      <div className="flex min-w-0 flex-1 items-center gap-2">{children}</div>
+      <div className="-mr-3 flex shrink-0 items-center">
+        <IconButton
+          icon="undo"
+          label="Отменить последний ответ"
+          strokeWidth={1.5}
+          disabled={!canUndo}
+          onClick={onUndo}
+          aria-keyshortcuts="Z"
+        />
+        <Link
+          href="/settings"
+          aria-label="Настройки"
+          className="inline-flex size-11 items-center justify-center rounded-chip text-ink active:bg-surface-2"
+        >
+          <Icon name="gear" size={20} strokeWidth={1.5} />
+        </Link>
+      </div>
+    </header>
   );
 }
 
