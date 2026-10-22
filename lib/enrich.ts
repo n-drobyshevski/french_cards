@@ -3,14 +3,8 @@
 // («Дополнить карточки»), via POST /api/ai/enrich.
 // The network part is small; deciding what to change is in pure functions so it is unit-tested.
 import { db } from "./db";
-import {
-  ENRICH_CHUNK_MAX,
-  type AiErrorBody,
-  type EnrichResponse,
-  type EnrichResult,
-  type FolderInput,
-  type ModelTierInput,
-} from "./ai/schemas";
+import { ENRICH_CHUNK_MAX } from "./ai/constants";
+import type { AiErrorBody, EnrichResponse, EnrichResult, FolderInput, ModelTierInput } from "./ai/schemas";
 import { listFolders } from "./folders";
 import { getSettings } from "./settings";
 import type { Folder, Settings, Word } from "./types";

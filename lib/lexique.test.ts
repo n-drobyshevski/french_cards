@@ -18,6 +18,12 @@ const FIXTURE: LexiqueEntry[] = [
   ["semaine", "noun", "f", 100],
 ];
 
+/** FIXTURE as the build script writes it: sorted by folded key, the key appended where it differs. */
+const FILE_FIXTURE: LexiqueEntry[] = FIXTURE.map((e): LexiqueEntry => {
+  const key = foldKey(e[0]);
+  return key === e[0] ? e : [e[0], e[1], e[2], e[3], key];
+}).sort((a, b) => ((a[4] ?? a[0]) < (b[4] ?? b[0]) ? -1 : 1));
+
 describe("createLexique / search", () => {
   const lex = createLexique(FIXTURE); // deliberately unsorted
 
@@ -59,6 +65,17 @@ describe("createLexique / search", () => {
     expect(lex.search("la")).toEqual([]);
   });
 
+  it("searches prefolded entries the same way", () => {
+    const pre = createLexique(FILE_FIXTURE, { prefolded: true });
+    for (const q of ["cass", "ENERV", "oeu", "c’est", "se ener", "l'oeu", "la cass"]) expect(pre.search(q)).toEqual(lex.search(q));
+  });
+
+  it("folds a prefolded list after all when it is out of key order (a file without keys)", () => {
+    const stale = createLexique(FILE_FIXTURE.map((e) => e.slice(0, 4) as unknown as LexiqueEntry), { prefolded: true });
+    expect(stale.search("ENERV").map((h) => h.fr)).toEqual(["énerver"]);
+    expect(stale.search("oeu")[0].fr).toBe("œuvre");
+  });
+
   it("folds like the build script", () => {
     expect(foldKey("  Être  Vénère ")).toBe("etre venere");
     expect(foldKey("l’Œil")).toBe("l'oeil");
@@ -68,13 +85,17 @@ describe("createLexique / search", () => {
 describe("public/lexique/fr-lemmas.json", () => {
   const path = fileURLToPath(new URL("../public/lexique/fr-lemmas.json", import.meta.url));
   const data = JSON.parse(readFileSync(path, "utf8")) as LexiqueEntry[];
-  const lex = createLexique(data);
+
+  const lex = createLexique(data, { prefolded: true });
 
   it("is a sorted list of 20–30k well-formed lemmas", () => {
     expect(data.length).toBeGreaterThan(20000);
     expect(data.length).toBeLessThan(30000);
     const keys = data.map((e) => foldKey(e[0]));
     for (let i = 1; i < keys.length; i++) expect(keys[i - 1] <= keys[i]).toBe(true);
+    // The stored key is the folded lemma, and is left out only when it equals the lemma.
+    const mismatched = data.filter((e) => (e[4] ?? e[0]) !== foldKey(e[0]) || e[4] === e[0] || e.length > 5);
+    expect(mismatched).toEqual([]);
     for (const [lemma, pos, gender, freq] of data.slice(0, 500)) {
       expect(typeof lemma).toBe("string");
       expect(["noun", "verb", "adj", "adv", "expression", "other"]).toContain(pos);
@@ -96,19 +117,20 @@ describe("loadLexique / prefixSearch", () => {
   afterEach(() => setLexiqueForTesting(null));
 
   it("fetches once and caches", async () => {
-    const fetchImpl = vi.fn(async () => Response.json(FIXTURE));
+    const fetchImpl = vi.fn(async () => Response.json(FILE_FIXTURE));
     const a = await loadLexique(fetchImpl as unknown as typeof fetch);
     const b = await loadLexique(fetchImpl as unknown as typeof fetch);
     expect(a).toBe(b);
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     expect(prefixSearch("se cass", 1)[0].fr).toBe("se casser");
+    expect(prefixSearch("s'ener", 1)[0].fr).toBe("s'énerver");
   });
 
   it("retries after a failed load and returns [] while not loaded", async () => {
     expect(prefixSearch("cass")).toEqual([]);
     const failing = vi.fn(async () => new Response("nope", { status: 500 }));
     await expect(loadLexique(failing as unknown as typeof fetch)).rejects.toThrow();
-    const ok = vi.fn(async () => Response.json(FIXTURE));
+    const ok = vi.fn(async () => Response.json(FILE_FIXTURE));
     await expect(loadLexique(ok as unknown as typeof fetch)).resolves.toBeTruthy();
   });
 });

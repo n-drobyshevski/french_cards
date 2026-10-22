@@ -7,7 +7,8 @@ import type { Gender, PartOfSpeech } from "./types";
 
 export const LEXIQUE_URL = "/lexique/fr-lemmas.json";
 
-export type LexiqueEntry = readonly [lemma: string, pos: PartOfSpeech, gender: Gender, freq: number];
+/** `key` is the folded lemma, written by the build script only when it differs from `lemma`. */
+export type LexiqueEntry = readonly [lemma: string, pos: PartOfSpeech, gender: Gender, freq: number, key?: string];
 
 export interface LexiqueHit {
   /** What to show and insert: the lemma with the typed pronominal prefix or article restored ("se casser", "la thune"). */
@@ -71,18 +72,29 @@ export interface Lexique {
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
-/** Builds a searchable index. Entries need not be pre-sorted (they are when they come from the script). */
-export function createLexique(entries: readonly LexiqueEntry[]): Lexique {
-  const rows = entries.map((e) => ({ key: foldKey(e[0]), e }));
-  let sorted = true;
-  for (let i = 1; i < rows.length; i++) {
-    if (cmp(rows[i - 1].key, rows[i].key) > 0) {
-      sorted = false;
-      break;
-    }
+interface Row {
+  key: string;
+  e: LexiqueEntry;
+}
+
+function isSorted(rows: readonly Row[]): boolean {
+  for (let i = 1; i < rows.length; i++) if (cmp(rows[i - 1].key, rows[i].key) > 0) return false;
+  return true;
+}
+
+/**
+ * Builds a searchable index. Entries need not be pre-sorted (they are when they come from the script).
+ * `prefolded`: the entries are the build script's output, which carries the folded keys, so no folding
+ * runs here. A list out of key order (a file from before the keys were added) is folded after all.
+ */
+export function createLexique(entries: readonly LexiqueEntry[], { prefolded = false } = {}): Lexique {
+  let rows: Row[] | null = prefolded ? entries.map((e) => ({ key: e[4] ?? e[0], e })) : null;
+  if (!rows || !isSorted(rows)) {
+    rows = entries.map((e) => ({ key: foldKey(e[0]), e }));
+    if (!isSorted(rows)) rows.sort((a, b) => cmp(a.key, b.key));
   }
-  if (!sorted) rows.sort((a, b) => cmp(a.key, b.key));
-  const keys = rows.map((r) => r.key);
+  const index: readonly Row[] = rows;
+  const keys = index.map((r) => r.key);
 
   function lowerBound(prefix: string): number {
     let lo = 0;
@@ -96,7 +108,7 @@ export function createLexique(entries: readonly LexiqueEntry[]): Lexique {
   }
 
   return {
-    size: rows.length,
+    size: index.length,
     search(q: string, limit = 5): LexiqueHit[] {
       if (limit <= 0) return [];
       // Detect the prefix before trimming, so "se " (typed space) already means pronominal.
@@ -108,9 +120,9 @@ export function createLexique(entries: readonly LexiqueEntry[]): Lexique {
       const key = foldKey(prefix ? lead.slice(prefix[0].length) : lead);
       if (!key) return [];
 
-      const matches: { row: (typeof rows)[number]; exact: boolean }[] = [];
+      const matches: { row: Row; exact: boolean }[] = [];
       for (let i = lowerBound(key); i < keys.length && keys[i].startsWith(key); i++) {
-        const row = rows[i];
+        const row = index[i];
         if (pronominal && row.e[1] !== "verb") continue;
         if (article && (row.e[1] !== "noun" || !fitsArticle(article, row.e[2], row.key))) continue;
         matches.push({ row, exact: row.key === key });
@@ -148,7 +160,7 @@ export function loadLexique(fetchImpl: typeof fetch = fetch): Promise<Lexique> {
     const res = await fetchImpl(LEXIQUE_URL, { cache: "force-cache" });
     if (!res.ok) throw new Error(`lexique: HTTP ${res.status}`);
     const data = (await res.json()) as LexiqueEntry[];
-    loaded = createLexique(data);
+    loaded = createLexique(data, { prefolded: true });
     return loaded;
   })().catch((error: unknown) => {
     loading = null;

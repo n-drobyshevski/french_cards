@@ -1,6 +1,7 @@
 // Which theme a new word goes to: the automatic pick from a suggestion, its alternatives,
 // a proposed new theme, or anything the user taps. Pure helpers (no Dexie).
-import { FOLDER_INBOX, FOLDER_NEW, NEW_FOLDER_MIN_WORDS, type EnrichResult, type Suggestion } from "@/lib/ai/schemas";
+import { FOLDER_INBOX, FOLDER_NEW, NEW_FOLDER_MIN_WORDS } from "@/lib/ai/constants";
+import type { EnrichResult, Suggestion } from "@/lib/ai/schemas";
 import type { Folder } from "@/lib/types";
 
 export type FolderChoice =

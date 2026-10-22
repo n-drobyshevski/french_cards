@@ -2,18 +2,8 @@
 // codes to levels, keeps folder picks inside the user's slugs, slices to the documented limits.
 // Pure functions without server-only imports, so they are unit-testable.
 import type { SlangLevel } from "@/lib/types";
-import {
-  FOLDER_ALTERNATIVES_MAX,
-  FOLDER_INBOX,
-  FOLDER_NEW,
-  SLANG_CODES,
-  type NewFolderProposal,
-  type SlangCode,
-  type Suggestion,
-  type SuggestionModel,
-  type VocabItem,
-  type VocabItemModel,
-} from "./schemas";
+import { FOLDER_ALTERNATIVES_MAX, FOLDER_INBOX, FOLDER_NEW, SLANG_CODES } from "./constants";
+import type { NewFolderProposal, SlangCode, Suggestion, SuggestionModel, VocabItem, VocabItemModel } from "./schemas";
 
 const CYRILLIC = /[Ѐ-ӿ]/;
 
