@@ -11,7 +11,7 @@ Read with `docs/plan.md` (scope and phases), `mockups/SPEC.md` (the v3 visual de
 - **Scheduling:** `ts-fsrs@5`, used only through `lib/scheduler.ts`.
 - **Sync and auth:** Supabase (`@supabase/ssr` + `@supabase/supabase-js`).
   - Login is an email OTP code typed into the app (never a magic link), and only `ALLOWED_EMAIL` may sign in.
-  - Sync is last-write-wins on `updated_at` with soft deletes (`deleted_at`). `review_log` is insert-only.
+  - Sync is last-write-wins on `updated_at` with soft deletes (`deleted_at`). `review_log` rows are only ever soft-deleted (undo).
 - **AI:**
   - Packages: `ai@7`, `@ai-sdk/anthropic@4`, `zod@4`.
   - Model `claude-haiku-5-5` with `providerOptions.anthropic.thinking = {type:'disabled'}`. Never set temperature/top_p/top_k and never prefill.

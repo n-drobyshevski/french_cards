@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans, Newsreader } from "next/font/google";
+import { RegisterSW } from "@/components/pwa/RegisterSW";
+import { THEME_INIT_SCRIPT } from "@/components/providers/theme";
 import "./globals.css";
 
 const plexSans = IBM_Plex_Sans({
@@ -45,7 +47,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${plexSans.variable} ${plexMono.variable} ${newsreader.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <head>
+        {/* Applies a forced light/dark theme before first paint on every route. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
+      <body className="min-h-full flex flex-col">
+        {children}
+        <RegisterSW />
+      </body>
     </html>
   );
 }

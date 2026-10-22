@@ -1,6 +1,7 @@
 // On-device source of truth (IndexedDB via Dexie). The UI reads with useLiveQuery;
 // lib/sync.ts mirrors these tables to Supabase.
 import Dexie, { type EntityTable } from "dexie";
+import { installOutboxTracking } from "./outbox";
 import type { Folder, ReorgRun, ReviewLog, ReviewState, Settings, Word } from "./types";
 
 /** Local bookkeeping for sync: rows changed since the last successful push. */
@@ -31,10 +32,12 @@ export class KartochkiDB extends Dexie {
       settings: "id",
       outbox: "key, table, queued_at",
     });
+    // Every write to a synced table queues `${table}:${id}` in outbox, in the same transaction.
+    installOutboxTracking(this);
   }
 }
 
 export const db = new KartochkiDB();
 
 export const nowIso = () => new Date().toISOString();
-export const newId = () => crypto.randomUUID();
+export { newId } from "./id";

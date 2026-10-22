@@ -89,7 +89,14 @@ export interface ReviewLog {
 export interface ReorgRun extends Syncable {
   created_at: string;
   applied_at: string | null;
-  moves: { word_id: string; from: string | null; to: string | null }[];
+  moves: {
+    word_id: string;
+    from: string | null;
+    to: string | null;
+    /** How the word was placed before the run, so undo restores it exactly. */
+    from_source?: Word["folder_source"];
+    from_confidence?: Confidence | null;
+  }[];
   created_folders: string[];
 }
 
@@ -103,6 +110,8 @@ export interface Settings {
   suggestions_enabled: boolean;
   auto_sort_enabled: boolean;
   last_sync_at: string | null;
+  /** Pull cursors per synced table: the server `synced_at` of the last row received. Owned by lib/sync.ts. */
+  sync_cursors?: Partial<Record<SyncTable, string>>;
 }
 
 export const DEFAULT_SETTINGS: Settings = {

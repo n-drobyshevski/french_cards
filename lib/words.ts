@@ -1,0 +1,349 @@
+// Word CRUD and review persistence. Every write stamps updated_at; the outbox middleware
+// (lib/outbox.ts, installed in lib/db.ts) queues each written row for sync.
+import { db, newId } from "./db";
+import { fromSnapshot, grade, newReviewState, resetState, reviewStateId, type GradeResult, type Rating } from "./scheduler";
+import type { Confidence, Direction, ReviewLog, ReviewState, Word } from "./types";
+
+export type WordFields = Omit<Word, "id" | "created_at" | "updated_at" | "deleted_at">;
+
+/** fr + ru are required; everything else has a default (see `addWord`). */
+export type NewWordInput = Pick<Word, "fr" | "ru"> & Partial<WordFields> & { id?: string; created_at?: string };
+
+export type WordPatch = Partial<WordFields>;
+
+export interface MoveRecord {
+  word_id: string;
+  from: string | null;
+  to: string | null;
+  from_source: Word["folder_source"];
+  from_confidence: Confidence | null;
+}
+
+export interface MoveOptions {
+  /** "user" (default) for manual moves; "auto" for automatic sorting, which skips user-placed words. */
+  source?: Word["folder_source"];
+  confidence?: Confidence | null;
+}
+
+const WRITE_TABLES = () => [db.words, db.review_state, db.review_log, db.outbox];
+
+function cleanText(s: string | null | undefined): string | null {
+  const t = s?.replace(/\s+/g, " ").trim();
+  return t ? t : null;
+}
+
+function buildWord(input: NewWordInput, now: Date): Word {
+  const fr = cleanText(input.fr);
+  const ru = cleanText(input.ru);
+  if (!fr) throw new Error("Пустое французское слово");
+  if (!ru) throw new Error("Пустой перевод");
+  const iso = now.toISOString();
+  const folderId = input.folder_id ?? null;
+  return {
+    id: input.id ?? newId(),
+    fr,
+    ru,
+    note: cleanText(input.note),
+    example_fr: cleanText(input.example_fr),
+    example_ru: cleanText(input.example_ru),
+    pos: input.pos ?? "other",
+    gender: input.gender ?? "none",
+    slang_level: input.slang_level ?? 0,
+    verlan: input.verlan ?? false,
+    tags: [...new Set((input.tags ?? []).map((t) => t.trim()).filter(Boolean))],
+    folder_id: folderId,
+    folder_source: input.folder_source ?? "auto",
+    folder_confidence: folderId === null ? null : (input.folder_confidence ?? null),
+    source: input.source ?? "manual",
+    both_directions: input.both_directions ?? true,
+    created_at: input.created_at ?? iso,
+    updated_at: iso,
+    deleted_at: null,
+  };
+}
+
+function directionsOf(word: Pick<Word, "both_directions">): Direction[] {
+  return word.both_directions ? ["fr_ru", "ru_fr"] : ["fr_ru"];
+}
+
+/** Ensures live review_state rows exist for the word's directions (reviving soft-deleted ones with their progress). */
+async function syncStatesForWord(word: Word, now: Date): Promise<string[]> {
+  const iso = now.toISOString();
+  const touched: string[] = [];
+  for (const direction of ["fr_ru", "ru_fr"] as const) {
+    const id = reviewStateId(word.id, direction);
+    const existing = await db.review_state.get(id);
+    const wanted = word.deleted_at === null && directionsOf(word).includes(direction);
+    if (wanted && !existing) {
+      await db.review_state.put(newReviewState(word.id, direction, now));
+      touched.push(id);
+    } else if (wanted && existing && existing.deleted_at !== null) {
+      await db.review_state.put({ ...existing, deleted_at: null, updated_at: iso });
+      touched.push(id);
+    } else if (!wanted && existing && existing.deleted_at === null) {
+      await db.review_state.put({ ...existing, deleted_at: iso, updated_at: iso });
+      touched.push(id);
+    }
+  }
+  return touched;
+}
+
+/** Adds a word plus its review cards (fr_ru, and ru_fr when both_directions). */
+export async function addWord(input: NewWordInput, now: Date = new Date()): Promise<Word> {
+  const [word] = await addWords([input], now);
+  return word;
+}
+
+/** Bulk add (screenshot/list import) in one transaction. Undo with `softDeleteWords(ids)`. */
+export async function addWords(inputs: readonly NewWordInput[], now: Date = new Date()): Promise<Word[]> {
+  const words = inputs.map((i) => buildWord(i, now));
+  if (words.length === 0) return [];
+  await db.transaction("rw", WRITE_TABLES(), async () => {
+    await db.words.bulkPut(words);
+    const states = words.flatMap((w) => directionsOf(w).map((d) => newReviewState(w.id, d, now)));
+    await db.review_state.bulkPut(states);
+  });
+  return words;
+}
+
+/**
+ * Edits a word. Changing `folder_id` without an explicit `folder_source` marks it as placed by
+ * the user. Turning `both_directions` off soft-deletes the ru_fr card; turning it on again
+ * revives it with its old progress.
+ */
+export async function updateWord(id: string, patch: WordPatch, now: Date = new Date()): Promise<Word> {
+  return db.transaction("rw", WRITE_TABLES(), async () => {
+    const current = await db.words.get(id);
+    if (!current || current.deleted_at !== null) throw new Error("Слово не найдено");
+    const next: Word = { ...current, ...patch, id, updated_at: now.toISOString() };
+    if ("fr" in patch) {
+      const fr = cleanText(patch.fr);
+      if (!fr) throw new Error("Пустое французское слово");
+      next.fr = fr;
+    }
+    if ("ru" in patch) {
+      const ru = cleanText(patch.ru);
+      if (!ru) throw new Error("Пустой перевод");
+      next.ru = ru;
+    }
+    for (const key of ["note", "example_fr", "example_ru"] as const) {
+      if (key in patch) next[key] = cleanText(patch[key]);
+    }
+    if (patch.tags) next.tags = [...new Set(patch.tags.map((t) => t.trim()).filter(Boolean))];
+    if ("folder_id" in patch && patch.folder_id !== current.folder_id) {
+      if (patch.folder_source === undefined) next.folder_source = "user";
+      if (patch.folder_confidence === undefined) next.folder_confidence = null;
+    }
+    if (next.folder_id === null) next.folder_confidence = null;
+    await db.words.put(next);
+    if (next.both_directions !== current.both_directions) await syncStatesForWord(next, now);
+    return next;
+  });
+}
+
+export async function softDeleteWord(id: string, now: Date = new Date()): Promise<void> {
+  await softDeleteWords([id], now);
+}
+
+/** Soft-deletes words and their review cards. Undo with `restoreWords(ids)`. */
+export async function softDeleteWords(ids: readonly string[], now: Date = new Date()): Promise<void> {
+  if (ids.length === 0) return;
+  const iso = now.toISOString();
+  await db.transaction("rw", WRITE_TABLES(), async () => {
+    const words = (await db.words.bulkGet([...ids])).filter((w): w is Word => !!w && w.deleted_at === null);
+    if (words.length === 0) return;
+    await db.words.bulkPut(words.map((w) => ({ ...w, deleted_at: iso, updated_at: iso })));
+    const states = await db.review_state
+      .where("word_id")
+      .anyOf(words.map((w) => w.id))
+      .filter((s) => s.deleted_at === null)
+      .toArray();
+    await db.review_state.bulkPut(states.map((s) => ({ ...s, deleted_at: iso, updated_at: iso })));
+  });
+}
+
+/** Undoes `softDeleteWords`: revives the words and the cards for their directions. */
+export async function restoreWords(ids: readonly string[], now: Date = new Date()): Promise<void> {
+  if (ids.length === 0) return;
+  const iso = now.toISOString();
+  await db.transaction("rw", WRITE_TABLES(), async () => {
+    const words = (await db.words.bulkGet([...ids])).filter((w): w is Word => !!w && w.deleted_at !== null);
+    const restored = words.map((w) => ({ ...w, deleted_at: null, updated_at: iso }));
+    await db.words.bulkPut(restored);
+    const touched: string[] = [];
+    for (const w of restored) touched.push(...(await syncStatesForWord(w, now)));
+  });
+}
+
+/**
+ * Moves words to a folder (null = «Входящие»). Manual moves set folder_source "user".
+ * With `source: "auto"` words the user placed by hand are skipped.
+ * Returns what changed; pass it to `restoreMoves` to undo.
+ */
+export async function moveWords(
+  ids: readonly string[],
+  folderId: string | null,
+  opts: MoveOptions = {},
+  now: Date = new Date(),
+): Promise<MoveRecord[]> {
+  const source = opts.source ?? "user";
+  const iso = now.toISOString();
+  return db.transaction("rw", WRITE_TABLES(), async () => {
+    const words = (await db.words.bulkGet([...ids])).filter((w): w is Word => !!w && w.deleted_at === null);
+    const records: MoveRecord[] = [];
+    const updated: Word[] = [];
+    for (const w of words) {
+      if (source === "auto" && w.folder_source === "user") continue;
+      const confidence = folderId === null ? null : source === "auto" ? (opts.confidence ?? null) : null;
+      if (w.folder_id === folderId && w.folder_source === source && w.folder_confidence === confidence) continue;
+      records.push({
+        word_id: w.id,
+        from: w.folder_id,
+        to: folderId,
+        from_source: w.folder_source,
+        from_confidence: w.folder_confidence,
+      });
+      updated.push({ ...w, folder_id: folderId, folder_source: source, folder_confidence: confidence, updated_at: iso });
+    }
+    await db.words.bulkPut(updated);
+    return records;
+  });
+}
+
+/** Undoes `moveWords` (or a reorg run's moves when given full MoveRecords). */
+export async function restoreMoves(records: readonly MoveRecord[], now: Date = new Date()): Promise<void> {
+  if (records.length === 0) return;
+  const iso = now.toISOString();
+  await db.transaction("rw", WRITE_TABLES(), async () => {
+    const updated: Word[] = [];
+    for (const r of records) {
+      const w = await db.words.get(r.word_id);
+      if (!w || w.deleted_at !== null) continue;
+      updated.push({
+        ...w,
+        folder_id: r.from,
+        folder_source: r.from_source,
+        folder_confidence: r.from === null ? null : r.from_confidence,
+        updated_at: iso,
+      });
+    }
+    await db.words.bulkPut(updated);
+  });
+}
+
+/**
+ * Resets a word's cards (one direction, or all) to New. Review history is kept.
+ * Returns the previous states; pass them to `restoreReviewStates` to undo.
+ */
+export async function resetProgress(wordId: string, direction?: Direction, now: Date = new Date()): Promise<ReviewState[]> {
+  return db.transaction("rw", WRITE_TABLES(), async () => {
+    const states = await db.review_state
+      .where("word_id")
+      .equals(wordId)
+      .filter((s) => s.deleted_at === null && (direction === undefined || s.direction === direction))
+      .toArray();
+    await db.review_state.bulkPut(states.map((s) => resetState(s, now)));
+    return states;
+  });
+}
+
+export async function restoreReviewStates(states: readonly ReviewState[], now: Date = new Date()): Promise<void> {
+  if (states.length === 0) return;
+  const iso = now.toISOString();
+  await db.transaction("rw", WRITE_TABLES(), async () => {
+    await db.review_state.bulkPut(states.map((s) => ({ ...s, updated_at: iso })));
+  });
+}
+
+/** Grades a card and persists the new state plus an append-only log row (with the undo snapshot). */
+export async function gradeCard(
+  wordId: string,
+  direction: Direction,
+  rating: Rating,
+  now: Date = new Date(),
+): Promise<GradeResult> {
+  return db.transaction("rw", WRITE_TABLES(), async () => {
+    const word = await db.words.get(wordId);
+    if (!word || word.deleted_at !== null) throw new Error("Слово не найдено");
+    const id = reviewStateId(wordId, direction);
+    let current = await db.review_state.get(id);
+    if (!current || current.deleted_at !== null) current = newReviewState(wordId, direction, now);
+    const result = grade(current, rating, now);
+    await db.review_state.put(result.state);
+    await db.review_log.add(result.log);
+    return result;
+  });
+}
+
+/** Latest live review (optionally for one card) — what «Отменить» would undo. */
+export async function getLastReview(filter: { wordId?: string; direction?: Direction } = {}): Promise<ReviewLog | undefined> {
+  return db.review_log
+    .orderBy("review")
+    .reverse()
+    .filter(
+      (l) =>
+        l.deleted_at === null &&
+        (filter.wordId === undefined || l.word_id === filter.wordId) &&
+        (filter.direction === undefined || l.direction === filter.direction),
+    )
+    .first();
+}
+
+/**
+ * Undoes the most recent review: restores the card from the log's `prev` snapshot and
+ * tombstones the log row (deleted_at), so it no longer counts for today. Returns the undone
+ * log and the restored state, or null when there is nothing to undo.
+ */
+export async function undoLastReview(
+  filter: { wordId?: string; direction?: Direction } = {},
+  now: Date = new Date(),
+): Promise<{ log: ReviewLog; state: ReviewState | null } | null> {
+  return db.transaction("rw", WRITE_TABLES(), async () => {
+    const log = await getLastReview(filter);
+    if (!log) return null;
+    const iso = now.toISOString();
+    const tomb: ReviewLog = { ...log, deleted_at: iso, updated_at: iso };
+    await db.review_log.put(tomb);
+    let state: ReviewState | null = null;
+    if (log.prev) {
+      state = fromSnapshot(log.prev, now);
+      const word = await db.words.get(log.word_id);
+      if (word?.deleted_at) state.deleted_at = word.deleted_at;
+      await db.review_state.put(state);
+    }
+    return { log: tomb, state };
+  });
+}
+
+export async function getWord(id: string): Promise<Word | undefined> {
+  const w = await db.words.get(id);
+  return w && w.deleted_at === null ? w : undefined;
+}
+
+/** Live review cards of a word, fr_ru first. */
+export async function getWordStates(wordId: string): Promise<ReviewState[]> {
+  const states = await db.review_state.where("word_id").equals(wordId).filter((s) => s.deleted_at === null).toArray();
+  return states.sort((a, b) => (a.direction === b.direction ? 0 : a.direction === "fr_ru" ? -1 : 1));
+}
+
+/** Review history of a word, newest first (for the Word-Detail strip). */
+export async function getWordHistory(wordId: string, limit = 8): Promise<ReviewLog[]> {
+  const logs = await db.review_log.where("word_id").equals(wordId).filter((l) => l.deleted_at === null).toArray();
+  return logs.sort((a, b) => b.review.localeCompare(a.review)).slice(0, limit);
+}
+
+/**
+ * Live words, optionally in one folder, newest first. `null` = «Входящие», which also holds
+ * words whose folder no longer exists.
+ */
+export async function listWords(folderId?: string | null): Promise<Word[]> {
+  let coll = db.words.toCollection();
+  if (folderId === null) {
+    const live = new Set((await db.folders.filter((f) => f.deleted_at === null).toArray()).map((f) => f.id));
+    coll = db.words.filter((w) => w.folder_id === null || !live.has(w.folder_id));
+  } else if (folderId !== undefined) {
+    coll = db.words.where("folder_id").equals(folderId);
+  }
+  const words = await coll.filter((w) => w.deleted_at === null).toArray();
+  return words.sort((a, b) => b.created_at.localeCompare(a.created_at));
+}

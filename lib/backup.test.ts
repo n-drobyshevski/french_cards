@@ -1,0 +1,186 @@
+import "fake-indexeddb/auto";
+import { beforeEach, describe, expect, it } from "vitest";
+import {
+  backupFileName,
+  BackupError,
+  exportBackup,
+  exportBackupJson,
+  importBackup,
+  parseBackup,
+  previewBackupImport,
+  undoBackupImport,
+} from "./backup";
+import { db } from "./db";
+import { createFolder } from "./folders";
+import { getSettings, updateSettings } from "./settings";
+import type { Word } from "./types";
+import { addWord, gradeCard, softDeleteWord } from "./words";
+
+const T0 = new Date("2026-10-21T10:00:00.000Z");
+const later = (s: number) => new Date(T0.getTime() + s * 1000);
+
+const clearAll = () => Promise.all(db.tables.map((t) => t.clear()));
+
+async function sampleData() {
+  const folder = await createFolder({ name: "Деньги" }, T0);
+  const thune = await addWord({ fr: "la thune", ru: "бабки", folder_id: folder.id }, T0);
+  const gone = await addWord({ fr: "gone", ru: "x" }, T0);
+  await gradeCard(thune.id, "fr_ru", 3, later(10));
+  await softDeleteWord(gone.id, later(20));
+  await updateSettings({ new_per_day: 7 });
+  return { folder, thune, gone };
+}
+
+beforeEach(clearAll);
+
+describe("export", () => {
+  it("includes every table and tombstones", async () => {
+    const { gone } = await sampleData();
+    const file = await exportBackup(later(30));
+    expect(file.format).toBe("kartochki-backup");
+    expect(file.version).toBe(1);
+    expect(file.exported_at).toBe(later(30).toISOString());
+    expect(file.tables.folders).toHaveLength(1);
+    expect(file.tables.words).toHaveLength(2);
+    expect(file.tables.review_state).toHaveLength(4);
+    expect(file.tables.review_log).toHaveLength(1);
+    expect(file.tables.reorg_runs).toEqual([]);
+    expect(file.tables.settings[0]).toMatchObject({ new_per_day: 7 });
+    expect((file.tables.words as Word[]).find((w) => w.id === gone.id)?.deleted_at).not.toBeNull();
+  });
+
+  it("names the file by local date", () => {
+    expect(backupFileName(new Date(2026, 0, 5, 12))).toBe("kartochki-2026-01-05.json");
+  });
+});
+
+describe("import", () => {
+  it("round-trips into an empty db and queues everything for sync", async () => {
+    await sampleData();
+    const json = await exportBackupJson(later(30));
+    const before = await exportBackup(later(30));
+    await clearAll();
+    const res = await importBackup(json);
+    expect(res.words).toEqual({ inserted: 2, updated: 0, skipped: 0, deleted: 0 });
+    expect(res.review_state.inserted).toBe(4);
+    expect(res.settings).toBe("imported");
+    const after = await exportBackup(later(30));
+    expect(after.tables.words).toEqual(before.tables.words);
+    expect(after.tables.review_state).toEqual(before.tables.review_state);
+    expect(after.tables.review_log).toEqual(before.tables.review_log);
+    expect((await getSettings()).new_per_day).toBe(7);
+    expect(await db.outbox.count()).toBe(1 + 2 + 4 + 1);
+  });
+
+  it("merges by updated_at: newer rows win, older ones are skipped", async () => {
+    const { thune } = await sampleData();
+    const file = await exportBackup(later(30));
+    const words = file.tables.words as Word[];
+    const fileThune = words.find((w) => w.id === thune.id)!;
+
+    // local edit is newer than the backup → kept
+    await db.words.update(thune.id, { ru: "local", updated_at: later(100).toISOString() });
+    // a word that only exists in the backup and a newer remote edit of another
+    const extra: Word = { ...fileThune, id: "extra-id", fr: "le fric", ru: "бабло", updated_at: later(5).toISOString() };
+    const newerFolder = { ...file.tables.folders[0], name: "Бабки", updated_at: later(200).toISOString() };
+    const res = await importBackup({ ...file, tables: { ...file.tables, words: [...words, extra], folders: [newerFolder] } });
+
+    expect((await db.words.get(thune.id))?.ru).toBe("local");
+    expect(await db.words.get("extra-id")).toMatchObject({ fr: "le fric" });
+    expect((await db.folders.get(newerFolder.id))?.name).toBe("Бабки");
+    expect(res.words).toEqual({ inserted: 1, updated: 0, skipped: 2, deleted: 0 });
+    expect(res.folders).toEqual({ inserted: 0, updated: 1, skipped: 0, deleted: 0 });
+    expect(res.settings).toBe("kept");
+  });
+
+  it("applies newer tombstones", async () => {
+    const { thune } = await sampleData();
+    const file = await exportBackup(later(30));
+    const words = (file.tables.words as Word[]).map((w) =>
+      w.id === thune.id ? { ...w, deleted_at: later(50).toISOString(), updated_at: later(50).toISOString() } : w,
+    );
+    await importBackup({ ...file, tables: { ...file.tables, words } });
+    expect((await db.words.get(thune.id))?.deleted_at).toBe(later(50).toISOString());
+  });
+
+  it("previews the changes without writing anything", async () => {
+    const { thune } = await sampleData();
+    const file = await exportBackup(later(30));
+    const words = (file.tables.words as Word[]).map((w) =>
+      w.id === thune.id ? { ...w, deleted_at: later(50).toISOString(), updated_at: later(50).toISOString() } : w,
+    );
+    const extra: Word = { ...words[0], id: "extra-id", fr: "le fric", deleted_at: null, updated_at: later(5).toISOString() };
+    const outbox = await db.outbox.count();
+
+    const preview = await previewBackupImport({ ...file, tables: { ...file.tables, words: [...words, extra] } });
+
+    expect(preview.words).toEqual({ inserted: 1, updated: 1, skipped: 1, deleted: 1 });
+    expect(preview.exported_at).toBe(later(30).toISOString());
+    expect(preview.settings).toBe("kept");
+    expect(await db.words.get("extra-id")).toBeUndefined();
+    expect((await db.words.get(thune.id))?.deleted_at).toBeNull();
+    expect(await db.outbox.count()).toBe(outbox);
+  });
+
+  it("undoes an import: overwritten rows come back and added rows are deleted", async () => {
+    const { thune, folder } = await sampleData();
+    const file = await exportBackup(later(30));
+    const words = (file.tables.words as Word[]).map((w) =>
+      w.id === thune.id ? { ...w, ru: "из копии", deleted_at: later(50).toISOString(), updated_at: later(50).toISOString() } : w,
+    );
+    const extra: Word = { ...words[0], id: "extra-id", fr: "le fric", deleted_at: null, updated_at: later(5).toISOString() };
+    const folders = [{ ...file.tables.folders[0], name: "Бабки", updated_at: later(60).toISOString() }];
+    await updateSettings({ new_per_day: 20 });
+
+    const applied = await importBackup(
+      { ...file, tables: { ...file.tables, words: [...words, extra], folders } },
+      { includeSettings: true },
+    );
+    expect((await db.words.get(thune.id))?.deleted_at).not.toBeNull();
+    expect((await getSettings()).new_per_day).toBe(7);
+
+    await undoBackupImport(applied.undo, later(70));
+
+    const restored = await db.words.get(thune.id);
+    expect(restored).toMatchObject({ ru: "бабки", deleted_at: null, updated_at: later(70).toISOString() });
+    expect((await db.folders.get(folder.id))?.name).toBe("Деньги");
+    expect((await db.words.get("extra-id"))?.deleted_at).toBe(later(70).toISOString());
+    expect((await getSettings()).new_per_day).toBe(20);
+    expect(await db.outbox.get(`words:${thune.id}`)).toBeDefined();
+  });
+
+  it("imports settings only when asked (or when none exist)", async () => {
+    await sampleData();
+    const file = await exportBackup(later(30));
+    await updateSettings({ new_per_day: 20, last_sync_at: "x" });
+    expect((await importBackup(file)).settings).toBe("kept");
+    expect((await getSettings()).new_per_day).toBe(20);
+    expect((await importBackup(file, { includeSettings: true })).settings).toBe("imported");
+    const s = await getSettings();
+    expect(s.new_per_day).toBe(7);
+    expect(s.last_sync_at).toBe("x");
+  });
+
+  it("skips malformed rows", async () => {
+    const res = await importBackup({
+      format: "kartochki-backup",
+      version: 1,
+      exported_at: T0.toISOString(),
+      tables: {
+        words: [{ id: "a" }, { id: "b", updated_at: "nope", fr: "x", ru: "y", slang_level: 0, created_at: "z" }, "junk"],
+        folders: [],
+      },
+    });
+    expect(res.words).toEqual({ inserted: 0, updated: 0, skipped: 3, deleted: 0 });
+    expect(res.review_log).toEqual({ inserted: 0, updated: 0, skipped: 0, deleted: 0 });
+    expect(res.settings).toBe("absent");
+    expect(await db.words.count()).toBe(0);
+  });
+
+  it("rejects files that are not backups", () => {
+    expect(() => parseBackup("{oops")).toThrow(BackupError);
+    expect(() => parseBackup({ format: "other", tables: {} })).toThrow(/не резервная копия/);
+    expect(() => parseBackup({ format: "kartochki-backup", version: 99, tables: {} })).toThrow(/новой версией/);
+    expect(() => parseBackup({ format: "kartochki-backup", version: 1, tables: { words: {} } })).toThrow(BackupError);
+  });
+});
