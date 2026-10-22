@@ -171,10 +171,13 @@ function Desk({ scope }: { scope: LibraryScope }) {
 
   const scopeRows = words?.words;
   const folderOrder = useMemo(() => new Map(folders.map((f) => [f.id, f.sort])), [folders]);
+  // Sorted once per library change; the filters keep that order, so typing never re-sorts.
+  const sortedRows = useMemo(() => scopeRows && sortWords(scopeRows, sort, folderOrder), [scopeRows, sort, folderOrder]);
   const filtered = useMemo(() => {
-    if (!scopeRows) return undefined;
+    if (!sortedRows) return undefined;
     const q = deferredQuery.trim();
-    const list = scopeRows.filter(
+    if (!q && status === "all" && slang.length === 0) return sortedRows;
+    return sortedRows.filter(
       (item) =>
         (status !== "due" || item.schedule.due) &&
         (status !== "difficult" || item.schedule.status === "difficult") &&
@@ -182,8 +185,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
         matchesSlang(item.word, slang) &&
         (!q || matchesSearch(item.word, q)),
     );
-    return sortWords(list, sort, folderOrder);
-  }, [scopeRows, status, slang, deferredQuery, sort, folderOrder]);
+  }, [sortedRows, status, slang, deferredQuery]);
   const capped = useMemo(() => (filtered && deferredQuery.trim() ? filtered.slice(0, RESULTS_MAX) : filtered), [filtered, deferredQuery]);
   const rows = capped ?? EMPTY_ROWS;
   const ids = useMemo(() => rows.map((r) => r.word.id), [rows]);
@@ -251,33 +253,45 @@ function Desk({ scope }: { scope: LibraryScope }) {
   const [inner, setInner] = useState(INITIAL_TABLE_INNER);
   // Right after DeskPlaceholder: its skeleton timer carries on (no blink at the hand-over).
   const [skeletonStyle] = useState(takeSkeletonHandoff);
-  const [view, setView] = useState({ top: 0, height: 600 });
+  const rowH = coarse ? 48 : 40;
+  // Guide words show only in the whole library sorted by «Слово»; only then is the scroll tracked,
+  // and only a change of the first or last visible row re-renders the desk.
+  const guideShown = scope.kind === "all" && sort.key === "fr";
+  const [visible, setVisible] = useState(() => visibleRows(0, 600, rowH));
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
     const measure = () => {
       setInner(el.clientWidth - 48);
-      setView((v) => (v.height === el.clientHeight ? v : { ...v, height: el.clientHeight }));
+      if (guideShown) {
+        const next = visibleRows(el.scrollTop, el.clientHeight, rowH);
+        setVisible((v) => (v.first === next.first && v.last === next.last ? v : next));
+      }
     };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [theme?.folder, loaded]);
+  }, [theme?.folder, loaded, guideShown, rowH]);
   const scrollFrame = useRef(0);
   const onScroll = (e: UIEvent<HTMLDivElement>) => {
+    if (!guideShown) return;
     const el = e.currentTarget;
     cancelAnimationFrame(scrollFrame.current);
-    scrollFrame.current = requestAnimationFrame(() => setView({ top: el.scrollTop, height: el.clientHeight }));
+    scrollFrame.current = requestAnimationFrame(() => {
+      const next = visibleRows(el.scrollTop, el.clientHeight, rowH);
+      setVisible((v) => (v.first === next.first && v.last === next.last ? v : next));
+    });
   };
-  const columns = tableColumns({ inner, layout: layout === "expanded" ? "expanded" : "medium", coarse, themeColumn: scope.kind === "all" });
-  const rowH = coarse ? 48 : 40;
+  const tableLayout = layout === "expanded" ? "expanded" : "medium";
+  // Stable between renders, so the memoised rows hold.
+  const columns = useMemo(() => tableColumns({ inner, layout: tableLayout, coarse, themeColumn: scope.kind === "all" }), [inner, tableLayout, coarse, scope.kind]);
   const guide = useMemo(() => {
-    if (sort.key !== "fr" || rows.length === 0) return null;
-    const first = Math.min(rows.length - 1, Math.max(0, Math.floor(view.top / rowH)));
-    const last = Math.min(rows.length - 1, Math.max(first, Math.floor((view.top + view.height - HEAD_H - 1) / rowH)));
+    if (!guideShown || rows.length === 0) return null;
+    const first = Math.min(rows.length - 1, visible.first);
+    const last = Math.min(rows.length - 1, Math.max(first, visible.last));
     return guideRange(rows[first].word.fr, rows[last].word.fr);
-  }, [sort.key, rows, view, rowH]);
+  }, [guideShown, rows, visible]);
 
   // ----- Actions with undo
   const moveIds = async (list: readonly string[], key: string) => {
@@ -736,7 +750,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
             <h1 className="m-0 min-w-0 truncate font-serif text-[28px] leading-9 font-medium tracking-[-0.015em]">{title}</h1>
             {folder?.locked && <span className="shrink-0 rounded-[4px] border border-rule px-1.5 font-mono text-[11px] leading-5 text-muted">закреплена</span>}
             <span className="flex-1" />
-            {scope.kind === "all" && guide && (
+            {guide && (
               <span lang="fr" aria-hidden="true" className="shrink-0 truncate font-serif text-[16px] text-muted italic">
                 {guide}
               </span>
@@ -1120,3 +1134,9 @@ function Desk({ scope }: { scope: LibraryScope }) {
 }
 
 function noop() {}
+
+/** First and last row under the table head (unclamped) at this scroll offset. */
+function visibleRows(top: number, height: number, rowH: number): { first: number; last: number } {
+  const first = Math.max(0, Math.floor(top / rowH));
+  return { first, last: Math.max(first, Math.floor((top + height - HEAD_H - 1) / rowH)) };
+}
