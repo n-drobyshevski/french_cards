@@ -634,6 +634,13 @@ function Desk({ scope }: { scope: LibraryScope }) {
                 <span className="font-medium text-ink">{scopeStats.due} к повторению</span>
               </>
             )}
+            {scopeStats.total > 0 && (
+              <span className="tabular-nums">
+                {" · "}
+                {scopeStats.total - scopeStats.fresh} повторено
+                {scopeStats.reviewedToday > 0 && ` · ${scopeStats.reviewedToday} сегодня`}
+              </span>
+            )}
           </span>
           {scope.kind === "all" && scopeStats.total > 0 && sortLink}
         </span>

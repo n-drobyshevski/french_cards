@@ -112,6 +112,10 @@ test("the ledger counts filter, the filter sheet narrows and orders the list", a
   expect(searchBox!.y + searchBox!.height).toBeLessThanOrEqual(tabsBox!.y);
   expect(tabsBox!.y - (searchBox!.y + searchBox!.height)).toBeLessThan(40);
 
+  // The KPI row under the filters: counts only.
+  await expect(page.getByText(/^\d+ повторено$/)).toBeVisible();
+  await expect(page.getByText(/^\d+ сегодня$/)).toBeVisible();
+
   const due = page.getByRole("button", { name: /^К повторению: \d+$/ });
   await due.click();
   await expect(due).toHaveAttribute("aria-pressed", "true");

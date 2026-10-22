@@ -2,7 +2,7 @@
 import { DEFAULT_FOLDERS, defaultFolderId, nextFolderSort, pickFolderColor, uniqueSlug } from "./core/folders";
 import { db, liveRows, newId } from "./db";
 import { cardMastery, cardStatus, wordStatus } from "./scheduler";
-import { endOfStudyDay } from "./session";
+import { endOfStudyDay, startOfStudyDay } from "./session";
 import type { Confidence, Folder, ReviewState, Word } from "./types";
 import type { MoveRecord } from "./words";
 
@@ -231,6 +231,8 @@ export interface FolderStats {
   difficult: number;
   /** Words never reviewed. */
   fresh: number;
+  /** Words with a card graded since the study day began (library KPI «сегодня»). */
+  reviewedToday: number;
   /** 0..1 mean card mastery (stability / 21 d, new = 0). */
   mastery: number;
   /** Up to SAMPLE_WORDS French headwords, newest first (the phone tiles show them). */
@@ -252,7 +254,7 @@ export interface LibraryStats {
   folders: FolderWithStats[];
 }
 
-const emptyStats = (): FolderStats => ({ total: 0, due: 0, difficult: 0, fresh: 0, mastery: 0, samples: [] });
+const emptyStats = (): FolderStats => ({ total: 0, due: 0, difficult: 0, fresh: 0, reviewedToday: 0, mastery: 0, samples: [] });
 
 interface Acc {
   stats: FolderStats;
@@ -292,6 +294,7 @@ export function libraryStatsFrom(
   };
   const total = acc("__all__");
   const folderIds = new Set(folders.map((f) => f.id));
+  const dayStart = startOfStudyDay(now).getTime();
   // Newest first, so each folder's samples are its latest words (a copy: callers reuse their array).
   const words = [...rows].sort((a, b) => b.created_at.localeCompare(a.created_at));
   for (const w of words) {
@@ -300,12 +303,14 @@ export function libraryStatsFrom(
     const status = wordStatus(ws);
     const due = ws.some((s) => isDueToday(s, now));
     const m = ws.reduce((sum, s) => sum + cardMastery(s), 0);
+    const today = ws.some((s) => s.last_review !== null && Date.parse(s.last_review) >= dayStart);
     for (const a of [acc(key), total]) {
       a.stats.total++;
       if (a.stats.samples.length < SAMPLE_WORDS) a.stats.samples.push(w.fr);
       if (due) a.stats.due++;
       if (status === "difficult") a.stats.difficult++;
       if (ws.every((s) => cardStatus(s) === "new")) a.stats.fresh++;
+      if (today) a.stats.reviewedToday++;
       a.masterySum += m;
       a.cards += ws.length;
     }

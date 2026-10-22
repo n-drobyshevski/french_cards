@@ -17,6 +17,7 @@ import {
   stableId,
   updateFolder,
 } from "./folders";
+import { startOfStudyDay } from "./session";
 import { addWord, gradeCard } from "./words";
 
 const T0 = new Date(2026, 9, 21, 12, 0);
@@ -121,6 +122,21 @@ describe("getLibraryStats", () => {
     expect(lib.totals.total).toBe(3);
     expect(lib.folders.find((f) => f.slug === "eda")!.stats.total).toBe(0);
     expect(await getFolderStats(null, T0)).toEqual(lib.inbox);
+  });
+
+  it("counts the words graded since the study day began", async () => {
+    const f = await createFolder({ name: "Tmp" }, T0);
+    const today = await addWord({ fr: "today", ru: "x", folder_id: f.id, both_directions: false }, T0);
+    const yesterday = await addWord({ fr: "yesterday", ru: "x", folder_id: f.id, both_directions: false }, T0);
+    await addWord({ fr: "new", ru: "x", folder_id: f.id, both_directions: false }, T0);
+    await gradeCard(today.id, "fr_ru", 3, startOfStudyDay(T0));
+    await gradeCard(yesterday.id, "fr_ru", 3, new Date(startOfStudyDay(T0).getTime() - 1));
+
+    const lib = await getLibraryStats(T0);
+    const s = lib.folders.find((x) => x.id === f.id)!.stats;
+    expect(s.reviewedToday).toBe(1);
+    expect(s.total - s.fresh).toBe(2);
+    expect(lib.totals.reviewedToday).toBe(1);
   });
 
   it("previews the newest words of a theme, at most three", async () => {

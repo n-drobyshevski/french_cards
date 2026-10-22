@@ -521,7 +521,7 @@ Red marks: bar, Входящие, «Трудные» count = 3.
 Red marks: bar, Входящие, detail card rule = 3.
 - Sidebar «Библиотека» active. List pane x 248–1040 (padding 24, inner 744), detail x 1040–1440 (1px left rule).
 - **Header**: y 20 h1 «Библиотека»; same row, right end: guide words of the visible range Newsreader italic 16
-  muted «chelou — vas-y» (only when sorted by «Слово»). y 60 subline 13 muted «158 слов · 23 к повторению»
+  muted «chelou — vas-y» (only when sorted by «Слово»). y 60 subline 13 muted «158 слов · 23 к повторению · 120 повторено · 14 сегодня» («сегодня» only when > 0)
   (23 ink 500), 24px, «7 слов без темы» + 8px + tertiary 13/500 underlined «Разложить по темам» →
   D-Sort-Plan.dc.html. y 84 12px muted «Последняя раскладка: 12 перемещений» + 8px tertiary 13 «Отменить».
 - **Toolbar** y 112, 36px: search 300 (white, 1px `#8a8a85`, radius 4, search icon, placeholder «Поиск по FR

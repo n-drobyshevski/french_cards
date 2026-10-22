@@ -20,7 +20,7 @@ describe("library shape cache", () => {
 
 describe("theme cache", () => {
   it("remembers themes and «Входящие» by route id", () => {
-    const stats = { total: 3, due: 1, difficult: 0, fresh: 1, mastery: 0.5, samples: [] };
+    const stats = { total: 3, due: 1, difficult: 0, fresh: 1, reviewedToday: 0, mastery: 0.5, samples: [] };
     rememberLibrary({
       folders: [{ id: "f1", name: "Деньги", color: "#123456", locked: true, stats, description: null, sort: 0 } as never],
       inbox: { ...stats, total: 2 },
