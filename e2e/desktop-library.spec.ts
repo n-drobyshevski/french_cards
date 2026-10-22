@@ -125,6 +125,8 @@ test("a theme page: header, «Повторить тему» with R, theme menu",
   await page.keyboard.press("Escape");
   await expect(menu).toBeHidden();
   await row(page, "c'est dur").click();
+  // R opens review filtered to the theme (the review screen then tidies the URL).
+  const opened = page.waitForURL(/\/\?folder=/, { waitUntil: "commit" });
   await page.keyboard.press("r");
-  await expect(page).toHaveURL(/\/\?folder=/);
+  await opened;
 });
