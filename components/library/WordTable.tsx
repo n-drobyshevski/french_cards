@@ -3,6 +3,7 @@
 import {
   memo,
   useRef,
+  type CSSProperties,
   type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
@@ -13,6 +14,7 @@ import {
 } from "react";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
+import { SKELETON_FADE, SKELETON_WIDTHS, SkeletonBar } from "@/components/ui/Skeleton";
 import { SlangMeter } from "@/components/ui/SlangMeter";
 import { SLANG_LABELS } from "@/lib/types";
 import { CheckMark } from "./Checkbox";
@@ -51,6 +53,8 @@ export interface WordTableProps {
   fine: boolean;
   label: string;
   loading: boolean;
+  /** Timing override for the delayed skeleton rows (the hand-over from DeskPlaceholder). */
+  skeletonStyle?: CSSProperties;
   handlers: RefObject<RowHandlers>;
   onSelectAll: (select: boolean) => void;
   onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
@@ -81,6 +85,7 @@ export function WordTable({
   fine,
   label,
   loading,
+  skeletonStyle,
   handlers,
   onSelectAll,
   onKeyDown,
@@ -158,14 +163,30 @@ export function WordTable({
         </div>
 
         <div role="rowgroup">
-          {loading
-            ? Array.from({ length: 5 }, (_, i) => (
-                <div key={i} aria-hidden="true" className={cx("flex items-center gap-6 border-b border-rule px-6 pl-[64px]", coarse ? "h-12" : "h-10")}>
-                  <span className="h-3 w-32 rounded-[2px] bg-hover" />
-                  <span className="h-2.5 w-20 rounded-[2px] bg-hover" />
-                </div>
-              ))
-            : rows.map((item, i) => (
+          {loading ? (
+            // Rows are reserved; skeleton rows only if the read is still pending at 300 ms (§3.1, D4).
+            <div data-table-skeleton="" aria-hidden="true" className="delayed-in" style={skeletonStyle}>
+              {Array.from({ length: 8 }, (_, i) => {
+                const [a, b] = SKELETON_WIDTHS[i % SKELETON_WIDTHS.length];
+                return (
+                  <div
+                    key={i}
+                    className={cx("grid items-center border-b border-rule px-6", coarse ? "h-12" : "h-10")}
+                    style={{ gridTemplateColumns: columns.template, opacity: SKELETON_FADE[Math.min(i, SKELETON_FADE.length - 1)] }}
+                  >
+                    <span />
+                    <span className="px-2">
+                      <SkeletonBar width={a + 24} />
+                    </span>
+                    <span className="px-2">
+                      <SkeletonBar width={b + 16} height={6} />
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            rows.map((item, i) => (
                 <Row
                   key={item.word.id}
                   item={item}
@@ -180,7 +201,8 @@ export function WordTable({
                   handlers={handlers}
                   ghost={ghost}
                 />
-              ))}
+              ))
+          )}
         </div>
       </div>
       {empty}

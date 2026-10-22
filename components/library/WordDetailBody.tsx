@@ -610,12 +610,40 @@ function HistoryStrip({ history }: { history: readonly ReviewLog[] }) {
 const fieldInput =
   "box-border h-10 rounded-[4px] border border-boundary bg-surface px-3 text-ink outline-none placeholder:text-muted focus:border-2 focus:border-ink focus:px-[11px]";
 
-function PaneBody({ wordId, onClose, onPrev, onNext, onOpenWord, onNewTheme, editSignal = 0, coarse = false, cardRef }: Omit<WordDetailBodyProps, "variant">) {
+/**
+ * The pane follows the list cursor without blinking (MOTION-SPEC D3): the query keeps the previous
+ * word's data until the next word is read, and only then does the content (with its per-word
+ * editing state) switch over — in one frame, no animation.
+ */
+function PaneBody(props: Omit<WordDetailBodyProps, "variant">) {
+  const { wordId, onClose, editSignal = 0 } = props;
+  const data = useWordDetail(wordId, true);
+  useCloseWhenGone(data, onClose);
+  // Lives across words, so an `E` pressed while the next word is still being read is not lost.
+  const handledEditRef = useRef(editSignal);
+  if (!data || !data.word) {
+    return <div className="min-h-40" aria-busy="true" />;
+  }
+  return <PaneContent key={data.word.id} {...props} data={data} handledEditRef={handledEditRef} />;
+}
+
+function PaneContent({
+  wordId,
+  data,
+  handledEditRef,
+  onClose,
+  onPrev,
+  onNext,
+  onOpenWord,
+  onNewTheme,
+  editSignal = 0,
+  coarse = false,
+  cardRef,
+}: Omit<WordDetailBodyProps, "variant"> & { data: DetailData; handledEditRef: RefObject<number> }) {
   const id = useId();
   const keys = useFormatKeys();
-  const data = useWordDetail(wordId, true);
-  const word = data && data.word ? data.word : null;
-  const folders = data && "folders" in data ? data.folders : [];
+  const word = data.word;
+  const folders = data.folders;
   const editor = useWordEditor(word, folders);
   const actions = useWordActions(word, folders, onClose);
   const refresh = useRefresh(word);
@@ -623,13 +651,12 @@ function PaneBody({ wordId, onClose, onPrev, onNext, onOpenWord, onNewTheme, edi
   const saveExamples = useExampleSaver(word);
   const [themeMenu, setThemeMenu] = useState<HTMLElement | null>(null);
   const ruRef = useRef<HTMLInputElement>(null);
-  useCloseWhenGone(data, onClose);
 
-  // `E` from the list: open the entry form with «Русский» focused.
-  const handledEdit = useRef(editSignal);
+  // `E` from the list: open the entry form with «Русский» focused (once the word on screen is the
+  // cursor's word).
   useEffect(() => {
-    if (!word || editSignal === handledEdit.current) return;
-    handledEdit.current = editSignal;
+    if (word.id !== wordId || editSignal === handledEditRef.current) return;
+    handledEditRef.current = editSignal;
     editor.start("entry");
     requestAnimationFrame(() => {
       const el = ruRef.current;
@@ -658,9 +685,6 @@ function PaneBody({ wordId, onClose, onPrev, onNext, onOpenWord, onNewTheme, edi
     [],
   );
 
-  if (!data || !data.word) {
-    return <div className="min-h-40" aria-busy="true" />;
-  }
   const w = data.word;
   const { folder } = actions;
   const { editing, draft, set } = editor;

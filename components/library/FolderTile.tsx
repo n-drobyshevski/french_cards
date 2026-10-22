@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
+import { SKELETON_WIDTHS, SkeletonBar } from "@/components/ui/Skeleton";
 import type { FolderStats, FolderWithStats } from "@/lib/folders";
 import { folderHref, nWords } from "./format";
 import { useLongPress } from "./use-long-press";
@@ -35,7 +37,7 @@ export function FolderTile({
     >
       <span aria-hidden="true" className="absolute inset-x-0 top-0 h-[3px]" style={{ background: folder.color }} />
       <span className="truncate font-serif text-[19px] leading-6 font-medium">{folder.name}</span>
-      <span className="meta mt-1">
+      <span className="meta mt-1 tabular-nums">
         {total}
         {due > 0 && (
           <>
@@ -84,6 +86,25 @@ export function NewFolderTile({ onClick, tall = false }: { onClick: () => void; 
   );
 }
 
-export function TileSkeleton({ tall = false }: { tall?: boolean }) {
-  return <div aria-hidden="true" className={`${tall ? "h-[116px]" : "h-24"} rounded-card border border-rule bg-surface`} />;
+/**
+ * A theme tile's frame with flat bars for its name, counts and preview (MOTION-SPEC §3.3: one fill,
+ * static). `wide`: the «Все слова» tile. Callers add `delayed-in` so a fast read never paints it.
+ */
+export function TileSkeleton({ tall = false, wide = false, index = 0, className }: { tall?: boolean; wide?: boolean; index?: number; className?: string }) {
+  const [a, b] = SKELETON_WIDTHS[index % SKELETON_WIDTHS.length];
+  if (wide) {
+    return (
+      <div aria-hidden="true" className={cx("col-span-2 flex h-16 flex-col justify-center gap-2 rounded-card border border-rule px-3", className)}>
+        <SkeletonBar width={a + 16} />
+        <SkeletonBar width={b + 40} height={6} />
+      </div>
+    );
+  }
+  return (
+    <div aria-hidden="true" className={cx(TILE, tall ? "h-[116px]" : "h-24", "border border-rule bg-surface", className)}>
+      <SkeletonBar width={a + 8} className="mt-2" />
+      <SkeletonBar width={b - 24} height={6} className="mt-3.5" />
+      {tall && <SkeletonBar width={Math.min(a + b, 132)} height={6} className="mt-3.5" />}
+    </div>
+  );
 }
