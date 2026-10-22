@@ -49,6 +49,7 @@ import {
 import { cardNumber } from "@/components/add/match";
 import { spotlightTheme } from "@/components/shell/dnd";
 import { CheckMark } from "./Checkbox";
+import { useRevealClass } from "./first-paint";
 import { formatDate, plural, posAbbr, SOURCE_LABELS, STATUS_LABELS } from "./format";
 import { markLeaving, markReturning } from "./leaving";
 import { INBOX_KEY, MoveMenu, ThemeSquare } from "./MoveMenu";
@@ -236,6 +237,21 @@ function useWordEditor(word: Word | null, folders: readonly Folder[]) {
   return { editing, draft, saving, formError, dupConfirm, start, cancel, set, save, dirty: !!word && isDirty(word, editing, draft) };
 }
 
+/**
+ * L9: a saved edit lights what it changed (spotlight, §5.14), one region: the entry's headword,
+ * grammar and translation together (`data-edited~="entry"`), or the note, or the examples. Call
+ * `lit(what)` once the save went through; the fields are lit after the view is back.
+ */
+function useSavedSpotlight() {
+  const root = useRef<HTMLDivElement>(null);
+  const [saved, setSaved] = useState<{ what: Exclude<Editing, null>; n: number } | null>(null);
+  useEffect(() => {
+    if (saved) root.current?.querySelectorAll(`[data-edited~="${saved.what}"]`).forEach((el) => spotlight(el));
+  }, [saved]);
+  const lit = (what: Exclude<Editing, null>) => setSaved((s) => ({ what, n: (s?.n ?? 0) + 1 }));
+  return { ref: root, lit };
+}
+
 /** Move / reset / delete with undo snackbars. */
 function useWordActions(word: Word | null, folders: readonly Folder[], onDeleted: () => void) {
   const showUndo = useUndoSnackbar();
@@ -336,6 +352,10 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
   const saveExamples = useExampleSaver(word);
   const proposal = useTranslationProposal(editor.draft?.fr ?? "", editor.draft?.ru ?? "", editor.editing === "entry");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const { ref: savedRef, lit: litSaved } = useSavedSpotlight();
+  // L9: the content is usually there on the first frame; when it is not, the sheet keeps a reserved
+  // blank (never a skeleton) and the content fades in --dur-quick over it.
+  const reveal = useRevealClass(!!data?.word);
   useCloseWhenGone(data, onClose);
 
   if (!data || !data.word) {
@@ -349,7 +369,8 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
-    await editor.save();
+    const what = editor.editing;
+    if (what && (await editor.save())) litSaved(what);
   };
 
   const editActions = (
@@ -369,7 +390,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
   );
 
   return (
-    <div data-word-detail="" className="flex flex-col px-4 pb-4">
+    <div ref={savedRef} data-word-detail="" className={cx("flex flex-col px-4 pb-4", reveal)}>
       {/* Card header: theme chip + close, above the red index-card rule */}
       <div className="flex h-11 shrink-0 items-center justify-between">
         <Chip dropdown onClick={() => setPickerOpen(true)} aria-label={`Тема: ${folder?.name ?? "Входящие"}, изменить`}>
@@ -432,13 +453,13 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
         </form>
       ) : (
         <>
-          <div className="mt-4 flex items-start gap-2">
+          <div data-edited="entry" className="mt-4 flex items-start gap-2">
             <h2 lang="fr" className="m-0 min-w-0 flex-1 font-serif text-[36px] leading-10 font-medium tracking-[-0.015em] break-words">
               {w.fr}
             </h2>
             <IconButton icon="pencil" label="Изменить слово и перевод" className="-mr-3 text-muted" onClick={() => editor.start("entry")} />
           </div>
-          <div data-refresh="slang pos" className="mt-2 flex h-5 items-center gap-2">
+          <div data-refresh="slang pos" data-edited="entry" className="mt-2 flex h-5 items-center gap-2">
             {abbr && (
               <>
                 <AbbrHint abbr={abbr} className="text-[15px] leading-5" />
@@ -449,7 +470,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             )}
             <SlangMeter level={w.slang_level} verlan={w.verlan} hints />
           </div>
-          <p data-refresh="ru" className="m-0 mt-1 text-[18px] leading-6">
+          <p data-refresh="ru" data-edited="entry" className="m-0 mt-1 text-[18px] leading-6">
             {w.ru}
           </p>
         </>
@@ -582,7 +603,7 @@ function SheetField({
   children: ReactNode;
 }) {
   return (
-    <div data-refresh={refresh} className="flex items-start gap-2 border-t border-rule py-3">
+    <div data-refresh={refresh} data-edited={refresh} className="flex items-start gap-2 border-t border-rule py-3">
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="meta">{label}</span>
         {editing ? form : children}
@@ -713,6 +734,7 @@ function PaneContent({
   const proposal = useTranslationProposal(editor.draft?.fr ?? "", editor.draft?.ru ?? "", editor.editing === "entry");
   const [themeMenu, setThemeMenu] = useState<HTMLElement | null>(null);
   const ruRef = useRef<HTMLInputElement>(null);
+  const { ref: savedRef, lit: litSaved } = useSavedSpotlight();
 
   // `E` from the list: open the entry form with «Русский» focused (once the word on screen is the
   // cursor's word).
@@ -756,8 +778,11 @@ function PaneContent({
 
   const submit = async (event?: FormEvent) => {
     event?.preventDefault();
+    const what = editor.editing;
     const undo = await editor.save();
-    if (undo) cardRef?.current?.focus({ preventScroll: true });
+    if (!undo) return;
+    cardRef?.current?.focus({ preventScroll: true });
+    if (what) litSaved(what);
   };
   // Esc discards the edit; «Вернуть» brings the draft back.
   const discard = () => {
@@ -832,13 +857,13 @@ function PaneContent({
   );
 
   const note = (
-    <div data-refresh="note" className="flex items-start gap-2">
+    <div data-refresh="note" data-edited="note" className="flex items-start gap-2">
       <p className={cx("m-0 min-w-0 flex-1 text-[14px] leading-5 whitespace-pre-line", !w.note && "text-muted")}>{w.note || "Нет заметки"}</p>
       {!editing && pencil("Изменить заметку", () => editor.start("note"))}
     </div>
   );
   const example = (
-    <div data-refresh="example" className="flex items-start gap-2">
+    <div data-refresh="example" data-edited="example" className="flex items-start gap-2">
       <ExampleList
         size="pane"
         card={w}
@@ -851,7 +876,7 @@ function PaneContent({
   );
 
   return (
-    <div data-word-detail="" className="flex flex-col">
+    <div ref={savedRef} data-word-detail="" className="flex flex-col">
       {/* Theme button + previous / next */}
       <div className="flex h-8 items-center justify-between gap-2">
         <button
@@ -883,7 +908,7 @@ function PaneContent({
         aria-labelledby={`${id}-head`}
         className="mt-4 flex flex-col rounded-[6px] border border-rule bg-surface focus-visible:outline-offset-2"
       >
-        <div data-refresh="slang" className="flex h-10 items-center justify-between px-5">
+        <div data-refresh="slang" data-edited="entry" className="flex h-10 items-center justify-between px-5">
           <span className="font-mono text-[11px] text-muted tabular-nums">FR · {cardNumber(data.number ?? 1)}</span>
           <SlangMeter level={w.slang_level} verlan={false} hints hintAlign="end" />
         </div>
@@ -947,7 +972,7 @@ function PaneContent({
             </form>
           ) : (
             <>
-              <div className="flex items-start gap-2">
+              <div data-edited="entry" className="flex items-start gap-2">
                 <h2
                   id={`${id}-head`}
                   aria-live="polite"
@@ -959,7 +984,7 @@ function PaneContent({
                 <span className="mt-1.5">{pencil("Изменить слово и перевод", () => editor.start("entry"), "E")}</span>
               </div>
               {showGrammar && (
-                <p data-refresh="pos slang" className="m-0 mt-1 flex flex-wrap items-baseline gap-x-1 text-[15px] leading-5">
+                <p data-refresh="pos slang" data-edited="entry" className="m-0 mt-1 flex flex-wrap items-baseline gap-x-1 text-[15px] leading-5">
                   {abbr && <AbbrHint abbr={abbr} />}
                   {!coarse && (
                     <>
@@ -973,7 +998,7 @@ function PaneContent({
                   )}
                 </p>
               )}
-              <p data-refresh="ru" className="m-0 mt-2 text-[18px] leading-6 font-medium">
+              <p data-refresh="ru" data-edited="entry" className="m-0 mt-2 text-[18px] leading-6 font-medium">
                 {w.ru}
               </p>
               <RefreshResult refresh={refresh} />

@@ -17,6 +17,7 @@ import { Collapse } from "@/components/ui/Collapse";
 import {
   DICTIONARY_ROWS,
   DictionarySlot,
+  DuplicateReveal,
   useDictionaryReserved,
   useVariantsRegion,
   VARIANT_ENTER,
@@ -235,9 +236,9 @@ export function DeskSearchPanel({ inputRef, ...props }: DeskSearchPanelProps) {
               </section>
             </Collapse>
           )}
-          {props.duplicate && (
-            <DuplicateBox info={props.duplicate} onOpen={() => props.onOpenWord(props.duplicate!.word.id)} onAddAnyway={props.onAddAnyway} />
-          )}
+          <DuplicateReveal info={props.duplicate}>
+            {(info) => <DuplicateBox info={info} onOpen={() => props.onOpenWord(info.word.id)} onAddAnyway={props.onAddAnyway} />}
+          </DuplicateReveal>
           {showVariants && (
             <Variants {...props} direction={direction} listboxId={`${base}-var`} optionProps={optionProps} active={active} folders={folders} />
           )}

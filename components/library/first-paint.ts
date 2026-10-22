@@ -24,6 +24,22 @@ export function useRevealClass(loaded: boolean): string | undefined {
   return mode === "fade" ? REVEAL : undefined;
 }
 
+// ----- Search wait
+
+/** Stale search results dim to .5 over --dur-quick (L5). */
+export const STALE_DIM = "transition-opacity duration-(--dur-quick) ease-standard";
+
+/**
+ * The library search while the deferred query lags behind the typed one (L5): the old results stay
+ * where they are and `dim` turns on after 150 ms; `searching` («Ищем…») only after a 300 ms wait
+ * (`waiting`: lagging, or the words not read yet). New results replace the old ones in place.
+ */
+export function useSearchWait(stale: boolean, waiting: boolean): { dim: boolean; searching: boolean } {
+  const dim = useDelayedFlag(stale, { delay: 150, min: 0 });
+  const searching = useDelayedFlag(waiting, { delay: 300, min: 0 });
+  return { dim: dim && stale, searching: searching && waiting };
+}
+
 // ----- Phone library shape
 
 export interface LibraryShape {

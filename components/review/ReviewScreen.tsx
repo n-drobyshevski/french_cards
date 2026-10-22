@@ -33,7 +33,7 @@ import { GradeBar } from "./GradeBar";
 import { HINT_LINE_CSS, HintLine } from "./HintLine";
 import { isTypingTarget, keepsActivationKeys, reviewKeyAction } from "./keys";
 import { CardDeck, LeavingCard, REVIEW_DESK_CSS, ReviewCard, ReviewCardPlaceholder, WRITE_IN, type CardFace } from "./ReviewCard";
-import { PENDING_PROGRESS, ReviewTopBar, type ReviewProgress } from "./ReviewTopBar";
+import { PENDING_PROGRESS, ReviewTopBar, type GradeEcho, type ReviewProgress } from "./ReviewTopBar";
 import { SessionDone } from "./SessionDone";
 import { useInlineSnackbar } from "./useInlineSnackbar";
 import { useReviewFilter } from "./useReviewFilter";
@@ -50,6 +50,10 @@ const SAVE_WAIT_MS = 2000;
 
 /** Haptic of a grade (MOTION-SPEC §5.13): «Знаю» good, «Не знаю» again, «Сложно» a tick. */
 const GRADE_HAPTIC: Record<Rating, HapticKind> = { 1: "again", 2: "tick", 3: "good", 4: "good" };
+
+/** The progress echo's tone of a grade (R12): «Знаю» good, «Не знаю» again, «Сложно» ink. */
+const GRADE_ECHO: Record<Rating, GradeEcho["tone"]> = { 1: "again", 2: "ink", 3: "good", 4: "good" };
+let echoSeq = 0;
 
 /**
  * The grade bar's labels fade in --dur-quick once the headword has glided (R3; the bar's slot is
@@ -140,8 +144,11 @@ export function ReviewScreen() {
   const [awaiting, setAwaiting] = useState<Awaiting | null>(null);
   const [instance, setInstance] = useState(0);
   const [practice, setPractice] = useState<Practice | null>(null);
-  const [practiceLoading, setPracticeLoading] = useState(false);
+  /** The practice round being built (its kind), so «Готово на сегодня» shows which action waits (R11). */
+  const [practiceLoading, setPracticeLoading] = useState<Practice["kind"] | null>(null);
   const [flash, setFlash] = useState<Rating | null>(null);
+  /** The latest grade, echoed by the progress step it causes (R12); `practice` keeps it to its round. */
+  const [lastGrade, setLastGrade] = useState<(GradeEcho & { practice: boolean }) | null>(null);
   /** Graded cards on their way out, over the next card. */
   const [leaving, setLeaving] = useState<Leaving[]>([]);
   /** How the card with this key appears: out of the stack after a grade, or back after an undo. */
@@ -437,6 +444,7 @@ export function ReviewScreen() {
     setInstance(instance + 1);
     setPinned(null);
     setFlash(null);
+    setLastGrade({ seq: ++echoSeq, tone: GRADE_ECHO[rating], practice: !!practice });
 
     if (practice) {
       if (nextQueue.length === 0) {
@@ -461,6 +469,7 @@ export function ReviewScreen() {
         refocus.current = null;
         setAwaiting(null);
         setPinned(before);
+        setLastGrade(null);
         snackbar.show({ message: errorText(error) });
       } finally {
         busy.current = false;
@@ -502,7 +511,7 @@ export function ReviewScreen() {
 
   const startPractice = async (kind: Practice["kind"], over: SessionFilter = filter) => {
     if (practiceLoading) return;
-    setPracticeLoading(true);
+    setPracticeLoading(kind);
     try {
       const scope = kind === "mistakes" ? "today" : kind === "theme" || kind === "set" ? "all" : "recent";
       const items = await buildPracticeQueue({ ...over, scope });
@@ -523,7 +532,7 @@ export function ReviewScreen() {
       resetCard();
       snackbar.hide();
     } finally {
-      setPracticeLoading(false);
+      setPracticeLoading(null);
     }
   };
 
@@ -661,6 +670,7 @@ export function ReviewScreen() {
             : "Практика · не влияет на расписание",
       right: formatProgress(cleared, practice.total),
       ratio: progressRatio(cleared, practice.total),
+      echo: lastGrade?.practice ? lastGrade : null,
     };
   } else if (shown && cardsShown) {
     const c = shown.session.counts;
@@ -668,6 +678,7 @@ export function ReviewScreen() {
       left: queueSummary(c.due, c.new),
       right: formatProgress(c.done, c.total),
       ratio: progressRatio(c.done, c.total),
+      echo: lastGrade && !lastGrade.practice ? lastGrade : null,
     };
   }
 
@@ -759,7 +770,7 @@ export function ReviewScreen() {
             data={doneData}
             moment={moment}
             haptics={hapticsEnabled}
-            busy={practiceLoading}
+            pending={practiceLoading}
             desktop={desktop}
             letters={letters}
             onRepeatMistakes={() => void startPractice("mistakes")}

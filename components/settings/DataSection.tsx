@@ -265,7 +265,7 @@ export function DataSection({ desktop = false }: { desktop?: boolean }) {
   return (
     <>
       {rows ?? (
-        <SettingsSection title="Данные">
+        <SettingsSection title="Данные" anchor="set-data">
           {line.canSync || syncBusy ? (
             <SettingsButtonRow
               label="Синхронизация"

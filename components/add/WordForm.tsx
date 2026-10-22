@@ -10,6 +10,7 @@ import { posAbbr } from "./match";
 import {
   BothDirectionsRow,
   DuplicateNotice,
+  DuplicateReveal,
   FIELD_INPUT,
   FieldError,
   FieldRow,
@@ -110,7 +111,9 @@ export function WordForm({
         <FieldError id={frErrorId}>{errors.fr}</FieldError>
       </div>
 
-      {duplicate && <DuplicateNotice info={duplicate} onOpen={() => onOpenWord(duplicate.word.id)} onAddAnyway={onAddAnyway} />}
+      <DuplicateReveal info={duplicate}>
+        {(info) => <DuplicateNotice info={info} onOpen={() => onOpenWord(info.word.id)} onAddAnyway={onAddAnyway} />}
+      </DuplicateReveal>
 
       <div className="mx-4 mt-2 flex flex-col">
         <FieldRow label="Русский" spot="ru">

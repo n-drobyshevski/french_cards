@@ -20,6 +20,7 @@ import { SlangMeter } from "@/components/ui/SlangMeter";
 import { SLANG_LABELS } from "@/lib/types";
 import { CheckMark } from "./Checkbox";
 import { CURRENT_ROW_BG } from "./dark";
+import { STALE_DIM } from "./first-paint";
 import { posAbbr } from "./format";
 import { useLeavingList } from "./leaving";
 import type { MenuAnchor } from "./Menu";
@@ -56,6 +57,8 @@ export interface WordTableProps {
   fine: boolean;
   label: string;
   loading: boolean;
+  /** The search lags behind the typed query: the rows stay, dimmed to .5 (L5). */
+  stale?: boolean;
   /** Timing override for the delayed skeleton rows (the hand-over from DeskPlaceholder). */
   skeletonStyle?: CSSProperties;
   handlers: RefObject<RowHandlers>;
@@ -88,6 +91,7 @@ export function WordTable({
   fine,
   label,
   loading,
+  stale = false,
   skeletonStyle,
   handlers,
   onSelectAll,
@@ -167,7 +171,7 @@ export function WordTable({
           </div>
         </div>
 
-        <div role="rowgroup">
+        <div role="rowgroup" className={cx(STALE_DIM, stale && "opacity-50")}>
           {loading ? (
             // Rows are reserved; skeleton rows only if the read is still pending at 300 ms (§3.1, D4).
             <div data-table-skeleton="" aria-hidden="true" className="delayed-in" style={skeletonStyle}>
@@ -212,7 +216,7 @@ export function WordTable({
           )}
         </div>
       </div>
-      {empty}
+      <div className={cx(STALE_DIM, stale && "opacity-50")}>{empty}</div>
       {footer}
       {/* Drag ghost (DESKTOP-SPEC §3): white, 1px ink, the word + «+N». */}
       <div aria-hidden="true" className="pointer-events-none fixed -top-[200px] left-0">

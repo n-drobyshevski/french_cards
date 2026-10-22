@@ -18,6 +18,7 @@ import {
   DICTIONARY_ROWS,
   DictionarySlot,
   DuplicateNotice,
+  DuplicateReveal,
   FIELD_INPUT,
   FieldError,
   FieldRow,
@@ -116,13 +117,9 @@ export function SearchPanel(props: SearchPanelProps) {
         <EmptyState {...props} />
       ) : (
         <>
-          {props.duplicate && (
-            <DuplicateNotice
-              info={props.duplicate}
-              onOpen={() => props.onOpenWord(props.duplicate!.word.id)}
-              onAddAnyway={props.onAddAnyway}
-            />
-          )}
+          <DuplicateReveal info={props.duplicate}>
+            {(info) => <DuplicateNotice info={info} onOpen={() => props.onOpenWord(info.word.id)} onAddAnyway={props.onAddAnyway} />}
+          </DuplicateReveal>
 
           {/* Fixed order (A3): «Словарь», «Варианты», then the manual way in. An error stays inside
               «Варианты», and the quick form opens below it, so nothing above moves. */}

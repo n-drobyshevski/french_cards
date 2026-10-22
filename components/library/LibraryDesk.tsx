@@ -40,7 +40,7 @@ import { takeSkeletonHandoff } from "./DeskPlaceholder";
 import { BulkBar, EmptyPane, FilterStrip, SelectionSummary, summaryTargets, TextLink, type StatusFilter } from "./DeskParts";
 import { DisbandSheet, disbandMessage } from "./DisbandSheet";
 import { EnrichPlanSheet } from "./EnrichPlanSheet";
-import { cachedFolder, rememberLibrary } from "./first-paint";
+import { cachedFolder, rememberLibrary, useSearchWait } from "./first-paint";
 import { FolderFormSheet } from "./FolderFormSheet";
 import { nWords, plural, practiceHref, reviewHref } from "./format";
 import { markLeaving, markReturning } from "./leaving";
@@ -185,6 +185,9 @@ function Desk({ scope }: { scope: LibraryScope }) {
     return sortWords(list, sort, folderOrder);
   }, [scopeRows, status, slang, deferredQuery, sort, folderOrder]);
   const capped = useMemo(() => (filtered && deferredQuery.trim() ? filtered.slice(0, RESULTS_MAX) : filtered), [filtered, deferredQuery]);
+  // L5: while the deferred query lags, the old rows stay (dimmed after 150 ms); «Ищем…» after 300 ms.
+  const stale = query !== deferredQuery;
+  const wait = useSearchWait(stale, listMode && (capped === undefined || stale));
   const rows = capped ?? EMPTY_ROWS;
   const ids = useMemo(() => rows.map((r) => r.word.id), [rows]);
   const byId = useMemo(() => new Map(rows.map((r) => [r.word.id, r])), [rows]);
@@ -607,7 +610,13 @@ function Desk({ scope }: { scope: LibraryScope }) {
   if (listMode) {
     subline = (
       <span role="status" className="font-medium text-ink">
-        {capped === undefined || query !== deferredQuery ? "Ищем…" : filtered && filtered.length ? `Найдено ${nWords(filtered.length)}` : "Ничего не найдено"}
+        {wait.searching
+          ? "Ищем…"
+          : capped === undefined
+            ? ""
+            : filtered && filtered.length
+              ? `Найдено ${nWords(filtered.length)}`
+              : "Ничего не найдено"}
       </span>
     );
   } else if (scopeStats) {
@@ -684,7 +693,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
           ? "В этой теме пока нет слов."
           : "В библиотеке пока нет слов."
       : null;
-  const noResults = hasWords && capped && capped.length === 0 && query === deferredQuery;
+  const noResults = hasWords && capped && capped.length === 0;
 
   // ----- Detail pane content
   const pane: ReactNode =
@@ -897,6 +906,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
               fine={fine}
               label={`Слова: ${title}`}
               loading={capped === undefined}
+              stale={wait.dim}
               skeletonStyle={skeletonStyle}
               handlers={handlers}
               onSelectAll={(all) => {

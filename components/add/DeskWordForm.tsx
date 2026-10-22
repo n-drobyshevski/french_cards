@@ -7,7 +7,7 @@ import { Icon } from "@/components/ui/Icons";
 import { ExampleList } from "@/components/examples/ExampleList";
 import { SLANG_LABELS, type Folder, type SlangLevel } from "@/lib/types";
 import type { DuplicateInfo } from "./data";
-import { PendingDots, UnknownMeter, useFieldSpotlight } from "./parts";
+import { DuplicateReveal, PendingDots, UnknownMeter, useFieldSpotlight } from "./parts";
 import { detectionStates, type WordFormProps } from "./WordForm";
 import { CheckBox, DESK_INPUT, DeskFieldError, DeskFrame, FIELD_LABEL, HIDDEN_CONTROL_FOCUS, HintLine, KeyButton, ThemeSquare, type Hint } from "./desk-parts";
 import { choiceKey, choiceName, INBOX_CHOICE, sameChoice, type FolderChoice } from "./folder-choice";
@@ -142,7 +142,9 @@ export function DeskWordForm({
               className={cx(DESK_INPUT, "font-serif text-[20px] font-medium placeholder:font-sans placeholder:text-[15px] placeholder:font-normal")}
             />
             <DeskFieldError id={ids.frError}>{errors.fr}</DeskFieldError>
-            {duplicate && <DuplicateLine id={ids.dup} info={duplicate} onOpen={() => onOpenWord(duplicate.word.id)} />}
+            <DuplicateReveal info={duplicate}>
+              {(info) => <DuplicateLine id={ids.dup} info={info} onOpen={() => onOpenWord(info.word.id)} />}
+            </DuplicateReveal>
           </div>
           <div className="min-w-0">
             <label htmlFor={ids.ru} className={FIELD_LABEL}>
