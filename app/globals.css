@@ -85,6 +85,8 @@
 
 html {
   -webkit-tap-highlight-color: transparent;
+  /* Horizontal swipes grade cards; never let them trigger the browser's back/forward gesture. */
+  overscroll-behavior-x: none;
   -webkit-text-size-adjust: 100%;
 }
 

@@ -82,6 +82,14 @@ export function useSwipe({ enabled, onDecide }: { enabled: boolean; onDecide: (o
     settle();
   };
 
+  // On touch the browser implicitly captures the pointer on the child under the finger; moving
+  // the capture to the card makes that child fire lostpointercapture, which bubbles here. Only
+  // the card itself losing capture ends the drag.
+  const onLostPointerCapture = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.target !== event.currentTarget || event.pointerId !== state.current.pointerId) return;
+    onPointerCancel();
+  };
+
   return {
     view,
     handlers: enabled
@@ -90,7 +98,7 @@ export function useSwipe({ enabled, onDecide }: { enabled: boolean; onDecide: (o
           onPointerMove,
           onPointerUp,
           onPointerCancel,
-          onLostPointerCapture: onPointerCancel,
+          onLostPointerCapture,
         }
       : {},
   };

@@ -112,7 +112,14 @@ export function ReviewCard({ word, direction, revealed, onReveal, folderName, sw
             <SlangMeter level={word.slang_level} verlan={word.verlan} />
           </CardHeader>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-6 pt-6 pb-4">
+          {/* The scroller needs pan-y too: touch-action is resolved up to the nearest scroll container,
+              so without it the browser claims horizontal drags (back gesture) and cancels the swipe. */}
+          <div
+            className={cx(
+              "flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-6 pt-6 pb-4",
+              swipeEnabled && "touch-pan-y",
+            )}
+          >
             <h2 lang="fr" className={cx("m-0 font-serif font-medium tracking-[-0.015em] break-words", promptSize(word.fr))}>
               {word.fr}
             </h2>
