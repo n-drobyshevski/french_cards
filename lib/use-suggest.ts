@@ -47,6 +47,11 @@ export interface SuggestSnapshot {
   results: readonly Suggestion[];
   status: SuggestStatus;
   error: SuggestErrorKind | null;
+  /**
+   * The debounce is over and a request is in flight (status "loading"). The UI waits on this,
+   * not on `status`, for its delayed indicator (MOTION-SPEC §3.1: 150 ms after the debounce).
+   */
+  requesting: boolean;
 }
 
 /** The last response received, which later queries are narrowed from. */
@@ -154,7 +159,7 @@ class HttpError extends Error {
   }
 }
 
-const IDLE: SuggestSnapshot = { query: "", direction: "fr", results: [], status: "idle", error: null };
+const IDLE: SuggestSnapshot = { query: "", direction: "fr", results: [], status: "idle", error: null, requesting: false };
 
 const defaultOnline = () => (typeof navigator === "undefined" ? true : navigator.onLine !== false);
 
@@ -220,28 +225,28 @@ export class SuggestController {
     const direction = detectDirection(query);
 
     if (!this.enabled || query.length < this.minChars) {
-      this.set({ query, direction, results: [], status: "idle", error: null });
+      this.set({ query, direction, results: [], status: "idle", error: null, requesting: false });
       return;
     }
 
     const cached = opts.force ? undefined : this.cache.get(cacheKey(query));
     if (cached) {
       this.basis = { query, direction, results: cached, complete: true };
-      this.set({ query, direction, results: cached, status: "done", error: null });
+      this.set({ query, direction, results: cached, status: "done", error: null, requesting: false });
       return;
     }
 
     const plan = planSuggest(this.basis, query);
     if (!plan.fetch && !opts.force) {
-      this.set({ query, direction, results: plan.results, status: "done", error: null });
+      this.set({ query, direction, results: plan.results, status: "done", error: null, requesting: false });
       return;
     }
     if (!this.isOnline()) {
-      this.set({ query, direction, results: plan.results, status: "error", error: "offline" });
+      this.set({ query, direction, results: plan.results, status: "error", error: "offline", requesting: false });
       return;
     }
 
-    this.set({ query, direction, results: plan.results, status: "loading", error: null });
+    this.set({ query, direction, results: plan.results, status: "loading", error: null, requesting: false });
     if (opts.immediate || opts.force) {
       void this.run(query, direction, plan.results);
     } else {
@@ -267,7 +272,7 @@ export class SuggestController {
   /** Stops the pending timer and the request in flight. */
   cancel = (): void => {
     this.abortPending();
-    if (this.snapshot.status === "loading") this.set({ ...this.snapshot, status: "idle" });
+    if (this.snapshot.status === "loading") this.set({ ...this.snapshot, status: "idle", requesting: false });
   };
 
   private abortPending(): void {
@@ -297,6 +302,7 @@ export class SuggestController {
     const { max } = this.preferences;
     let ended: "done" | "error" | null = null;
     let errorKind: SuggestErrorKind = "failed";
+    this.set({ ...this.snapshot, requesting: true });
 
     try {
       const res = await this.fetchImpl(this.url, {
@@ -314,7 +320,7 @@ export class SuggestController {
         if (line.type === "suggestion") {
           if (fresh.length >= max) continue;
           fresh.push(line.suggestion);
-          this.set({ query, direction, results: mergeStreaming(fresh, kept, max), status: "loading", error: null });
+          this.set({ query, direction, results: mergeStreaming(fresh, kept, max), status: "loading", error: null, requesting: true });
         } else if (line.type === "done" || line.type === "error") {
           ended = line.type;
           break;
@@ -332,12 +338,12 @@ export class SuggestController {
     if (ended === "done") {
       this.basis = { query, direction, results: fresh, complete: true };
       this.remember(query, fresh);
-      this.set({ query, direction, results: fresh, status: "done", error: null });
+      this.set({ query, direction, results: fresh, status: "done", error: null, requesting: false });
       return;
     }
     // An error line, an HTTP error, or a stream that broke off: keep whatever arrived.
     if (fresh.length > 0) this.basis = { query, direction, results: fresh, complete: false };
-    this.set({ query, direction, results: fresh.length > 0 ? fresh : [...kept], status: "error", error: errorKind });
+    this.set({ query, direction, results: fresh.length > 0 ? fresh : [...kept], status: "error", error: errorKind, requesting: false });
   }
 }
 
@@ -354,6 +360,8 @@ export interface UseSuggestOptions {
 }
 
 export interface SuggestApi extends SuggestSnapshot {
+  /** Settings «Вариантов» (1–3): how many row slots «Варианты» reserves. */
+  max: number;
   setQuery: SuggestController["setQuery"];
   retry: () => void;
   flush: () => void;
@@ -377,5 +385,5 @@ export function useSuggest({ folders, enabled, preferences = DEFAULT_SUGGEST_PRE
     };
   }, [controller]);
 
-  return { ...snapshot, setQuery: controller.setQuery, retry: controller.retry, flush: controller.flush, cancel: controller.cancel };
+  return { ...snapshot, max: preferences.max, setQuery: controller.setQuery, retry: controller.retry, flush: controller.flush, cancel: controller.cancel };
 }

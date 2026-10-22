@@ -10,6 +10,7 @@ import { FlatKey, Kbd } from "@/components/ui/Kbd";
 import { DialogChrome } from "@/components/ui/Sheet";
 import { cx } from "@/components/ui/cx";
 import { useFormatKeys, useIsMac } from "@/lib/key-names";
+import { useDelayedFlag } from "@/lib/use-delayed-flag";
 import type { Folder } from "@/lib/types";
 import { choiceKey, choiceName, INBOX_CHOICE, type FolderChoice } from "./folder-choice";
 
@@ -168,40 +169,78 @@ export interface KeyButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElem
   keys?: string;
   /** Shown but inactive: stays focusable, aria-disabled (DESKTOP-SPEC §3 disabled). */
   inactive?: boolean;
-  busy?: boolean;
+  /**
+   * Waiting on its own action (MOTION-SPEC §3.5): no second press, full contrast; after 150 ms the
+   * label becomes `pendingLabel` («Добавляем…») with the width locked to the wider label.
+   */
+  pending?: boolean;
+  pendingLabel?: ReactNode;
+  /** A sibling in the same footer is pending: presses do nothing, the look stays. */
+  blocked?: boolean;
 }
 
-export function KeyButton({ variant = "primary", keys, inactive = false, busy = false, className, children, onClick, ...rest }: KeyButtonProps) {
+export function KeyButton({
+  variant = "primary",
+  keys,
+  inactive = false,
+  pending = false,
+  pendingLabel = "Добавляем…",
+  blocked = false,
+  className,
+  children,
+  onClick,
+  ...rest
+}: KeyButtonProps) {
   const fmt = useFormatKeys();
   const mac = useIsMac();
+  const swapped = useDelayedFlag(pending, { delay: 150, min: 0 });
   const shortcut = keys
     ?.split("+")
     .map((k) => (k === "Mod" ? (mac ? "Meta" : "Control") : k))
     .join("+");
-  const off = inactive || busy;
+  const stopped = inactive || pending || blocked;
   return (
     <button
       type="button"
-      aria-disabled={off || undefined}
-      aria-busy={busy || undefined}
+      aria-disabled={stopped || undefined}
+      aria-busy={pending || undefined}
       aria-keyshortcuts={shortcut}
       onClick={(e) => {
-        if (!off) onClick?.(e);
+        if (!stopped) onClick?.(e);
       }}
       className={cx(
         "inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-btn border pr-3 pl-4 text-[14px] leading-5 font-medium whitespace-nowrap",
         variant === "primary"
           ? "border-ink bg-ink text-on-ink hoverable:opacity-90"
           : "border-boundary bg-surface text-ink hoverable:shadow-[inset_0_0_0_1px_var(--boundary)]",
-        off && "cursor-default border-rule! bg-surface! text-boundary! shadow-none! hoverable:opacity-100",
+        inactive && "cursor-default border-rule! bg-surface! text-boundary! shadow-none! hoverable:opacity-100",
+        (pending || blocked) && !inactive && "cursor-default hoverable:opacity-100 hoverable:shadow-none",
         !keys && "pr-4",
         className,
       )}
       {...rest}
     >
-      <span>{children}</span>
+      {/* Both labels share one grid cell, so the width never changes. */}
+      <span className="grid">
+        <span
+          aria-hidden={swapped || undefined}
+          className={cx("col-start-1 row-start-1 transition-opacity duration-(--dur-exit) ease-exit", swapped && "opacity-0")}
+        >
+          {children}
+        </span>
+        <span
+          aria-hidden={!swapped || undefined}
+          className={cx(
+            "col-start-1 row-start-1 transition-opacity duration-(--dur-quick) ease-enter",
+            !swapped && "opacity-0",
+            swapped && (variant === "primary" ? "opacity-72" : "text-muted"),
+          )}
+        >
+          {pendingLabel}
+        </span>
+      </span>
       {keys && (
-        <Kbd aria-hidden="true" tone={variant === "primary" && !off ? "ink" : "paper"}>
+        <Kbd aria-hidden="true" tone={variant === "primary" && !inactive ? "ink" : "paper"}>
           {fmt(keys)}
         </Kbd>
       )}

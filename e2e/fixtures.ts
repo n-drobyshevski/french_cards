@@ -286,3 +286,68 @@ export async function loggedRatings(page: Page): Promise<number[]> {
       }),
   );
 }
+
+/**
+ * Holds POST /api/ai/suggest until `release()`; each held request then gets `answer()` (rows, or
+ * an HTTP error status). Lets a test look at «Варианты» while they wait.
+ */
+export async function gateSuggest(page: Page, answer: () => readonly SuggestionWire[] | number) {
+  let open!: () => void;
+  let gate = new Promise<void>((resolve) => (open = resolve));
+  await page.route("**/api/ai/suggest", async (route: Route) => {
+    await gate;
+    const a = answer();
+    if (typeof a === "number") {
+      await route.fulfill({ status: a, contentType: "application/json", body: JSON.stringify({ error: "failed" }) });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: NDJSON,
+      body: ndjson([
+        { type: "meta", direction: "fr" },
+        ...a.map((suggestion, index) => ({ type: "suggestion", index, suggestion })),
+        { type: "done", count: a.length },
+      ]),
+    });
+  });
+  return {
+    release: () => open(),
+    /** Holds the next requests again. */
+    hold: () => {
+      gate = new Promise<void>((resolve) => (open = resolve));
+    },
+  };
+}
+
+/**
+ * Keeps a read-write transaction open on the app database, so the app's own saves queue behind it
+ * (IndexedDB runs overlapping read-write transactions one at a time). Returns `release`.
+ */
+export async function holdDatabase(page: Page): Promise<() => Promise<void>> {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const open = indexedDB.open("kartochki");
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const db = open.result;
+          const tx = db.transaction(Array.from(db.objectStoreNames), "readwrite");
+          const w = window as unknown as { __holdDb: boolean };
+          w.__holdDb = true;
+          const store = tx.objectStore("settings");
+          const spin = () => {
+            if (w.__holdDb) store.get("__hold").onsuccess = spin;
+          };
+          spin();
+          tx.oncomplete = () => db.close();
+          resolve();
+        };
+      }),
+  );
+  return async () => {
+    await page.evaluate(() => {
+      (window as unknown as { __holdDb: boolean }).__holdDb = false;
+    });
+  };
+}

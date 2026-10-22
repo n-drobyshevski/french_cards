@@ -15,7 +15,10 @@ import { cardNumber } from "./match";
 export interface DeskWordFormProps extends Omit<WordFormProps, "onSubmit" | "onAddAnyway"> {
   /** «Добавить» (andMore = «Добавить и ещё»). */
   onSave: (andMore: boolean) => void;
-  saving: boolean;
+  /** Which button's save is running: that one shows «Добавляем…», the other only stops taking presses. */
+  saving: "add" | "more" | null;
+  /** «Добавить и ещё» saved: the fields fade out (--dur-exit) before the search comes back. */
+  leaving?: boolean;
   saveError: string | null;
   /** Footer status after «Добавить и ещё» (replaces the key line). */
   status?: ReactNode;
@@ -45,6 +48,7 @@ export function DeskWordForm({
   enriching = false,
   onSave,
   saving,
+  leaving = false,
   saveError,
   status,
 }: DeskWordFormProps) {
@@ -73,17 +77,27 @@ export function DeskWordForm({
         ) : (
           <HintLine hints={FORM_HINTS} />
         ))}
-      <KeyButton variant="secondary" keys="Shift+Mod+Enter" busy={saving} onClick={() => onSave(true)}>
+      <KeyButton
+        variant="secondary"
+        keys="Shift+Mod+Enter"
+        pending={saving === "more"}
+        blocked={saving === "add"}
+        onClick={() => onSave(true)}
+      >
         Добавить и ещё
       </KeyButton>
-      <KeyButton keys="Mod+Enter" busy={saving} onClick={() => onSave(false)}>
+      <KeyButton keys="Mod+Enter" pending={saving === "add"} blocked={saving === "more"} onClick={() => onSave(false)}>
         {duplicate ? "Добавить всё равно" : "Добавить"}
       </KeyButton>
     </>
   );
 
   return (
-    <DeskFrame footer={footer} tall bodyClassName="pb-3">
+    <DeskFrame
+      footer={footer}
+      tall
+      bodyClassName={cx("pb-3", leaving && "pointer-events-none opacity-0 transition-opacity duration-(--dur-exit) ease-exit")}
+    >
       <form aria-label="Новое слово" onSubmit={(e) => e.preventDefault()} className="m-0 flex flex-col">
         <div className="grid grid-cols-2 gap-x-4">
           <div className="min-w-0">

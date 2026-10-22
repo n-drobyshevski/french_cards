@@ -13,7 +13,14 @@ import { dictionaryKey, MANUAL_KEY, moveActive, recentKey, resolveActive, varian
 import { cardNumber, posAbbr, splitTypedPrefix } from "./match";
 import { choiceName, foldersForSuggestion } from "./folder-choice";
 import { DESK_INPUT, DeskFieldError, DeskFrame, DeskSection, FIELD_LABEL, HintLine, KeyButton, ThemeSelect, type Hint } from "./desk-parts";
-import { NOTICE } from "./parts";
+import {
+  useVariantsRegion,
+  VARIANT_ENTER,
+  VARIANT_ROW_HEIGHT,
+  VariantError,
+  VariantSlotFrame,
+  VariantsStatusSlot,
+} from "./parts";
 import type { SearchPanelProps } from "./SearchPanel";
 
 export interface DeskSearchPanelProps extends Omit<SearchPanelProps, "onClear"> {
@@ -56,7 +63,8 @@ export function DeskSearchPanel({ inputRef, ...props }: DeskSearchPanelProps) {
   const trimmed = value.trim();
   const direction = detectDirection(trimmed);
   const showDictionary = trimmed !== "" && direction === "fr" && dictionary.length > 0;
-  const showVariants = trimmed !== "" && !quick && suggestionsEnabled && suggest.status !== "idle";
+  // «Варианты» keep their slots whenever there is a headword, also while failed (A2, A3).
+  const showVariants = trimmed !== "" && suggestionsEnabled;
   const recent = trimmed ? [] : (context?.recent ?? []);
   const results = showVariants ? suggest.results : [];
 
@@ -176,12 +184,6 @@ export function DeskSearchPanel({ inputRef, ...props }: DeskSearchPanelProps) {
         <EmptyState {...props} listboxId={`${base}-recent`} optionProps={optionProps} active={active} />
       ) : (
         <>
-          {quick && (
-            <>
-              {suggestionsEnabled && suggest.error && <DeskNotice kind={suggest.error} onRetry={suggest.retry} />}
-              <QuickForm {...props} quick={quick} direction={direction} />
-            </>
-          )}
           {showDictionary && (
             <section aria-labelledby={`${base}-dict-title`} className="mt-4">
               <DeskSection id={`${base}-dict-title`} title="Словарь" aside="работает без сети" />
@@ -206,6 +208,8 @@ export function DeskSearchPanel({ inputRef, ...props }: DeskSearchPanelProps) {
           {showVariants && (
             <Variants {...props} direction={direction} listboxId={`${base}-var`} optionProps={optionProps} active={active} folders={folders} />
           )}
+          {/* Below «Варианты», so an error never moves what is above it (A3). */}
+          {quick && <QuickForm {...props} quick={quick} direction={direction} />}
         </>
       )}
     </DeskFrame>
@@ -262,6 +266,7 @@ function EmptyState({
   context,
   folders,
   suggestionsEnabled,
+  freshId,
   listboxId,
   optionProps,
   active,
@@ -284,7 +289,14 @@ function EmptyState({
           />
           <div role="listbox" id={listboxId} aria-labelledby={headingId}>
             {recent.map((w) => (
-              <RecentRow key={w.id} word={w} folders={folders} active={active === recentKey(w.id)} optionProps={optionProps(recentKey(w.id))} />
+              <RecentRow
+                key={w.id}
+                word={w}
+                folders={folders}
+                fresh={w.id === freshId}
+                active={active === recentKey(w.id)}
+                optionProps={optionProps(recentKey(w.id))}
+              />
             ))}
           </div>
         </section>
@@ -294,13 +306,36 @@ function EmptyState({
   );
 }
 
-function RecentRow({ word, folders, active, optionProps }: { word: Word; folders: readonly Folder[]; active: boolean; optionProps: OptionProps }) {
+/** A just-added row opens from 0 (--dur-move) and its paper fades from --surface-2 (--dur-spotlight). */
+const FRESH_ROW_STYLE = {
+  transition: "height var(--dur-move) var(--ease-standard), background-color var(--dur-spotlight) linear",
+} as const;
+
+function RecentRow({
+  word,
+  folders,
+  fresh,
+  active,
+  optionProps,
+}: {
+  word: Word;
+  folders: readonly Folder[];
+  fresh: boolean;
+  active: boolean;
+  optionProps: OptionProps;
+}) {
   const folder = word.folder_id ? folders.find((f) => f.id === word.folder_id) : undefined;
   return (
     <div
       {...optionProps}
       aria-label={`Открыть: ${word.fr} — ${word.ru}`}
-      className={cx(ROW, "grid h-12 grid-cols-[200px_minmax(0,1fr)_96px_104px] items-center", activeRow(active))}
+      style={fresh ? FRESH_ROW_STYLE : undefined}
+      className={cx(
+        ROW,
+        "grid h-12 grid-cols-[200px_minmax(0,1fr)_96px_104px] items-center",
+        fresh && "overflow-hidden starting:h-0 starting:bg-surface-2",
+        activeRow(active),
+      )}
     >
       <RowEdges active={active} last={false} />
       <span lang="fr" className="truncate pr-3 font-serif text-[19px] leading-6 font-medium">
@@ -410,18 +445,22 @@ function Variants({
   active,
 }: PanelProps & ListProps & { direction: "fr" | "ru" }) {
   const headingId = useId();
-  const { results, status } = suggest;
-  const loading = status === "loading";
+  const region = useVariantsRegion(suggest);
+  const rows = region.slots.filter((slot) => slot.kind === "row");
+  const rest = region.slots.filter((slot) => slot.kind !== "row");
+  const done = suggest.status === "done";
   return (
-    <section aria-labelledby={headingId} className="mt-4">
+    <section aria-labelledby={headingId} aria-busy={region.busy || undefined} data-variants="" className="mt-4">
       <DeskSection
         id={headingId}
         title="Варианты"
         aside={`${direction === "ru" ? "по-французски" : "перевод"}${showSlang ? " · уровень" : ""} · тема`}
       />
-      <div role="listbox" id={listboxId} aria-labelledby={headingId} aria-busy={loading || undefined}>
-        {results.map((s, i) => {
-          const key = variantKey(s);
+      <VariantsStatusSlot status={region.status} />
+      <div role="listbox" id={listboxId} aria-labelledby={headingId}>
+        {rows.map((slot, i) => {
+          const s = slot.suggestion;
+          const key = slot.key;
           const abbr = posAbbr(s);
           const theme = autoSort ? choiceName(foldersForSuggestion(s, folders).auto, folders) : "Входящие";
           const on = active === key;
@@ -430,9 +469,10 @@ function Variants({
               key={key}
               {...optionProps(key)}
               aria-label={`Выбрать: ${s.fr} — ${s.ru}`}
-              className={cx(ROW, "grid h-[72px] grid-cols-[minmax(0,1fr)_136px_18px] items-center gap-x-4", activeRow(on))}
+              style={{ animationDelay: `${slot.delay}ms` }}
+              className={cx(ROW, VARIANT_ENTER, "grid h-[72px] grid-cols-[minmax(0,1fr)_136px_18px] items-center gap-x-4", activeRow(on))}
             >
-              <RowEdges active={on} last={i === results.length - 1 && !loading && status !== "error"} />
+              <RowEdges active={on} last={i === rows.length - 1 && done && rest.length === 0} />
               <span className="flex min-w-0 flex-col">
                 <span className="flex min-w-0 items-baseline gap-1.5 whitespace-nowrap">
                   <span lang="fr" className="truncate font-serif text-[19px] leading-6 font-medium">
@@ -457,50 +497,18 @@ function Variants({
           );
         })}
       </div>
-      {loading && <SkeletonRows count={results.length > 0 ? 1 : 2} />}
-      {status === "done" && results.length === 0 && (
-        <p className="m-0 flex h-12 items-center text-[14px] leading-5 text-muted">Вариантов не нашлось.</p>
+      {rest.map((slot) =>
+        slot.kind === "error" ? (
+          <VariantError key={slot.key} kind={slot.error} onRetry={suggest.retry} />
+        ) : slot.kind === "empty" ? (
+          <p key={slot.key} className="m-0 flex items-center text-[14px] leading-5 text-muted" style={{ height: VARIANT_ROW_HEIGHT }}>
+            Вариантов не нашлось.
+          </p>
+        ) : slot.kind === "slot" ? (
+          <VariantSlotFrame key={slot.key} slot={slot} />
+        ) : null,
       )}
-      {status === "error" && suggest.error && <DeskNotice kind={suggest.error} onRetry={suggest.retry} />}
     </section>
-  );
-}
-
-/** Hairline skeleton rows while «Варианты» load (60% / 40% bars), no text. */
-function SkeletonRows({ count }: { count: number }) {
-  return (
-    <div role="status" aria-label="Загружаем варианты">
-      {Array.from({ length: count }, (_, i) => (
-        <div key={i} aria-hidden="true" className="flex h-[72px] flex-col gap-4 pt-[18px]">
-          <span className="block h-2 w-3/5 rounded-[2px] bg-surface-2" />
-          <span className="block h-2 w-2/5 rounded-[2px] bg-surface-2" />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function DeskNotice({ kind, onRetry }: { kind: NonNullable<DeskSearchPanelProps["suggest"]["error"]>; onRetry: () => void }) {
-  const n = NOTICE[kind];
-  return (
-    <p role="status" className="m-0 mt-4 flex items-start gap-2 text-[13px] leading-5 text-muted">
-      <Icon name={kind === "offline" ? "cloud-off" : "alert"} size={16} strokeWidth={1.75} className="mt-0.5 shrink-0" />
-      <span>
-        <span className="font-medium text-ink">{n.lead}</span> {n.rest}
-        {n.retry && (
-          <>
-            {" "}
-            <button
-              type="button"
-              onClick={onRetry}
-              className="bg-transparent p-0 text-[13px] leading-5 font-medium text-ink underline decoration-1 underline-offset-[3px]"
-            >
-              Повторить
-            </button>
-          </>
-        )}
-      </span>
-    </p>
   );
 }
 
@@ -518,7 +526,7 @@ function QuickForm({
   const errorId = useId();
   const themeId = useId();
   return (
-    <div className="mt-4">
+    <div className={cx("mt-4", VARIANT_ENTER)}>
       <div className="grid grid-cols-2 gap-x-4">
         <div>
           <label htmlFor={otherId} className={FIELD_LABEL}>
@@ -559,7 +567,7 @@ function QuickForm({
         >
           Все поля
         </button>
-        <KeyButton keys="Mod+Enter" busy={saving} onClick={onQuickSave}>
+        <KeyButton keys="Mod+Enter" pending={saving} onClick={onQuickSave}>
           Добавить
         </KeyButton>
       </div>

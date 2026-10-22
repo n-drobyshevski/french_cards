@@ -5,6 +5,7 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } 
 import { WordDetailSheet } from "@/components/library/WordDetailSheet";
 import { useAddSheet } from "@/components/providers/AddSheetContext";
 import { Button } from "@/components/ui/Button";
+import { cx } from "@/components/ui/cx";
 import { Sheet } from "@/components/ui/Sheet";
 import { Snackbar, useSnackbar } from "@/components/ui/Snackbar";
 import { detectDirection } from "@/lib/ai/normalize";
@@ -18,7 +19,7 @@ import type { Folder } from "@/lib/types";
 import { useLayoutClass } from "@/lib/use-media";
 import { toFolderInputs, useSuggest, type SuggestPreferences } from "@/lib/use-suggest";
 import { MANUAL_KEY, variantKey } from "./combobox";
-import { loadAddContext, loadDuplicate, loadListDuplicates } from "./data";
+import { loadAddContext, loadDuplicate, loadListDuplicates, type DuplicateInfo } from "./data";
 import {
   applyEnrichment,
   draftFromSuggestion,
@@ -56,6 +57,25 @@ const EMPTY_QUICK: QuickFields = { other: "", folder: INBOX_CHOICE, error: null 
 const DICTIONARY_ROWS = 3;
 /** How long the in-sheet «Отменить» bar stays after «Добавить и ещё». */
 const UNDO_BAR_MS = 7000;
+
+type SaveKind = "add" | "more";
+
+/** What the sheet showed when «Добавить» was pressed: kept on screen while it closes (A8). */
+interface Frozen {
+  label: string;
+  duplicate: DuplicateInfo | null;
+  listRows: ListRow[];
+}
+
+/** A motion token in ms (MOTION-SPEC §2.1; shorter under reduced motion), for timers that follow CSS. */
+function tokenMs(name: string, fallback: number): number {
+  if (typeof window === "undefined") return fallback;
+  // The minifier writes 240ms as «.24s».
+  const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const value = parseFloat(raw);
+  if (!Number.isFinite(value)) return fallback;
+  return raw.endsWith("ms") ? value : raw.endsWith("s") ? value * 1000 : fallback;
+}
 
 /**
  * The quick-add bottom sheet, mounted once by AppProviders and opened with useAddSheet().open().
@@ -128,7 +148,13 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
   const [listFolder, setListFolder] = useState<FolderChoice | null>(null);
   const [listToggled, setListToggled] = useState<ReadonlySet<string>>(() => new Set());
   const [listEnriched, setListEnriched] = useState<ReadonlyMap<string, EnrichResult>>(() => new Map());
-  const [saving, setSaving] = useState(false);
+  // Which save is running: «Добавить» (closes the sheet) or «Добавить и ещё» (starts over).
+  const [saving, setSaving] = useState<SaveKind | null>(null);
+  // While «Добавить» saves and the sheet sinks, the body shows what was submitted (A8).
+  const [frozen, setFrozen] = useState<Frozen | null>(null);
+  // After «Добавить и ещё»: the fields fade out, then the search comes back with the new word on top.
+  const [leaving, setLeaving] = useState(false);
+  const [freshId, setFreshId] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [lexReady, setLexReady] = useState(isLexiqueLoaded);
   const [focusRequest, setFocusRequest] = useState<{ target: FocusTarget } | null>(null);
@@ -185,23 +211,25 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
   );
 
   // Duplicate check: the typed French headword, or the form's French field.
-  const dupText = mode === "form" ? (draft?.fr ?? "") : mode === "search" && direction === "fr" ? query : "";
+  // Stopped once «Добавить» is pressed: the word just saved must not flag itself as a duplicate.
+  const dupText = frozen ? "" : mode === "form" ? (draft?.fr ?? "") : mode === "search" && direction === "fr" ? query : "";
   const dupKey = normalizeLemma(dupText);
   const duplicateRow = useLiveQuery(() => (dupKey.length >= 2 ? loadDuplicate(dupText) : null), [dupText]);
-  const duplicate =
+  const liveDuplicate =
     duplicateRow && dupKey.length >= 2 && normalizeLemma(duplicateRow.word.fr) === dupKey && ackDuplicate !== dupKey
       ? duplicateRow
       : null;
+  const duplicate = frozen ? frozen.duplicate : liveDuplicate;
 
   const quickVisible =
     mode === "search" && trimmed.length > 0 && (!suggestionsEnabled || (suggest.status === "error" && suggest.results.length === 0));
 
   // «Список» rows: parsed lines, flagged when already in the library or repeated in the list.
   const parsed = useMemo(() => (mode === "list" ? parseWordList(listText) : []), [mode, listText]);
-  const listFrs = useMemo(() => parsed.filter((r) => r.fr).map((r) => r.fr), [parsed]);
+  const listFrs = useMemo(() => (frozen ? [] : parsed.filter((r) => r.fr).map((r) => r.fr)), [parsed, frozen]);
   const listDuplicates = useLiveQuery(() => loadListDuplicates(listFrs), [listFrs]);
   const listAuto = listFolder === null && autoSort;
-  const listRows = useMemo<ListRow[]>(() => {
+  const liveListRows = useMemo<ListRow[]>(() => {
     const seen = new Map<string, number>();
     const rows = parsed.map((r): ListRow => {
       const lemma = normalizeLemma(r.fr);
@@ -226,6 +254,13 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
     );
     return rows.map((r, i) => ({ ...r, autoFolder: choices[i] }));
   }, [parsed, listDuplicates, listToggled, listEnriched, listAuto, folders]);
+  const listRows = frozen ? frozen.listRows : liveListRows;
+
+  const liveLabel =
+    mode === "list"
+      ? `Список · ${parsed.length} ${plural(parsed.length, ["строка", "строки", "строк"])}`
+      : `Карточка ${cardNumber((context?.total ?? 0) + 1)}`;
+  const label = frozen ? frozen.label : liveLabel;
   const listSelected = listRows.filter((r) => r.checked);
 
   // Slang level, example and theme: for the manual form while both sides are filled, and for
@@ -281,6 +316,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
 
   const changeQuery = (value: string) => {
     dropKeptDraft(value);
+    if (value.trim()) setFreshId(null);
     setQuery(value);
     requestSuggestions(value);
     setSaveError(null);
@@ -348,6 +384,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
   };
 
   const startOver = () => {
+    setLeaving(false);
     setMode("search");
     setQuery("");
     requestSuggestions("");
@@ -363,13 +400,20 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
     undoSave(result).catch(() => snackbar.show({ message: "Не получилось отменить" }));
   };
 
-  const showUndoSnackbar = (message: string, result: SaveResult) =>
-    snackbar.show({ message, actionLabel: "Отменить", onAction: () => undo(result) });
+  /**
+   * The page snackbar. When the sheet is closing it enters only once the sheet has cleared (A8: the
+   * sheet closes in --dur-enter; the desktop dialog goes at once), never over the sinking sheet.
+   */
+  const showUndoSnackbar = (message: string, result: SaveResult, afterClose = false) => {
+    const show = () => snackbar.show({ message, actionLabel: "Отменить", onAction: () => undo(result) });
+    if (afterClose && !desk) window.setTimeout(show, tokenMs("--dur-enter", 240));
+    else show();
+  };
 
   /** Closing hands a pending in-sheet undo over to the page snackbar. */
   const handleOpenChange = (next: boolean) => {
     if (!next && undoBar) {
-      showUndoSnackbar(undoBar.message, undoBar.result);
+      showUndoSnackbar(undoBar.message, undoBar.result, true);
       setUndoBar(null);
     }
     onOpenChange(next);
@@ -384,25 +428,37 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
   };
 
   const commit = async (request: SaveRequest | SaveRequest[], message: string, andMore: boolean): Promise<SaveResult | null> => {
-    setSaving(true);
+    setSaving(andMore ? "more" : "add");
     setSaveError(null);
+    // «Добавить» closes the sheet: from now on it shows what was submitted, not the saved word
+    // coming back as «Уже есть…» or the next card number.
+    if (!andMore) setFrozen({ label, duplicate, listRows });
+    let result: SaveResult;
     try {
-      const result = await saveWordGroups(Array.isArray(request) ? request : [request]);
-      if (andMore) {
-        setUndoBar({ id: ++undoSeq.current, message, result });
-        startOver();
-      } else {
-        setUndoBar(null);
-        showUndoSnackbar(message, result);
-        onOpenChange(false);
-      }
-      return result;
+      result = await saveWordGroups(Array.isArray(request) ? request : [request]);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "Не получилось сохранить");
+      setSaving(null);
+      setFrozen(null);
       return null;
-    } finally {
-      setSaving(false);
     }
+    if (andMore) {
+      setUndoBar({ id: ++undoSeq.current, message, result });
+      setFreshId(result.words[0]?.id ?? null);
+      // The fields fade out (--dur-exit), then the empty search comes back focused; the buttons
+      // keep refusing presses until then, so the same draft cannot be added twice.
+      setLeaving(true);
+      window.setTimeout(() => {
+        startOver();
+        setSaving(null);
+      }, tokenMs("--dur-exit", 140));
+    } else {
+      setUndoBar(null);
+      setSaving(null);
+      onOpenChange(false);
+      showUndoSnackbar(message, result, true);
+    }
+    return result;
   };
 
   const saveForm = (andMore: boolean) => {
@@ -562,10 +618,17 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
         {undoLine}
         {errorLine}
         <div className="grid grid-cols-2 gap-2">
-          <Button variant="secondary" block disabled={saving} onClick={() => saveForm(true)}>
+          <Button
+            variant="secondary"
+            block
+            pending={saving === "more"}
+            pendingLabel="Добавляем…"
+            blocked={saving === "add"}
+            onClick={() => saveForm(true)}
+          >
             Добавить и ещё
           </Button>
-          <Button block pending={saving} pendingLabel="Добавляем…" onClick={() => saveForm(false)}>
+          <Button block pending={saving === "add"} pendingLabel="Добавляем…" blocked={saving === "more"} onClick={() => saveForm(false)}>
             Добавить
           </Button>
         </div>
@@ -576,7 +639,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
       <>
         {undoLine}
         {errorLine}
-        <Button block pending={saving} pendingLabel="Добавляем…" disabled={listSelected.length === 0} onClick={saveList}>
+        <Button block pending={saving !== null} pendingLabel="Добавляем…" disabled={listSelected.length === 0} onClick={saveList}>
           {listSelected.length > 0 ? `Добавить ${nWords(listSelected.length)}` : "Добавить"}
         </Button>
       </>
@@ -586,7 +649,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
       <>
         {undoLine}
         {errorLine}
-        <Button block pending={saving} pendingLabel="Добавляем…" onClick={saveQuick}>
+        <Button block pending={saving !== null} pendingLabel="Добавляем…" onClick={saveQuick}>
           Добавить
         </Button>
       </>
@@ -604,11 +667,6 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
         </ToolButton>
       </>
     );
-
-  const label =
-    mode === "list"
-      ? `Список · ${parsed.length} ${plural(parsed.length, ["строка", "строки", "строк"])}`
-      : `Карточка ${cardNumber((context?.total ?? 0) + 1)}`;
 
   if (desk) {
     const status = undoBar && (
@@ -671,7 +729,8 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
             onQuickChange={(patch) => setQuick((q) => ({ ...q, ...patch }))}
             onQuickSave={saveQuick}
             preferredKey={draft && draftOrigin && draftOrigin.query === query ? draftOrigin.key : null}
-            saving={saving}
+            freshId={freshId}
+            saving={saving !== null}
             saveError={saveError}
             status={status}
           />
@@ -689,6 +748,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
             enriching={formEnriching}
             onSave={saveForm}
             saving={saving}
+            leaving={leaving}
             saveError={saveError}
             status={status}
           />
@@ -706,7 +766,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
             folders={folders}
             show={detectPrefs}
             onSave={saveList}
-            saving={saving}
+            saving={saving !== null}
             saveError={saveError}
             status={status}
           />
@@ -763,27 +823,30 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
           onAddAnyway={() => setAckDuplicate(dupKey)}
           quick={quickVisible ? quick : null}
           onQuickChange={(patch) => setQuick((q) => ({ ...q, ...patch }))}
+          freshId={freshId}
         />
       )}
 
       {mode === "form" && draft && (
-        <WordForm
-          draft={draft}
-          onChange={(patch) => {
-            setDraft((d) => (d ? { ...d, ...patch } : d));
-            if ("fr" in patch) setErrors((e) => ({ ...e, fr: undefined }));
-            if ("ru" in patch) setErrors((e) => ({ ...e, ru: undefined }));
-          }}
-          folders={folders}
-          errors={errors}
-          frRef={frRef}
-          ruRef={ruRef}
-          duplicate={duplicate}
-          onOpenWord={openWord}
-          onAddAnyway={() => setAckDuplicate(dupKey)}
-          onSubmit={() => saveForm(false)}
-          enriching={formEnriching}
-        />
+        <div className={cx(leaving && "pointer-events-none opacity-0 transition-opacity duration-(--dur-exit) ease-exit")}>
+          <WordForm
+            draft={draft}
+            onChange={(patch) => {
+              setDraft((d) => (d ? { ...d, ...patch } : d));
+              if ("fr" in patch) setErrors((e) => ({ ...e, fr: undefined }));
+              if ("ru" in patch) setErrors((e) => ({ ...e, ru: undefined }));
+            }}
+            folders={folders}
+            errors={errors}
+            frRef={frRef}
+            ruRef={ruRef}
+            duplicate={duplicate}
+            onOpenWord={openWord}
+            onAddAnyway={() => setAckDuplicate(dupKey)}
+            onSubmit={() => saveForm(false)}
+            enriching={formEnriching}
+          />
+        </div>
       )}
 
       {mode === "list" && (
