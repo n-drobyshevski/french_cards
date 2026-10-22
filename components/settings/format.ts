@@ -71,7 +71,7 @@ const words = (n: number) => `${n} ${pluralRu(n, ["слово", "слова", "�
 export function describeBackupImport(result: ImportResult): string {
   const added = result.words.inserted;
   const updated = result.words.updated;
-  const other = (["folders", "review_state", "review_log", "reorg_runs"] as const).reduce(
+  const other = (["folders", "review_state", "review_log", "reorg_runs", "review_sets"] as const).reduce(
     (sum, t) => sum + result[t].inserted + result[t].updated,
     0,
   );

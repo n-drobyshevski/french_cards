@@ -40,6 +40,7 @@ The repo `n-drobyshevski/french_cards` is empty (branch `ccr-8a1fb2eb-6rovnb`, n
 - **`review_state`**: PK (word_id, direction ∈ fr_ru|ru_fr), FSRS card fields
 - **`review_log`**: append-only, for undo and later FSRS optimization
 - **`reorg_runs`**: plan + undo payload for the AI re-sort
+- **`review_sets`**: «Мои наборы» for Повторение (name, themes, statuses, slang levels, age, mode), synced so every device sees them
 
 ## Phase 0: UI/UX mockups (first deliverable; we stop here for the user's feedback)
 - **Process:** run a workflow with one designer agent per screen group, then a consistency/critique pass.
