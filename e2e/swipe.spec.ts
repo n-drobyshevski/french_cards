@@ -111,13 +111,13 @@ test("grading swipes vibrate: a tick at the threshold, then one pulse for Зна
   const first = await page.locator("[data-review-answer] h2").innerText();
   await touchSwipe(page, 1);
   await expect(page.getByText(`Знаю · ${first}`)).toBeVisible();
-  expect(await vibrations()).toEqual([8, 14]);
+  expect(await vibrations()).toEqual([20, 40]);
 
   await questionCard(page).tap();
   const second = await page.locator("[data-review-answer] h2").innerText();
   await touchSwipe(page, -1);
   await expect(page.getByText(`Не знаю · ${second}`)).toBeVisible();
-  expect(await vibrations()).toEqual([8, 14, 8, [12, 60, 12]]);
+  expect(await vibrations()).toEqual([20, 40, 20, [35, 80, 35]]);
 
   // The flip and fly-out transforms must not widen the page: a mobile browser then widens its
   // layout viewport to fit (zooming out), which pushes the tab bar off screen.

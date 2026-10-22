@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
+import { AbbrHint } from "@/components/ui/AbbrHint";
 import { Kbd } from "@/components/ui/Kbd";
 import { SlangMeter } from "@/components/ui/SlangMeter";
 import { SLANG_LABELS, type Direction, type Word } from "@/lib/types";
@@ -263,7 +264,7 @@ export function ReviewCard({
           )}
         >
           <CardHeader label={<CallNumber side={label} number={number} />}>
-            <SlangMeter level={word.slang_level} verlan={word.verlan} />
+            <SlangMeter level={word.slang_level} verlan={word.verlan} hints hintAlign="end" />
           </CardHeader>
 
           {/* The scroller needs pan-y too: touch-action is resolved up to the nearest scroll container,
@@ -286,8 +287,8 @@ export function ReviewCard({
               {word.fr}
             </h2>
             {pos && (
-              <span lang="fr" className={cx("abbr mt-2 text-[15px] leading-5 md:text-[17px] md:leading-8", STEP_POS[step])}>
-                {pos}
+              <span className={cx("mt-2 flex", STEP_POS[step])}>
+                <AbbrHint abbr={pos} className="text-[15px] leading-5 md:text-[17px] md:leading-8" />
               </span>
             )}
             <p className="mt-6 mb-0 text-[22px] leading-7 font-medium break-words md:mt-4 md:text-[24px] md:leading-8">

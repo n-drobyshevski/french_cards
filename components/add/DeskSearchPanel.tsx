@@ -402,6 +402,7 @@ function DuplicateBox({ info, onOpen, onAddAnyway }: { info: NonNullable<SearchP
 function Variants({
   suggest,
   autoSort = true,
+  showSlang = true,
   folders,
   direction,
   listboxId,
@@ -413,7 +414,11 @@ function Variants({
   const loading = status === "loading";
   return (
     <section aria-labelledby={headingId} className="mt-4">
-      <DeskSection id={headingId} title="Варианты" aside={direction === "ru" ? "по-французски · уровень · тема" : "перевод · уровень · тема"} />
+      <DeskSection
+        id={headingId}
+        title="Варианты"
+        aside={`${direction === "ru" ? "по-французски" : "перевод"}${showSlang ? " · уровень" : ""} · тема`}
+      />
       <div role="listbox" id={listboxId} aria-labelledby={headingId} aria-busy={loading || undefined}>
         {results.map((s, i) => {
           const key = variantKey(s);
@@ -444,7 +449,7 @@ function Variants({
                 </span>
               </span>
               <span className="flex min-w-0 flex-col items-start gap-1">
-                <Meter level={s.slang_level} verlan={s.verlan} />
+                {showSlang && <Meter level={s.slang_level} verlan={s.verlan} />}
                 <span className="max-w-full truncate text-[12px] leading-4 text-muted">{theme}</span>
               </span>
               <span className="flex justify-end">{on && <EnterCap />}</span>

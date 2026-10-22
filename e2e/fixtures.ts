@@ -151,6 +151,10 @@ export interface EnrichResultWire {
   example_fr: string | null;
   example_ru: string | null;
   confidence: "high" | "med" | "low";
+  /** Theme slug, "NEW" or "INBOX" when the request carried themes; otherwise null. */
+  folder: string | null;
+  folder_alternatives: string[];
+  new_folder: { slug: string; name: string; description: string } | null;
 }
 
 export interface EnrichWordWire {
@@ -164,11 +168,11 @@ export interface EnrichWordWire {
 export async function mockEnrich(
   page: Page,
   make: (word: EnrichWordWire) => Omit<EnrichResultWire, "id"> | null,
-  onRequest?: (words: EnrichWordWire[]) => void,
+  onRequest?: (words: EnrichWordWire[], folders: { slug: string }[] | undefined) => void,
 ) {
   await page.route("**/api/ai/enrich", async (route: Route) => {
-    const { words } = route.request().postDataJSON() as { words: EnrichWordWire[] };
-    onRequest?.(words);
+    const { words, folders } = route.request().postDataJSON() as { words: EnrichWordWire[]; folders?: { slug: string }[] };
+    onRequest?.(words, folders);
     const results = words.flatMap((w) => {
       const r = make(w);
       return r ? [{ id: w.id, ...r }] : [];
@@ -186,6 +190,9 @@ export const enriched = (word: EnrichWordWire, fields: Partial<Omit<EnrichResult
   example_fr: `Exemple avec ${word.fr}.`,
   example_ru: `Пример: ${word.ru}.`,
   confidence: "high",
+  folder: null,
+  folder_alternatives: [],
+  new_folder: null,
   ...fields,
 });
 

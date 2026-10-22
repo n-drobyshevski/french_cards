@@ -1,6 +1,6 @@
 // Which theme a new word goes to: the automatic pick from a suggestion, its alternatives,
 // a proposed new theme, or anything the user taps. Pure helpers (no Dexie).
-import { FOLDER_INBOX, FOLDER_NEW, type Suggestion } from "@/lib/ai/schemas";
+import { FOLDER_INBOX, FOLDER_NEW, NEW_FOLDER_MIN_WORDS, type EnrichResult, type Suggestion } from "@/lib/ai/schemas";
 import type { Folder } from "@/lib/types";
 
 export type FolderChoice =
@@ -95,4 +95,21 @@ export function folderSource(
 ): { folder_source: "auto" | "user"; kept_auto: boolean } {
   const keptAuto = !touched || (auto !== null && sameChoice(chosen, auto));
   return { folder_source: keptAuto ? "auto" : "user", kept_auto: keptAuto && auto !== null };
+}
+
+/**
+ * Automatic themes for pasted «Список» rows (null = not detected yet). Like a suggestion's pick,
+ * but a proposed new theme is used only when at least NEW_FOLDER_MIN_WORDS rows go there, and a
+ * low-confidence pick stays in «Входящие».
+ */
+export function listFolderChoices(
+  results: readonly (EnrichResult | null)[],
+  folders: readonly Pick<Folder, "id" | "slug" | "name">[],
+): (FolderChoice | null)[] {
+  const picks = results.map((r) =>
+    r && r.folder !== null && r.confidence !== "low" ? foldersForSuggestion({ ...r, folder: r.folder }, folders).auto : r ? INBOX_CHOICE : null,
+  );
+  const votes = new Map<string, number>();
+  for (const p of picks) if (p?.kind === "new") votes.set(choiceKey(p), (votes.get(choiceKey(p)) ?? 0) + 1);
+  return picks.map((p) => (p?.kind === "new" && (votes.get(choiceKey(p)) ?? 0) < NEW_FOLDER_MIN_WORDS ? INBOX_CHOICE : p));
 }

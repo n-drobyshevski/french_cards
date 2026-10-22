@@ -299,11 +299,14 @@ export function ThemeSelect({
   folders,
   onChange,
   labelledBy,
+  auto,
 }: {
   value: FolderChoice;
   folders: readonly Folder[];
   onChange: (choice: FolderChoice) => void;
   labelledBy?: string;
+  /** A first option «label» that stands for «each word to its own theme». */
+  auto?: { label: string; selected: boolean; onSelect: () => void };
 }) {
   const valueId = useId();
   const options: FolderChoice[] = [INBOX_CHOICE, ...folders.map((f): FolderChoice => ({ kind: "folder", id: f.id }))];
@@ -315,20 +318,22 @@ export function ThemeSelect({
         HIDDEN_CONTROL_FOCUS,
       )}
     >
-      <ThemeSquare choice={value} folders={folders} />
+      {!auto?.selected && <ThemeSquare choice={value} folders={folders} />}
       <span id={valueId} className="min-w-24 text-left">
-        {value.kind === "new" ? `Новая тема: ${value.name}` : choiceName(value, folders)}
+        {auto?.selected ? auto.label : value.kind === "new" ? `Новая тема: ${value.name}` : choiceName(value, folders)}
       </span>
       <Icon name="chevron" size={14} strokeWidth={1.75} className="text-muted" />
       <select
         aria-labelledby={labelledBy}
-        value={choiceKey(value)}
+        value={auto?.selected ? "auto" : choiceKey(value)}
         onChange={(e) => {
+          if (auto && e.target.value === "auto") return auto.onSelect();
           const next = options.find((o) => choiceKey(o) === e.target.value);
           if (next) onChange(next);
         }}
         className="absolute inset-0 size-full cursor-pointer appearance-none opacity-0"
       >
+        {auto && <option value="auto">{auto.label}</option>}
         {options.map((o) => (
           <option key={choiceKey(o)} value={choiceKey(o)}>
             {o.kind === "new" ? `Новая тема: ${o.name}` : choiceName(o, folders)}

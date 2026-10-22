@@ -89,3 +89,21 @@ test("flipping does not move or resize the card; hidden grade buttons are unreac
   const after = await answer.boundingBox();
   expect(after).toEqual(before);
 });
+
+test("a tap on an abbreviation on the answer explains it instead of flipping the card", async ({ page }) => {
+  await openReview(page);
+  await questionCard(page).click();
+  const answer = page.locator("[data-review-answer]");
+  await expect(answer).toBeVisible();
+  const abbr = answer.getByRole("button", { name: / — / }).first();
+  await abbr.click();
+  await expect(answer.getByRole("tooltip")).toBeVisible();
+  await expect(answer).toBeVisible();
+  // The hint stays on screen.
+  const box = (await answer.getByRole("tooltip").boundingBox())!;
+  expect(box.x).toBeGreaterThanOrEqual(15);
+  expect(box.x + box.width).toBeLessThanOrEqual(390 - 15);
+  // A tap elsewhere on the card closes the hint and flips the card back as usual.
+  await answer.click({ position: { x: 40, y: 300 } });
+  await expect(answer).toHaveCount(0);
+});

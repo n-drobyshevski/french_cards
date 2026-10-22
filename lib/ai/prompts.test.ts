@@ -45,6 +45,18 @@ describe("user prompts", () => {
     expect(suggestUserPrompt({ q: "деньги", direction: "ru", folders: [] })).toContain("Russian");
   });
 
+  it("suggest/extract: settings preferences become extra lines, defaults add nothing", () => {
+    const plain = suggestUserPrompt({ q: "cass", direction: "fr", folders, max: 3, register: "any", notes: true });
+    expect(plain.endsWith("<input>cass</input>")).toBe(true);
+    const p = suggestUserPrompt({ q: "cass", direction: "fr", folders, max: 1, register: "slang", notes: false });
+    expect(p).toContain("Return at most 1 suggestion.");
+    expect(p).toContain("argot and familier words first");
+    expect(p).toContain("note is always null");
+    expect(suggestUserPrompt({ q: "cass", direction: "fr", folders, max: 2, register: "neutral" })).toContain("Put the neutral word first");
+    expect(extractUserPrompt({ imageCount: 1, folders, notes: false })).toContain("note is always null");
+    expect(extractUserPrompt({ imageCount: 1, folders })).not.toContain("note");
+  });
+
   it("extract/taxonomy/assign include their inputs", () => {
     expect(extractUserPrompt({ imageCount: 3, folders })).toContain("3 images");
     const t = taxonomyUserPrompt({
@@ -60,5 +72,7 @@ describe("user prompts", () => {
     expect(e).toContain("Cards (2)");
     expect(e).toContain("w1\tla caisse\tтачка\t");
     expect(e).toContain("w2\tchelou\tстрёмный\tверлан");
+    expect(e).not.toContain("Themes:");
+    expect(enrichUserPrompt({ words: [{ ref: "w1", fr: "la thune", ru: "бабки", note: null }], folders })).toMatch(/^Themes:\n- dengi: Деньги — Деньги и работа\n- eda: Еда\n\nCards \(1\)/);
   });
 });

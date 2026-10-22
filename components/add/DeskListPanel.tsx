@@ -3,6 +3,8 @@
 import { useId, type ReactNode } from "react";
 import { SlangMeter } from "@/components/ui/SlangMeter";
 import { cx } from "@/components/ui/cx";
+import type { Folder } from "@/lib/types";
+import { choiceName } from "./folder-choice";
 import { CheckBox, DeskFrame, DeskSection, FIELD_LABEL, HIDDEN_CONTROL_FOCUS, HintLine, KeyButton, ThemeSelect, type Hint } from "./desk-parts";
 import type { ListPanelProps, ListRow } from "./ListPanel";
 import { cardNumber, nWords } from "./match";
@@ -26,7 +28,22 @@ const TAGS: Record<Exclude<ListRow["status"], "ok">, string> = {
 };
 
 /** D-Add-List: one pair per line, «Тема», and the «Разбор» table of what will be added. */
-export function DeskListPanel({ textareaRef, text, onText, rows, onToggle, folder, onFolder, folders, onSave, saving, saveError, status }: DeskListPanelProps) {
+export function DeskListPanel({
+  textareaRef,
+  text,
+  onText,
+  rows,
+  onToggle,
+  folder,
+  onFolder,
+  auto,
+  folders,
+  show = { slang: true, examples: true },
+  onSave,
+  saving,
+  saveError,
+  status,
+}: DeskListPanelProps) {
   const themeId = useId();
   const headingId = useId();
   const selected = rows.filter((r) => r.checked).length;
@@ -66,7 +83,13 @@ export function DeskListPanel({ textareaRef, text, onText, rows, onToggle, folde
       <span id={themeId} className={cx(FIELD_LABEL, "mt-4")}>
         Тема
       </span>
-      <ThemeSelect value={folder} folders={folders} labelledBy={themeId} onChange={onFolder} />
+      <ThemeSelect
+        value={folder}
+        folders={folders}
+        labelledBy={themeId}
+        onChange={onFolder}
+        auto={auto && { label: "По темам автоматически", ...auto }}
+      />
 
       {rows.length > 0 && (
         <section aria-labelledby={headingId} className="mt-6">
@@ -74,7 +97,7 @@ export function DeskListPanel({ textareaRef, text, onText, rows, onToggle, folde
           <ul className="m-0 list-none p-0">
             {rows.map((row, i) => (
               <li key={row.key}>
-                <ParseRow row={row} last={i === rows.length - 1} onToggle={() => onToggle(row.key)} />
+                <ParseRow row={row} folders={folders} showSlang={show.slang} last={i === rows.length - 1} onToggle={() => onToggle(row.key)} />
               </li>
             ))}
           </ul>
@@ -84,7 +107,19 @@ export function DeskListPanel({ textareaRef, text, onText, rows, onToggle, folde
   );
 }
 
-function ParseRow({ row, last, onToggle }: { row: ListRow; last: boolean; onToggle: () => void }) {
+function ParseRow({
+  row,
+  folders,
+  showSlang,
+  last,
+  onToggle,
+}: {
+  row: ListRow;
+  folders: readonly Folder[];
+  showSlang: boolean;
+  last: boolean;
+  onToggle: () => void;
+}) {
   const invalid = row.status === "invalid";
   const tag = invalid ? (row.problem === "no_french" ? "Нет французского" : "Нет перевода") : row.status === "ok" ? null : TAGS[row.status];
   const existing = row.status === "duplicate" ? row.existing : null;
@@ -127,13 +162,20 @@ function ParseRow({ row, last, onToggle }: { row: ListRow; last: boolean; onTogg
           </span>
         )}
       </span>
-      <span className="flex items-center self-center justify-self-end">
+      <span className="flex items-center gap-3 self-center justify-self-end">
         {tag ? (
           <span className="inline-flex h-5 items-center rounded-[4px] border border-rule px-1.5 font-mono text-[11px] leading-none tracking-[.06em] whitespace-nowrap text-muted uppercase">
             {tag}
           </span>
         ) : (
-          row.enrich && <SlangMeter level={row.enrich.slang_level} verlan={row.enrich.verlan} size="sm" />
+          <>
+            {row.autoFolder && (
+              <span className="max-w-40 truncate font-mono text-[11px] tracking-[.06em] text-muted">
+                {row.autoFolder.kind === "new" ? `+ ${row.autoFolder.name}` : choiceName(row.autoFolder, folders)}
+              </span>
+            )}
+            {showSlang && row.enrich && <SlangMeter level={row.enrich.slang_level} verlan={row.enrich.verlan} size="sm" />}
+          </>
         )}
       </span>
     </label>

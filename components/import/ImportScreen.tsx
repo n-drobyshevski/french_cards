@@ -106,8 +106,11 @@ export function ImportScreen() {
       setRows(null);
       setPickError(null);
       setPicked(accepted);
-      const list = foldersForExtract(foldersRef.current ?? (await listFolders()));
-      await start(accepted, list);
+      const [list, settings] = await Promise.all([
+        foldersRef.current ?? listFolders(),
+        getSettings(),
+      ]);
+      await start(accepted, foldersForExtract(list), { model: settings.ai_model_extract, notes: settings.notes_enabled });
     },
     [reset, start, setPicked],
   );
@@ -143,7 +146,15 @@ export function ImportScreen() {
     const items = state.items;
     Promise.all([findDuplicates(items.map((i) => i.fr)), listFolders(), getSettings()])
       .then(([dups, fs, settings]) => {
-        if (!cancelled) setRows(buildRows(items, fs, dups, { autoSort: settings.auto_sort_enabled }));
+        if (!cancelled) {
+          setRows(
+            buildRows(items, fs, dups, {
+              autoSort: settings.auto_sort_enabled,
+              slang: settings.slang_detect_enabled,
+              examples: settings.examples_enabled,
+            }),
+          );
+        }
       })
       .catch(() => {
         if (!cancelled) setRows(buildRows(items, foldersRef.current ?? [], new Map()));

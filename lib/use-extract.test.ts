@@ -55,6 +55,15 @@ describe("extractFormData", () => {
   it("omits folders when there are none", () => {
     expect(extractFormData({ tiles: [tile("a.webp")] }, []).has("folders")).toBe(false);
   });
+
+  it("adds the Settings model and notes only when they differ from the defaults", () => {
+    const plain = extractFormData({ tiles: [tile("a.webp")] }, [], { model: "fast", notes: true });
+    expect(plain.has("model")).toBe(false);
+    expect(plain.has("notes")).toBe(false);
+    const custom = extractFormData({ tiles: [tile("a.webp")] }, [], { model: "accurate", notes: false });
+    expect(custom.get("model")).toBe("accurate");
+    expect(custom.get("notes")).toBe("false");
+  });
 });
 
 describe("foldersForExtract", () => {
