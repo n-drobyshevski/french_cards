@@ -293,7 +293,7 @@ export function DuplicateNotice({
   );
 }
 
-const NOTICE: Record<SuggestErrorKind, { lead: string; rest: string; retry: boolean }> = {
+export const NOTICE: Record<SuggestErrorKind, { lead: string; rest: string; retry: boolean }> = {
   offline: { lead: "Нет сети — подсказки недоступны.", rest: "Заполни вручную, мы синхронизируем позже.", retry: false },
   unavailable: { lead: "Подсказки недоступны.", rest: "Заполни вручную.", retry: false },
   rate_limited: { lead: "Слишком много запросов подряд.", rest: "Заполни вручную или попробуй через минуту.", retry: true },

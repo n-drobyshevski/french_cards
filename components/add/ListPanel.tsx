@@ -6,6 +6,7 @@ import { SlangMeter } from "@/components/ui/SlangMeter";
 import { cx } from "@/components/ui/cx";
 import type { EnrichResult } from "@/lib/ai/schemas";
 import type { Folder } from "@/lib/types";
+import type { DuplicateInfo } from "./data";
 import { choiceName, type FolderChoice } from "./folder-choice";
 import type { ParsedLine } from "./parse-list";
 import { FieldRow, FolderSelect, SectionHeader } from "./parts";
@@ -20,6 +21,8 @@ export interface ListRow extends ParsedLine {
   enrich: EnrichResult | null;
   /** With automatic themes: where this row goes (null = not detected yet). */
   autoFolder: FolderChoice | null;
+  /** The word already in the library (status "duplicate"). */
+  existing: DuplicateInfo | null;
 }
 
 const TAGS: Record<Exclude<ListRowStatus, "ok">, string> = {

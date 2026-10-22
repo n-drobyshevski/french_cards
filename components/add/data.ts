@@ -44,16 +44,22 @@ export interface DuplicateInfo {
 export async function loadDuplicate(fr: string): Promise<DuplicateInfo | null> {
   if (!normalizeLemma(fr)) return null;
   const word = await findDuplicate(fr);
-  if (!word) return null;
+  return word ? duplicateInfo(word) : null;
+}
+
+async function duplicateInfo(word: Word): Promise<DuplicateInfo> {
   const before = await db.words.filter((w) => w.deleted_at === null && w.created_at < word.created_at).count();
   const folder = word.folder_id ? await getFolder(word.folder_id) : undefined;
   return { word, ordinal: before + 1, folderName: folder?.name ?? null };
 }
 
-/** For «Список»: lemma key → existing word, for the given French entries. */
-export async function loadListDuplicates(frs: readonly string[]): Promise<Map<string, Word>> {
+/** For «Список»: lemma key → the existing word (with its theme and number), for the given French entries. */
+export async function loadListDuplicates(frs: readonly string[]): Promise<Map<string, DuplicateInfo>> {
   const found = await findDuplicates(frs);
-  const byKey = new Map<string, Word>();
-  for (const [fr, word] of found) byKey.set(normalizeLemma(fr), word);
+  const byKey = new Map<string, DuplicateInfo>();
+  for (const [fr, word] of found) {
+    const key = normalizeLemma(fr);
+    if (!byKey.has(key)) byKey.set(key, await duplicateInfo(word));
+  }
   return byKey;
 }

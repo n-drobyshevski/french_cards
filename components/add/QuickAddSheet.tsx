@@ -1,7 +1,7 @@
 "use client";
 
 import { useLiveQuery } from "dexie-react-hooks";
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState, type ReactNode } from "react";
 import { WordDetailSheet } from "@/components/library/WordDetailSheet";
 import { useAddSheet } from "@/components/providers/AddSheetContext";
 import { Button } from "@/components/ui/Button";
@@ -15,7 +15,9 @@ import { isLexiqueLoaded, loadLexique, prefixSearch, type LexiqueHit } from "@/l
 import { getSettings } from "@/lib/settings";
 import { normalizeLemma } from "@/lib/text";
 import type { Folder } from "@/lib/types";
+import { useLayoutClass } from "@/lib/use-media";
 import { toFolderInputs, useSuggest, type SuggestPreferences } from "@/lib/use-suggest";
+import { MANUAL_KEY, variantKey } from "./combobox";
 import { loadAddContext, loadDuplicate, loadListDuplicates } from "./data";
 import {
   applyEnrichment,
@@ -30,6 +32,10 @@ import {
   type WordDraft,
 } from "./draft";
 import { choiceKey, INBOX_CHOICE, listFolderChoices, type FolderChoice } from "./folder-choice";
+import { DeskChrome, UndoLine } from "./desk-parts";
+import { DeskListPanel } from "./DeskListPanel";
+import { DeskSearchPanel } from "./DeskSearchPanel";
+import { DeskWordForm } from "./DeskWordForm";
 import { ListPanel, type ListRow } from "./ListPanel";
 import { cardNumber, nWords, plural } from "./match";
 import { parseWordList } from "./parse-list";
@@ -106,9 +112,14 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
   const suggest = useSuggest({ folders: folderInputs, enabled: suggestionsEnabled, preferences });
   const { setQuery: requestSuggestions, cancel: cancelSuggestions } = suggest;
 
+  // From 768 up the sheet is the desktop dialog (mockups D-Add-*): its own panels and keys.
+  const desk = useLayoutClass() !== "compact";
   const [mode, setMode] = useState<Mode>("search");
   const [query, setQuery] = useState(initialFr);
   const [draft, setDraft] = useState<WordDraft | null>(null);
+  // Which headword and option the draft came from. On desktop Esc goes back to the search with the
+  // draft kept; ↵ on the same option reopens it until the headword changes.
+  const [draftOrigin, setDraftOrigin] = useState<{ query: string; key: string } | null>(null);
   const [errors, setErrors] = useState<DraftErrors>({});
   const [ackDuplicate, setAckDuplicate] = useState<string | null>(null);
   const [quick, setQuick] = useState<QuickFields>(EMPTY_QUICK);
@@ -205,7 +216,8 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
             ? "duplicate"
             : "ok";
       const checked = status !== "invalid" && (status === "ok") !== listToggled.has(key);
-      return { ...r, key, status, checked, enrich: listEnriched.get(key) ?? null, autoFolder: null };
+      const existing = status === "duplicate" ? (listDuplicates?.get(lemma) ?? null) : null;
+      return { ...r, key, status, checked, enrich: listEnriched.get(key) ?? null, autoFolder: null, existing };
     });
     if (!listAuto) return rows;
     const choices = listFolderChoices(
@@ -258,33 +270,59 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
   // ---------------------------------------------------------------------------------------
   // Actions
 
+  /** A kept draft lasts while the headword it came from stays. */
+  const dropKeptDraft = (nextQuery: string) => {
+    if (mode === "search" && draftOrigin && nextQuery !== draftOrigin.query) {
+      setDraft(null);
+      setDraftOrigin(null);
+      setErrors({});
+    }
+  };
+
   const changeQuery = (value: string) => {
+    dropKeptDraft(value);
     setQuery(value);
     requestSuggestions(value);
     setSaveError(null);
   };
 
   const pickHit = (hit: LexiqueHit) => {
+    dropKeptDraft(hit.fr);
     setQuery(hit.fr);
     requestSuggestions(hit.fr, { force: true });
     setFocusRequest({ target: "search" });
   };
 
+  /** Desktop: the kept draft for this option and headword, reopened as it was left. */
+  const reopenDraft = (key: string) => {
+    if (!desk || !draft || draftOrigin?.key !== key || draftOrigin.query !== query) return false;
+    setSaveError(null);
+    setMode("form");
+    setFocusRequest({ target: "fr" });
+    return true;
+  };
+
   const pickSuggestion = (s: Suggestion) => {
+    if (reopenDraft(variantKey(s))) return;
     setDraft(draftFromSuggestion(s, folders, { autoSort, slang: slangDetect, examples: examplesOn }));
+    setDraftOrigin({ query, key: variantKey(s) });
     setErrors({});
     setSaveError(null);
     setMode("form");
-    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    // Phones: hide the keyboard to show the card. Desktop: focus the first field (Tab order, ⌘↵).
+    if (desk) setFocusRequest({ target: "fr" });
+    else if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
   };
 
   const openManual = () => {
+    if (reopenDraft(MANUAL_KEY)) return;
     const other = quick.other.trim();
     const next =
       direction === "ru"
         ? manualDraft({ fr: other, ru: trimmed, folder: quick.folder })
         : manualDraft({ fr: trimmed, ru: other, folder: quick.folder });
     setDraft(next);
+    setDraftOrigin({ query, key: MANUAL_KEY });
     setErrors({});
     setSaveError(null);
     setMode("form");
@@ -293,7 +331,10 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
 
   const backToSearch = () => {
     setMode("search");
-    setDraft(null);
+    if (!desk) {
+      setDraft(null);
+      setDraftOrigin(null);
+    }
     setErrors({});
     setSaveError(null);
     setFocusRequest({ target: "search" });
@@ -311,6 +352,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
     setQuery("");
     requestSuggestions("");
     setDraft(null);
+    setDraftOrigin(null);
     setErrors({});
     setAckDuplicate(null);
     setQuick(EMPTY_QUICK);
@@ -455,6 +497,42 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
       return next;
     });
 
+  // Desktop keys (DESKTOP-SPEC §4 «Add dialog»): ⌘↵ «Добавить», ⇧⌘↵ «Добавить и ещё»; Esc from
+  // the form goes back to the search (draft kept), else closes. Anything typed makes the dialog
+  // ignore scrim clicks and Radix's own Esc, so Esc is handled here, one layer per press.
+  const dirty = mode === "form" || draft !== null || (mode === "search" ? trimmed !== "" : listText.trim() !== "");
+  const onDeskKey = useEffectEvent((e: KeyboardEvent) => {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === "Escape") {
+      if (e.repeat) return;
+      if (mode === "form") {
+        e.preventDefault();
+        backToSearch();
+      } else if (dirty) {
+        e.preventDefault();
+        handleOpenChange(false);
+      }
+      return;
+    }
+    if (e.key !== "Enter" || !(e.metaKey || e.ctrlKey) || e.altKey || e.defaultPrevented || e.repeat) return;
+    if (mode === "form") {
+      e.preventDefault();
+      saveForm(e.shiftKey);
+    } else if (!e.shiftKey && mode === "list") {
+      e.preventDefault();
+      saveList();
+    } else if (!e.shiftKey && quickVisible) {
+      e.preventDefault();
+      saveQuick();
+    }
+  });
+  useEffect(() => {
+    if (!desk || !open) return;
+    const listener = (e: KeyboardEvent) => onDeskKey(e);
+    document.addEventListener("keydown", listener);
+    return () => document.removeEventListener("keydown", listener);
+  }, [desk, open]);
+
   // ---------------------------------------------------------------------------------------
   // Render
 
@@ -531,6 +609,111 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
     mode === "list"
       ? `Список · ${parsed.length} ${plural(parsed.length, ["строка", "строки", "строк"])}`
       : `Карточка ${cardNumber((context?.total ?? 0) + 1)}`;
+
+  if (desk) {
+    const status = undoBar && (
+      <UndoLine
+        message={undoBar.message}
+        onUndo={() => {
+          undo(undoBar.result);
+          setUndoBar(null);
+          setFocusRequest({ target: mode === "list" ? "list" : mode === "form" ? "fr" : "search" });
+        }}
+      />
+    );
+    const onDraftChange = (patch: Partial<WordDraft>) => {
+      setDraft((d) => (d ? { ...d, ...patch } : d));
+      if ("fr" in patch) setErrors((e) => ({ ...e, fr: undefined }));
+      if ("ru" in patch) setErrors((e) => ({ ...e, ru: undefined }));
+    };
+    return (
+      <Sheet
+        open={open}
+        onOpenChange={handleOpenChange}
+        height="large"
+        dialogWidth={640}
+        dismissible={!dirty}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          inputRef.current?.focus();
+        }}
+        header={
+          <DeskChrome
+            label={label}
+            title={mode === "list" ? "Несколько слов" : "Новое слово"}
+            onBack={mode === "form" ? backToSearch : undefined}
+            onScreenshot={() => handleOpenChange(false)}
+            onList={mode === "search" ? () => openList() : undefined}
+          />
+        }
+      >
+        {mode === "search" && (
+          <DeskSearchPanel
+            inputRef={inputRef}
+            value={query}
+            onValueChange={changeQuery}
+            onSubmit={submitSearch}
+            onPasteList={openList}
+            suggest={suggest}
+            suggestionsEnabled={suggestionsEnabled}
+            autoSort={autoSort}
+            showSlang={slangDetect}
+            folders={folders}
+            context={context}
+            dictionary={dictionary}
+            onPickHit={pickHit}
+            onPickSuggestion={pickSuggestion}
+            onManual={openManual}
+            duplicate={duplicate}
+            onOpenWord={openWord}
+            onAddAnyway={() => setAckDuplicate(dupKey)}
+            quick={quickVisible ? quick : null}
+            onQuickChange={(patch) => setQuick((q) => ({ ...q, ...patch }))}
+            onQuickSave={saveQuick}
+            preferredKey={draft && draftOrigin && draftOrigin.query === query ? draftOrigin.key : null}
+            saving={saving}
+            saveError={saveError}
+            status={status}
+          />
+        )}
+        {mode === "form" && draft && (
+          <DeskWordForm
+            draft={draft}
+            onChange={onDraftChange}
+            folders={folders}
+            errors={errors}
+            frRef={frRef}
+            ruRef={ruRef}
+            duplicate={duplicate}
+            onOpenWord={openWord}
+            enriching={formEnriching}
+            onSave={saveForm}
+            saving={saving}
+            saveError={saveError}
+            status={status}
+          />
+        )}
+        {mode === "list" && (
+          <DeskListPanel
+            textareaRef={listRef}
+            text={listText}
+            onText={setListText}
+            rows={listRows}
+            onToggle={toggleListRow}
+            folder={listFolder ?? INBOX_CHOICE}
+            onFolder={setListFolder}
+            auto={autoSort ? { selected: listFolder === null, onSelect: () => setListFolder(null) } : undefined}
+            folders={folders}
+            show={detectPrefs}
+            onSave={saveList}
+            saving={saving}
+            saveError={saveError}
+            status={status}
+          />
+        )}
+      </Sheet>
+    );
+  }
 
   return (
     <Sheet

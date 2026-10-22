@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EnrichResult, Suggestion } from "@/lib/ai/schemas";
+import { MANUAL_KEY, moveActive, resolveActive, variantKey } from "./combobox";
 import { applyEnrichment, draftFromSuggestion, draftToSaveRequest, enrichKey, enrichScope, manualDraft, validateDraft } from "./draft";
 import { choiceKey, choiceName, folderSource, foldersForSuggestion, INBOX_CHOICE, listFolderChoices } from "./folder-choice";
 import { cardNumber, nWords, posAbbr, splitTypedPrefix } from "./match";
@@ -305,5 +306,29 @@ describe("display helpers", () => {
     expect(nWords(12)).toBe("12 слов");
     expect(cardNumber(47)).toBe("№ 047");
     expect(cardNumber(1159)).toBe("№ 1159");
+  });
+});
+
+describe("add dialog combobox cursor", () => {
+  const keys = ["d:se casser", "d:casse-croûte", variantKey({ fr: "se casser", ru: "свалить" }), variantKey({ fr: "se tirer", ru: "свалить" }), MANUAL_KEY];
+  const v1 = keys[2];
+
+  it("defaults to the fallback (first «Вариант» or the kept draft) until the user moves", () => {
+    expect(resolveActive(keys, null, v1)).toBe(v1);
+    expect(resolveActive(keys, "d:casse-croûte", v1)).toBe("d:casse-croûte");
+    expect(resolveActive(keys, "d:gone", v1)).toBe(v1);
+    expect(resolveActive(keys, null, "v:gone")).toBeNull();
+    expect(resolveActive([], null, v1)).toBeNull();
+  });
+
+  it("moves across «Словарь» and «Варианты» as one list and stops at the ends", () => {
+    expect(moveActive(keys, v1, -1)).toBe("d:casse-croûte");
+    expect(moveActive(keys, v1, 1)).toBe(keys[3]);
+    expect(moveActive(keys, keys[3], 1)).toBe(MANUAL_KEY);
+    expect(moveActive(keys, MANUAL_KEY, 1)).toBe(MANUAL_KEY);
+    expect(moveActive(keys, keys[0], -1)).toBe(keys[0]);
+    expect(moveActive(keys, null, 1)).toBe(keys[0]);
+    expect(moveActive(keys, null, -1)).toBe(MANUAL_KEY);
+    expect(moveActive([], null, 1)).toBeNull();
   });
 });
