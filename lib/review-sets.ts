@@ -1,9 +1,8 @@
 // «Мои наборы»: named card sets for Повторение, built from filters (themes, word status, slang
-// level, age) and reviewed either on the schedule or as a practice round. Kept in Settings, so
-// they are device-local and travel with the JSON backup.
-import { newId } from "./db";
+// level, age) and reviewed either on the schedule or as a practice round. Rows of the synced
+// `review_sets` table, so every device sees the same sets; deletes are soft, like other rows.
+import { db, newId } from "./db";
 import { buildPracticeQueue, getSessionCounts, PRACTICE_ALL_MAX, type SessionFilter } from "./session";
-import { getSettings, updateSettings } from "./settings";
 import { SLANG_LABELS, type Direction, type Folder, type ReviewSet, type ReviewSetStatus, type SlangLevel } from "./types";
 
 const DAY_MS = 86_400_000;
@@ -23,7 +22,7 @@ export const SET_SLANG: readonly (SlangLevel | "verl")[] = [0, 1, 2, 3, "verl"];
 export const ADDED_LABELS: Record<ReviewSet["added"], string> = { all: "Всё время", week: "За неделю", month: "За месяц" };
 export const MODE_LABELS: Record<ReviewSet["mode"], string> = { schedule: "По расписанию", practice: "Тренировка" };
 
-export type ReviewSetDraft = Omit<ReviewSet, "id" | "created_at">;
+export type ReviewSetDraft = Omit<ReviewSet, "id" | "created_at" | "updated_at" | "deleted_at">;
 
 export const EMPTY_SET_DRAFT: ReviewSetDraft = { name: "", folders: [], statuses: [], slang: [], added: "all", mode: "schedule" };
 
@@ -32,67 +31,47 @@ export const setIdOf = (choice: string): string | null => (choice.startsWith(SET
 
 const cleanName = (name: string) => name.replace(/\s+/g, " ").trim().slice(0, REVIEW_SET_NAME_MAX);
 
-/** Only well-formed sets survive (stored rows, a backup being imported). */
-export function normalizeReviewSets(raw: unknown): ReviewSet[] {
-  if (!Array.isArray(raw)) return [];
-  const out: ReviewSet[] = [];
-  const seen = new Set<string>();
-  for (const v of raw) {
-    if (!v || typeof v !== "object") continue;
-    const r = v as Record<string, unknown>;
-    if (typeof r.id !== "string" || !r.id || seen.has(r.id) || typeof r.name !== "string" || !cleanName(r.name)) continue;
-    const strings = (x: unknown) => (Array.isArray(x) ? x.filter((s): s is string => typeof s === "string" && s.length > 0) : []);
-    seen.add(r.id);
-    out.push({
-      id: r.id,
-      name: cleanName(r.name),
-      folders: [...new Set(strings(r.folders))],
-      statuses: SET_STATUSES.filter((s) => Array.isArray(r.statuses) && r.statuses.includes(s)),
-      slang: SET_SLANG.filter((k) => Array.isArray(r.slang) && r.slang.includes(k)),
-      added: r.added === "week" || r.added === "month" ? r.added : "all",
-      mode: r.mode === "practice" ? "practice" : "schedule",
-      created_at: typeof r.created_at === "string" ? r.created_at : new Date(0).toISOString(),
-    });
-  }
-  return out;
-}
-
+/** Live sets, oldest first (use inside useLiveQuery). */
 export async function listReviewSets(): Promise<ReviewSet[]> {
-  return normalizeReviewSets((await getSettings()).review_sets);
+  const rows = await db.review_sets.filter((s) => s.deleted_at === null).toArray();
+  return rows.sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
 }
 
 export async function createReviewSet(draft: ReviewSetDraft, now: Date = new Date()): Promise<ReviewSet> {
   const name = cleanName(draft.name);
   if (!name) throw new Error("Дайте набору название");
-  const set: ReviewSet = { ...draft, name, id: newId(), created_at: now.toISOString() };
-  await updateSettings({ review_sets: [...(await listReviewSets()), set] });
+  const iso = now.toISOString();
+  const set: ReviewSet = { ...draft, name, id: newId(), created_at: iso, updated_at: iso, deleted_at: null };
+  await db.review_sets.put(set);
   return set;
 }
 
-export async function updateReviewSet(id: string, draft: ReviewSetDraft): Promise<ReviewSet | null> {
+export async function updateReviewSet(id: string, draft: ReviewSetDraft, now: Date = new Date()): Promise<ReviewSet | null> {
   const name = cleanName(draft.name);
   if (!name) throw new Error("Дайте набору название");
-  const sets = await listReviewSets();
-  const i = sets.findIndex((s) => s.id === id);
-  if (i < 0) return null;
-  const next = { ...sets[i], ...draft, name };
-  await updateSettings({ review_sets: sets.map((s, j) => (j === i ? next : s)) });
-  return next;
+  return db.transaction("rw", db.review_sets, async () => {
+    const current = await db.review_sets.get(id);
+    if (!current || current.deleted_at !== null) return null;
+    const next: ReviewSet = { ...current, ...draft, name, updated_at: now.toISOString() };
+    await db.review_sets.put(next);
+    return next;
+  });
 }
 
-/** Removes the set; returns it with its position so `restoreReviewSet` can put it back. */
-export async function deleteReviewSet(id: string): Promise<{ set: ReviewSet; index: number } | null> {
-  const sets = await listReviewSets();
-  const index = sets.findIndex((s) => s.id === id);
-  if (index < 0) return null;
-  await updateSettings({ review_sets: sets.filter((s) => s.id !== id) });
-  return { set: sets[index], index };
+/** Soft-deletes the set (synced like any row); `restoreReviewSet` brings it back. */
+export async function deleteReviewSet(id: string, now: Date = new Date()): Promise<ReviewSet | null> {
+  return db.transaction("rw", db.review_sets, async () => {
+    const current = await db.review_sets.get(id);
+    if (!current || current.deleted_at !== null) return null;
+    const iso = now.toISOString();
+    await db.review_sets.put({ ...current, deleted_at: iso, updated_at: iso });
+    return current;
+  });
 }
 
-export async function restoreReviewSet(removed: { set: ReviewSet; index: number }): Promise<void> {
-  const sets = (await listReviewSets()).filter((s) => s.id !== removed.set.id);
-  sets.splice(Math.min(removed.index, sets.length), 0, removed.set);
-  await updateSettings({ review_sets: sets });
+export async function restoreReviewSet(set: ReviewSet, now: Date = new Date()): Promise<void> {
+  const current = await db.review_sets.get(set.id);
+  await db.review_sets.put({ ...(current ?? set), deleted_at: null, updated_at: now.toISOString() });
 }
 
 /** The session filter for a set. Themes deleted since are ignored (none left = every theme). */

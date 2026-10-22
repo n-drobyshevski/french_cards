@@ -15,7 +15,7 @@ import { cardNumber } from "@/components/add/match";
 import { listFolders } from "@/lib/folders";
 import { previewIntervals, reviewStateId, type Rating } from "@/lib/scheduler";
 import { advancePractice, buildPracticeQueue, sessionFilterKey, startOfStudyDay, type QueueItem, type SessionFilter } from "@/lib/session";
-import { normalizeReviewSets, setIdOf, setSessionFilter } from "@/lib/review-sets";
+import { listReviewSets, setIdOf, setSessionFilter } from "@/lib/review-sets";
 import { getSettings } from "@/lib/settings";
 import { useFinePointer, useLayoutClass } from "@/lib/use-media";
 import { getLastReview, getWord, gradeCard, undoLastReview } from "@/lib/words";
@@ -132,13 +132,14 @@ export function ReviewScreen() {
 
   const direction = effectiveDirection(stored, settings?.default_direction ?? "fr_ru");
   // «Мои наборы»: the filter may name a saved set (`set:<id>`) instead of a theme.
-  const sets = useMemo(() => normalizeReviewSets(settings?.review_sets), [settings?.review_sets]);
+  const storedSets = useLiveQuery(() => listReviewSets(), []);
+  const sets = useMemo(() => storedSets ?? [], [storedSets]);
   const storedSetId = setIdOf(stored.folder);
   const storedSet = storedSetId ? (sets.find((s) => s.id === storedSetId) ?? null) : null;
   const folderKnown =
     stored.folder === "all" ||
     stored.folder === "inbox" ||
-    (storedSetId ? !settings || !!storedSet : !folders || folders.some((f) => f.id === stored.folder));
+    (storedSetId ? !storedSets || !!storedSet : !folders || folders.some((f) => f.id === stored.folder));
   const folder: FolderChoice = folderKnown ? stored.folder : "all";
   const set = folderKnown ? storedSet : null;
   const liveFolderIds = useMemo(() => (folders ? new Set(folders.map((f) => f.id)) : undefined), [folders]);
