@@ -12,8 +12,10 @@ import { Segmented } from "@/components/ui/Segmented";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { Toggle } from "@/components/ui/Toggle";
 import { getSettings, updateSettings } from "@/lib/settings";
-import { DEFAULT_SETTINGS, type Settings } from "@/lib/types";
+import { DEFAULT_SETTINGS, type Direction, type Settings } from "@/lib/types";
+import { useLayoutClass } from "@/lib/use-media";
 import { DataSection } from "./DataSection";
+import { DesktopSettings } from "./DesktopSettings";
 import { DirectionSheet } from "./DirectionSheet";
 import { NEW_PER_DAY_MAX, stepNewPerDay } from "./format";
 import { SettingsButtonRow, SettingsRow, SettingsSection } from "./SettingsList";
@@ -30,20 +32,50 @@ const GRADE_OPTIONS = [
   { value: 3, label: "3", ariaLabel: "Три кнопки: Не знаю, Сложно и Знаю" },
 ] as const;
 
-/** «Настройки»: review preferences, theme, suggestions and data (sync, backup, sign-out). */
+/**
+ * «Настройки»: review preferences, theme, suggestions and data (sync, backup, sign-out). Phones get
+ * today's list; from 768 up the desktop layout (DesktopSettings). The server and hydration render
+ * the phone list, hidden from 768 up by CSS, so a wide window never flashes the phone layout.
+ */
 export function SettingsScreen() {
   const stored = useLiveQuery(() => getSettings(), []);
   const settings: Settings = stored ?? DEFAULT_SETTINGS;
   const loading = stored === undefined;
   const toast = useSnackbar();
-  const [directionOpen, setDirectionOpen] = useState(false);
+  const layout = useLayoutClass();
 
   const save = (patch: Partial<Omit<Settings, "id">>) => {
     updateSettings(patch).catch(() => toast.show({ message: "Не получилось сохранить настройку" }));
   };
+  const onTheme = (theme: Settings["theme"]) => {
+    applyTheme(theme);
+    save({ theme });
+  };
+  const onDirection = (value: Direction) => {
+    save({ default_direction: value });
+    clearReviewDirection();
+  };
+
+  if (layout !== "compact") {
+    return <DesktopSettings settings={settings} loading={loading} save={save} onTheme={onTheme} onDirection={onDirection} />;
+  }
+  return <PhoneSettings settings={settings} loading={loading} save={save} onTheme={onTheme} onDirection={onDirection} />;
+}
+
+interface ScreenProps {
+  settings: Settings;
+  loading: boolean;
+  save: (patch: Partial<Omit<Settings, "id">>) => void;
+  onTheme: (theme: Settings["theme"]) => void;
+  onDirection: (direction: Direction) => void;
+}
+
+/** The phone list (< 768), unchanged from before the desktop layout. */
+function PhoneSettings({ settings, loading, save, onTheme, onDirection }: ScreenProps) {
+  const [directionOpen, setDirectionOpen] = useState(false);
 
   return (
-    <>
+    <div className="contents md:hidden">
       <Header title="Настройки" fallbackHref="/" />
       <main className="flex flex-1 flex-col px-4 pb-6">
         <SettingsSection title="Повторение">
@@ -103,10 +135,7 @@ export function SettingsScreen() {
               ariaLabelledby="theme-label"
               options={THEME_OPTIONS}
               value={settings.theme}
-              onChange={(theme) => {
-                applyTheme(theme);
-                save({ theme });
-              }}
+              onChange={onTheme}
             />
           </SettingsRow>
         </SettingsSection>
@@ -146,11 +175,8 @@ export function SettingsScreen() {
         open={directionOpen}
         onOpenChange={setDirectionOpen}
         value={settings.default_direction}
-        onChange={(value) => {
-          save({ default_direction: value });
-          clearReviewDirection();
-        }}
+        onChange={onDirection}
       />
-    </>
+    </div>
   );
 }

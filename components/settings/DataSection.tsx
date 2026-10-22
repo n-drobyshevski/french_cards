@@ -12,6 +12,7 @@ import { syncNow, useSyncStatus } from "@/lib/sync";
 import { SYNC_TABLES } from "@/lib/types";
 import { softDeleteWords } from "@/lib/words";
 import { BackupImportSheet, type BackupPreview } from "./BackupImportSheet";
+import { DeskButtonRow, DeskRow, DeskSection } from "./DesktopControls";
 import { describeBackupImport, describeLegacyImport, syncLine } from "./format";
 import { SettingsButtonRow, SettingsRow, SettingsSection } from "./SettingsList";
 import { useClock } from "./useClock";
@@ -50,8 +51,11 @@ async function saveBackup(): Promise<"saved" | "cancelled"> {
 const message = (error: unknown, fallback: string) =>
   error instanceof BackupError || (error instanceof Error && /[а-яё]/i.test(error.message)) ? (error as Error).message : fallback;
 
-/** «Данные»: sync status, JSON export/import, the old-version import and sign-out. */
-export function DataSection() {
+/**
+ * «Данные»: sync status, JSON export/import, the old-version import and sign-out. `desktop`: the
+ * rows of D-Settings (text rows, a dot only for «нет сети» / «ошибка»).
+ */
+export function DataSection({ desktop = false }: { desktop?: boolean }) {
   const toast = useSnackbar();
   const auth = useAuthUser();
   const sync = useSyncStatus();
@@ -176,52 +180,104 @@ export function DataSection() {
     </>
   );
 
+  const deskDot = line.tone === "again" ? "again" : line.text.endsWith("нет сети") ? "muted" : null;
+  const deskStatus = (
+    <span className="flex min-w-0 shrink items-center gap-2">
+      {deskDot && <span aria-hidden="true" className={cx("size-1.5 shrink-0 rounded-full", DOT[deskDot])} />}
+      <span className={cx("truncate text-[13px] leading-5 tabular-nums", deskDot === "again" ? "text-again" : "text-muted")}>{line.text}</span>
+    </span>
+  );
+
+  const rows = desktop ? (
+    <DeskSection id="set-data" title="Данные">
+      {line.canSync ? (
+        <DeskButtonRow
+          label="Синхронизация"
+          aria-label={`Синхронизация: ${line.text}. Синхронизировать сейчас`}
+          onClick={() => void syncNow()}
+          trailing={deskStatus}
+        />
+      ) : (
+        <DeskRow label="Синхронизация">{deskStatus}</DeskRow>
+      )}
+      <DeskButtonRow
+        label={busy === "export" ? "Сохраняем…" : "Экспорт JSON"}
+        disabled={busy !== null}
+        aria-busy={busy === "export" || undefined}
+        onClick={() => void onExport()}
+      />
+      <DeskButtonRow
+        label={busy === "json" ? "Читаем файл…" : "Импорт JSON"}
+        disabled={busy !== null}
+        aria-busy={busy === "json" || undefined}
+        onClick={() => jsonInput.current?.click()}
+      />
+      <DeskButtonRow
+        label={busy === "html" ? "Читаем файл…" : "Импорт из старой версии (HTML)"}
+        disabled={busy !== null}
+        aria-busy={busy === "html" || undefined}
+        onClick={() => htmlInput.current?.click()}
+      />
+      {signedIn && (
+        <DeskButtonRow
+          label="Выйти"
+          tone="again"
+          disabled={busy !== null}
+          aria-busy={busy === "signout" || undefined}
+          onClick={() => void onSignOut()}
+        />
+      )}
+    </DeskSection>
+  ) : null;
+
   return (
     <>
-      <SettingsSection title="Данные">
-        {line.canSync ? (
-          <SettingsButtonRow
-            label="Синхронизация"
-            aria-label={`Синхронизация: ${line.text}. Синхронизировать сейчас`}
-            onClick={() => void syncNow()}
-            trailing={status}
-          />
-        ) : (
-          <SettingsRow label="Синхронизация">{status}</SettingsRow>
-        )}
+      {rows ?? (
+        <SettingsSection title="Данные">
+          {line.canSync ? (
+            <SettingsButtonRow
+              label="Синхронизация"
+              aria-label={`Синхронизация: ${line.text}. Синхронизировать сейчас`}
+              onClick={() => void syncNow()}
+              trailing={status}
+            />
+          ) : (
+            <SettingsRow label="Синхронизация">{status}</SettingsRow>
+          )}
 
-        <SettingsButtonRow
-          label="Экспорт JSON"
-          disabled={busy !== null}
-          aria-busy={busy === "export" || undefined}
-          onClick={() => void onExport()}
-          trailing={<Icon name="download" size={16} className="text-muted" />}
-        />
-
-        <SettingsButtonRow
-          label="Импорт JSON"
-          disabled={busy !== null}
-          aria-busy={busy === "json" || undefined}
-          onClick={() => jsonInput.current?.click()}
-          trailing={<Icon name="chevron-right" size={14} strokeWidth={2} className="text-muted" />}
-        />
-        <SettingsButtonRow
-          label="Импорт из старой версии (HTML)"
-          disabled={busy !== null}
-          aria-busy={busy === "html" || undefined}
-          onClick={() => htmlInput.current?.click()}
-          trailing={<Icon name="chevron-right" size={14} strokeWidth={2} className="text-muted" />}
-        />
-        {signedIn && (
           <SettingsButtonRow
-            label="Выйти"
-            tone="again"
+            label="Экспорт JSON"
             disabled={busy !== null}
-            aria-busy={busy === "signout" || undefined}
-            onClick={() => void onSignOut()}
+            aria-busy={busy === "export" || undefined}
+            onClick={() => void onExport()}
+            trailing={<Icon name="download" size={16} className="text-muted" />}
           />
-        )}
-      </SettingsSection>
+
+          <SettingsButtonRow
+            label="Импорт JSON"
+            disabled={busy !== null}
+            aria-busy={busy === "json" || undefined}
+            onClick={() => jsonInput.current?.click()}
+            trailing={<Icon name="chevron-right" size={14} strokeWidth={2} className="text-muted" />}
+          />
+          <SettingsButtonRow
+            label="Импорт из старой версии (HTML)"
+            disabled={busy !== null}
+            aria-busy={busy === "html" || undefined}
+            onClick={() => htmlInput.current?.click()}
+            trailing={<Icon name="chevron-right" size={14} strokeWidth={2} className="text-muted" />}
+          />
+          {signedIn && (
+            <SettingsButtonRow
+              label="Выйти"
+              tone="again"
+              disabled={busy !== null}
+              aria-busy={busy === "signout" || undefined}
+              onClick={() => void onSignOut()}
+            />
+          )}
+        </SettingsSection>
+      )}
       <input
         ref={jsonInput}
         type="file"
