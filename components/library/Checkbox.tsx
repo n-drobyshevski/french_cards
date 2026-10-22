@@ -3,7 +3,8 @@ import { cx } from "@/components/ui/cx";
 /**
  * The desktop checkbox mark (DESKTOP-SPEC §3): 14×14, radius 2, 1px muted border; checked = ink
  * fill with a white check; indeterminate = an 8px dash. Purely visual: the row or gutter around it
- * is the control (role="checkbox" / aria-selected there).
+ * is the control (role="checkbox" / aria-selected there). The ink fills in --dur-instant; no tick
+ * draw on desktop (MOTION-SPEC §5.9).
  */
 export function CheckMark({ checked, indeterminate = false, className }: { checked: boolean; indeterminate?: boolean; className?: string }) {
   const on = checked || indeterminate;
@@ -11,7 +12,7 @@ export function CheckMark({ checked, indeterminate = false, className }: { check
     <span
       aria-hidden="true"
       className={cx(
-        "box-border flex size-3.5 shrink-0 items-center justify-center rounded-[2px] border",
+        "box-border flex size-3.5 shrink-0 items-center justify-center rounded-[2px] border transition-colors duration-(--dur-instant) ease-press",
         on ? "border-ink bg-ink text-on-ink" : "border-muted bg-surface",
         className,
       )}

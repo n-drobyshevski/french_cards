@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { haptic, hapticSupport, thresholdNotifier, VIBRATION_PATTERNS } from "./haptics";
+import { HAPTIC_KINDS, haptic, hapticsEnabled, hapticSupport, IOS_TAPS, thresholdNotifier, VIBRATION_PATTERNS } from "./haptics";
+import { resetSettingsMirrorMemory, SETTINGS_MIRROR_KEY } from "./settings-mirror";
 
 describe("haptic", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -20,7 +21,7 @@ describe("haptic", () => {
 
   it("swallows errors from the Vibration API", () => {
     vi.stubGlobal("navigator", { vibrate: () => { throw new Error("blocked"); }, userAgent: "", platform: "", maxTouchPoints: 0 });
-    expect(() => haptic("threshold")).not.toThrow();
+    expect(() => haptic("tick")).not.toThrow();
   });
 });
 
@@ -72,6 +73,9 @@ describe("haptic on iPhone", () => {
       haptic("again");
       vi.advanceTimersByTime(120);
       expect(clicks).toHaveLength(3);
+      haptic("done");
+      vi.advanceTimersByTime(1000);
+      expect(clicks).toHaveLength(4);
       expect(head.children.size).toBe(0);
     } finally {
       vi.useRealTimers();
@@ -89,6 +93,56 @@ describe("haptic on iPhone", () => {
   });
 });
 
+describe("haptic vocabulary", () => {
+  it("has an Android pattern and an iOS tap count for every kind (MOTION-SPEC §5.13)", () => {
+    expect(VIBRATION_PATTERNS).toEqual({ tick: 20, good: 40, again: [35, 80, 35], done: [30, 60, 30, 60, 50] });
+    expect(IOS_TAPS).toEqual({ tick: 1, good: 1, again: 2, done: 1 });
+    expect(Object.keys(VIBRATION_PATTERNS).sort()).toEqual([...HAPTIC_KINDS].sort());
+  });
+});
+
+describe("the «Вибрация» setting", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetSettingsMirrorMemory();
+  });
+
+  const mirror = (haptics: boolean | undefined) => {
+    const raw = haptics === undefined ? null : JSON.stringify({ haptics });
+    vi.stubGlobal("localStorage", { getItem: (key: string) => (key === SETTINGS_MIRROR_KEY ? raw : null) });
+    resetSettingsMirrorMemory();
+  };
+
+  it("is on by default and follows the mirrored setting", () => {
+    mirror(undefined);
+    expect(hapticsEnabled()).toBe(true);
+    mirror(false);
+    expect(hapticsEnabled()).toBe(false);
+    mirror(true);
+    expect(hapticsEnabled()).toBe(true);
+  });
+
+  it("silences every kind when it is off", () => {
+    mirror(false);
+    const vibrate = vi.fn(() => true);
+    vi.stubGlobal("navigator", { vibrate, userAgent: "Android", platform: "Linux", maxTouchPoints: 5 });
+    for (const kind of HAPTIC_KINDS) haptic(kind);
+    expect(vibrate).not.toHaveBeenCalled();
+  });
+});
+
+describe("desktop", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("reports no support without a coarse pointer, even where navigator.vibrate exists", () => {
+    vi.stubGlobal("navigator", { vibrate: () => true, userAgent: "Mozilla/5.0 (X11; Linux x86_64)", platform: "Linux", maxTouchPoints: 0 });
+    vi.stubGlobal("window", { matchMedia: (q: string) => ({ matches: q !== "(any-pointer: coarse)" }) });
+    expect(hapticSupport()).toBe("none");
+    vi.stubGlobal("window", { matchMedia: () => ({ matches: true }) });
+    expect(hapticSupport()).toBe("vibrate");
+  });
+});
+
 describe("thresholdNotifier", () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -103,6 +157,15 @@ describe("thresholdNotifier", () => {
     n.update(false, true);
     n.update(true, true);
     expect(vibrate).toHaveBeenCalledTimes(2);
+  });
+
+  it("stays silent on iPhone, where nothing plays outside a gesture", () => {
+    vi.stubGlobal("navigator", { userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X)", platform: "iPhone", maxTouchPoints: 5 });
+    const createElement = vi.fn();
+    vi.stubGlobal("document", { createElement, head: {} });
+    const n = thresholdNotifier();
+    n.update(true, true);
+    expect(createElement).not.toHaveBeenCalled();
   });
 
   it("stays silent when haptics are turned off", () => {

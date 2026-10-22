@@ -267,6 +267,18 @@ export const tabBar = (page: Page) => page.getByRole("navigation", { name: "Ос
 
 export const addSheet = (page: Page) => page.getByRole("dialog", { name: /Новое слово/ });
 
+/** Waits for the page's finite animations (a dialog's rise, a snackbar's entry) before measuring geometry. */
+export async function motionSettled(page: Page) {
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity)
+        .map((a) => a.finished.catch(() => undefined)),
+    ),
+  );
+}
+
 /** Ratings in the local review log, oldest first (1 = Не знаю … 3 = Знаю). Undone answers are gone. */
 export async function loggedRatings(page: Page): Promise<number[]> {
   return page.evaluate(

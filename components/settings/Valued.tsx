@@ -6,9 +6,8 @@ import { cx } from "@/components/ui/cx";
 // selected segment or option, no number, an empty checkbox — and no input. When the values arrive
 // they fade in (`--dur-quick`); the frames never move.
 
-/** Marks fade instead of snapping when the values arrive. */
+/** Marks fade instead of snapping when the values arrive (Toggle fades its own thumb and track). */
 const MARKS =
-  "[&_[role=switch]>span>span]:transition-opacity [&_[role=switch]>span>span]:duration-(--dur-quick) " +
   "[&_[role=radio]>span]:transition-colors [&_[role=radio]>span]:duration-(--dur-quick) " +
   "[&_[data-text-option]]:transition-colors [&_[data-text-option]]:duration-(--dur-quick) " +
   "[&_[data-check]]:transition-colors [&_[data-check]]:duration-(--dur-quick) [&_[data-check]>*]:transition-opacity [&_[data-check]>*]:duration-(--dur-quick) " +

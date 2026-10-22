@@ -101,14 +101,14 @@ export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>
   strokeWidth?: number;
 }
 
-/** 44×44 transparent icon button (header actions, sheet close). */
+/** 44×44 transparent icon button (header actions, sheet close); press .96 with a --surface-2 tint. */
 export function IconButton({ icon, label, iconSize = 20, strokeWidth, className, type = "button", ...rest }: IconButtonProps) {
   return (
     <button
       type={type}
       aria-label={label}
       className={cx(
-        "inline-flex size-11 shrink-0 items-center justify-center rounded-chip bg-transparent text-ink active:bg-surface-2 disabled:opacity-40",
+        "press-sm inline-flex size-11 shrink-0 items-center justify-center rounded-chip bg-transparent text-ink active:bg-surface-2 data-pressed:bg-surface-2 disabled:opacity-40",
         className,
       )}
       {...rest}

@@ -3,6 +3,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Drawer } from "vaul";
+import { exitMs, sheetCloseMs } from "@/lib/motion";
 import { useLayoutClass } from "@/lib/use-media";
 import { IconButton } from "./Button";
 import { cx } from "./cx";
@@ -48,6 +49,25 @@ export function useVisualViewport(active = true): ViewportBox | null {
   return active ? box : null;
 }
 
+/**
+ * Calls `onClosed` once `open` has been false for `ms()` (the close animation), whoever closed it:
+ * a drag, the scrim, Esc or the caller. Reopening first cancels it.
+ */
+function useAfterClose(open: boolean, onClosed: (() => void) | undefined, ms: () => number) {
+  const callback = useRef(onClosed);
+  useEffect(() => {
+    callback.current = onClosed;
+  });
+  const wasOpen = useRef(open);
+  useEffect(() => {
+    const closing = wasOpen.current && !open;
+    wasOpen.current = open;
+    if (!closing) return;
+    const timer = window.setTimeout(() => callback.current?.(), ms());
+    return () => window.clearTimeout(timer);
+  }, [open, ms]);
+}
+
 /** Keyboard heights under this are browser chrome jitter, not a keyboard. */
 export const KEYBOARD_MIN = 40;
 /** Gap kept above a full-height sheet (mockups: sheet top at 56px). */
@@ -75,7 +95,10 @@ export interface SheetProps {
   dismissible?: boolean;
   /** For a sheet opened from inside another sheet. */
   nested?: boolean;
-  /** Called after the close animation finishes (reset form state here). */
+  /**
+   * Called after the close animation finishes, however the sheet was closed (reset form state
+   * here): sheetCloseMs() on phones, exitMs() for the desktop dialog.
+   */
   onClosed?: () => void;
   /** Radix auto-focus on open; call event.preventDefault() to keep focus where it is. */
   onOpenAutoFocus?: (event: Event) => void;
@@ -101,6 +124,8 @@ export function Sheet(props: SheetProps) {
 /**
  * Bottom sheet on vaul's Drawer: handle, 12px top radius, 1px ink top rule, scrim var(--scrim).
  * The body scrolls; the sheet follows the visual viewport so inputs stay above the keyboard.
+ * Motion (A1): opens in --dur-sheet on --spring-settle, closes in --dur-enter (globals.css); a fade
+ * of --dur-quick under reduced motion.
  */
 function DrawerSheet({
   open,
@@ -130,17 +155,11 @@ function DrawerSheet({
         : { maxHeight };
 
   const Root = nested ? Drawer.NestedRoot : Drawer.Root;
+  // Not vaul's onAnimationEnd: that one waits a fixed 500ms and misses closes made by the caller.
+  useAfterClose(open, onClosed, sheetCloseMs);
 
   return (
-    <Root
-      open={open}
-      onOpenChange={onOpenChange}
-      dismissible={dismissible}
-      repositionInputs={false}
-      onAnimationEnd={(isOpen) => {
-        if (!isOpen) onClosed?.();
-      }}
-    >
+    <Root open={open} onOpenChange={onOpenChange} dismissible={dismissible} repositionInputs={false}>
       <Drawer.Portal>
         <Drawer.Overlay className="fixed inset-0 z-40 bg-(--scrim)" />
         <Drawer.Content
@@ -203,6 +222,8 @@ const DIALOG_TOP: Record<SheetHeight, string> = { auto: "max(24px, 10vh)", large
  * var(--scrim-desk) over the whole window. Top max(24px, 10vh) (40 for large/full), max-height to
  * 40px above the window bottom; `full` takes all of it. Header and footer stay pinned, the body
  * scrolls (12px top padding when there is no header). Nested dialogs stack; `dismissible={false}` ignores Esc and outside clicks.
+ * Motion (D5): in opacity + 8px rise over --dur-enter, out opacity + 4px down over --dur-exit; the
+ * scrim fades the same (`dialog-panel` / `dialog-scrim` in globals.css).
  */
 function DialogSheet({
   open,
@@ -220,12 +241,7 @@ function DialogSheet({
   bodyClassName,
   children,
 }: SheetProps) {
-  // No exit animation here: the dialog is gone as soon as it closes.
-  const wasOpen = useRef(open);
-  useEffect(() => {
-    if (wasOpen.current && !open) onClosed?.();
-    wasOpen.current = open;
-  }, [open, onClosed]);
+  useAfterClose(open, onClosed, exitMs);
 
   const top = DIALOG_TOP[height];
   const maxHeight = `calc(100dvh - ${top} - 40px)`;
@@ -236,7 +252,7 @@ function DialogSheet({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-40 bg-(--scrim-desk)" />
+        <Dialog.Overlay className="dialog-scrim fixed inset-0 z-40 bg-(--scrim-desk)" />
         <Dialog.Content
           {...(description ? {} : { "aria-describedby": undefined })}
           onOpenAutoFocus={onOpenAutoFocus}
@@ -254,7 +270,7 @@ function DialogSheet({
             height: height === "full" ? maxHeight : undefined,
           }}
           className={cx(
-            "fixed left-1/2 z-50 flex -translate-x-1/2 flex-col overflow-hidden rounded-[8px] border border-rule bg-surface text-ink outline-none",
+            "dialog-panel fixed left-1/2 z-50 flex -translate-x-1/2 flex-col overflow-hidden rounded-[8px] border border-rule bg-surface text-ink outline-none",
             className,
           )}
         >

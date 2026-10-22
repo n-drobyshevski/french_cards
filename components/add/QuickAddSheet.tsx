@@ -13,6 +13,7 @@ import type { EnrichResult, Suggestion } from "@/lib/ai/schemas";
 import { fillSavedWords, type EnrichInput } from "@/lib/enrich";
 import { listFolders } from "@/lib/folders";
 import { isLexiqueLoaded, loadLexique, prefixSearch, type LexiqueHit } from "@/lib/lexique";
+import { exitMs, sheetCloseMs } from "@/lib/motion";
 import { getSettings } from "@/lib/settings";
 import { normalizeLemma } from "@/lib/text";
 import type { Folder } from "@/lib/types";
@@ -65,16 +66,6 @@ interface Frozen {
   label: string;
   duplicate: DuplicateInfo | null;
   listRows: ListRow[];
-}
-
-/** A motion token in ms (MOTION-SPEC §2.1; shorter under reduced motion), for timers that follow CSS. */
-function tokenMs(name: string, fallback: number): number {
-  if (typeof window === "undefined") return fallback;
-  // The minifier writes 240ms as «.24s».
-  const raw = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-  const value = parseFloat(raw);
-  if (!Number.isFinite(value)) return fallback;
-  return raw.endsWith("ms") ? value : raw.endsWith("s") ? value * 1000 : fallback;
 }
 
 /**
@@ -406,7 +397,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
    */
   const showUndoSnackbar = (message: string, result: SaveResult, afterClose = false) => {
     const show = () => snackbar.show({ message, actionLabel: "Отменить", onAction: () => undo(result) });
-    if (afterClose && !desk) window.setTimeout(show, tokenMs("--dur-enter", 240));
+    if (afterClose && !desk) window.setTimeout(show, sheetCloseMs());
     else show();
   };
 
@@ -451,7 +442,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
       window.setTimeout(() => {
         startOver();
         setSaving(null);
-      }, tokenMs("--dur-exit", 140));
+      }, exitMs());
     } else {
       setUndoBar(null);
       setSaving(null);
