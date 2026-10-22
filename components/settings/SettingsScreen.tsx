@@ -177,6 +177,13 @@ function PhoneSettings({ settings, known, save, onTheme, onDirection }: ScreenPr
                 onChange={onTheme}
               />
             </SettingsRow>
+            <SettingsRow label="Происхождение слов" labelId="origin-label" caption="В библиотеке и на обороте карточки">
+              <Toggle
+                aria-labelledby="origin-label"
+                checked={settings.origin_visible}
+                onCheckedChange={(checked) => save({ origin_visible: checked })}
+              />
+            </SettingsRow>
           </SettingsSection>
 
           <SettingsSection

@@ -30,6 +30,7 @@ import type { MenuAnchor } from "./Menu";
 import type { Columns, SortKey, SortState } from "./table";
 import type { LibraryWord } from "./useLibraryWords";
 import { rowLabel } from "./WordList";
+import { useShowOrigin } from "@/lib/use-show-origin";
 
 // The desktop word table (DESKTOP-SPEC §3 table tokens, §4 library a11y model): one tab stop with
 // a roving row, role="grid" + aria-multiselectable, aria-selected = selection, aria-current = the
@@ -303,6 +304,7 @@ const Row = memo(function Row({ item, index, leaving, returning, columns, curren
   const showBox = coarse || selected || selectionActive;
   const hoverActions = fine && !coarse && !selectionActive;
   const difficult = schedule.status === "difficult";
+  const origin = useShowOrigin() ? word.origin : null;
 
   const cancelPress = () => {
     if (press.current) window.clearTimeout(press.current.timer);
@@ -430,6 +432,7 @@ const Row = memo(function Row({ item, index, leaving, returning, columns, curren
       </div>
       <div role="gridcell" className="min-w-0 truncate px-2 text-[14px] leading-5 text-muted">
         {word.ru}
+        {origin && <span className="text-muted/80"> · {origin}</span>}
       </div>
       <div role="gridcell" className="flex min-w-0 px-2">
         {columns.level === "meter" ? (

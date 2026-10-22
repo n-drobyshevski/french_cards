@@ -176,6 +176,8 @@ export interface Settings {
   ai_model_extract: "fast" | "accurate";
   /** Библиотека opens on the theme tiles or on the list of all words. */
   library_view: "themes" | "words";
+  /** «Происхождение» (word.origin) in library rows and on the review card's answer side. */
+  origin_visible: boolean;
   /**
    * «Мои наборы» as the first version kept them, device-local. Moved into the synced
    * `review_sets` table on upgrade (lib/db.ts) and in old backups; not written any more.
@@ -228,6 +230,7 @@ export const DEFAULT_SETTINGS: Settings = {
   ai_model: "fast",
   ai_model_extract: "fast",
   library_view: "themes",
+  origin_visible: true,
   last_sync_at: null,
 };
 

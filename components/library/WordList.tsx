@@ -9,6 +9,7 @@ import { SlangMeter, slangAbbr } from "@/components/ui/SlangMeter";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { cx } from "@/components/ui/cx";
 import { exitMs } from "@/lib/motion";
+import { useShowOrigin } from "@/lib/use-show-origin";
 import type { Folder, Word } from "@/lib/types";
 import { moveWords, restoreMoves, restoreWords, softDeleteWords } from "@/lib/words";
 import { posAbbr, STATUS_DOT, STATUS_LABELS } from "./format";
@@ -27,6 +28,7 @@ const ACTIONS_WIDTH = 160;
 export function WordRowContent({ item, showFolder, struck = false }: { item: LibraryWord; showFolder?: boolean; struck?: boolean }) {
   const { word, schedule } = item;
   const abbr = posAbbr(word);
+  const origin = useShowOrigin() ? word.origin : null;
   return (
     <span className="relative flex h-16 w-full min-w-0 items-center gap-3 border-b border-rule transition-[border-color] duration-(--dur-quick) ease-standard group-data-lifted/swipe:border-ink">
       {struck && (
@@ -50,6 +52,7 @@ export function WordRowContent({ item, showFolder, struck = false }: { item: Lib
         </span>
         <span className="truncate text-[14px] leading-5 text-muted">
           {word.ru}
+          {origin && <span className="text-muted/80"> · {origin}</span>}
           {showFolder && <span className="text-muted/80"> · {item.folder?.name ?? "Входящие"}</span>}
         </span>
       </span>

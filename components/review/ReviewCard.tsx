@@ -26,6 +26,7 @@ import {
 import { headwordStep, posAbbr, type HeadwordStep } from "./format";
 import { flyOut, stackPose, swipeVisual, type SwipeOutcome, type SwipeVisual } from "./swipe";
 import { useSwipe } from "./useSwipe";
+import { useShowOrigin } from "@/lib/use-show-origin";
 
 /** Index-card shell: white, radius 6, 1px rule, the red header rule 44px from the top. */
 const cardShell = "flex flex-col overflow-hidden rounded-card border border-rule bg-surface text-ink";
@@ -314,6 +315,7 @@ const AnswerFace = memo(function AnswerFace({
   const [bodyRef, clipped] = useClippedBelow<HTMLDivElement>();
   const pos = posAbbr(word);
   const step = headwordStep(direction === "fr_ru" ? word.fr : word.ru, word.fr);
+  const origin = useShowOrigin() ? word.origin : null;
   return (
     <>
       <CardHeader label={<CallNumber side={direction === "fr_ru" ? "FR" : "RU"} number={number} />}>
@@ -372,6 +374,12 @@ const AnswerFace = memo(function AnswerFace({
           {word.note && (
             <p className="mt-2 mb-0 max-w-[32ch] text-[14px] leading-5 whitespace-pre-line text-muted md:line-clamp-3 md:max-w-[60ch] md:text-[15px] md:leading-[22px]">
               {word.note}
+            </p>
+          )}
+          {origin && (
+            <p className="mt-2 mb-0 max-w-[32ch] text-[13px] leading-5 text-muted md:max-w-[60ch] md:text-[14px]">
+              <span className="meta mr-1.5">Откуда</span>
+              {origin}
             </p>
           )}
           {(word.example_fr || word.example_ru) && (

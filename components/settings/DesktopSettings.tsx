@@ -143,6 +143,12 @@ export function DesktopSettings({ settings, known, save, onTheme, onDirection }:
               <DeskRow label="Тема" labelId="set-theme-label">
                 <TextOptions ariaLabelledby="set-theme-label" options={THEME_OPTIONS} value={settings.theme} onChange={onTheme} />
               </DeskRow>
+              <CheckboxRow
+                label="Происхождение слов"
+                caption="В библиотеке и на обороте карточки"
+                checked={settings.origin_visible}
+                onCheckedChange={(checked) => save({ origin_visible: checked })}
+              />
             </DeskSection>
 
             <DeskSection id="set-hints" title="ИИ">
