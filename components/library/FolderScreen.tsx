@@ -15,6 +15,7 @@ import type { Folder } from "@/lib/types";
 import { useLayoutClass } from "@/lib/use-media";
 import { DeskPlaceholder } from "./DeskPlaceholder";
 import { FolderFormSheet } from "./FolderFormSheet";
+import { DisbandSheet, disbandMessage } from "./DisbandSheet";
 import { FolderMenuSheet } from "./FolderMenuSheet";
 import { LibraryDesk } from "./LibraryDesk";
 import { nWords, reviewHref } from "./format";
@@ -48,6 +49,7 @@ function PhoneFolder({ id }: { id: string }) {
   const addSheet = useAddSheet();
   const [menuOpen, setMenuOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [disbandOpen, setDisbandOpen] = useState(false);
 
   const meta = useLiveQuery(async () => {
     const [folder, lib, counts] = await Promise.all([
@@ -198,7 +200,28 @@ function PhoneFolder({ id }: { id: string }) {
               setMenuOpen(false);
               setEditOpen(true);
             }}
+            onDisband={
+              stats && stats.total > 0
+                ? () => {
+                    setMenuOpen(false);
+                    setDisbandOpen(true);
+                  }
+                : undefined
+            }
             onDelete={() => void remove(folder)}
+          />
+          <DisbandSheet
+            open={disbandOpen}
+            onOpenChange={setDisbandOpen}
+            folder={folder}
+            onDisbanded={(moves) => {
+              router.push("/library");
+              snackbar.show({
+                message: disbandMessage(folder.name, moves),
+                actionLabel: "Отменить",
+                onAction: () => void restoreFolder(folder.id, moves),
+              });
+            }}
           />
           <FolderFormSheet
             open={editOpen}

@@ -17,6 +17,7 @@ import type { Settings } from "@/lib/types";
 import { getUndoableRun, undoReorgRun } from "@/lib/reorg";
 import { useLayoutClass } from "@/lib/use-media";
 import { DeskPlaceholder } from "./DeskPlaceholder";
+import { DisbandSheet, disbandMessage } from "./DisbandSheet";
 import { EnrichPlanSheet } from "./EnrichPlanSheet";
 import { FolderFormSheet } from "./FolderFormSheet";
 import { FolderMenuSheet } from "./FolderMenuSheet";
@@ -85,6 +86,7 @@ function PhoneLibrary() {
   const [menuFolderId, setMenuFolderId] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [disbandOpen, setDisbandOpen] = useState(false);
 
   const searching = query.trim() !== "";
   const filtered = searching || narrows(filter);
@@ -370,7 +372,27 @@ function PhoneLibrary() {
               setMenuOpen(false);
               setEditOpen(true);
             }}
+            onDisband={
+              menuFolder.stats.total > 0
+                ? () => {
+                    setMenuOpen(false);
+                    setDisbandOpen(true);
+                  }
+                : undefined
+            }
             onDelete={() => void removeFolder(menuFolder)}
+          />
+          <DisbandSheet
+            open={disbandOpen}
+            onOpenChange={setDisbandOpen}
+            folder={menuFolder}
+            onDisbanded={(moves) =>
+              snackbar.show({
+                message: disbandMessage(menuFolder.name, moves),
+                actionLabel: "Отменить",
+                onAction: () => void restoreFolder(menuFolder.id, moves),
+              })
+            }
           />
           <FolderFormSheet
             open={editOpen}

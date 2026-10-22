@@ -20,14 +20,16 @@ export interface FolderMenuSheetProps {
   /** Also offer «Открыть тему» and «Повторить тему» (the library's long-press menu). */
   navigation?: boolean;
   onEdit: () => void;
+  /** «Расформировать»: offered when the theme has words. */
+  onDisband?: () => void;
   onDelete: () => void;
 }
 
 /**
- * Actions on a theme: open and review it (from the library), edit, pin, delete. The theme screen
+ * Actions on a theme: open and review it (from the library), edit, pin, disband, delete. The theme screen
  * opens it from «⋯», the phone library from a long press on the theme tile.
  */
-export function FolderMenuSheet({ open, onOpenChange, folder, navigation = false, onEdit, onDelete }: FolderMenuSheetProps) {
+export function FolderMenuSheet({ open, onOpenChange, folder, navigation = false, onEdit, onDisband, onDelete }: FolderMenuSheetProps) {
   const lockLabelId = `lock-${folder.id}`;
   const cards = useLiveQuery(async () => {
     if (!open || !navigation) return null;
@@ -81,6 +83,23 @@ export function FolderMenuSheet({ open, onOpenChange, folder, navigation = false
             aria-labelledby={lockLabelId}
           />
         </div>
+        {onDisband && (
+          <button
+            type="button"
+            onClick={onDisband}
+            aria-label="Расформировать"
+            aria-describedby={`disband-${folder.id}`}
+            className={cx(ROW, "h-auto min-h-[52px] py-2 text-ink")}
+          >
+            <Icon name="move" size={18} className="shrink-0" />
+            <span className="flex min-w-0 flex-col">
+              <span className="leading-5">Расформировать</span>
+              <span id={`disband-${folder.id}`} className="text-[12px] leading-4 text-muted">
+                Удалить тему, а слова разложить по другим темам.
+              </span>
+            </span>
+          </button>
+        )}
         <button type="button" onClick={onDelete} className={cx(ROW, "font-medium text-again")}>
           <Icon name="trash" size={18} />
           Удалить тему

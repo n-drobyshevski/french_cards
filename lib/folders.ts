@@ -3,7 +3,7 @@ import { db, newId } from "./db";
 import { cardMastery, cardStatus, wordStatus } from "./scheduler";
 import { endOfStudyDay } from "./session";
 import { slugify } from "./text";
-import type { Folder, ReviewState, Word } from "./types";
+import type { Confidence, Folder, ReviewState, Word } from "./types";
 import type { MoveRecord } from "./words";
 
 export interface DefaultFolder {
@@ -200,6 +200,57 @@ export async function deleteFolder(id: string, now: Date = new Date()): Promise<
   });
 }
 
+/** Where «Расформировать» puts one word of the theme. */
+export interface FolderPlacement {
+  wordId: string;
+  /** Another live theme; null = «Входящие». */
+  to: string | null;
+  /** "user" when picked by hand in the plan. */
+  source: Word["folder_source"];
+  confidence: Confidence | null;
+}
+
+/**
+ * «Расформировать»: deletes the theme and moves its words to the placements in one transaction.
+ * Words without a placement (added since the plan), or whose target theme is gone, go to
+ * «Входящие». Returns the moves; `restoreFolder(id, moves)` undoes it. Null when the theme is gone.
+ */
+export async function disbandFolder(
+  id: string,
+  placements: readonly FolderPlacement[],
+  now: Date = new Date(),
+): Promise<MoveRecord[] | null> {
+  const iso = now.toISOString();
+  return db.transaction("rw", FOLDER_TABLES(), async () => {
+    const folder = await getFolder(id);
+    if (!folder) return null;
+    const others = new Set((await listFolders()).filter((f) => f.id !== id).map((f) => f.id));
+    const byWord = new Map(placements.map((p) => [p.wordId, p]));
+    const words = await db.words.where("folder_id").equals(id).filter((w) => w.deleted_at === null).toArray();
+    const moves: MoveRecord[] = [];
+    const updated: Word[] = [];
+    for (const w of words) {
+      const p = byWord.get(w.id);
+      const to = p && p.to !== null && others.has(p.to) ? p.to : null;
+      moves.push({ word_id: w.id, from: id, to, from_source: w.folder_source, from_confidence: w.folder_confidence });
+      updated.push({
+        ...w,
+        folder_id: to,
+        folder_source: to === null ? "auto" : p!.source,
+        folder_confidence: to === null || p!.source === "user" ? null : p!.confidence,
+        updated_at: iso,
+      });
+    }
+    await db.words.bulkPut(updated);
+    await db.folders.put({ ...folder, deleted_at: iso, updated_at: iso });
+    return moves;
+  });
+}
+
+/**
+ * Brings a deleted or disbanded theme back and returns its words to it — only those still where
+ * the deletion put them (a word moved since stays where the user put it).
+ */
 export async function restoreFolder(id: string, moves: readonly MoveRecord[], now: Date = new Date()): Promise<void> {
   const iso = now.toISOString();
   await db.transaction("rw", FOLDER_TABLES(), async () => {
@@ -209,7 +260,7 @@ export async function restoreFolder(id: string, moves: readonly MoveRecord[], no
     const restored: Word[] = [];
     for (const m of moves) {
       const w = await db.words.get(m.word_id);
-      if (!w || w.deleted_at !== null || w.folder_id !== null) continue;
+      if (!w || w.deleted_at !== null || w.folder_id !== m.to) continue;
       restored.push({ ...w, folder_id: m.from, folder_source: m.from_source, folder_confidence: m.from_confidence, updated_at: iso });
     }
     await db.words.bulkPut(restored);

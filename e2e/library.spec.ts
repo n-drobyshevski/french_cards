@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { enriched, mockEnrich } from "./fixtures";
+import { enriched, mockClassifyAssign, mockEnrich } from "./fixtures";
 
 test("library search matches French and Russian, ignoring accents", async ({ page }) => {
   await page.goto("/library");
@@ -216,4 +216,53 @@ test("«Название, описание и цвет» from the long-press men
   await name.fill("Менты");
   await form.getByRole("button", { name: "Сохранить" }).click();
   await expect(page.getByRole("link", { name: /^Менты:/ })).toBeVisible();
+});
+
+test("«Расформировать» spreads a theme's words over the other themes and can be undone", async ({ page }) => {
+  const sent: string[][] = [];
+  await mockClassifyAssign(page, (w, folders) => (w.fr === "je vais me tuer" ? folders.find((f) => f.name === "Повседневное")!.slug : "INBOX"), {
+    onRequest: (body) => sent.push(body.folders.map((f) => f.name)),
+  });
+  await page.goto("/library");
+  await longPress(page, page.getByRole("link", { name: /^Эмоции:/ }));
+  await page.getByRole("dialog", { name: "Эмоции" }).getByRole("button", { name: /Расформировать/ }).click();
+
+  const sheet = page.getByRole("dialog", { name: "Расформировать «Эмоции»" });
+  await expect(sheet.getByRole("region", { name: "Повседневное: 1 слово" })).toBeVisible();
+  await expect(sheet.getByRole("region", { name: "Входящие: 1 слово" })).toBeVisible();
+  // The theme itself is not offered as a target.
+  expect(sent[0]).not.toContain("Эмоции");
+
+  // «c'est dur» goes to «Еда» by hand.
+  await sheet.getByRole("button", { name: "c'est dur — изменить тему" }).click();
+  await page.getByRole("dialog", { name: "Куда переместить" }).getByRole("radio", { name: /Еда/ }).click();
+  await expect(sheet.getByRole("region", { name: "Еда: 1 слово" })).toBeVisible();
+  await expect(sheet.getByText("вручную")).toBeVisible();
+
+  await sheet.getByRole("button", { name: "Расформировать" }).click();
+  await expect(sheet).toBeHidden();
+  await expect(page.getByText("Тема «Эмоции» расформирована · 2 слова в других темах")).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Эмоции:/ })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /^Еда: 2 слова/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Повседневное: 8 слов/ })).toBeVisible();
+
+  await page.getByRole("button", { name: "Отменить", exact: true }).click();
+  await expect(page.getByRole("link", { name: /^Эмоции: 2 слова/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Еда: 1 слово/ })).toBeVisible();
+});
+
+test("without suggestions «Расформировать» can still send every word to «Входящие»", async ({ page }) => {
+  await mockClassifyAssign(page, () => "INBOX", { status: 503 });
+  await page.goto("/library");
+  await page.getByRole("link", { name: /^Эмоции:/ }).click();
+  await expect(page.getByRole("heading", { name: "Эмоции" })).toBeVisible();
+  await page.getByRole("button", { name: "Ещё действия с темой" }).click();
+  await page.getByRole("dialog", { name: "Эмоции" }).getByRole("button", { name: /Расформировать/ }).click();
+
+  const sheet = page.getByRole("dialog", { name: "Расформировать «Эмоции»" });
+  await expect(sheet.getByRole("alert")).toContainText("недоступна");
+  await sheet.getByRole("button", { name: "Всё во «Входящие»" }).click();
+  await expect(page).toHaveURL(/\/library$/);
+  await expect(page.getByText("Тема «Эмоции» расформирована · 2 во «Входящих»")).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Входящие:/ })).toBeVisible();
 });

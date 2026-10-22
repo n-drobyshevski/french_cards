@@ -17,7 +17,7 @@ import {
   type ModelTierInput,
 } from "./ai/schemas";
 import { db, newId } from "./db";
-import { createFolder, FOLDER_COLORS, listFolders } from "./folders";
+import { createFolder, disbandFolder, FOLDER_COLORS, listFolders } from "./folders";
 import { getSettings } from "./settings";
 import type { Confidence, Folder, ReorgRun, Word } from "./types";
 import { moveWords, type MoveRecord } from "./words";
@@ -149,9 +149,20 @@ export function buildAssignRequests(snap: ReorgSnapshot, targets: readonly Assig
   if (targets.length === 0) return [];
   const { movable } = partition(snap);
   const folders = targets.map((t) => ({ slug: t.slug, name: t.name, description: t.description }));
-  const slugByFolder = new Map(targets.filter((t) => t.folderId).map((t) => [t.folderId!, t.slug]));
+  const examples = assignExamples(snap, targets);
 
-  // Examples: user-placed words, taken round-robin across folders so every theme is represented.
+  const requests: AssignRequest[] = [];
+  for (let i = 0; i < movable.length; i += ASSIGN_CHUNK_MAX) {
+    requests.push({ mode: "assign", words: movable.slice(i, i + ASSIGN_CHUNK_MAX).map(assignWord), folders, examples });
+  }
+  return requests;
+}
+
+const assignWord = (w: Word) => ({ id: w.id, fr: clip(w.fr, 120), ru: clip(w.ru, 160), note: clipOrNull(w.note, 300) });
+
+/** Few-shot examples: user-placed words, taken round-robin across folders so every theme is represented. */
+function assignExamples(snap: ReorgSnapshot, targets: readonly AssignTarget[]): AssignRequest["examples"] {
+  const slugByFolder = new Map(targets.filter((t) => t.folderId).map((t) => [t.folderId!, t.slug]));
   const byFolder = new Map<string, Word[]>();
   for (const w of snap.words) {
     if (w.folder_source !== "user" || w.folder_id === null) continue;
@@ -170,22 +181,7 @@ export function buildAssignRequests(snap: ReorgSnapshot, targets: readonly Assig
       }
     }
   }
-
-  const requests: AssignRequest[] = [];
-  for (let i = 0; i < movable.length; i += ASSIGN_CHUNK_MAX) {
-    requests.push({
-      mode: "assign",
-      words: movable.slice(i, i + ASSIGN_CHUNK_MAX).map((w) => ({
-        id: w.id,
-        fr: clip(w.fr, 120),
-        ru: clip(w.ru, 160),
-        note: clipOrNull(w.note, 300),
-      })),
-      folders,
-      examples,
-    });
-  }
-  return requests;
+  return examples;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -671,4 +667,124 @@ export async function runReorg(opts: RunReorgOptions = {}): Promise<ReorgPlan> {
     opts.signal,
   );
   return buildPlan(snap, targets, results.flat(), now);
+}
+
+// ---------------------------------------------------------------------------------------------
+// «Расформировать»: one theme's words spread over the other themes (pass B only, no new
+// themes), reviewed as a plan; applying it deletes the theme. Unlike the re-sort, every word of
+// the theme moves — hand-placed ones too, since their theme goes away. Low confidence → «Входящие».
+
+export interface DisbandMove {
+  word: { id: string; fr: string; ru: string };
+  /** Target folder id; null = «Входящие». */
+  to: string | null;
+  confidence: Confidence | null;
+  /** Picked by hand in the plan. */
+  edited: boolean;
+}
+
+export interface DisbandPlan {
+  folderId: string;
+  name: string;
+  /** Themes the words may go to (the theme itself excluded), in their order. */
+  targets: Folder[];
+  moves: DisbandMove[];
+}
+
+const wordsOf = (snap: ReorgSnapshot, folderId: string) => snap.words.filter((w) => w.deleted_at === null && w.folder_id === folderId);
+
+/** The other themes as assign targets. */
+export function disbandTargets(snap: ReorgSnapshot, folderId: string): AssignTarget[] {
+  return requestFolders(snap.folders.filter((f) => f.id !== folderId))
+    .slice(0, ASSIGN_FOLDERS_MAX)
+    .map((f) => ({ slug: f.slug, name: f.name, description: clipOrNull(f.description, 300), folderId: f.id }));
+}
+
+/** Pass B bodies for the theme's words; examples come from the other themes. */
+export function buildDisbandRequests(snap: ReorgSnapshot, folderId: string, targets: readonly AssignTarget[]): AssignRequest[] {
+  if (targets.length === 0) return [];
+  const words = wordsOf(snap, folderId);
+  const folders = targets.map((t) => ({ slug: t.slug, name: t.name, description: t.description }));
+  const examples = assignExamples(snap, targets);
+  const requests: AssignRequest[] = [];
+  for (let i = 0; i < words.length; i += ASSIGN_CHUNK_MAX) {
+    requests.push({ mode: "assign", words: words.slice(i, i + ASSIGN_CHUNK_MAX).map(assignWord), folders, examples });
+  }
+  return requests;
+}
+
+/** Every word of the theme with its target: the model's theme, or «Входящие» for INBOX, low confidence or no answer. */
+export function buildDisbandPlan(
+  snap: ReorgSnapshot,
+  folderId: string,
+  targets: readonly AssignTarget[],
+  assignments: readonly AssignmentResult[],
+): DisbandPlan {
+  const idBySlug = new Map(targets.map((t) => [t.slug, t.folderId]));
+  const byWord = new Map<string, AssignmentResult>();
+  for (const a of assignments) if (!byWord.has(a.id)) byWord.set(a.id, a);
+  const moves = wordsOf(snap, folderId).map((w): DisbandMove => {
+    const a = byWord.get(w.id);
+    const to = a && a.folder !== FOLDER_INBOX && a.confidence !== "low" ? (idBySlug.get(a.folder) ?? null) : null;
+    return { word: { id: w.id, fr: w.fr, ru: w.ru }, to, confidence: to === null ? null : a!.confidence, edited: false };
+  });
+  return {
+    folderId,
+    name: snap.folders.find((f) => f.id === folderId)?.name ?? "",
+    targets: snap.folders.filter((f) => f.id !== folderId),
+    moves,
+  };
+}
+
+/** The word goes where the user picked (null = «Входящие»). */
+export function retargetDisband(plan: DisbandPlan, wordId: string, to: string | null): DisbandPlan {
+  return {
+    ...plan,
+    moves: plan.moves.map((m) => (m.word.id === wordId ? { ...m, to, confidence: null, edited: true } : m)),
+  };
+}
+
+export interface DisbandGroup {
+  /** null = «Входящие». */
+  folder: Folder | null;
+  moves: DisbandMove[];
+}
+
+/** Non-empty groups in theme order, «Входящие» last. */
+export function disbandGroups(plan: DisbandPlan): DisbandGroup[] {
+  const groups: DisbandGroup[] = plan.targets.map((folder) => ({ folder, moves: plan.moves.filter((m) => m.to === folder.id) }));
+  groups.push({ folder: null, moves: plan.moves.filter((m) => m.to === null) });
+  return groups.filter((g) => g.moves.length > 0);
+}
+
+/** Builds the plan for «Расформировать». Nothing is written. */
+export async function runDisband(folderId: string, opts: RunReorgOptions = {}): Promise<DisbandPlan> {
+  const snap = opts.snapshot ?? (await loadReorgSnapshot());
+  const targets = disbandTargets(snap, folderId);
+  const requests = buildDisbandRequests(snap, folderId, targets);
+  if (requests.length === 0) return buildDisbandPlan(snap, folderId, targets, []);
+
+  const model = opts.model ?? (await getSettings()).ai_model;
+  let done = 0;
+  opts.onProgress?.(0, requests.length);
+  const results = await pool(
+    requests,
+    ASSIGN_CONCURRENCY,
+    async (req) => {
+      const res = await postClassify<AssignResponse>({ ...req, model }, opts);
+      opts.onProgress?.(++done, requests.length);
+      return res.assignments;
+    },
+    opts.signal,
+  );
+  return buildDisbandPlan(snap, folderId, targets, results.flat());
+}
+
+/** Applies the plan: the words move, the theme is deleted. Returns the moves for `restoreFolder`. */
+export function applyDisband(plan: DisbandPlan, now: Date = new Date()): Promise<MoveRecord[] | null> {
+  return disbandFolder(
+    plan.folderId,
+    plan.moves.map((m) => ({ wordId: m.word.id, to: m.to, source: m.edited ? "user" : "auto", confidence: m.confidence })),
+    now,
+  );
 }

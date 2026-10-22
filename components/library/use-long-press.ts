@@ -10,6 +10,25 @@ const SLOP = 10;
 const GUARD_MS = 800;
 
 /**
+ * The finger lifting after a long press still produces a click, and it lands on whatever is under
+ * it by then — often the menu that just opened. Swallow that one click, wherever it lands.
+ */
+function swallowNextClick() {
+  if (typeof document === "undefined") return;
+  const swallow = (e: Event) => {
+    e.preventDefault();
+    e.stopPropagation();
+    done();
+  };
+  const done = () => {
+    clearTimeout(timer);
+    document.removeEventListener("click", swallow, true);
+  };
+  const timer = setTimeout(done, GUARD_MS);
+  document.addEventListener("click", swallow, true);
+}
+
+/**
  * Long press on a touch target (a link): a held finger, Android's `contextmenu`, or the keyboard's
  * context-menu key call `onLongPress`; the browser's own link menu and the click that follows the
  * press are suppressed. Spread the handlers on the element and add `select-none` and
@@ -34,6 +53,7 @@ export function useLongPress(onLongPress: () => void) {
     press.current = null;
     if (Date.now() - fired.current < GUARD_MS) return;
     fired.current = Date.now();
+    swallowNextClick();
     latest.current();
   };
 
