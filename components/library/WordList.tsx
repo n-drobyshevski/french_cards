@@ -1,6 +1,7 @@
 "use client";
 
-import { useRef, useState, type ReactNode } from "react";
+import { memo, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { Button } from "@/components/ui/Button";
 import { Collapse } from "@/components/ui/Collapse";
 import { Icon } from "@/components/ui/Icons";
 import { Sheet, SheetCloseButton, SheetTitle } from "@/components/ui/Sheet";
@@ -87,8 +88,88 @@ export interface WordListProps {
   /** Accessible name of the list. */
   label: string;
   className?: string;
-  footer?: ReactNode;
+  /** More rows than shown: the «Показать ещё» button after the list, with this text. */
+  moreLabel?: string;
+  onMore?: () => void;
 }
+
+/** Row events, stable through a ref so the rows can be memoised. */
+interface ListRowHandlers {
+  setOpen: (id: string, open: boolean) => void;
+  tap: (id: string) => void;
+  longPress: (word: Word) => void;
+  fullSwipe: (word: Word) => void;
+  startMove: (word: Word) => void;
+  remove: (word: Word) => void;
+}
+
+interface WordListRowProps {
+  id: string;
+  item: LibraryWord;
+  leaving: boolean;
+  returning: boolean;
+  open: boolean;
+  lifted: boolean;
+  struck: boolean;
+  showFolder?: boolean;
+  handlers: RefObject<ListRowHandlers>;
+}
+
+const WordListRow = memo(function WordListRow({ id, item, leaving, returning, open, lifted, struck, showFolder, handlers }: WordListRowProps) {
+  return (
+    <li
+      aria-hidden={leaving || undefined}
+      className={cx(
+        // 8px into the gutter on the left (room for the lifted card's edge), to the screen edge on the right.
+        "-mr-4 -ml-2",
+        !lifted && !leaving && !returning && "[contain-intrinsic-size:auto_64px] [content-visibility:auto]",
+      )}
+    >
+      <Collapse open={!leaving} appear={returning} innerClassName={lifted ? "-mt-0.5 pt-0.5" : undefined}>
+        <SwipeRow
+          open={open}
+          onOpenChange={(next) => handlers.current.setOpen(id, next)}
+          onTap={() => handlers.current.tap(id)}
+          onLongPress={() => handlers.current.longPress(item.word)}
+          onFullSwipe={() => handlers.current.fullSwipe(item.word)}
+          lifted={lifted}
+          highlight={returning}
+          label={rowLabel(item, showFolder)}
+          actionsWidth={ACTIONS_WIDTH}
+          actions={({ open, locked }) => (
+            <>
+              <button
+                type="button"
+                tabIndex={open ? 0 : -1}
+                onClick={() => handlers.current.startMove(item.word)}
+                className={cx(
+                  "flex h-full shrink-0 flex-col items-center justify-center gap-1 overflow-hidden bg-surface-2 text-[12px] font-medium whitespace-nowrap text-ink transition-[flex-basis] duration-(--dur-move) ease-standard active:opacity-80",
+                  locked ? "basis-0" : "basis-[88px]",
+                )}
+              >
+                <Icon name="move" size={18} />
+                Переместить
+              </button>
+              <button
+                type="button"
+                tabIndex={open ? 0 : -1}
+                onClick={() => handlers.current.remove(item.word)}
+                className="flex h-full min-w-[72px] flex-1 flex-col items-center justify-center gap-1 bg-again text-[12px] font-medium text-on-ink active:opacity-80"
+              >
+                <Icon name="trash" size={18} />
+                Удалить
+              </button>
+            </>
+          )}
+        >
+          <span className="flex w-full min-w-0 pr-4 pl-2">
+            <WordRowContent item={item} showFolder={showFolder} struck={struck} />
+          </span>
+        </SwipeRow>
+      </Collapse>
+    </li>
+  );
+});
 
 /**
  * Word rows with swipe-left actions «Переместить» / «Удалить», a long-press menu as their
@@ -97,7 +178,7 @@ export interface WordListProps {
  * Rows never just vanish (§5.10, L7, L10): a deleted word is struck out, then its row closes;
  * a word moved out of this list closes; «Отменить» opens the row again and lights it (spotlight).
  */
-export function WordList({ items, folders, showFolder, label, className, footer }: WordListProps) {
+export const WordList = memo(function WordList({ items, folders, showFolder, label, className, moreLabel, onMore }: WordListProps) {
   const snackbar = useSnackbar();
   const [openRow, setOpenRow] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -178,78 +259,52 @@ export function WordList({ items, folders, showFolder, label, className, footer 
     window.setTimeout(() => void deleteNow(word), exitMs());
   };
 
+  const handlers = useRef<ListRowHandlers>(null as unknown as ListRowHandlers);
+  const rowHandlers: ListRowHandlers = {
+    setOpen: (id, open) => setOpenRow(open ? id : null),
+    tap: (id) => {
+      setOpenRow(null);
+      setDetailId(id);
+    },
+    longPress: (word) => {
+      setOpenRow(null);
+      setMenuWord(word);
+      setMenuOpen(true);
+    },
+    fullSwipe: (word) => {
+      setOpenRow(null);
+      void deleteNow(word);
+    },
+    startMove,
+    remove,
+  };
+  useLayoutEffect(() => {
+    handlers.current = rowHandlers;
+  });
+
   return (
     <>
       <ul aria-label={label} className={cx("m-0 flex list-none flex-col p-0", className)}>
-        {entries.map(({ id, item, leaving, returning }) => {
-          const lifted = menuOpen && menuWord?.id === id;
-          return (
-            <li
-              key={id}
-              aria-hidden={leaving || undefined}
-              className={cx(
-                // 8px into the gutter on the left (room for the lifted card's edge), to the screen edge on the right.
-                "-mr-4 -ml-2",
-                !lifted && !leaving && !returning && "[contain-intrinsic-size:auto_64px] [content-visibility:auto]",
-              )}
-            >
-              <Collapse open={!leaving} appear={returning} innerClassName={lifted ? "-mt-0.5 pt-0.5" : undefined}>
-                <SwipeRow
-                  open={openRow === id}
-                  onOpenChange={(open) => setOpenRow(open ? id : null)}
-                  onTap={() => {
-                    setOpenRow(null);
-                    setDetailId(id);
-                  }}
-                  onLongPress={() => {
-                    setOpenRow(null);
-                    setMenuWord(item.word);
-                    setMenuOpen(true);
-                  }}
-                  onFullSwipe={() => {
-                    setOpenRow(null);
-                    void deleteNow(item.word);
-                  }}
-                  lifted={lifted}
-                  highlight={returning}
-                  label={rowLabel(item, showFolder)}
-                  actionsWidth={ACTIONS_WIDTH}
-                  actions={({ open, locked }) => (
-                    <>
-                      <button
-                        type="button"
-                        tabIndex={open ? 0 : -1}
-                        onClick={() => startMove(item.word)}
-                        className={cx(
-                          "flex h-full shrink-0 flex-col items-center justify-center gap-1 overflow-hidden bg-surface-2 text-[12px] font-medium whitespace-nowrap text-ink transition-[flex-basis] duration-(--dur-move) ease-standard active:opacity-80",
-                          locked ? "basis-0" : "basis-[88px]",
-                        )}
-                      >
-                        <Icon name="move" size={18} />
-                        Переместить
-                      </button>
-                      <button
-                        type="button"
-                        tabIndex={open ? 0 : -1}
-                        onClick={() => remove(item.word)}
-                        className="flex h-full min-w-[72px] flex-1 flex-col items-center justify-center gap-1 bg-again text-[12px] font-medium text-on-ink active:opacity-80"
-                      >
-                        <Icon name="trash" size={18} />
-                        Удалить
-                      </button>
-                    </>
-                  )}
-                >
-                  <span className="flex w-full min-w-0 pr-4 pl-2">
-                    <WordRowContent item={item} showFolder={showFolder} struck={struck.has(id)} />
-                  </span>
-                </SwipeRow>
-              </Collapse>
-            </li>
-          );
-        })}
+        {entries.map(({ id, item, leaving, returning }) => (
+          <WordListRow
+            key={id}
+            id={id}
+            item={item}
+            leaving={leaving}
+            returning={returning}
+            open={openRow === id}
+            lifted={menuOpen && menuWord?.id === id}
+            struck={struck.has(id)}
+            showFolder={showFolder}
+            handlers={handlers}
+          />
+        ))}
       </ul>
-      {footer}
+      {moreLabel && onMore && (
+        <Button variant="secondary" size="md" className="mt-3 self-start" onClick={onMore}>
+          {moreLabel}
+        </Button>
+      )}
 
       <Sheet
         open={menuOpen}
@@ -310,4 +365,4 @@ export function WordList({ items, folders, showFolder, label, className, footer 
       <WordDetailSheet wordId={detailId} onClose={() => setDetailId(null)} />
     </>
   );
-}
+});
