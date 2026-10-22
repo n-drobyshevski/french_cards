@@ -2,6 +2,7 @@
 // (lib/outbox.ts, installed in lib/db.ts) queues each written row for sync.
 import { buildWord, cleanText, directionsOf, type NewWordInput, type WordPatch } from "./core/words";
 import { db } from "./db";
+import { cleanCustomFields } from "./core/custom-fields";
 import { cleanExamples } from "./examples";
 import { fromSnapshot, grade, newReviewState, resetState, reviewStateId, type GradeResult, type Rating } from "./scheduler";
 import type { Confidence, Direction, ReviewLog, ReviewState, Word } from "./types";
@@ -102,6 +103,7 @@ export async function updateWord(id: string, patch: WordPatch, now: Date = new D
       if (key in patch) next[key] = cleanText(patch[key]);
     }
     if ("extra_examples" in patch) next.extra_examples = cleanExamples(patch.extra_examples);
+    if ("custom_fields" in patch) next.custom_fields = cleanCustomFields(patch.custom_fields);
     if (patch.tags) next.tags = [...new Set(patch.tags.map((t) => t.trim()).filter(Boolean))];
     if ("folder_id" in patch && patch.folder_id !== current.folder_id) {
       if (patch.folder_source === undefined) next.folder_source = "user";

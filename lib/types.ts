@@ -35,6 +35,27 @@ export interface WordExample {
   ru: string | null;
 }
 
+/**
+ * A value of a custom field («Свои поля») on one word. `field_id` points to a shared FieldDef;
+ * null = a one-off field of this word. The label is kept so a value outlives its deleted definition.
+ */
+export interface CustomFieldValue {
+  field_id: string | null;
+  label: string;
+  value: string;
+}
+
+/** A shared custom field shown on every card (Settings «Свои поля»). Synced. */
+export interface FieldDef extends Syncable {
+  /** Label on the card, e.g. «Синонимы». */
+  name: string;
+  /** What to write there, for the automatic fill, e.g. «2–3 синонима на французском». */
+  hint: string | null;
+  /** Filled automatically when a word is added and by «Дополнить карточки». */
+  ai_fill: boolean;
+  sort: number;
+}
+
 export interface Word extends Syncable {
   fr: string;
   ru: string;
@@ -44,6 +65,8 @@ export interface Word extends Syncable {
   example_ru: string | null;
   /** Further examples after the first («+ Ещё пример»). Missing on rows written before them. */
   extra_examples?: WordExample[];
+  /** «Свои поля». Missing on rows written before them. */
+  custom_fields?: CustomFieldValue[];
   pos: PartOfSpeech;
   gender: Gender;
   slang_level: SlangLevel;
@@ -194,5 +217,5 @@ export const DEFAULT_SETTINGS: Settings = {
   last_sync_at: null,
 };
 
-export const SYNC_TABLES = ["folders", "words", "review_state", "review_log", "reorg_runs", "review_sets"] as const;
+export const SYNC_TABLES = ["folders", "words", "review_state", "review_log", "reorg_runs", "review_sets", "field_defs"] as const;
 export type SyncTable = (typeof SYNC_TABLES)[number];

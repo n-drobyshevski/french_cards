@@ -1,6 +1,7 @@
 // Pure word helpers shared by the app and the server (no Dexie): input types, text cleanup,
 // building a new row with its defaults, the card directions and the auto-sort rule. lib/words.ts re-exports them.
 import { cleanExamples } from "../examples";
+import { cleanCustomFields } from "./custom-fields";
 import { newId } from "../id";
 import type { Direction, Word } from "../types";
 
@@ -33,6 +34,7 @@ export function buildWord(input: NewWordInput, now: Date): Word {
     example_fr: cleanText(input.example_fr),
     example_ru: cleanText(input.example_ru),
     extra_examples: cleanExamples(input.extra_examples),
+    custom_fields: cleanCustomFields(input.custom_fields),
     pos: input.pos ?? "other",
     gender: input.gender ?? "none",
     slang_level: input.slang_level ?? 0,

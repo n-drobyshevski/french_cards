@@ -2,7 +2,7 @@
 // lib/sync.ts mirrors these tables to Supabase.
 import Dexie, { type EntityTable } from "dexie";
 import { installOutboxTracking } from "./outbox";
-import type { Folder, ReorgRun, ReviewLog, ReviewSet, ReviewState, Settings, Word } from "./types";
+import type { FieldDef, Folder, ReorgRun, ReviewLog, ReviewSet, ReviewState, Settings, Word } from "./types";
 
 /** Local bookkeeping for sync: rows changed since the last successful push. */
 export interface Outbox {
@@ -19,6 +19,7 @@ export class KartochkiDB extends Dexie {
   review_log!: EntityTable<ReviewLog, "id">;
   reorg_runs!: EntityTable<ReorgRun, "id">;
   review_sets!: EntityTable<ReviewSet, "id">;
+  field_defs!: EntityTable<FieldDef, "id">;
   settings!: EntityTable<Settings, "id">;
   outbox!: EntityTable<Outbox, "key">;
 
@@ -46,6 +47,8 @@ export class KartochkiDB extends Dexie {
           await tx.table<Settings, string>("settings").put(rest);
         }
       });
+    // «Свои поля»: shared custom field definitions (synced).
+    this.version(3).stores({ field_defs: "id, sort, updated_at" });
     // Every write to a synced table queues `${table}:${id}` in outbox, in the same transaction.
     installOutboxTracking(this);
   }

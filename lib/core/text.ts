@@ -27,11 +27,15 @@ export function searchKey(input: string): string {
   return foldAccents(input.normalize("NFC").toLowerCase()).replace(APOSTROPHES, "'").replace(SPACES, " ").trim();
 }
 
-/** True if every whitespace-separated term of `query` occurs in FR, RU, note or tags (accent-insensitive). */
-export function matchesSearch(word: Pick<Word, "fr" | "ru"> & Partial<Pick<Word, "note" | "tags">>, query: string): boolean {
+/** True if every whitespace-separated term of `query` occurs in FR, RU, note, tags or custom fields (accent-insensitive). */
+export function matchesSearch(
+  word: Pick<Word, "fr" | "ru"> & Partial<Pick<Word, "note" | "tags" | "custom_fields">>,
+  query: string,
+): boolean {
   const q = searchKey(query);
   if (!q) return true;
-  const hay = searchKey([word.fr, word.ru, word.note ?? "", ...(word.tags ?? [])].join(" \u0001 "));
+  const fields = (word.custom_fields ?? []).map((f) => f.value);
+  const hay = searchKey([word.fr, word.ru, word.note ?? "", ...(word.tags ?? []), ...fields].join(" \u0001 "));
   return q.split(" ").every((term) => hay.includes(term));
 }
 
