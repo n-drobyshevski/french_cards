@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useRef, type ReactNode } from "react";
+import { useShortcutsEnabled } from "@/components/shell/ShellContext";
 import { useSnackbar } from "@/components/ui/Snackbar";
 
 // Undo snackbars of the desktop library: the screen keeps the latest «Отменить» so `Z` / `⌘Z` in
@@ -30,6 +31,7 @@ export interface UndoSnackbarOptions {
 export function useUndoSnackbar(): (options: UndoSnackbarOptions) => void {
   const snackbar = useSnackbar();
   const api = useContext(UndoContext);
+  const shortcuts = useShortcutsEnabled();
   return useCallback(
     ({ message, undo, actionLabel = "Отменить" }: UndoSnackbarOptions) => {
       let done = false;
@@ -42,6 +44,8 @@ export function useUndoSnackbar(): (options: UndoSnackbarOptions) => void {
       const id = snackbar.show({
         message,
         actionLabel,
+        // `Z` runs it from the list region (DESKTOP-SPEC §2 snackbar: on-ink cap).
+        actionKey: api && shortcuts ? "Z" : undefined,
         onAction: run,
         onHide: () => {
           if (api && api.current() === entry) api.set(null);
@@ -50,7 +54,7 @@ export function useUndoSnackbar(): (options: UndoSnackbarOptions) => void {
       entry = { run, hide: () => snackbar.hide(id) };
       api?.set(entry);
     },
-    [snackbar, api],
+    [snackbar, api, shortcuts],
   );
 }
 
