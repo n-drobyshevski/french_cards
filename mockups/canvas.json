@@ -371,6 +371,166 @@
    "h": 800,
    "title": "Десктоп · Библиотека · тёмная тема",
    "is_interactive": true
+  },
+  "M-Review-Reveal.dc.html": {
+   "x": 0,
+   "y": 13320,
+   "w": 1760,
+   "h": 1044,
+   "title": "Ответ: тап по карточке",
+   "is_interactive": true
+  },
+  "M-Review-Swipe.dc.html": {
+   "x": 1840,
+   "y": 13320,
+   "w": 2190,
+   "h": 1044,
+   "title": "Свайп: штамп и порог",
+   "is_interactive": true
+  },
+  "M-Review-Grade.dc.html": {
+   "x": 4110,
+   "y": 13320,
+   "w": 2190,
+   "h": 1044,
+   "title": "Оценка кнопкой и отмена",
+   "is_interactive": true
+  },
+  "M-Review-Loading.dc.html": {
+   "x": 6380,
+   "y": 13320,
+   "w": 1760,
+   "h": 1044,
+   "title": "Повторение: загрузка без прыжков",
+   "is_interactive": true
+  },
+  "M-Session-Done.dc.html": {
+   "x": 8220,
+   "y": 13320,
+   "w": 2190,
+   "h": 1044,
+   "title": "Готово на сегодня",
+   "is_interactive": true
+  },
+  "M-Add-Suggest.dc.html": {
+   "x": 0,
+   "y": 15044,
+   "w": 2190,
+   "h": 1044,
+   "title": "Варианты: поток без сдвигов",
+   "is_interactive": true
+  },
+  "M-Add-Detect.dc.html": {
+   "x": 2270,
+   "y": 15044,
+   "w": 1760,
+   "h": 1044,
+   "title": "Автозаполнение и «Список»",
+   "is_interactive": true
+  },
+  "M-Add-Save.dc.html": {
+   "x": 4110,
+   "y": 15044,
+   "w": 1760,
+   "h": 1044,
+   "title": "Добавить: ожидание и закрытие",
+   "is_interactive": true
+  },
+  "M-Import-Wait.dc.html": {
+   "x": 0,
+   "y": 16768,
+   "w": 2190,
+   "h": 1044,
+   "title": "Импорт: живое ожидание",
+   "is_interactive": true
+  },
+  "M-Import-Stop-Error.dc.html": {
+   "x": 2270,
+   "y": 16768,
+   "w": 1330,
+   "h": 1044,
+   "title": "Импорт: стоп, ошибка, лимит",
+   "is_interactive": true
+  },
+  "M-Import-Commit.dc.html": {
+   "x": 3680,
+   "y": 16768,
+   "w": 1760,
+   "h": 1044,
+   "title": "Импорт: галочки и добавление",
+   "is_interactive": true
+  },
+  "M-Sort-Plan.dc.html": {
+   "x": 5520,
+   "y": 16768,
+   "w": 2190,
+   "h": 1044,
+   "title": "Разложить по темам: план",
+   "is_interactive": true
+  },
+  "M-Library-Load.dc.html": {
+   "x": 0,
+   "y": 18492,
+   "w": 2190,
+   "h": 1044,
+   "title": "Библиотека и тема: загрузка",
+   "is_interactive": true
+  },
+  "M-Library-Rows.dc.html": {
+   "x": 2270,
+   "y": 18492,
+   "w": 2190,
+   "h": 1044,
+   "title": "Строки: нажатие, свайп, удаление",
+   "is_interactive": true
+  },
+  "M-Settings-Sync.dc.html": {
+   "x": 4540,
+   "y": 18492,
+   "w": 1760,
+   "h": 1044,
+   "title": "Настройки и синхронизация",
+   "is_interactive": true
+  },
+  "M-Boot-Offline.dc.html": {
+   "x": 6380,
+   "y": 18492,
+   "w": 1760,
+   "h": 1044,
+   "title": "Вход, офлайн, ошибки",
+   "is_interactive": true
+  },
+  "M-Kit.dc.html": {
+   "x": 0,
+   "y": 20216,
+   "w": 1440,
+   "h": 1000,
+   "title": "Кит движения и ожидания",
+   "is_interactive": true
+  },
+  "M-D-Review-Keys.dc.html": {
+   "x": 1520,
+   "y": 20216,
+   "w": 1440,
+   "h": 920,
+   "title": "Десктоп: оценка клавишами",
+   "is_interactive": true
+  },
+  "M-D-Library-Pane.dc.html": {
+   "x": 3040,
+   "y": 20216,
+   "w": 1440,
+   "h": 920,
+   "title": "Десктоп: таблица и карточка",
+   "is_interactive": true
+  },
+  "M-D-Dialogs-Drop.dc.html": {
+   "x": 4560,
+   "y": 20216,
+   "w": 1440,
+   "h": 920,
+   "title": "Десктоп: перенос и диалоги",
+   "is_interactive": true
   }
  },
  "order": [
@@ -416,7 +576,27 @@
   "D-Library-Medium.dc.html",
   "D-Library-Touch.dc.html",
   "D-Review-Answer-Dark.dc.html",
-  "D-Library-Dark.dc.html"
+  "D-Library-Dark.dc.html",
+  "M-Review-Reveal.dc.html",
+  "M-Review-Swipe.dc.html",
+  "M-Review-Grade.dc.html",
+  "M-Review-Loading.dc.html",
+  "M-Session-Done.dc.html",
+  "M-Add-Suggest.dc.html",
+  "M-Add-Detect.dc.html",
+  "M-Add-Save.dc.html",
+  "M-Import-Wait.dc.html",
+  "M-Import-Stop-Error.dc.html",
+  "M-Import-Commit.dc.html",
+  "M-Sort-Plan.dc.html",
+  "M-Library-Load.dc.html",
+  "M-Library-Rows.dc.html",
+  "M-Settings-Sync.dc.html",
+  "M-Boot-Offline.dc.html",
+  "M-Kit.dc.html",
+  "M-D-Review-Keys.dc.html",
+  "M-D-Library-Pane.dc.html",
+  "M-D-Dialogs-Drop.dc.html"
  ],
  "notes": {
   "row1": {
@@ -495,6 +675,41 @@
    "text": "11 · Десктоп · Настройки, вход, размеры, тёмная тема",
    "kind": "title1",
    "maxW": 8364
+  },
+  "row12": {
+   "x": 0,
+   "y": 13040,
+   "text": "12 · Движение · Повторение",
+   "kind": "title1",
+   "maxW": 10410
+  },
+  "row13": {
+   "x": 0,
+   "y": 14764,
+   "text": "13 · Движение · Добавление и ИИ",
+   "kind": "title1",
+   "maxW": 5870
+  },
+  "row14": {
+   "x": 0,
+   "y": 16488,
+   "text": "14 · Движение · Импорт и сортировка",
+   "kind": "title1",
+   "maxW": 7710
+  },
+  "row15": {
+   "x": 0,
+   "y": 18212,
+   "text": "15 · Движение · Библиотека и система",
+   "kind": "title1",
+   "maxW": 8140
+  },
+  "row16": {
+   "x": 0,
+   "y": 19936,
+   "text": "16 · Движение · Десктоп и кит",
+   "kind": "title1",
+   "maxW": 6000
   }
  },
  "designSystems": []
