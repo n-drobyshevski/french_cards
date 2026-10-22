@@ -36,7 +36,7 @@ test.describe("review", () => {
     await expect(page.getByText("01 / 11", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: /Карточка une blague/ })).toHaveCount(0);
     await expect(questionCard(page)).toBeVisible();
-    await expect(page.getByText(/^Знаю ·/)).toBeVisible();
+    await expect(page.locator("[data-snackbar]")).toHaveCount(0);
 
     // Undo from the header button: the same card comes back unanswered and the count resets.
     await expect(undo).toBeEnabled();
@@ -46,13 +46,13 @@ test.describe("review", () => {
     await expect(undo).toBeDisabled();
   });
 
-  test("the snackbar «Отменить» also undoes, and Space/1-3 work from the keyboard", async ({ page }) => {
+  test("Space/1-3 work from the keyboard, Z undoes", async ({ page }) => {
     await openReview(page);
     await page.keyboard.press("Space");
     await expect(page.getByText("шутка", { exact: true })).toBeVisible();
     await page.keyboard.press("1");
     await expect(page.getByText("01 / 11", { exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Отменить", exact: true }).click();
+    await page.keyboard.press("z");
     await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: /Карточка une blague/ })).toBeVisible();
   });

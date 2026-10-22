@@ -145,7 +145,8 @@ export interface ReviewCardProps {
 }
 
 /**
- * The review card: question side (tap to flip) or answer side (swipe sideways to grade, tap to flip back).
+ * The review card: question side (tap to flip) or answer side (tap to flip back); either side swipes
+ * sideways to grade.
  * From 768 up it is the landscape index card of DESKTOP-SPEC §5 #1–#3: fixed size, ruled front with
  * the call number, tracings footer on the back, the stack of cards to come behind it.
  */
@@ -164,7 +165,7 @@ export function ReviewCard({
   number,
   remaining = 0,
 }: ReviewCardProps) {
-  const swipe = useSwipe({ enabled: revealed && swipeEnabled, haptics, onDecide: onSwipe });
+  const swipe = useSwipe({ enabled: swipeEnabled, haptics, onDecide: onSwipe });
   const { dx, width, mode } = swipe.view;
   const visual = swipeVisual(dx, width || 1);
   const moving = mode !== "idle" || dx !== 0;
@@ -199,13 +200,19 @@ export function ReviewCard({
       {!revealed ? (
         <button
           type="button"
-          onClick={onReveal}
+          {...swipe.handlers}
+          onClick={() => {
+            if (swipe.consumeClick()) return;
+            onReveal();
+          }}
           aria-label={`Карточка ${prompt}, перевернуть`}
           aria-keyshortcuts="Space"
           data-review-reveal=""
+          style={motion}
           className={cx(
             cardShell,
-            "absolute inset-0 text-left",
+            "absolute inset-0 text-left will-change-transform",
+            swipeEnabled && "touch-pan-y select-none",
             flip === "down" && "animate-[card-turn-down_220ms_ease-out]",
           )}
         >
