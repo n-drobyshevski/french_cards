@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { floatingBottom } from "./bottom-clearance";
+import { Kbd } from "./Kbd";
 import { cx } from "./cx";
 
 export interface SnackbarViewProps {
@@ -10,27 +11,43 @@ export interface SnackbarViewProps {
   /** «Отменить» */
   actionLabel?: string;
   onAction?: () => void;
+  /**
+   * Key that runs the action, printed as an on-ink cap after the label from 768 up («Отменить» +
+   * `Z`). Only pass it when the screen really binds that key.
+   */
+  actionKey?: string;
   className?: string;
 }
 
-/** Ink bar, white text, underlined action. Presentational: place it in flow (review screen) or use useSnackbar(). */
-export function Snackbar({ message, actionLabel, onAction, className }: SnackbarViewProps) {
+/**
+ * Ink bar, white text, underlined action. Presentational: place it in flow (review screen) or use
+ * useSnackbar(). Phones: full column width, 48 tall. From 768 up (DESKTOP-SPEC §2): 44 tall, as
+ * wide as its text up to 480, centred, padding 0 8 0 16, the action with its key cap.
+ */
+export function Snackbar({ message, actionLabel, onAction, actionKey, className }: SnackbarViewProps) {
   return (
     <div
       data-snackbar=""
       className={cx(
         "flex h-12 shrink-0 items-center justify-between gap-2 rounded-card bg-ink pr-1 pl-4 text-on-ink",
+        "md:mx-auto md:h-11 md:w-fit md:max-w-[480px] md:gap-4 md:pr-2",
         className,
       )}
     >
-      <span className="min-w-0 truncate text-[14px] leading-5">{message}</span>
+      <span className="min-w-0 truncate text-[14px] leading-5 md:tabular-nums">{message}</span>
       {actionLabel && onAction && (
         <button
           type="button"
           onClick={onAction}
-          className="h-11 shrink-0 rounded-chip bg-transparent px-3 text-[14px] font-medium text-on-ink underline decoration-1 underline-offset-[3px] active:opacity-70"
+          aria-keyshortcuts={actionKey}
+          className="inline-flex h-11 shrink-0 items-center gap-2 rounded-chip bg-transparent px-3 text-[14px] font-medium text-on-ink active:opacity-70 md:h-8 md:px-2 hoverable:bg-on-ink/10"
         >
-          {actionLabel}
+          <span className="underline decoration-1 underline-offset-[3px]">{actionLabel}</span>
+          {actionKey && (
+            <Kbd tone="ink" aria-hidden="true" className="max-md:hidden">
+              {actionKey}
+            </Kbd>
+          )}
         </button>
       )}
     </div>
@@ -43,6 +60,8 @@ export interface SnackbarOptions {
   message: ReactNode;
   actionLabel?: string;
   onAction?: () => void;
+  /** Key that runs the action, shown as a cap from 768 up (the caller binds it). */
+  actionKey?: string;
   /** ms before auto-hide; 0 keeps it until hidden. Default 5000, 7000 with an action. */
   duration?: number;
   onHide?: (reason: SnackbarHideReason) => void;
@@ -148,6 +167,7 @@ export function SnackbarProvider({ children }: { children: ReactNode }) {
       <Snackbar
         message={entry.message}
         actionLabel={entry.actionLabel}
+        actionKey={entry.actionKey}
         onAction={
           entry.onAction
             ? () => {

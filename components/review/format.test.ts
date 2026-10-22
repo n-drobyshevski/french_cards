@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { nextDirection, parseReviewFilter, toSessionFilter } from "./filter";
-import { formatPercent, formatProgress, pluralRu, posAbbr, progressRatio, queueSummary } from "./format";
+import {
+  callNumber,
+  formatPercent,
+  formatProgress,
+  headwordStep,
+  pluralRu,
+  posAbbr,
+  progressRatio,
+  queueSummary,
+} from "./format";
 
 describe("pluralRu", () => {
   const forms = ["слово", "слова", "слов"] as const;
@@ -89,5 +98,22 @@ describe("review filter", () => {
     expect(parseReviewFilter(JSON.stringify({ direction: "sideways", folder: 3 }))).toEqual({ direction: null, folder: "all" });
     expect(parseReviewFilter("{oops")).toEqual({ direction: null, folder: "all" });
     expect(parseReviewFilter(null)).toEqual({ direction: null, folder: "all" });
+  });
+});
+
+describe("desktop card", () => {
+  it("picks the headword step from the longer side", () => {
+    expect(headwordStep("se casser")).toBe(1);
+    expect(headwordStep("se casser", "свалить, сбежать")).toBe(1);
+    expect(headwordStep("загоняться, париться", "se prendre la tête")).toBe(2);
+    expect(headwordStep("x".repeat(28))).toBe(2);
+    expect(headwordStep("x".repeat(29), "y")).toBe(3);
+  });
+
+  it("formats the call number", () => {
+    expect(callNumber("fr_ru", 1)).toBe("FR · № 001");
+    expect(callNumber("ru_fr", 18)).toBe("RU · № 018");
+    expect(callNumber("fr_ru", 1159)).toBe("FR · № 1159");
+    expect(callNumber("ru_fr", undefined)).toBe("RU");
   });
 });

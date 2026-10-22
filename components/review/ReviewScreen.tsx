@@ -5,14 +5,18 @@ import { cx } from "@/components/ui/cx";
 import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAddSheet } from "@/components/providers/AddSheetContext";
 import { useAppReady } from "@/components/providers/AppProviders";
+import { OPEN_LAYER_SELECTOR } from "@/components/shell/keys";
+import { useShortcutsEnabled } from "@/components/shell/ShellContext";
 import { Chip } from "@/components/ui/Chip";
 import { bottomBarRef } from "@/components/ui/bottom-clearance";
 import { Icon } from "@/components/ui/Icons";
 import { useSnackbar } from "@/components/ui/Snackbar";
+import { cardNumber } from "@/components/add/match";
 import { listFolders } from "@/lib/folders";
 import { previewIntervals, reviewStateId, type Rating } from "@/lib/scheduler";
 import { advancePractice, buildPracticeQueue, startOfStudyDay, type QueueItem } from "@/lib/session";
 import { getSettings } from "@/lib/settings";
+import { useFinePointer, useLayoutClass } from "@/lib/use-media";
 import { getLastReview, getWord, gradeCard, undoLastReview } from "@/lib/words";
 import type { Direction } from "@/lib/types";
 import { loadReviewScreen, type ReviewScreenData } from "./data";
@@ -21,15 +25,28 @@ import { effectiveDirection, nextDirection, toSessionFilter, type FolderChoice }
 import { FolderPickerSheet } from "./FolderPickerSheet";
 import { DIRECTION_LABELS, DIRECTION_NAMES, GRADE_LABELS, formatProgress, progressRatio, queueSummary } from "./format";
 import { GradeBar } from "./GradeBar";
+import { HINT_LINE_CSS, HintLine } from "./HintLine";
 import { isTypingTarget, keepsActivationKeys, reviewKeyAction } from "./keys";
-import { ReviewCard, ReviewCardPlaceholder } from "./ReviewCard";
-import { ProgressLine, ReviewTopBar } from "./ReviewTopBar";
+import { REVIEW_DESK_CSS, ReviewCard, ReviewCardPlaceholder } from "./ReviewCard";
+import { ReviewTopBar, type ReviewProgress } from "./ReviewTopBar";
 import { SessionDone } from "./SessionDone";
 import { useInlineSnackbar } from "./useInlineSnackbar";
 import { useReviewFilter } from "./useReviewFilter";
 
 /** Re-read the queue this often while visible, so learning steps and the 04:00 day roll over. */
 const TICK_MS = 60_000;
+
+/** Desktop: keys are ignored this long after a screen change (done, practice start/end; DESKTOP-SPEC §4). */
+const INPUT_GUARD_MS = 400;
+/** Desktop: a grade chosen with a key flashes its button this long before the card moves on. */
+const FLASH_MS = 120;
+
+/**
+ * Desktop desk (from 768): the card and the grade row centred in the content area under the running
+ * head, the hint line 24px from the bottom. On phones it is `display: contents`, so the card, hint,
+ * snackbar and grade bar stay direct children of the column as before.
+ */
+const DESK = "contents md:relative md:flex md:min-h-0 md:flex-1 md:flex-col md:items-center md:justify-center md:px-6 md:pb-[65px]";
 
 interface Pinned {
   key: string;
@@ -97,7 +114,17 @@ export function ReviewScreen() {
   const [instance, setInstance] = useState(0);
   const [practice, setPractice] = useState<Practice | null>(null);
   const [practiceLoading, setPracticeLoading] = useState(false);
+  const [flash, setFlash] = useState<Rating | null>(null);
   const busy = useRef(false);
+  const flashing = useRef(false);
+  /** performance.now() until which desktop keys are ignored (screen just changed). */
+  const guardUntil = useRef(0);
+  const layout = useLayoutClass();
+  const desktop = layout !== "compact";
+  const finePointer = useFinePointer();
+  const shortcutsEnabled = useShortcutsEnabled();
+  /** Single-letter keys (Z, P): settings.shortcuts on desktop; phones keep Z as before. */
+  const letters = desktop ? shortcutsEnabled : true;
   /** Whether focus last moved by pointer (then Space/Enter on a focused button still flip the card). */
   const focusByPointer = useRef(false);
   /**
@@ -154,8 +181,28 @@ export function ReviewScreen() {
   const hasNext = !!queue && queue.some((i) => i.key !== current?.key);
   const gradeButtons = settings?.grade_buttons ?? 3;
   const swipeEnabled = settings?.swipe_grading ?? true;
+  // With a mouse or trackpad a drag does not grade: a click flips, keys and buttons grade.
+  const cardSwipe = swipeEnabled && !finePointer;
+  const keyHints = settings?.key_hints ?? true;
   const hapticsEnabled = settings?.haptics ?? true;
   const canUndo = practice ? practice.history.length > 0 : !!lastToday;
+
+  const shown = live ?? awaiting?.data;
+  const loading = !practice && (!loaded || shown === undefined);
+  const emptyLibrary = !practice && !!live && live.libraryWords === 0;
+  const emptyFolder = !practice && !!live && !emptyLibrary && live.filterWords === 0;
+  const done = !practice && !!live && !emptyLibrary && !emptyFolder && live.session.queue.length === 0;
+
+  // Desktop input guard: a screen change (done, practice start/end) ignores keys for 400ms, also
+  // key presses that began before it (e.g. a held «3» on the last card landing on «Готово»).
+  const inPractice = !!practice;
+  const screenKey = done ? "done" : inPractice ? "practice" : "cards";
+  const previousScreen = useRef(screenKey);
+  useEffect(() => {
+    if (previousScreen.current === screenKey) return;
+    previousScreen.current = screenKey;
+    guardUntil.current = performance.now() + INPUT_GUARD_MS;
+  }, [screenKey]);
 
   const revealedAt = revealed && pinned ? pinned.revealedAt : 0;
   const currentState = current?.state;
@@ -241,6 +288,7 @@ export function ReviewScreen() {
       snackbar.show({
         message: <GradeMessage rating={rating} fr={item.word.fr} />,
         actionLabel: "Отменить",
+        actionKey: letters ? "Z" : undefined,
         onAction: () => void undo(),
       });
       return;
@@ -253,6 +301,7 @@ export function ReviewScreen() {
       snackbar.show({
         message: <GradeMessage rating={rating} fr={item.word.fr} />,
         actionLabel: "Отменить",
+        actionKey: letters ? "Z" : undefined,
         onAction: () => void undo({ wordId: item.word.id, direction: item.direction }),
       });
     } catch (error) {
@@ -289,6 +338,22 @@ export function ReviewScreen() {
     snackbar.hide();
   };
 
+  /** Desktop: a grade chosen with a key flashes its button (ink fill), then the card moves on. */
+  const gradeWithFlash = (rating: Rating) => {
+    if (!desktop) {
+      void grade(rating);
+      return;
+    }
+    if (flashing.current || busy.current) return;
+    flashing.current = true;
+    setFlash(rating);
+    window.setTimeout(() => {
+      flashing.current = false;
+      setFlash(null);
+      void grade(rating);
+    }, FLASH_MS);
+  };
+
   const setFolder = (value: FolderChoice) => {
     setStored({ ...stored, folder: value });
     resetCard();
@@ -297,8 +362,19 @@ export function ReviewScreen() {
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
     if (event.defaultPrevented || isTypingTarget(event.target)) return;
     if (pickerOpen || addSheet.isOpen || document.querySelector('[role="dialog"]')) return;
-    const action = reviewKeyAction(event, { revealed, gradeButtons });
+    if (desktop && (document.querySelector(OPEN_LAYER_SELECTOR) || event.timeStamp < guardUntil.current || flashing.current)) return;
+    const action = reviewKeyAction(event, { revealed, gradeButtons, letters, desktop, done, practice: !!practice });
     if (!action) return;
+    if (action.type === "practice") {
+      event.preventDefault();
+      void startPractice("extra");
+      return;
+    }
+    if (action.type === "end-practice") {
+      event.preventDefault();
+      endPractice();
+      return;
+    }
     if (action.type === "undo") {
       if (!canUndo) return;
       event.preventDefault();
@@ -310,7 +386,7 @@ export function ReviewScreen() {
     event.preventDefault();
     if (action.type === "flip") reveal();
     else if (action.type === "unflip") hide();
-    else void grade(action.rating);
+    else gradeWithFlash(action.rating);
   });
 
   useEffect(() => {
@@ -333,6 +409,11 @@ export function ReviewScreen() {
   useEffect(() => {
     const target = refocus.current;
     if (!target) return;
+    // Desktop «Готово на сегодня» places focus itself (on «Повторить ошибки»).
+    if (desktop && done) {
+      refocus.current = null;
+      return;
+    }
     const root = mainRef.current;
     if (target === "answer") {
       const answer = root?.querySelector<HTMLElement>("[data-review-answer]");
@@ -349,13 +430,8 @@ export function ReviewScreen() {
     next.focus({ preventScroll: true });
   });
 
-  const shown = live ?? awaiting?.data;
-  const loading = !practice && (!loaded || shown === undefined);
-  const emptyLibrary = !practice && !!live && live.libraryWords === 0;
-  const emptyFolder = !practice && !!live && !emptyLibrary && live.filterWords === 0;
-  const done = !practice && !!live && !emptyLibrary && !emptyFolder && live.session.queue.length === 0;
 
-  let progress: { left: string; right: string; ratio: number } | null = null;
+  let progress: ReviewProgress | null = null;
   if (practice) {
     const remaining = new Set(practice.queue.map((i) => i.key)).size;
     const cleared = practice.total - remaining;
@@ -373,13 +449,35 @@ export function ReviewScreen() {
     };
   }
 
+  const ordinals = (live ?? awaiting?.data)?.ordinals;
+  const ordinal = current ? ordinals?.get(current.word.id) : undefined;
+  /** Cards after this one (the desktop stack shows up to two outlines). */
+  const remaining = queue && current ? new Set(queue.map((i) => i.key)).size - 1 : 0;
+  const cardsShown = !loading && !emptyLibrary && !emptyFolder && !done;
+
   // overflow-clip: the flip and fly-out transforms must never widen the page (mobile browsers
   // zoom out to fit and stay zoomed). clip, unlike hidden, does not create a scroll container.
+  // data-wide: from 768 up the screen lays itself out over the whole content area (running head,
+  // the card centred under it); phones keep the 16px-gutter column.
   return (
-    <main ref={mainRef} className="flex flex-1 flex-col overflow-clip px-4 pb-4">
-      <ReviewTopBar canUndo={canUndo} onUndo={() => void undo()}>
+    <main ref={mainRef} data-review="" data-wide="" className="flex flex-1 flex-col overflow-clip px-4 pb-4 md:p-0">
+      <style>{REVIEW_DESK_CSS + HINT_LINE_CSS}</style>
+      <ReviewTopBar
+        canUndo={canUndo}
+        onUndo={() => void undo()}
+        letters={letters}
+        hideOnDesktop={done || emptyLibrary}
+        progress={cardsShown ? progress : null}
+        heading={cardsShown ? <h1 className="sr-only">Повторение</h1> : null}
+      >
         {practice ? (
-          <Chip icon="close" onClick={endPractice}>
+          <Chip
+            icon="close"
+            onClick={endPractice}
+            aria-keyshortcuts={desktop ? "Escape" : undefined}
+            title={desktop ? "Закончить практику (Esc)" : undefined}
+            className="md:border-boundary hoverable:bg-hover-surface"
+          >
             Закончить практику
           </Chip>
         ) : (
@@ -391,41 +489,51 @@ export function ReviewScreen() {
                 setStored({ ...stored, direction: nextDirection(direction) });
                 resetCard();
               }}
+              className="md:border-boundary hoverable:bg-hover-surface"
             >
               <span>{DIRECTION_LABELS[direction]}</span>
               <Icon name="swap" size={14} className="text-muted" />
             </Chip>
-            <Chip dropdown aria-haspopup="dialog" onClick={() => setPickerOpen(true)} className="min-w-0 shrink!">
+            <Chip
+              dropdown
+              aria-haspopup="dialog"
+              onClick={() => setPickerOpen(true)}
+              className="min-w-0 shrink! md:border-boundary hoverable:bg-hover-surface"
+            >
               <span className="min-w-0 truncate">{folderLabel}</span>
             </Chip>
           </>
         )}
       </ReviewTopBar>
 
-      {loading && <ReviewCardPlaceholder />}
+      {loading && (
+        <div className={DESK}>
+          <ReviewCardPlaceholder />
+          {/* The grade row's place, so the card does not move when it loads. */}
+          <div aria-hidden="true" className="mt-8 h-14 max-md:hidden" />
+        </div>
+      )}
 
       {emptyLibrary && <EmptyLibrary onAdd={() => addSheet.open()} />}
 
       {emptyFolder && <EmptyFolder folderName={folderLabel} onShowAll={() => setFolder("all")} onAdd={() => addSheet.open()} />}
 
       {done && (
-        <>
-          <SessionDone
-            filter={filter}
-            tick={tick}
-            busy={practiceLoading}
-            onRepeatMistakes={() => void startPractice("mistakes")}
-            onPractice={() => void startPractice("extra")}
-            onAddWords={() => addSheet.open()}
-            snackbar={snackbar.render("mb-4")}
-          />
-        </>
+        <SessionDone
+          filter={filter}
+          tick={tick}
+          busy={practiceLoading}
+          desktop={desktop}
+          letters={letters}
+          onRepeatMistakes={() => void startPractice("mistakes")}
+          onPractice={() => void startPractice("extra")}
+          onAddWords={() => addSheet.open()}
+          snackbar={snackbar.render("mb-4", "done")}
+        />
       )}
 
-      {!loading && !emptyLibrary && !emptyFolder && !done && (
-        <>
-          <h1 className="sr-only">Повторение</h1>
-          {progress && <ProgressLine left={progress.left} right={progress.right} ratio={progress.ratio} />}
+      {cardsShown && (
+        <div className={DESK}>
           {current ? (
             <ReviewCard
               key={`${current.key}:${instance}`}
@@ -437,9 +545,11 @@ export function ReviewScreen() {
               flip={pinned?.key === current.key ? pinned.flip : undefined}
               haptics={hapticsEnabled}
               folderName={(current.word.folder_id && folderNames.get(current.word.folder_id)) || "Входящие"}
-              swipeEnabled={swipeEnabled}
+              swipeEnabled={cardSwipe}
               onSwipe={(outcome) => void grade(outcome === "good" ? 3 : 1)}
               hasNext={hasNext}
+              number={ordinal ? cardNumber(ordinal) : undefined}
+              remaining={remaining}
             />
           ) : (
             <ReviewCardPlaceholder />
@@ -449,7 +559,7 @@ export function ReviewScreen() {
           {swipeEnabled && (
             <p
               aria-hidden="true"
-              className={cx("meta mt-4 mb-0 flex h-4 shrink-0 justify-between leading-4", !revealed && "invisible")}
+              className={cx("meta mt-4 mb-0 flex h-4 shrink-0 justify-between leading-4 md:hidden", !revealed && "invisible")}
             >
               <span>← {GRADE_LABELS[1]}</span>
               <span>тап — вопрос</span>
@@ -462,11 +572,14 @@ export function ReviewScreen() {
             data-review-focus=""
             inert={!revealed}
             aria-hidden={revealed ? undefined : true}
-            className={cx("mt-4 shrink-0", !revealed && "invisible")}
+            className={cx("mt-4 shrink-0 md:mt-8 md:w-(--card-w) md:max-w-full", !revealed && "invisible")}
           >
-            <GradeBar buttons={gradeButtons} intervals={intervals} onGrade={(r) => void grade(r)} />
+            <GradeBar buttons={gradeButtons} intervals={intervals} flash={flash} onGrade={(r) => void grade(r)} />
           </div>
-        </>
+          {keyHints && current && (
+            <HintLine revealed={revealed} practice={!!practice} letters={letters} gradeButtons={gradeButtons} />
+          )}
+        </div>
       )}
 
       <FolderPickerSheet open={pickerOpen} onOpenChange={setPickerOpen} value={folder} onChange={setFolder} />
