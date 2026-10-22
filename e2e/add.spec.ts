@@ -155,7 +155,7 @@ test("a word typed by hand gets its slang level, an example and a theme before s
   await page.getByText("la caisse", { exact: true }).click();
   const card = page.getByRole("dialog", { name: "Карточка слова" });
   await expect(card.getByText("Il a garé sa caisse devant chez moi.")).toBeVisible();
-  await expect(card.getByRole("img", { name: /арго/ }).first()).toBeVisible();
+  await expect(card.getByRole("group", { name: /арго/ }).first()).toBeVisible();
   await expect(card.getByText("Транспорт")).toBeVisible();
 });
 

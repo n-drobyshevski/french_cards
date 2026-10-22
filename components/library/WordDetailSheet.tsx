@@ -6,6 +6,7 @@ import { Button, IconButton } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { Segmented } from "@/components/ui/Segmented";
 import { Sheet, SheetCloseButton } from "@/components/ui/Sheet";
+import { AbbrHint } from "@/components/ui/AbbrHint";
 import { SlangMeter } from "@/components/ui/SlangMeter";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { Toggle } from "@/components/ui/Toggle";
@@ -310,15 +311,13 @@ function WordDetail({ wordId, onClose }: { wordId: string; onClose: () => void }
           <div className="mt-2 flex h-5 items-center gap-2">
             {abbr && (
               <>
-                <span lang="fr" className="abbr text-[15px] leading-5">
-                  {abbr}
-                </span>
+                <AbbrHint abbr={abbr} className="text-[15px] leading-5" />
                 <span aria-hidden="true" className="abbr">
                   ·
                 </span>
               </>
             )}
-            <SlangMeter level={word.slang_level} verlan={word.verlan} />
+            <SlangMeter level={word.slang_level} verlan={word.verlan} hints />
           </div>
           <p className="m-0 mt-1 text-[18px] leading-6">{word.ru}</p>
         </>

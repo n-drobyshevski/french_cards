@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useId, useState, type ClipboardEventHandler, type InputHTMLAttributes, type KeyboardEventHandler, type ReactNode, type Ref } from "react";
 import { Button, IconButton } from "@/components/ui/Button";
+import { AbbrHint } from "@/components/ui/AbbrHint";
 import { Chip } from "@/components/ui/Chip";
 import { Icon, type IconName } from "@/components/ui/Icons";
 import { Segmented } from "@/components/ui/Segmented";
@@ -140,8 +141,12 @@ export function HeadwordInput({
         )}
       />
       {trailing && (
-        <span lang="fr" aria-hidden="true" className="abbr shrink-0 pr-[15px] text-[15px] leading-5 whitespace-nowrap">
-          {trailing}
+        <span className="shrink-0 pr-[15px] whitespace-nowrap">
+          {typeof trailing === "string" ? (
+            <AbbrHint abbr={trailing} align="end" className="text-[15px] leading-5" />
+          ) : (
+            trailing
+          )}
         </span>
       )}
       {clearable && (

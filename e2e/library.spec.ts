@@ -97,3 +97,25 @@ test("the library shows theme tiles or every word, and remembers the choice", as
   await view.getByRole("radio", { name: "Темы" }).click();
   await expect(page.getByRole("link", { name: /^Эмоции:/ })).toBeVisible();
 });
+
+test("a tap on an abbreviation in the word sheet explains it", async ({ page }) => {
+  await page.goto("/library");
+  await page.getByRole("searchbox", { name: "Поиск по FR и RU" }).or(page.getByRole("textbox", { name: "Поиск по FR и RU" })).fill("flics");
+  await page.getByText("les flics", { exact: true }).click();
+  const sheet = page.getByRole("dialog", { name: "Карточка слова" });
+
+  await sheet.getByRole("button", { name: "n. m. — nom masculin" }).click();
+  const hint = sheet.getByRole("tooltip");
+  await expect(hint).toContainText("Существительное мужского рода");
+  await expect(sheet.getByRole("button", { name: "n. m. — nom masculin" })).toHaveAttribute("aria-expanded", "true");
+
+  // The slang level explains itself too; one hint at a time.
+  await sheet.getByRole("button", { name: "fam. — familier" }).click();
+  await expect(sheet.getByRole("tooltip")).toHaveCount(1);
+  await expect(sheet.getByRole("tooltip")).toContainText("Разговорное");
+
+  // Escape closes the hint, not the sheet.
+  await page.keyboard.press("Escape");
+  await expect(sheet.getByRole("tooltip")).toHaveCount(0);
+  await expect(sheet).toBeVisible();
+});

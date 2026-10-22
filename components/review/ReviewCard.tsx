@@ -3,6 +3,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
+import { AbbrHint } from "@/components/ui/AbbrHint";
 import { SlangMeter } from "@/components/ui/SlangMeter";
 import type { Direction, Word } from "@/lib/types";
 import { posAbbr } from "./format";
@@ -137,7 +138,7 @@ export function ReviewCard({
           )}
         >
           <CardHeader label={label}>
-            <SlangMeter level={word.slang_level} verlan={word.verlan} />
+            <SlangMeter level={word.slang_level} verlan={word.verlan} hints hintAlign="end" />
           </CardHeader>
 
           {/* The scroller needs pan-y too: touch-action is resolved up to the nearest scroll container,
@@ -152,8 +153,8 @@ export function ReviewCard({
               {word.fr}
             </h2>
             {pos && (
-              <span lang="fr" className="abbr mt-2 text-[15px] leading-5">
-                {pos}
+              <span className="mt-2 flex">
+                <AbbrHint abbr={pos} className="text-[15px] leading-5" />
               </span>
             )}
             <p className="mt-6 mb-0 text-[22px] leading-7 font-medium break-words">{word.ru}</p>
