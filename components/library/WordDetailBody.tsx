@@ -454,16 +454,12 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
     if (what && (await editor.save())) litSaved(what);
   };
 
-  const editActions = (
-    <div className="mt-3 flex items-center gap-2">
-      <Button type="submit" size="md" pending={editor.saving} pendingLabel="Сохраняем…">
-        {editor.dupConfirm ? "Сохранить всё равно" : "Сохранить"}
-      </Button>
-      <Button variant="tertiary" size="md" onClick={editor.cancel}>
-        Отмена
-      </Button>
-    </div>
+  // Mockups: canvas «Правка полей — мокапы», H4 (chosen 2026-10-23): ✕ and ✓ at the bottom right of
+  // the field being edited; inside the box of a one-input field (note, origin), under a larger form.
+  const editPair = (className?: string) => (
+    <EditPair className={className} saving={editor.saving} dupConfirm={!!editor.dupConfirm} onCancel={editor.cancel} />
   );
+  const editActions = editPair("mt-3");
   const errorLine = editor.formError && (
     <p role="alert" className="m-0 mt-2 text-[13px] leading-5 text-again">
       {editor.formError}
@@ -568,15 +564,17 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
           form={
             draft && (
               <form onSubmit={save} className="flex flex-col" aria-label="Изменить заметку">
-                <textarea
-                  aria-label="Заметка"
-                  value={draft.note}
-                  onChange={(e) => set("note", e.target.value)}
-                  rows={3}
-                  className="mt-1 resize-none rounded-chip border border-rule bg-surface px-3 py-2.5 text-[15px] leading-[22px] text-ink outline-none focus:border-ink pointer-coarse:text-[16px]"
-                />
+                <div className="mt-1 flex flex-col rounded-chip border border-rule bg-surface focus-within:border-ink">
+                  <textarea
+                    aria-label="Заметка"
+                    value={draft.note}
+                    onChange={(e) => set("note", e.target.value)}
+                    rows={3}
+                    className="resize-none rounded-chip bg-transparent px-3 pt-2.5 pb-0.5 text-[15px] leading-[22px] text-ink outline-none! pointer-coarse:text-[16px]"
+                  />
+                  {editPair("px-1 pb-1")}
+                </div>
                 {errorLine}
-                {editActions}
               </form>
             )
           }
@@ -596,18 +594,20 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
           form={
             draft && (
               <form onSubmit={save} className="flex flex-col" aria-label="Изменить происхождение">
-                <input
-                  aria-label="Происхождение"
-                  value={draft.origin}
-                  onChange={(e) => set("origin", e.target.value)}
-                  maxLength={ORIGIN_MAX}
-                  placeholder="Например: верлан от lourd"
-                  autoFocus
-                  className="mt-1 h-11 rounded-chip border border-rule bg-surface px-3 text-[15px] text-ink outline-none placeholder:text-muted focus:border-ink pointer-coarse:text-[16px]"
-                />
+                <div className="mt-1 flex items-center rounded-chip border border-rule bg-surface pr-1 focus-within:border-ink">
+                  <input
+                    aria-label="Происхождение"
+                    value={draft.origin}
+                    onChange={(e) => set("origin", e.target.value)}
+                    maxLength={ORIGIN_MAX}
+                    placeholder="Например: верлан от lourd"
+                    autoFocus
+                    className="h-12 min-w-0 flex-1 bg-transparent px-3 text-[15px] text-ink outline-none! placeholder:text-muted pointer-coarse:text-[16px]"
+                  />
+                  {editPair()}
+                </div>
                 <AutoFillButton className="mt-1" fill={(o) => autofillOrigin(w, o)} onFill={(v) => set("origin", v)} />
                 {errorLine}
-                {editActions}
               </form>
             )
           }
@@ -2087,3 +2087,35 @@ function FieldsForm({
   );
 }
 
+/** H4: ✕ (muted) and ✓ (an ink disc) for the field being edited on phones; «Сохранить всё равно» spelled out. */
+function EditPair({ saving, dupConfirm, onCancel, className }: { saving: boolean; dupConfirm: boolean; onCancel: () => void; className?: string }) {
+  return (
+    <div className={cx("flex shrink-0 items-center justify-end gap-1", className)}>
+      <button
+        type="button"
+        aria-label="Отмена"
+        title="Отмена"
+        onClick={onCancel}
+        className="press-sm inline-flex size-10 items-center justify-center rounded-full bg-transparent text-muted active:bg-surface-2 hoverable:bg-hover-surface hoverable:text-ink"
+      >
+        <Icon name="close" size={20} />
+      </button>
+      {dupConfirm ? (
+        <button type="submit" disabled={saving} className="press-sm h-10 rounded-full bg-ink px-4 text-[14px] font-medium text-on-ink disabled:opacity-60">
+          Сохранить всё равно
+        </button>
+      ) : (
+        <button
+          type="submit"
+          aria-label={saving ? "Сохраняем…" : "Сохранить"}
+          title="Сохранить"
+          aria-busy={saving || undefined}
+          disabled={saving}
+          className="press-sm inline-flex size-10 items-center justify-center rounded-full bg-ink text-on-ink disabled:opacity-60"
+        >
+          <Icon name={saving ? "refresh" : "check"} size={20} strokeWidth={2} className={cx(saving && "animate-spin")} />
+        </button>
+      )}
+    </div>
+  );
+}
