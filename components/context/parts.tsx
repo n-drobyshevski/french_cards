@@ -415,19 +415,56 @@ export function ExampleTableRow({ example, inCard, onOpen }: { example: ShownExa
   );
 }
 
-/** «Ищем примеры в вебе»: the status line, three ruled blanks and «Остановить поиск». */
-export function ExamplesWait({ retryIn, onStop, wide = false }: { retryIn: number | null; onStop: () => void; wide?: boolean }) {
+/** «Ищем примеры в вебе» (or the quick free search): the status line, ruled blanks and «Остановить поиск». */
+export function ExamplesWait({
+  retryIn,
+  onStop,
+  wide = false,
+  web = true,
+}: {
+  retryIn: number | null;
+  onStop: () => void;
+  wide?: boolean;
+  /** The paid web search (10–20 s); otherwise Tatoeba's quick one. */
+  web?: boolean;
+}) {
   return (
     <div aria-busy="true" className="mt-3 flex flex-col">
-      <StatusLine text="Ищем примеры в вебе" active count={retryIn ? `повтор через ${retryIn} с` : undefined} />
-      <SkeletonRows count={3} height={wide ? 76 : 96} lines={3} />
-      {!wide && (
+      <StatusLine text={web ? "Ищем примеры в вебе" : "Ищем примеры"} active count={retryIn ? `повтор через ${retryIn} с` : undefined} />
+      <SkeletonRows count={web ? 3 : 2} height={wide ? 76 : 96} lines={3} />
+      {!wide && web && (
         <p className="m-0 mt-4 text-[13px] leading-[18px] text-muted">Перевод и синонимы уже готовы — можно смотреть, пока ищем живые примеры.</p>
       )}
       <Button variant="tertiary" size="sm" className="mt-2 self-start text-[14px]" onClick={onStop}>
         Остановить поиск
       </Button>
     </div>
+  );
+}
+
+/** Under Tatoeba's sentences: the paid web search, only on request. */
+export function WebMore({ online, onSearch, wide = false }: { online: boolean; onSearch: () => void; wide?: boolean }) {
+  if (!online) return null;
+  return (
+    <div className="mt-4 flex flex-col items-start gap-1.5">
+      <Button variant="secondary" size={wide ? "md" : "lg"} block={!wide} icon="spark" onClick={onSearch}>
+        Искать ещё в вебе
+      </Button>
+      <p className="meta m-0">форумы, песни, субтитры · 10–20 с</p>
+    </div>
+  );
+}
+
+/** Tatoeba's licence asks for credit: under the list whenever one of its sentences shows. */
+export function TatoebaCredit() {
+  return (
+    <p className="meta m-0 mt-3">
+      Фразы{" "}
+      <a href="https://tatoeba.org" target="_blank" rel="noopener noreferrer" className="text-muted underline underline-offset-2 hoverable:text-ink">
+        Tatoeba
+      </a>{" "}
+      · CC BY 2.0 FR
+    </p>
   );
 }
 
@@ -471,21 +508,32 @@ export function ExamplesEmpty({
   error,
   online,
   wide = false,
+  onWeb,
 }: {
   onInvent: () => void;
   inventing: boolean;
   error: string | null;
   online: boolean;
   wide?: boolean;
+  /** Set while the web search has not run yet: offered first, before a made-up example. */
+  onWeb?: () => void;
 }) {
   return (
     <div className="mt-4 flex flex-col gap-2 rounded-card border border-dashed border-rule bg-surface px-4 py-5">
-      <p className="m-0 font-serif text-[20px] leading-[26px] font-medium">Живых примеров не нашлось</p>
+      <p className="m-0 font-serif text-[20px] leading-[26px] font-medium">{onWeb ? "В Tatoeba примеров нет" : "Живых примеров не нашлось"}</p>
       <p className="m-0 text-[14px] leading-5 text-muted">
-        Слово редкое — в открытых текстах его почти не пишут. Можно подобрать пример по смыслу: он будет помечен как придуманный.
+        {onWeb
+          ? "Можно поискать живые фразы в вебе — на форумах, в песнях и субтитрах — или подобрать пример по смыслу: он будет помечен как придуманный."
+          : "Слово редкое — в открытых текстах его почти не пишут. Можно подобрать пример по смыслу: он будет помечен как придуманный."}
       </p>
+      {onWeb && (
+        <Button className={cx("mt-2", wide && "self-start")} size={wide ? "md" : "lg"} block={!wide} icon="spark" disabled={!online} onClick={onWeb}>
+          Искать в вебе
+        </Button>
+      )}
       <Button
-        className={cx("mt-2", wide && "self-start")}
+        className={cx(onWeb ? "mt-1" : "mt-2", wide && "self-start")}
+        variant={onWeb ? "secondary" : undefined}
         size={wide ? "md" : "lg"}
         block={!wide}
         icon="spark"

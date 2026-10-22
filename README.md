@@ -38,5 +38,7 @@ The e2e suite starts `next start` on port 3100 and mocks `/api/ai/*`. It uses th
 ## Attribution
 
 - `public/lexique/fr-lemmas.json` is derived from **Lexique 3.83** by Boris New & Christophe Pallier ([lexique.org](http://www.lexique.org)), licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); the derived file is shared under the same license. See `public/lexique/LICENSE.txt`; rebuild with `node scripts/build-lexique.mjs`.
+- `public/lexique/fr-conj.json` (verb tables for «Контекст» → «Спряжение») is derived from the same **Lexique 3.83** data under the same CC BY-SA 4.0 license; rebuild with `node scripts/build-conjugation.mjs`.
+- «Контекст» shows example sentences from **[Tatoeba](https://tatoeba.org)** (CC BY 2.0 FR), fetched from its public API in the browser, each linked to its page on tatoeba.org.
 - Ideas and patterns from [ts-fsrs-demo](https://github.com/ishiko732/ts-fsrs-demo) (MIT) and [jiaci](https://github.com/leoon-hu/jiaci) (MIT).
 - Anki import reads decks on the device with [sql.js](https://github.com/sql-js/sql.js) (MIT), [fflate](https://github.com/101arrowz/fflate) (MIT) and [fzstd](https://github.com/101arrowz/fzstd) (MIT).

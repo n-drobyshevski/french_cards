@@ -4,10 +4,12 @@ import {
   enriched,
   KIFFER_EXAMPLES,
   KIFFER_LOOKUP,
+  KIFFER_TATOEBA,
   mockContext,
   mockEnrich,
   mockLookup,
   mockSuggest,
+  mockTatoeba,
   tabBar,
   type ContextExampleWire,
   type LookupWire,
@@ -47,7 +49,8 @@ const CASSE: ContextExampleWire[] = [
 const lookups = { kiffer: KIFFER_LOOKUP, triper: TRIPER, "se casser": SE_CASSER } as Record<string, LookupWire>;
 
 async function mockAll(page: Page) {
-  const calls = { lookup: [] as string[], context: [] as string[] };
+  const calls = { lookup: [] as string[], context: [] as string[], tatoeba: [] as string[] };
+  await mockTatoeba(page, (q) => (q === "kiffer" ? [KIFFER_TATOEBA] : []), (q) => calls.tatoeba.push(q));
   await mockLookup(page, (q) => lookups[q] ?? { ...KIFFER_LOOKUP, found: false, q, fr: "", translations: [], synonyms: [], conjugation: null }, (b) => calls.lookup.push(b.q));
   await mockContext(page, (b) => (b.fr === "se casser" ? CASSE : b.fr === "kiffer" ? KIFFER_EXAMPLES : []), { onRequest: (b) => calls.context.push(b.fr) });
   return calls;
@@ -55,6 +58,11 @@ async function mockAll(page: Page) {
 
 const field = (page: Page) => page.getByRole("textbox", { name: "Слово или фраза" });
 const examples = (page: Page) => page.getByRole("list", { name: "Примеры" }).getByRole("listitem");
+
+/** «Искать ещё в вебе» under Tatoeba's sentences (or «Искать в вебе» when there are none). */
+async function searchWeb(page: Page) {
+  await page.getByRole("button", { name: /^Искать (ещё )?в вебе$/ }).click();
+}
 
 async function searchFor(page: Page, q: string) {
   await field(page).fill(q);
@@ -75,14 +83,24 @@ test("kiffer: translations, the meaning chips filter the examples, synonyms, con
   await expect(translations.getByRole("listitem").first()).toContainText("38%");
   await expect(page.getByRole("button", { name: "В карточки", exact: true })).toBeVisible();
 
-  await expect(page.getByText("3 примера из веба")).toBeVisible();
-  await expect(examples(page)).toHaveCount(3);
-  await expect(examples(page).first().getByRole("link", { name: /Форум · forum\.exemple\.fr/ })).toHaveAttribute("target", "_blank");
+  // Free first: Tatoeba's sentence, no paid search until asked.
+  await expect(examples(page)).toHaveCount(1);
+  await expect(examples(page).first()).toContainText(KIFFER_TATOEBA.fr);
+  await expect(examples(page).first().getByRole("link", { name: /Tatoeba · tatoeba\.org/ })).toHaveAttribute("target", "_blank");
+  await expect(page.getByRole("link", { name: "Tatoeba", exact: true })).toBeVisible();
+  expect(calls.tatoeba).toEqual(["kiffer"]);
+  expect(calls.context).toEqual([]);
+
+  await searchWeb(page);
+  await expect(page.getByText("4 примера")).toBeVisible();
+  await expect(examples(page)).toHaveCount(4);
+  await expect(examples(page).nth(1).getByRole("link", { name: /Форум · forum\.exemple\.fr/ })).toHaveAttribute("target", "_blank");
+  await expect(page.getByRole("button", { name: /^Искать ещё в вебе$/ })).toBeHidden();
   await page.getByRole("group", { name: "Значения" }).getByRole("button", { name: /нравиться/ }).click();
   await expect(examples(page)).toHaveCount(1);
   await expect(examples(page).first()).toContainText("Elle kiffe grave le mec de sa classe.");
-  await page.getByRole("group", { name: "Значения" }).getByRole("button", { name: "Все · 3" }).click();
-  await expect(examples(page)).toHaveCount(3);
+  await page.getByRole("group", { name: "Значения" }).getByRole("button", { name: "Все · 4" }).click();
+  await expect(examples(page)).toHaveCount(4);
   expect(calls.context).toEqual(["kiffer"]);
 
   await expect(page.getByText("это слово")).toBeVisible();
@@ -91,7 +109,8 @@ test("kiffer: translations, the meaning chips filter the examples, synonyms, con
 
   const conj = page.getByRole("button", { name: /Спряжение/ });
   await expect(conj).toHaveAttribute("aria-expanded", "false");
-  await expect(page.getByText("je kiffe · tu kiffes · il/elle kiffe…")).toBeVisible();
+  // Built on the device from Lexique, not by the model.
+  await expect(page.getByText("je kiffe · tu kiffes · il kiffe…")).toBeVisible();
   await conj.click();
   await expect(conj).toHaveAttribute("aria-expanded", "true");
   await expect(page.getByRole("heading", { name: "Passé composé" })).toBeVisible();
@@ -112,6 +131,8 @@ test("an example goes into the saved word's card", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1, name: "se casser" })).toBeVisible();
   const saved = page.getByRole("button", { name: "В библиотеке · Повседневное" });
   await expect(saved).toBeVisible();
+  await expect(page.getByText("В Tatoeba примеров нет")).toBeVisible();
+  await searchWeb(page);
 
   await page.getByRole("button", { name: `В карточку: ${CASSE[0].fr}` }).click();
   const sheet = page.getByRole("dialog", { name: "Пример" });
@@ -132,7 +153,9 @@ test("«+ В карточки» and an example's «Добавить слово �
   await mockAll(page);
   await mockEnrich(page, (w) => enriched(w, { pos: "verb", gender: "none", slang_level: 1, example_fr: null, example_ru: null }));
   await page.goto("/context?q=kiffer");
-  await expect(examples(page)).toHaveCount(3);
+  await expect(examples(page)).toHaveCount(1);
+  await searchWeb(page);
+  await expect(examples(page)).toHaveCount(4);
 
   await page.getByRole("button", { name: "В карточки", exact: true }).click();
   const sheet = addSheet(page);
@@ -155,18 +178,21 @@ test("history reopens a query from the device, offline too", async ({ page, cont
   const calls = await mockAll(page);
   await page.goto("/context");
   await searchFor(page, "kiffer");
-  await expect(examples(page)).toHaveCount(3);
+  await expect(examples(page)).toHaveCount(1);
+  await searchWeb(page);
+  await expect(examples(page)).toHaveCount(4);
 
   await page.goto("/context");
   const history = page.getByRole("region", { name: "Недавние" });
   const row = history.getByRole("link", { name: /kiffer/ });
-  await expect(row).toContainText("3 прим.");
+  await expect(row).toContainText("4 прим.");
   await expect(page.getByText("Из твоих карточек без примеров")).toBeVisible();
   await row.click();
   await expect(page.getByRole("heading", { level: 1, name: "kiffer" })).toBeVisible();
-  await expect(examples(page)).toHaveCount(3);
+  await expect(examples(page)).toHaveCount(4);
   expect(calls.lookup).toEqual(["kiffer"]);
   expect(calls.context).toEqual(["kiffer"]);
+  expect(calls.tatoeba).toEqual(["kiffer"]);
 
   await page.goBack();
   await expect(row).toBeVisible();
@@ -176,7 +202,7 @@ test("history reopens a query from the device, offline too", async ({ page, cont
   await expect(page.getByText("Открываются прошлые запросы — они сохранены на телефоне.")).toBeVisible();
   await row.click();
   await expect(page.getByRole("heading", { level: 1, name: "kiffer" })).toBeVisible();
-  await expect(examples(page)).toHaveCount(3);
+  await expect(examples(page)).toHaveCount(4);
   expect(calls.lookup).toEqual(["kiffer"]);
   await context.setOffline(false);
 });
@@ -208,7 +234,7 @@ test("a history row can be removed on its own, with «Отменить»", async
   await mockAll(page);
   await page.goto("/context");
   await searchFor(page, "kiffer");
-  await expect(examples(page)).toHaveCount(3);
+  await expect(examples(page)).toHaveCount(1);
   await searchFor(page, "triper");
   await expect(page.getByRole("heading", { level: 1, name: "triper" })).toBeVisible();
 

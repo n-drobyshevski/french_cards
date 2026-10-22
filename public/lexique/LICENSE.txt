@@ -2,3 +2,7 @@ fr-lemmas.json is derived from Lexique 3.83 (Boris New & Christophe Pallier, htt
 licensed under CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/), with a small curated list
 of slang lemmas added. Format: [lemma, part of speech, gender, frequency per million words], sorted by the
 accent-folded lemma. Rebuild with: node scripts/build-lexique.mjs
+
+fr-conj.json (verb tables for «Контекст» → «Спряжение») is derived from the same Lexique 3.83 data under
+the same licence: the verbs the conjugation rules in lib/core/conjugate.ts get wrong, as présent, imparfait,
+futur and past participle. Rebuild with: node scripts/build-conjugation.mjs

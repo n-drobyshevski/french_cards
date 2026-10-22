@@ -25,7 +25,8 @@ const EXAMPLE_FORMS = ["пример", "примера", "примеров"] as 
 export const nExamples = (n: number) => `${n} ${plural(n, EXAMPLE_FORMS)}`;
 
 /** The source kind as the mono source line names it: «ФОРУМ · forum.exemple.fr ↗». */
-export const KIND_LABELS: Record<ExampleKind, string> = {
+export const KIND_LABELS: Record<ExampleKind | "tatoeba", string> = {
+  tatoeba: "Tatoeba",
   forum: "Форум",
   song: "Песня",
   article: "Статья",

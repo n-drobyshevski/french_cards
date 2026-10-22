@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addSheet, enriched, KIFFER_EXAMPLES, KIFFER_LOOKUP, mockContext, mockEnrich, mockLookup, openReview } from "./fixtures";
+import { addSheet, enriched, KIFFER_EXAMPLES, KIFFER_LOOKUP, KIFFER_TATOEBA, mockContext, mockEnrich, mockLookup, mockTatoeba, openReview } from "./fixtures";
 
 // «Контекст» on desktop (D-Context): the bilingual table, the right rail, the example dialog, G C.
 
@@ -9,6 +9,7 @@ const rows = (page: Page) => page.getByRole("list", { name: "Примеры" }).
 test("kiffer: the table, the chips, synonyms and conjugation in the rail, an example into a new word", async ({ page }) => {
   await mockLookup(page, () => KIFFER_LOOKUP);
   await mockContext(page, () => KIFFER_EXAMPLES);
+  await mockTatoeba(page, () => [KIFFER_TATOEBA]);
   await mockEnrich(page, (w) => enriched(w, { pos: "verb", gender: "none", slang_level: 1, example_fr: null, example_ru: null }));
   await page.goto("/context");
   const nav = page.getByRole("navigation", { name: "Основная навигация" });
@@ -17,15 +18,18 @@ test("kiffer: the table, the chips, synonyms and conjugation in the rail, an exa
   await field(page).fill("kiffer");
   await field(page).press("Enter");
   await expect(page.getByRole("heading", { level: 1, name: "kiffer" })).toBeVisible();
-  await expect(rows(page)).toHaveCount(3);
-  await expect(rows(page).first()).toContainText("Честно, я так тащусь от этого трека");
+  await expect(rows(page)).toHaveCount(1);
+  await expect(rows(page).first()).toContainText(KIFFER_TATOEBA.ru);
+  await page.getByRole("button", { name: "Искать ещё в вебе" }).click();
+  await expect(rows(page)).toHaveCount(4);
+  await expect(rows(page).nth(1)).toContainText("Честно, я так тащусь от этого трека");
 
   const chips = page.getByRole("group", { name: "Значения" });
   await chips.getByRole("button", { name: /кайфовать/ }).click();
   await expect(rows(page)).toHaveCount(1);
   await expect(rows(page).first()).toContainText("On a kiffé la soirée");
-  await chips.getByRole("button", { name: "Все · 3" }).click();
-  await expect(rows(page)).toHaveCount(3);
+  await chips.getByRole("button", { name: "Все · 4" }).click();
+  await expect(rows(page)).toHaveCount(4);
 
   const rail = page.getByRole("complementary", { name: "Синонимы и спряжение" });
   await expect(rail.getByRole("button", { name: "surkiffer — дико тащиться" })).toBeVisible();
@@ -57,10 +61,11 @@ test("G then C opens «Контекст»; / focuses its search", async ({ page 
 test("a history row shows its «×» on hover and removes only itself", async ({ page }) => {
   await mockLookup(page, () => KIFFER_LOOKUP);
   await mockContext(page, () => KIFFER_EXAMPLES);
+  await mockTatoeba(page, () => [KIFFER_TATOEBA]);
   await page.goto("/context");
   await field(page).fill("kiffer");
   await field(page).press("Enter");
-  await expect(rows(page)).toHaveCount(3);
+  await expect(rows(page)).toHaveCount(1);
 
   await page.goto("/context");
   const history = page.getByRole("region", { name: "Недавние" });

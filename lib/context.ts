@@ -1,14 +1,17 @@
 "use client";
 
-// «Контекст»: look a word up the way Reverso Context does. Two requests per query: the dictionary
-// part (/api/ai/lookup, fast) and real sentences from the web (/api/ai/context, 10–20 s). Both
-// land in the device-local `lookups` table, which is the history and lets a repeat query (and the
-// offline screen) open without spending another web search.
+// «Контекст»: look a word up the way Reverso Context does. Per query: the dictionary part
+// (/api/ai/lookup, fast and cheap), the conjugation built on the device from Lexique
+// (lib/conjugation.ts), and free sentences from Tatoeba (lib/tatoeba.ts). The paid web search
+// (/api/ai/context, 10–20 s) runs only when asked. Everything lands in the device-local `lookups`
+// table, which is the history and lets a repeat query (and the offline screen) open for free.
 import { useLiveQuery } from "dexie-react-hooks";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AiClientError, postAiJson, type AiClientErrorCode } from "./ai-client";
 import type { ContextResponse, LookupResponse } from "./ai/schemas";
 import { CONTEXT_MEANINGS_MAX } from "./ai/constants";
+import { withConjugation } from "./conjugation";
+import { requestTatoeba } from "./tatoeba";
 import { searchKey } from "./core/text";
 import { db, type LookupEntry } from "./db";
 import { getSettings } from "./settings";
@@ -101,9 +104,12 @@ export interface ContextSearchState {
   q: string;
   lookupPhase: Phase;
   lookup: LookupResponse | null;
-  /** «Ищем в вебе»: "idle" until the lookup is done (or when it found nothing), "done" also after «Стоп» with no examples. */
+  /** The free examples (Tatoeba): "idle" until the lookup is done (or when it found nothing). */
   contextPhase: Phase | "stopped";
+  /** Tatoeba's examples, then the web search's once it ran. */
   context: ContextResponse | null;
+  /** «Искать ещё в вебе» (the paid search): only when asked. */
+  webPhase: Phase | "stopped";
   /** Shown under the failed part. */
   error: string | null;
   /** Seconds left of a rate-limit wait. */
@@ -118,6 +124,7 @@ const EMPTY: ContextSearchState = {
   lookup: null,
   contextPhase: "idle",
   context: null,
+  webPhase: "idle",
   error: null,
   retryIn: null,
   cached: false,
@@ -125,100 +132,167 @@ const EMPTY: ContextSearchState = {
 
 const messageOf = (e: unknown) => (e instanceof AiClientError ? e.message : MESSAGES.upstream);
 
+const exampleKey = (fr: string) => searchKey(fr).replace(/[^\p{L}\p{N}]+/gu, "");
+
+/** Tatoeba's rows first, then the web's new ones. */
+export function mergeExamples(free: ContextResponse | null, web: ContextResponse): ContextResponse {
+  const seen = new Set((free?.examples ?? []).map((e) => exampleKey(e.fr)));
+  const added = web.examples.filter((e) => !seen.has(exampleKey(e.fr)));
+  return { examples: [...(free?.examples ?? []), ...added], sources: (free?.sources ?? 0) + web.sources, web: true };
+}
+
 /**
- * Drives one query: the history first, then the lookup, then the web search. `search(q)` starts
- * (or reopens) a query, `stop()` ends the web search keeping what the lookup found, `retry()`
- * repeats the part that failed, `refresh()` ignores the history and asks again.
+ * Drives one query: the history first, then the lookup (with the conjugation built here), then
+ * Tatoeba's free sentences. The paid web search runs only on `searchWeb()` («Искать ещё в
+ * вебе»). `stop()` ends what is loading, `retry()` repeats the part that failed, `refresh()`
+ * ignores the history and asks again.
  */
 export function useContextSearch() {
   const [state, setState] = useState<ContextSearchState>(EMPTY);
   const abort = useRef<AbortController | null>(null);
   const run = useRef(0);
+  const stateRef = useRef(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   useEffect(() => () => abort.current?.abort(), []);
 
-  const searchWeb = useCallback(async (q: string, lookup: LookupResponse, id: number, controller: AbortController) => {
-    setState((s) => ({ ...s, contextPhase: "loading", error: null, retryIn: null }));
+  const fresh = useCallback(() => {
+    abort.current?.abort();
+    const controller = new AbortController();
+    abort.current = controller;
+    return { controller, id: ++run.current };
+  }, []);
+
+  const loadFree = useCallback(async (q: string, lookup: LookupResponse, id: number, controller: AbortController) => {
+    setState((s) => ({ ...s, contextPhase: "loading", error: null }));
+    try {
+      const context = await requestTatoeba(lookup, { signal: controller.signal });
+      if (run.current !== id) return;
+      await saveLookup({ q, lookup, context });
+      setState((s) => ({ ...s, contextPhase: "done", context }));
+    } catch {
+      if (run.current !== id) return;
+      if (controller.signal.aborted) {
+        setState((s) => ({ ...s, contextPhase: "stopped" }));
+        return;
+      }
+      // Tatoeba unreachable: the screen still offers the web search and «Подобрать пример».
+      setState((s) => ({ ...s, contextPhase: "done", context: { examples: [], sources: 0, web: false } }));
+    }
+  }, []);
+
+  const runWeb = useCallback(async (q: string, lookup: LookupResponse, free: ContextResponse | null, id: number, controller: AbortController) => {
+    setState((s) => ({ ...s, webPhase: "loading", error: null, retryIn: null }));
     try {
       const { ai_model } = await getSettings();
-      const context = await requestContext(lookup, {
+      const web = await requestContext(lookup, {
         signal: controller.signal,
         model: ai_model,
         onRetry: (seconds) => run.current === id && setState((s) => ({ ...s, retryIn: seconds })),
       });
       if (run.current !== id) return;
+      const context = mergeExamples(free, web);
       await saveLookup({ q, lookup, context });
-      setState((s) => ({ ...s, contextPhase: "done", context, retryIn: null }));
+      setState((s) => ({ ...s, webPhase: "done", context, retryIn: null }));
     } catch (error) {
       if (run.current !== id) return;
       if (controller.signal.aborted) {
-        setState((s) => ({ ...s, contextPhase: "stopped", retryIn: null }));
+        setState((s) => ({ ...s, webPhase: "stopped", retryIn: null }));
         return;
       }
-      setState((s) => ({ ...s, contextPhase: "error", error: messageOf(error), retryIn: null }));
+      setState((s) => ({ ...s, webPhase: "error", error: messageOf(error), retryIn: null }));
     }
   }, []);
 
   const start = useCallback(
-    async (raw: string, { fresh = false }: { fresh?: boolean } = {}) => {
-      abort.current?.abort();
+    async (raw: string, { fresh: refetch = false }: { fresh?: boolean } = {}) => {
       const q = cleanQuery(raw);
-      const id = ++run.current;
+      const { controller, id } = fresh();
       if (!q) {
         setState(EMPTY);
         return;
       }
-      const controller = new AbortController();
-      abort.current = controller;
-      const saved = fresh ? undefined : await getLookup(q);
+      const saved = refetch ? undefined : await getLookup(q);
       if (run.current !== id) return;
       if (saved) {
         void touchLookup(saved.key);
-        setState({ ...EMPTY, q, lookupPhase: "done", lookup: saved.lookup, contextPhase: saved.context ? "done" : "idle", context: saved.context, cached: true });
-        if (!saved.context && saved.lookup.found) void searchWeb(q, saved.lookup, id, controller);
+        const context = saved.context;
+        setState({
+          ...EMPTY,
+          q,
+          lookupPhase: "done",
+          lookup: saved.lookup,
+          contextPhase: context ? "done" : "idle",
+          context,
+          webPhase: context?.web ? "done" : "idle",
+          cached: true,
+        });
+        // The conjugation now comes from the device (entries saved earlier had the model's).
+        const lookup = await withConjugation(saved.lookup);
+        if (run.current !== id) return;
+        setState((s) => ({ ...s, lookup }));
+        if (!context && lookup.found) void loadFree(q, lookup, id, controller);
         return;
       }
       setState({ ...EMPTY, q, lookupPhase: "loading" });
       let lookup: LookupResponse;
       try {
         const { ai_model } = await getSettings();
-        lookup = await requestLookup(q, {
-          signal: controller.signal,
-          model: ai_model,
-          onRetry: (seconds) => run.current === id && setState((s) => ({ ...s, retryIn: seconds })),
-        });
+        lookup = await withConjugation(
+          await requestLookup(q, {
+            signal: controller.signal,
+            model: ai_model,
+            onRetry: (seconds) => run.current === id && setState((s) => ({ ...s, retryIn: seconds })),
+          }),
+        );
       } catch (error) {
         if (run.current !== id) return;
-        setState((s) => ({ ...s, lookupPhase: controller.signal.aborted ? "idle" : "error", error: controller.signal.aborted ? null : messageOf(error), retryIn: null }));
+        setState((s) => ({
+          ...s,
+          lookupPhase: controller.signal.aborted ? "idle" : "error",
+          error: controller.signal.aborted ? null : messageOf(error),
+          retryIn: null,
+        }));
         return;
       }
       if (run.current !== id) return;
       setState((s) => ({ ...s, lookupPhase: "done", lookup, retryIn: null }));
       await saveLookup({ q, lookup, context: null });
-      if (lookup.found && run.current === id) await searchWeb(q, lookup, id, controller);
+      if (lookup.found && run.current === id) await loadFree(q, lookup, id, controller);
     },
-    [searchWeb],
+    [fresh, loadFree],
   );
 
   const search = useCallback((q: string) => void start(q), [start]);
-  const refresh = useCallback(() => void start(state.q, { fresh: true }), [start, state.q]);
+  const refresh = useCallback(() => void start(stateRef.current.q, { fresh: true }), [start]);
   const stop = useCallback(() => abort.current?.abort(), []);
+  /** «Искать ещё в вебе»: the paid search, added after Tatoeba's sentences. */
+  const searchWeb = useCallback(() => {
+    const { q, lookup, context } = stateRef.current;
+    if (!lookup?.found) return;
+    const { controller, id } = fresh();
+    void runWeb(q, lookup, context, id, controller);
+  }, [fresh, runWeb]);
   const retry = useCallback(() => {
-    if (state.lookupPhase !== "done" || !state.lookup) {
-      void start(state.q, { fresh: true });
+    const s = stateRef.current;
+    if (s.lookupPhase !== "done" || !s.lookup) {
+      void start(s.q, { fresh: true });
       return;
     }
-    abort.current?.abort();
-    const controller = new AbortController();
-    abort.current = controller;
-    const id = ++run.current;
-    void searchWeb(state.q, state.lookup, id, controller);
-  }, [searchWeb, start, state.lookup, state.lookupPhase, state.q]);
+    if (s.webPhase === "error" || s.webPhase === "stopped") {
+      searchWeb();
+      return;
+    }
+    const { controller, id } = fresh();
+    void loadFree(s.q, s.lookup, id, controller);
+  }, [fresh, loadFree, searchWeb, start]);
   const reset = useCallback(() => {
     abort.current?.abort();
     run.current++;
     setState(EMPTY);
   }, []);
 
-  return { state, search, stop, retry, refresh, reset };
+  return { state, search, searchWeb, stop, retry, refresh, reset };
 }

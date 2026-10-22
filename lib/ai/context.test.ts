@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import { domainOf, finalizeContext, finalizeLookup, findHit, normalizeShares, snippetsFromSources, textKey, usesHeadword, type WebSource } from "./context";
 import type { ContextModel, LookupModel } from "./schemas";
 
-const forms = (w: string) => [`je ${w}`, `tu ${w}`, `il ${w}`, `nous ${w}`, `vous ${w}`, `ils ${w}`];
-
 const lookupModel = (extra: Partial<LookupModel> = {}): LookupModel => ({
   found: true,
   fr: " kiffer ",
@@ -24,14 +22,6 @@ const lookupModel = (extra: Partial<LookupModel> = {}): LookupModel => ({
     { fr: "surkiffer", ru: "дико тащиться", slang_level: "arg" },
     { fr: "", ru: "x", slang_level: "fam" },
   ],
-  conjugation: {
-    auxiliary: "avoir",
-    remark: "правильный на -er",
-    present: forms("kiffe"),
-    passe_compose: forms("a kiffé"),
-    imparfait: forms("kiffait"),
-    futur: forms("kiffera"),
-  },
   ...extra,
 });
 
@@ -46,14 +36,8 @@ describe("finalizeLookup", () => {
       ["adorer", 0],
       ["surkiffer", 2],
     ]);
-    expect(r.conjugation?.tenses.present).toHaveLength(6);
-  });
-
-  it("drops the conjugation of a non-verb or an incomplete one", () => {
-    expect(finalizeLookup(lookupModel({ pos: "adj" }), "chelou").conjugation).toBeNull();
-    const broken = lookupModel();
-    broken.conjugation!.futur = ["je kifferai"];
-    expect(finalizeLookup(broken, "kiffer").conjugation).toBeNull();
+    // Built on the device from Lexique, never by the model.
+    expect(r.conjugation).toBeNull();
   });
 
   it("not found: empty entry, Russian direction kept", () => {

@@ -582,7 +582,7 @@ export interface AiErrorBody {
 }
 
 // «Контекст»: a word looked up the way Reverso Context does it. /api/ai/lookup answers fast (the
-// dictionary part: translations by share, synonyms by register, conjugation); /api/ai/context
+// dictionary part: translations by share, synonyms by register; the conjugation is built on the device); /api/ai/context
 // searches the web for real sentences that use the word, each tied to its source.
 
 
@@ -592,9 +592,6 @@ export const LookupRequestSchema = z.object({
   q: shortText(80).min(1),
 });
 export type LookupRequest = z.input<typeof LookupRequestSchema>;
-
-const conjForms = () =>
-  z.array(z.string()).describe("Six forms in the order je, tu, il/elle, nous, vous, ils/elles, each with its pronoun: «je kiffe», «j'ai kiffé».");
 
 export const LookupModelSchema = z.object({
   found: z.boolean().describe("false when the query is not French or Russian language at all (gibberish, a name, a URL); every other field is then empty."),
@@ -621,17 +618,6 @@ export const LookupModelSchema = z.object({
       }),
     )
     .describe(`Up to ${LOOKUP_SYNONYMS_MAX} synonyms across registers (neutral to vulg), never the headword itself.`),
-  conjugation: z
-    .object({
-      auxiliary: z.enum(["avoir", "être"]).describe("The auxiliary of the passé composé."),
-      remark: z.string().nullable().describe("One short Russian remark: the verb group or an irregularity («правильный на -er», «неправильный»). Null if none."),
-      present: conjForms(),
-      passe_compose: conjForms(),
-      imparfait: conjForms(),
-      futur: conjForms(),
-    })
-    .nullable()
-    .describe("Only when the headword is a verb (pronominal verbs with their pronoun: je me casse); null for every other part of speech and for expressions."),
 });
 export type LookupModel = z.infer<typeof LookupModelSchema>;
 
@@ -647,6 +633,7 @@ export interface LookupSynonym {
   slang_level: SlangLevel;
 }
 
+/** Built on the device (lib/conjugation.ts), never by the model. */
 export interface Conjugation {
   auxiliary: "avoir" | "être";
   remark: string | null;
@@ -704,7 +691,8 @@ export interface ContextExample {
   hit: string;
   /** One of the request's meanings, or null. */
   meaning: string | null;
-  kind: ExampleKind;
+  /** "tatoeba": a sentence from the free Tatoeba corpus (lib/tatoeba.ts), not the web search. */
+  kind: ExampleKind | "tatoeba";
   url: string;
   /** Host without www., for the source line. */
   domain: string;
@@ -715,4 +703,6 @@ export interface ContextResponse {
   examples: ContextExample[];
   /** Distinct pages the search looked at. */
   sources: number;
+  /** On the device: true once the paid web search ran for this query (its examples follow Tatoeba's). */
+  web?: boolean;
 }

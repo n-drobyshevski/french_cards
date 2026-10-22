@@ -35,6 +35,8 @@ import {
   ConjugationSection,
   ExampleItem,
   ExamplesEmpty,
+  TatoebaCredit,
+  WebMore,
   ExamplesHalt,
   ExamplesWait,
   ExampleTableRow,
@@ -78,7 +80,7 @@ function ContextView({ q }: { q: string }) {
   const online = useOnline();
   const addSheet = useAddSheetActions();
   const showUndo = useUndoSnackbar();
-  const { state, search, stop, retry, refresh, reset } = useContextSearch();
+  const { state, search, searchWeb, stop, retry, refresh, reset } = useContextSearch();
   const inputRef = useRef<HTMLInputElement>(null);
 
   // The field and the per-query choices follow the URL.
@@ -203,6 +205,7 @@ function ContextView({ q }: { q: string }) {
       onOpenExample={setSheetExample}
       onStop={stop}
       onRetry={retry}
+      onWeb={searchWeb}
       onRefresh={refresh}
     />
   ) : null;
@@ -253,7 +256,7 @@ function Intro({ wide = false }: { wide?: boolean }) {
   return (
     <div>
       <h1 className={cx("m-0 font-serif font-medium tracking-[-0.015em]", wide ? "text-[28px] leading-9" : "text-[32px] leading-10")}>Контекст</h1>
-      <p className="m-0 mt-0.5 text-[14px] leading-5 text-muted">Как слово звучит в живой речи — примеры из веба, синонимы, спряжение.</p>
+      <p className="m-0 mt-0.5 text-[14px] leading-5 text-muted">Как слово звучит в живой речи — примеры, синонимы, спряжение.</p>
     </div>
   );
 }
@@ -277,6 +280,8 @@ interface ResultsProps {
   onOpenExample: (example: ShownExample) => void;
   onStop: () => void;
   onRetry: () => void;
+  /** «Искать ещё в вебе»: the paid search. */
+  onWeb: () => void;
   onRefresh: () => void;
 }
 
@@ -289,22 +294,43 @@ function Results(props: ResultsProps) {
   const lookup = state.lookup;
   if (!lookup.found) return <NotFound q={q} />;
 
-  const web = state.context?.examples ?? [];
-  const examples: ShownExample[] = web.length === 0 && props.invented ? [props.invented] : web;
-  const chips = meaningChips(lookup.translations, web);
+  const all = state.context?.examples ?? [];
+  const examples: ShownExample[] = all.length === 0 && props.invented ? [props.invented] : all;
+  const chips = meaningChips(lookup.translations, all);
   const shown = filterByMeaning(examples, props.meaning);
   const columns = synonymColumns({ fr: lookup.fr, ru: translationLine(lookup.translations, 1), slang_level: lookup.slang_level }, lookup.synonyms);
   const savedWord = saved ? { id: saved.word.id, folderName: saved.folderName } : saved;
   const inCard = (fr: string) => !!saved && hasExample(saved.word, fr);
   const phase = state.contextPhase;
+  const webPhase = state.webPhase;
+  const webDone = state.context?.web === true;
   const hasSynonyms = lookup.synonyms.length > 0;
 
+  const webBlock = (() => {
+    if (webPhase === "loading") return <ExamplesWait retryIn={state.retryIn} onStop={props.onStop} wide={wide} />;
+    if (webPhase === "error") return <ExamplesHalt kind="error" error={state.error} online={online} onRetry={props.onRetry} />;
+    if (webPhase === "stopped") return <ExamplesHalt kind="stopped" error={null} online={online} onRetry={props.onRetry} />;
+    if (!webDone && examples.length > 0) return <WebMore online={online} onSearch={props.onWeb} wide={wide} />;
+    return null;
+  })();
+
   const body = (() => {
-    if (phase === "loading") return <ExamplesWait retryIn={state.retryIn} onStop={props.onStop} wide={wide} />;
-    if (phase === "error") return <ExamplesHalt kind="error" error={state.error} online={online} onRetry={props.onRetry} />;
-    if (phase === "stopped" || (phase === "idle" && !state.context)) return <ExamplesHalt kind="stopped" error={null} online={online} onRetry={props.onRetry} />;
+    if (phase === "loading") return <ExamplesWait retryIn={null} onStop={props.onStop} wide={wide} web={false} />;
+    if (phase === "error" || phase === "stopped" || (phase === "idle" && !state.context)) {
+      return <ExamplesHalt kind="stopped" error={null} online={online} onRetry={props.onRetry} />;
+    }
     if (examples.length === 0) {
-      return <ExamplesEmpty onInvent={props.onInvent} inventing={props.inventing} error={props.inventError} online={online} wide={wide} />;
+      if (webPhase !== "idle" && webPhase !== "done") return webBlock;
+      return (
+        <ExamplesEmpty
+          onInvent={props.onInvent}
+          inventing={props.inventing}
+          error={props.inventError}
+          online={online}
+          wide={wide}
+          onWeb={webDone ? undefined : props.onWeb}
+        />
+      );
     }
     const Row = wide ? ExampleTableRow : ExampleItem;
     return (
@@ -314,7 +340,9 @@ function Results(props: ResultsProps) {
             <Row key={`${e.url}\u0001${e.fr}`} example={e} inCard={inCard(e.fr)} onOpen={() => props.onOpenExample(e)} />
           ))}
         </ul>
-        {online && web.length > 0 && (
+        {all.some((e) => e.kind === "tatoeba") && <TatoebaCredit />}
+        {webBlock}
+        {online && webDone && all.length > 0 && (
           <Button variant="tertiary" size="sm" className="mt-3 text-[14px]" onClick={props.onRefresh}>
             Искать заново
           </Button>
@@ -323,10 +351,10 @@ function Results(props: ResultsProps) {
     );
   })();
 
-  const countLine = phase === "done" && web.length > 0 ? `${nExamples(web.length)} из веба` : undefined;
+  const countLine = phase === "done" && all.length > 0 ? nExamples(all.length) : undefined;
   const chipRow = (className: string) =>
-    (wide ? lookup.translations.length > 0 : web.length > 0 && chips.some((c) => c.count > 0)) && (
-      <MeaningChips chips={chips} total={web.length} value={props.meaning} onChange={props.onMeaning} loading={phase !== "done" || web.length === 0} keepEmpty={wide} className={className} />
+    (wide ? lookup.translations.length > 0 : all.length > 0 && chips.some((c) => c.count > 0)) && (
+      <MeaningChips chips={chips} total={all.length} value={props.meaning} onChange={props.onMeaning} loading={phase !== "done" || all.length === 0} keepEmpty={wide} className={className} />
     );
 
   const conj = lookup.conjugation;
@@ -345,7 +373,7 @@ function Results(props: ResultsProps) {
           <WordStatus saved={savedWord} onOpen={props.onOpenSaved} onAdd={props.onAddWord} wide />
         </div>
         <div className="mt-2 flex flex-wrap gap-10">
-          <section aria-label="Примеры из веба" className="min-w-0 flex-[999_1_520px]">
+          <section aria-label="Живые примеры" className="min-w-0 flex-[999_1_520px]">
             {countLine && <p className="meta m-0 mt-3">{countLine}</p>}
             {body}
           </section>
@@ -370,7 +398,7 @@ function Results(props: ResultsProps) {
         <WordStatus saved={savedWord} onOpen={props.onOpenSaved} onAdd={props.onAddWord} />
       </article>
 
-      <section aria-labelledby="ctx-examples" aria-busy={phase === "loading" || undefined} className="mt-7">
+      <section aria-labelledby="ctx-examples" aria-busy={phase === "loading" || webPhase === "loading" || undefined} className="mt-7">
         <SectionHead id="ctx-examples" title="Как говорят" aside={countLine} />
         {chipRow("-mx-4 overflow-x-auto px-4 pt-3 pb-1 [scrollbar-width:none]")}
         {body}

@@ -1,5 +1,5 @@
-// POST /api/ai/lookup — «Контекст», the dictionary part: translations by share, synonyms by
-// register and the conjugation of a verb. JSON in, JSON out.
+// POST /api/ai/lookup — «Контекст», the dictionary part: translations by share and synonyms by
+// register (the conjugation is built on the device, lib/conjugation.ts). JSON in, JSON out.
 // Request: { q, model? } → LookupResponse.
 import { generateText, Output } from "ai";
 import { finalizeLookup } from "@/lib/ai/context";
@@ -34,7 +34,7 @@ export async function POST(req: Request): Promise<Response> {
       prompt: lookupUserPrompt({ q, direction: detectDirection(q) }),
       output: Output.object({ schema: LookupModelSchema, name: "lookup" }),
       providerOptions: providerOptionsFor(modelIdFor("lookup", model)),
-      maxOutputTokens: 2000,
+      maxOutputTokens: 1200,
       abortSignal: req.signal,
     });
     return Response.json(finalizeLookup(output as LookupModel, q), { headers: NO_STORE });

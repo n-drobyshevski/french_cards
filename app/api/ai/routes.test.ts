@@ -583,7 +583,6 @@ describe("POST /api/ai/lookup", () => {
     note: null,
     translations: [{ ru: "тащиться", share: 60 }, { ru: "нравиться", share: 40 }],
     synonyms: [{ fr: "adorer", ru: "обожать", slang_level: "neutral" }],
-    conjugation: null,
   };
 
   it("400 on an empty query", async () => {

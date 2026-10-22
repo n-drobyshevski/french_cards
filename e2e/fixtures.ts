@@ -367,6 +367,33 @@ export async function mockLookup(page: Page, make: (q: string) => LookupWire | n
  * Answers POST /api/ai/context with `make(body)`. With `gate`, each request waits for
  * `release()` (to look at «Ищем примеры в вебе»).
  */
+/** A Tatoeba sentence as its API returns it (with one Russian translation). */
+export interface TatoebaWire {
+  id: number;
+  fr: string;
+  ru: string;
+}
+
+/** A free Tatoeba sentence for «kiffer» («Как говорят» shows it before any web search). */
+export const KIFFER_TATOEBA: TatoebaWire = { id: 8315342, fr: "Tu kiffes le café ?", ru: "Вам нравится кофе?" };
+
+/** Tatoeba's API (asked from the browser): `make` gets the search `q` and returns the sentences. */
+export async function mockTatoeba(page: Page, make: (q: string) => TatoebaWire[], onRequest?: (q: string) => void) {
+  await page.route("https://api.tatoeba.org/**", async (route: Route) => {
+    const q = new URL(route.request().url()).searchParams.get("q") ?? "";
+    onRequest?.(q);
+    const data = make(q).map((s) => ({
+      id: s.id,
+      text: s.fr,
+      lang: "fra",
+      is_unapproved: false,
+      license: "CC BY 2.0 FR",
+      translations: [{ id: s.id + 1, text: s.ru, lang: "rus", is_direct: true, is_unapproved: false }],
+    }));
+    await route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ data, paging: { total: data.length } }) });
+  });
+}
+
 export async function mockContext(
   page: Page,
   make: (body: { fr: string; meanings: string[] }) => ContextExampleWire[] | number,

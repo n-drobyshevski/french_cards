@@ -4,11 +4,9 @@
 import { cleanText, detectDirection, dedupeKey, slangLevelFromCode } from "./normalize";
 import type { ContextSnippet } from "./prompts";
 import {
-  CONJ_TENSES,
   CONTEXT_EXAMPLES_MAX,
   LOOKUP_SYNONYMS_MAX,
   LOOKUP_TRANSLATIONS_MAX,
-  type Conjugation,
   type ContextExample,
   type ContextModel,
   type ContextResponse,
@@ -39,17 +37,6 @@ export function normalizeShares(raw: readonly number[]): number[] {
   const top = out.indexOf(Math.max(...out));
   out[top] = Math.max(1, out[top] + diff);
   return out;
-}
-
-function conjugationOf(raw: LookupModel["conjugation"], isVerb: boolean): Conjugation | null {
-  if (!raw || !isVerb) return null;
-  const tenses = {} as Conjugation["tenses"];
-  for (const t of CONJ_TENSES) {
-    const forms = (raw[t] ?? []).map((f) => cleanText(f, 60)).filter((f): f is string => !!f);
-    if (forms.length !== 6) return null;
-    tenses[t] = forms;
-  }
-  return { auxiliary: raw.auxiliary === "être" ? "être" : "avoir", remark: cleanText(raw.remark, 80), tenses };
 }
 
 export function finalizeLookup(raw: LookupModel, q: string): LookupResponse {
@@ -107,7 +94,8 @@ export function finalizeLookup(raw: LookupModel, q: string): LookupResponse {
     note: cleanText(raw.note, 160),
     translations: translations.map((t, i) => ({ ru: t.ru, share: shares[i] })),
     synonyms,
-    conjugation: conjugationOf(raw.conjugation, raw.pos === "verb"),
+    // Filled on the device from Lexique (lib/conjugation.ts).
+    conjugation: null,
   };
 }
 

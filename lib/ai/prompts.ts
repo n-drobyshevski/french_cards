@@ -224,14 +224,13 @@ Card se casser «свалить» with existing "Bon, je me casse." → example_
 Card une blague «шутка» with existing "C'est une blague ?" → example_fr "Il raconte toujours la même blague à chaque dîner.", example_ru "Он на каждом ужине рассказывает одну и ту же шутку."
 Card chelou «стрёмный» with existing "Il est chelou, ton pote." and "C'est chelou, ce bruit." → example_fr "J'ai reçu un message chelou d'un numéro inconnu.", example_ru "Мне пришло стрёмное сообщение с незнакомого номера."`;
 
-/** /api/ai/lookup: the dictionary part of «Контекст» (translations by share, synonyms by register, conjugation). */
+/** /api/ai/lookup: the dictionary part of «Контекст» (translations by share, synonyms by register). The conjugation is built on the device. */
 export const LOOKUP_SYSTEM = `${APP_CONTEXT}
 
 TASK. The learner looks a word or phrase up, the way people use Reverso Context. The user message gives the query, French or Russian, as typed (it may lack accents or be a little misspelt). Return the dictionary entry as JSON matching the schema.
 - fr: the French headword in dictionary form (see FORMS). Fix accents and obvious typos (chelou, not "chelous"; être vénère, not "etre venere"). For a Russian query give the most common SPOKEN French equivalent; prefer a familier or argot word when one is widely used, otherwise the neutral one.
 - translations: the distinct senses of the headword as Russian equivalents, most frequent first, each with a rough share of real usage in whole percent (adding up to about 100). One sense → one translation with share 100. Never list mere synonyms of the same sense as separate senses: «тащиться, кайфовать» are one sense; «тащиться» and «нравиться (о человеке)» are two. Same register as the French word.
 - synonyms: French words a speaker could use instead, across registers from neutral to vulg, each with its own slang level and a short Russian equivalent. Include the neutral standard word when the headword is slang (la thune → l'argent), and the slangier ones when it is neutral (l'argent → le fric, la thune, le blé). Never the headword itself, never an invented word.
-- conjugation: only for verbs. Six forms per tense with their pronouns, je/tu/il/nous/vous/ils, elided where French elides (j'ai, j'kiffe is NOT standard: write je kiffe). Pronominal verbs keep their pronoun (je me casse, je me suis cassé). Passé composé with the right auxiliary and agreement for être verbs written for a masculine subject (il est parti). Futur simple, not futur proche. Use standard spelling even for slang verbs (kiffer, bédave, galérer → je galère).
 - note: verlan origin («верлан от louche»), a neutral gloss for slang, a typical construction; Russian, short; null when nothing is worth saying.
 - found false only for things that are not language (a URL, random letters, a person's name); then leave text fields empty and lists empty.
 
@@ -240,10 +239,10 @@ ${FORM_RULES}
 ${SLANG_RUBRIC}
 
 EXAMPLES (shortened).
-q «kiffer» → fr "kiffer", pos verb, slang_level fam, translations [тащиться, кайфовать 38; нравиться 27; обожать 20; запасть (на кого-то) 15], synonyms [adorer «обожать» neutral; aimer bien «любить» neutral; triper «тащиться» fam; surkiffer «дико тащиться» arg], conjugation {auxiliary avoir, remark "правильный на -er", present ["je kiffe","tu kiffes","il kiffe","nous kiffons","vous kiffez","ils kiffent"], passe_compose ["j'ai kiffé", …], imparfait ["je kiffais", …], futur ["je kifferai", …]}
-q «chelou» → fr "chelou", pos adj, slang_level arg, verlan true, note "верлан от louche", translations [стрёмный, подозрительный 70; странный 30], synonyms [bizarre «странный» neutral; louche «подозрительный» fam; zarbi «странный» arg], conjugation null
-q «бабки» → fr "la thune", pos noun, gender f, slang_level arg, translations [бабки, деньги 100], synonyms [l'argent «деньги» neutral; le fric «бабки» fam; le blé «бабло» fam; l'oseille «бабло» fam; le flouze «бабло» arg], conjugation null
-q «se casser» → fr "se casser", pos verb, slang_level fam, translations [свалить, смыться 60; сломаться 40], conjugation {auxiliary être, present ["je me casse", …], passe_compose ["je me suis cassé", "tu t'es cassé", "il s'est cassé", "nous nous sommes cassés", "vous vous êtes cassés", "ils se sont cassés"], …}
+q «kiffer» → fr "kiffer", pos verb, slang_level fam, translations [тащиться, кайфовать 38; нравиться 27; обожать 20; запасть (на кого-то) 15], synonyms [adorer «обожать» neutral; aimer bien «любить» neutral; triper «тащиться» fam; surkiffer «дико тащиться» arg]
+q «chelou» → fr "chelou", pos adj, slang_level arg, verlan true, note "верлан от louche", translations [стрёмный, подозрительный 70; странный 30], synonyms [bizarre «странный» neutral; louche «подозрительный» fam; zarbi «странный» arg]
+q «бабки» → fr "la thune", pos noun, gender f, slang_level arg, translations [бабки, деньги 100], synonyms [l'argent «деньги» neutral; le fric «бабки» fam; le blé «бабло» fam; l'oseille «бабло» fam; le flouze «бабло» arg]
+q «se casser» → fr "se casser", pos verb, slang_level fam, translations [свалить, смыться 60; сломаться 40]
 q «putain» → fr "putain", pos expression, slang_level vulg, translations [блин, чёрт (междометие) 85; шлюха 15], synonyms [zut «блин» neutral; merde «чёрт» vulg; bordel «чёрт возьми» vulg]`;
 
 /** /api/ai/context, call 1 (with web search): find real sentences that use the headword. */
