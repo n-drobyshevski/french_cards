@@ -43,6 +43,35 @@ describe("reviewKeyAction", () => {
     expect(reviewKeyAction(key("1", "Digit1", { ctrlKey: true }), back)).toBeNull();
     expect(reviewKeyAction(key(" ", "Space", { repeat: true }), front)).toBeNull();
   });
+
+  it("ignores dead keys and IME composition", () => {
+    expect(reviewKeyAction(key("Dead", "BracketLeft", { isComposing: true }), back)).toBeNull();
+    expect(reviewKeyAction(key("1", "Digit1", { keyCode: 229 }), back)).toBeNull();
+  });
+
+  it("turns Z off with single-letter shortcuts, keeping Space and digits", () => {
+    const off = { ...back, letters: false };
+    expect(reviewKeyAction(key("z", "KeyZ"), off)).toBeNull();
+    expect(reviewKeyAction(key("1", "Digit1"), off)).toEqual({ type: "grade", rating: 1 });
+    expect(reviewKeyAction(key(" ", "Space"), off)).toEqual({ type: "unflip" });
+  });
+
+  it("desktop: P starts extra practice on the done screen, Esc ends practice", () => {
+    const done = { ...front, desktop: true, done: true };
+    expect(reviewKeyAction(key("p", "KeyP"), done)).toEqual({ type: "practice" });
+    expect(reviewKeyAction(key("з", "KeyP"), done)).toEqual({ type: "practice" });
+    expect(reviewKeyAction(key("p", "KeyP"), { ...done, letters: false })).toBeNull();
+    expect(reviewKeyAction(key("p", "KeyP"), { ...front, desktop: true })).toBeNull();
+    expect(reviewKeyAction(key(" ", "Space"), done)).toBeNull();
+    expect(reviewKeyAction(key("z", "KeyZ"), done)).toEqual({ type: "undo" });
+
+    const practice = { ...back, desktop: true, practice: true };
+    expect(reviewKeyAction(key("Escape", "Escape"), practice)).toEqual({ type: "end-practice" });
+    expect(reviewKeyAction(key("Escape", "Escape"), { ...back, desktop: true })).toBeNull();
+    // Phones keep today's keys.
+    expect(reviewKeyAction(key("Escape", "Escape"), { ...back, practice: true })).toBeNull();
+    expect(reviewKeyAction(key("p", "KeyP"), { ...front, done: true })).toBeNull();
+  });
 });
 
 describe("targets", () => {
