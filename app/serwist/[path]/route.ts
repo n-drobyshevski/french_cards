@@ -20,6 +20,9 @@ const serwist = createSerwistRoute({
   swSrc: "app/sw.ts",
   useNativeEsbuild: true,
   additionalPrecacheEntries: [{ url: "/~offline", revision }],
+  // Everything in public/ is precached by default; sql.js's wasm (public/vendor/, ~700 KB) is only needed
+  // for the Anki import, so it is fetched when first used instead of on every install.
+  globIgnores: ["**/node_modules/**/*", "public/vendor/**/*"],
 });
 
 export const generateStaticParams = serwist.generateStaticParams;
