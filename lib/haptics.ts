@@ -8,15 +8,12 @@ export type HapticKind =
   /** A card was graded «Знаю» by swipe. */
   | "good"
   /** A card was graded «Не знаю» by swipe. */
-  | "again"
-  /** A card was flipped by swipe. */
-  | "flip";
+  | "again";
 
 export const VIBRATION_PATTERNS: Record<HapticKind, number | number[]> = {
   threshold: 8,
   good: 14,
   again: [12, 60, 12],
-  flip: 10,
 };
 
 let iosSwitch: HTMLLabelElement | null = null;

@@ -37,26 +37,19 @@ async function touchDrag(page: Page, selector: string, dx: number, dy: number) {
   await cdp.detach();
 }
 
-test("swiping the question card up flips it; a downward drag does not", async ({ page }) => {
+test("a tap on the question card flips it; a vertical swipe does not", async ({ page }) => {
   await openReview(page);
-  const front = page.getByRole("button", { name: /^Карточка .*, перевернуть$/ });
-  await expect(front).toBeVisible();
-
-  await touchDrag(page, "main button[aria-label^='Карточка']", 0, 120);
+  await touchDrag(page, "main button[aria-label^='Карточка']", 4, -160);
   await page.waitForTimeout(300);
   await expect(page.locator("[data-review-answer]")).toHaveCount(0);
 
-  await touchDrag(page, "main button[aria-label^='Карточка']", 4, -160);
+  await questionCard(page).tap();
   await expect(page.locator("[data-review-answer]")).toBeVisible();
-  await expect(page.getByRole("button", { name: /^Знаю/ })).toBeVisible();
-});
 
-test("a tap on the question card still flips it", async ({ page }) => {
-  await openReview(page);
-  await page.getByRole("button", { name: /^Карточка .*, перевернуть$/ }).tap();
+  await touchDrag(page, "[data-review-answer]", 4, 160);
+  await page.waitForTimeout(300);
   await expect(page.locator("[data-review-answer]")).toBeVisible();
 });
-
 test("swiping the answer card with a finger grades it: right = Знаю, left = Не знаю", async ({ page }) => {
   await openReview(page);
 
@@ -101,19 +94,7 @@ test("Space flips the card both ways", async ({ page }) => {
   await expect(questionCard(page)).toBeVisible();
 });
 
-test("swiping the answer down flips the card back to the question", async ({ page }) => {
-  await openReview(page);
-  await questionCard(page).tap();
-  await expect(page.locator("[data-review-answer]")).toBeVisible();
-
-  await touchDrag(page, "[data-review-answer]", 4, 160);
-  await expect(questionCard(page)).toBeVisible();
-  await expect(page.locator("[data-review-answer]")).toHaveCount(0);
-  await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
-  await expect(page).toHaveURL(/\/$/);
-});
-
-test("swipes vibrate: a tick at the threshold, then a pattern for the grade or flip", async ({ page }) => {
+test("grading swipes vibrate: a tick at the threshold, then one pulse for Знаю, two for Не знаю", async ({ page }) => {
   await page.addInitScript(() => {
     const calls: unknown[] = [];
     (window as unknown as { __vibrations: unknown[] }).__vibrations = calls;
@@ -122,15 +103,21 @@ test("swipes vibrate: a tick at the threshold, then a pattern for the grade or f
   const vibrations = () => page.evaluate(() => (window as unknown as { __vibrations: unknown[] }).__vibrations.slice());
   await openReview(page);
 
-  await touchDrag(page, "main button[aria-label^='Карточка']", 4, -160);
+  await questionCard(page).tap();
   await expect(page.locator("[data-review-answer]")).toBeVisible();
   await expect(page.locator("[data-review-answer]")).toHaveClass(/card-turn-up/);
-  expect(await vibrations()).toEqual([8, 10]);
+  expect(await vibrations()).toEqual([]);
 
   const first = await page.locator("[data-review-answer] h2").innerText();
   await touchSwipe(page, 1);
   await expect(page.getByText(`Знаю · ${first}`)).toBeVisible();
-  expect(await vibrations()).toEqual([8, 10, 8, 14]);
+  expect(await vibrations()).toEqual([8, 14]);
+
+  await questionCard(page).tap();
+  const second = await page.locator("[data-review-answer] h2").innerText();
+  await touchSwipe(page, -1);
+  await expect(page.getByText(`Не знаю · ${second}`)).toBeVisible();
+  expect(await vibrations()).toEqual([8, 14, 8, [12, 60, 12]]);
 
   // The flip and fly-out transforms must not widen the page: a mobile browser then widens its
   // layout viewport to fit (zooming out), which pushes the tab bar off screen.
@@ -148,7 +135,9 @@ test("no vibration when it is turned off in settings", async ({ page }) => {
   await page.getByRole("switch", { name: "Вибрация при свайпах" }).click();
   await expect(page.getByRole("switch", { name: "Вибрация при свайпах" })).not.toBeChecked();
   await openReview(page);
-  await touchDrag(page, "main button[aria-label^='Карточка']", 4, -160);
-  await expect(page.locator("[data-review-answer]")).toBeVisible();
+  await questionCard(page).tap();
+  const first = await page.locator("[data-review-answer] h2").innerText();
+  await touchSwipe(page, 1);
+  await expect(page.getByText(`Знаю · ${first}`)).toBeVisible();
   expect(await page.evaluate(() => (window as unknown as { __vibrations: unknown[] }).__vibrations.length)).toBe(0);
 });

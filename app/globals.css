@@ -85,8 +85,8 @@
 
 html {
   -webkit-tap-highlight-color: transparent;
-  /* Card swipes (sideways to grade, up/down to flip) must never trigger the browser's
-     back/forward gesture or pull-to-refresh. */
+  /* Sideways card swipes must never trigger the browser's back/forward gesture; no
+     pull-to-refresh either, so the installed app never reloads under a stray drag. */
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
 }
@@ -121,8 +121,8 @@ body {
   }
 }
 
-/* Card flip: the side that appears turns in over the horizontal axis, matching the swipe
-   (up to the answer, down back to the question). Disabled by prefers-reduced-motion below. */
+/* Card flip (tap): the side that appears turns in over the horizontal axis, up to the answer
+   and down back to the question. Disabled by prefers-reduced-motion below. */
 @keyframes card-turn-up {
   from {
     transform: perspective(1000px) rotateX(-45deg);

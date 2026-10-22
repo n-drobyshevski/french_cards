@@ -8,7 +8,7 @@ import type { Direction, Word } from "@/lib/types";
 import { posAbbr } from "./format";
 import type { SwipeOutcome } from "./swipe";
 import { swipeVisual } from "./swipe";
-import { useSwipe, useSwipeDown, useSwipeUp } from "./useSwipe";
+import { useSwipe } from "./useSwipe";
 
 /** Index-card shell: white, radius 6, 1px rule, the red header rule 44px from the top. */
 const cardShell = "flex flex-col overflow-hidden rounded-card border border-rule bg-surface text-ink";
@@ -48,7 +48,7 @@ export interface ReviewCardProps {
   hasNext: boolean;
 }
 
-/** The review card: question side (tap or swipe up to flip) or answer side (swipe sideways to grade, tap or swipe down to flip back). */
+/** The review card: question side (tap to flip) or answer side (swipe sideways to grade, tap to flip back). */
 export function ReviewCard({
   word,
   direction,
@@ -63,8 +63,6 @@ export function ReviewCard({
   hasNext,
 }: ReviewCardProps) {
   const swipe = useSwipe({ enabled: revealed && swipeEnabled, haptics, onDecide: onSwipe });
-  const swipeUp = useSwipeUp({ enabled: !revealed && swipeEnabled, haptics, onFlip: onReveal });
-  const swipeDown = useSwipeDown({ enabled: revealed && swipeEnabled, haptics, onFlipBack: onHide });
   const { dx, width, mode } = swipe.view;
   const visual = swipeVisual(dx, width || 1);
   const moving = mode !== "idle" || dx !== 0;
@@ -79,12 +77,7 @@ export function ReviewCard({
         transform: `translateX(${dx}px) rotate(${visual.rotate}deg)`,
         transition: mode === "dragging" ? "none" : "transform 180ms ease-out",
       }
-    : swipeDown.pull || swipeDown.settling
-      ? {
-          transform: `translateY(${swipeDown.pull}px)`,
-          transition: swipeDown.settling ? "transform 180ms ease-out" : "none",
-        }
-      : undefined;
+    : undefined;
 
   return (
     <div data-review-focus="" className="relative mt-4 flex min-h-[280px] flex-1 flex-col">
@@ -97,25 +90,13 @@ export function ReviewCard({
       {!revealed ? (
         <button
           type="button"
-          {...swipeUp.handlers}
-          onClick={() => {
-            if (!swipeUp.consumeClick()) onReveal();
-          }}
+          onClick={onReveal}
           aria-label={`Карточка ${prompt}, перевернуть`}
           aria-keyshortcuts="Space"
           data-review-reveal=""
-          style={
-            swipeUp.lift || swipeUp.settling
-              ? {
-                  transform: `translateY(${swipeUp.lift}px)`,
-                  transition: swipeUp.settling ? "transform 180ms ease-out" : "none",
-                }
-              : undefined
-          }
           className={cx(
             cardShell,
             "absolute inset-0 text-left",
-            swipeEnabled && "touch-none select-none",
             flip === "down" && "animate-[card-turn-down_220ms_ease-out]",
           )}
         >
@@ -135,13 +116,12 @@ export function ReviewCard({
           </span>
           <span className="mx-5 flex h-12 shrink-0 items-center gap-2 border-t border-rule text-[12px] text-muted">
             <Icon name="flip" size={14} />
-            <span>{swipeEnabled ? "тапни или смахни вверх" : "тапни, чтобы перевернуть"}</span>
+            <span>тапни, чтобы перевернуть</span>
           </span>
         </button>
       ) : (
         <article
           {...swipe.handlers}
-          {...swipeDown.handlers}
           onClick={() => {
             if (!swipe.consumeClick()) onHide();
           }}
@@ -163,7 +143,6 @@ export function ReviewCard({
           {/* The scroller needs pan-y too: touch-action is resolved up to the nearest scroll container,
               so without it the browser claims horizontal drags (back gesture) and cancels the swipe. */}
           <div
-            data-answer-scroll=""
             className={cx(
               "flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-6 pt-6 pb-4",
               swipeEnabled && "touch-pan-y",

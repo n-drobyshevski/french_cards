@@ -446,12 +446,12 @@ export function ReviewScreen() {
           {revealed && swipeEnabled && (
             <p aria-hidden="true" className="meta mt-4 mb-0 flex h-4 shrink-0 justify-between leading-4">
               <span>← {GRADE_LABELS[1]}</span>
-              <span>тап / ↓ — вопрос</span>
+              <span>тап — вопрос</span>
               <span>{GRADE_LABELS[3]} →</span>
             </p>
           )}
           {snackbar.render()}
-          {/* The question side flips by tap or swipe up, so only the answer side has a bottom bar. */}
+          {/* The question side flips by tap, so only the answer side has a bottom bar. */}
           {revealed && (
             <div ref={bottomBarRef} data-review-focus="" className="mt-4 shrink-0">
               <GradeBar buttons={gradeButtons} intervals={intervals} onGrade={(r) => void grade(r)} />

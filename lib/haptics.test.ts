@@ -15,7 +15,7 @@ describe("haptic", () => {
 
   it("does nothing (and does not throw) without any haptic support", () => {
     vi.stubGlobal("navigator", { userAgent: "Desktop", platform: "Linux", maxTouchPoints: 0 });
-    expect(() => haptic("flip")).not.toThrow();
+    expect(() => haptic("good")).not.toThrow();
   });
 
   it("swallows errors from the Vibration API", () => {
