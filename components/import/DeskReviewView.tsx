@@ -34,6 +34,7 @@ import {
   type ImportRow,
 } from "./rows";
 import { ReviewShotPane } from "./ShotPane";
+import { AnkiReviewPane } from "./AnkiViews";
 import { ThemeMenu } from "./ThemeMenu";
 
 type MenuTarget = { key: string | null; anchor: HTMLElement } | null;
@@ -117,7 +118,7 @@ function DeskRow({ row, folders, current, menuOpen, onFocusRow, onToggle, onEdit
           >
             {ru || "нет перевода"}
           </span>
-          {row.ruGuess && ru && !dup && <DeskTag title="Перевода не было на скриншоте">ДОГАДКА</DeskTag>}
+          {row.ruGuess && ru && !dup && <DeskTag title="Перевода не было — подобран автоматически">ДОГАДКА</DeskTag>}
           {/* The example the row will be saved with, as on phones; the row keeps its height. */}
           {row.exampleFr && !dup && (
             <span lang="fr" className="min-w-0 truncate font-serif text-[14px] leading-5 text-muted italic">
@@ -186,6 +187,7 @@ export function DeskReviewView({
   onAdd,
   onRestart,
   onPickOther,
+  deck,
 }: ReviewViewProps & { onPickOther: () => void }) {
   const keys = useFormatKeys();
   const mac = useIsMac();
@@ -201,7 +203,7 @@ export function DeskReviewView({
   const allChecked = allAddableChecked(rows);
   const anyAddable = rows.some(canAdd);
   const someChecked = selected > 0 && !allChecked;
-  const notice = incompleteNotice(incomplete);
+  const notice = incompleteNotice(incomplete, !!deck);
   const options = themeOptions(folders, proposals);
 
   const focusRow = useCallback((key: string) => {
@@ -298,7 +300,11 @@ export function DeskReviewView({
 
   return (
     <div data-wide="" className="flex h-dvh min-h-0 flex-none">
-      <ReviewShotPane thumbs={thumbs} tiles={tiles} onPickOther={onPickOther} />
+      {deck ? (
+        <AnkiReviewPane title={deck.title} line={deck.line} onPickOther={onPickOther} />
+      ) : (
+        <ReviewShotPane thumbs={thumbs} tiles={tiles} onPickOther={onPickOther} />
+      )}
 
       <div className="@container flex min-w-0 flex-1 flex-col">
         <main aria-labelledby="import-review-title" className="min-h-0 flex-1 overflow-y-auto overscroll-contain pt-5 pb-6">
@@ -324,7 +330,7 @@ export function DeskReviewView({
               <p className="m-0 min-w-0">{notice}</p>
               <button type="button" onClick={onRestart} className={deskButton("tertiary", "gap-1 underline decoration-1 underline-offset-[3px]")}>
                 <Icon name="spark" size={14} strokeWidth={1.5} className="shrink-0" />
-                Распознать заново
+                {deck ? "Дополнить заново" : "Распознать заново"}
               </button>
             </div>
           )}

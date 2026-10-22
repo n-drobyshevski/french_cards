@@ -104,3 +104,18 @@ export function DeskAlert({ children }: { children: ReactNode }) {
     </p>
   );
 }
+
+/**
+ * Phone or desktop variant of a view. Before hydration the layout is unknown, so both render and
+ * CSS shows one (no phone-screen flash on a desktop reload).
+ */
+export function byLayout(desk: boolean | null, phone: ReactNode, wide: ReactNode): ReactNode {
+  if (desk === true) return wide;
+  if (desk === false) return phone;
+  return (
+    <>
+      <div className="contents md:hidden">{phone}</div>
+      <div className="contents max-md:hidden">{wide}</div>
+    </>
+  );
+}

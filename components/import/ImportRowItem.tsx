@@ -135,7 +135,7 @@ export function ImportRowItem({ row, folders, onToggle, onEdit, onPickFolder }: 
       >
         {row.ru.trim() || "нет перевода"}
       </span>
-      {row.ruGuess && row.ru.trim() && <Tag title="Перевода не было на скриншоте">ДОГАДКА</Tag>}
+      {row.ruGuess && row.ru.trim() && <Tag title="Перевода не было — подобран автоматически">ДОГАДКА</Tag>}
     </span>
   );
 

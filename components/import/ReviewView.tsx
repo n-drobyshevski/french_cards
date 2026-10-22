@@ -25,6 +25,7 @@ import {
   type FolderChoice,
   type ImportRow,
 } from "./rows";
+import { AnkiReviewSummary } from "./AnkiViews";
 import { CrossfadeText } from "./SwapLabel";
 
 export interface ReviewViewProps {
@@ -42,6 +43,8 @@ export interface ReviewViewProps {
   onAdd: () => void;
   /** Start over with other screenshots. */
   onRestart: () => void;
+  /** Anki import: the deck replaces the screenshots above the rows. */
+  deck?: { title: string; line: string };
 }
 
 /** The screenshots at full width under the summary, opened from its thumbnail. */
@@ -81,7 +84,8 @@ export async function saveRowEdit(
 }
 
 /** Line shown above the rows when the stream did not finish. */
-export function incompleteNotice(incomplete: ReviewViewProps["incomplete"]): string | null {
+export function incompleteNotice(incomplete: ReviewViewProps["incomplete"], deck = false): string | null {
+  if (incomplete === "stopped" && deck) return "Дополнение остановлено — здесь то, что успели.";
   if (incomplete === "stopped") return "Распознавание остановлено — здесь то, что успели найти.";
   if (incomplete === "cut") return "Распознано не всё: связь прервалась.";
   return null;
@@ -100,6 +104,7 @@ export function ReviewView({
   saving,
   onAdd,
   onRestart,
+  deck,
 }: ReviewViewProps) {
   const [editing, setEditing] = useState<string | null>(null);
   const [picker, setPicker] = useState<PickerTarget>(null);
@@ -155,11 +160,17 @@ export function ReviewView({
 
       {/* The same top as while the words were read (I3): the list below keeps its place. */}
       <main className="flex flex-1 flex-col px-4 pt-2 pb-4">
-        <ShotSummary stage={stage} thumbs={thumbs} images={images} tiles={tiles} onThumb={() => setGallery((v) => !v)} thumbOpen={gallery} />
-        {gallery && <ScreenshotGallery thumbs={thumbs} />}
+        {deck ? (
+          <AnkiReviewSummary title={deck.title} line={incompleteNotice(incomplete, true) ?? deck.line} />
+        ) : (
+          <>
+            <ShotSummary stage={stage} thumbs={thumbs} images={images} tiles={tiles} onThumb={() => setGallery((v) => !v)} thumbOpen={gallery} />
+            {gallery && <ScreenshotGallery thumbs={thumbs} />}
+          </>
+        )}
 
         <div className="relative mt-3">
-          <StatusLine text={stage.status} active={false} announce={stage.announce} />
+          <StatusLine text={deck ? `Готово · ${wordsRu(rows.length)}` : stage.status} active={false} announce={deck ? undefined : stage.announce} />
           {incomplete && (
             <button
               type="button"
@@ -167,7 +178,7 @@ export function ReviewView({
               className="absolute top-0 right-0 inline-flex h-5 items-center gap-1 bg-paper p-0 pl-2 text-[13px] leading-5 font-medium text-ink underline decoration-1 underline-offset-[3px] before:absolute before:-inset-3 before:content-['']"
             >
               <Icon name="spark" size={14} strokeWidth={1.5} className="shrink-0" />
-              Распознать заново
+              {deck ? "Дополнить заново" : "Распознать заново"}
             </button>
           )}
         </div>

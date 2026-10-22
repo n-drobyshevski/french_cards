@@ -52,13 +52,27 @@ export async function addWord(input: NewWordInput, now: Date = new Date()): Prom
   return word;
 }
 
-/** Bulk add (screenshot/list import) in one transaction. Undo with `softDeleteWords(ids)`. */
-export async function addWords(inputs: readonly NewWordInput[], now: Date = new Date()): Promise<Word[]> {
+/**
+ * Bulk add (screenshot/list import) in one transaction. Undo with `softDeleteWords(ids)`.
+ * `statesFor` may hand in carried-over progress for a word (Anki import); its directions the
+ * word doesn't have are ignored and missing ones start fresh.
+ */
+export async function addWords(
+  inputs: readonly NewWordInput[],
+  now: Date = new Date(),
+  statesFor?: (word: Word, index: number) => readonly ReviewState[] | null,
+): Promise<Word[]> {
   const words = inputs.map((i) => buildWord(i, now));
   if (words.length === 0) return [];
   await db.transaction("rw", WRITE_TABLES(), async () => {
     await db.words.bulkPut(words);
-    const states = words.flatMap((w) => directionsOf(w).map((d) => newReviewState(w.id, d, now)));
+    const states = words.flatMap((w, i) => {
+      const carried = statesFor?.(w, i) ?? [];
+      return directionsOf(w).map((d) => {
+        const found = carried.find((s) => s.direction === d);
+        return found ? { ...found, id: reviewStateId(w.id, d), word_id: w.id, deleted_at: null } : newReviewState(w.id, d, now);
+      });
+    });
     await db.review_state.bulkPut(states);
   });
   return words;

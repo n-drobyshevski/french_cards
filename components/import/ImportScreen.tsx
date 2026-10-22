@@ -12,8 +12,12 @@ import { IMAGE_ACCEPT, ImagePrepError, MAX_TILES, partitionImages } from "@/lib/
 import { findDuplicates } from "@/lib/text";
 import type { Folder } from "@/lib/types";
 import { foldersForExtract, useExtract } from "@/lib/use-extract";
-import { commitImport, undoImport } from "./commit";
-import { useDeskLayout } from "./desk";
+import { noteStates } from "@/lib/anki/progress";
+import { ankiFileOf, ANKI_ACCEPT } from "./anki-files";
+import { ankiRows, deckTitle, frFirst, notesRu } from "./anki-plan";
+import { AnkiProgressView, AnkiSetupView } from "./AnkiViews";
+import { commitImport, undoImport, type CommitOptions } from "./commit";
+import { byLayout, useDeskLayout } from "./desk";
 import { DeskPickView } from "./DeskPickView";
 import { DeskProcessingView } from "./DeskProcessingView";
 import { DeskReviewView } from "./DeskReviewView";
@@ -22,6 +26,7 @@ import { ProcessingView } from "./ProcessingView";
 import { ReviewView } from "./ReviewView";
 import { buildRows, proposalsOf, wordsRu, type ImportRow } from "./rows";
 import { SharedImages } from "./SharedImages";
+import { useAnkiImport } from "./use-anki-import";
 
 const NO_FOLDERS: Folder[] = [];
 
@@ -44,20 +49,6 @@ function usePickedFiles() {
   return [picked, set] as const;
 }
 
-/**
- * Phone or desktop variant of a view. Before hydration the layout is unknown, so both render and
- * CSS shows one (no phone-screen flash on a desktop reload).
- */
-function byLayout(desk: boolean | null, phone: ReactNode, wide: ReactNode): ReactNode {
-  if (desk === true) return wide;
-  if (desk === false) return phone;
-  return (
-    <>
-      <div className="contents md:hidden">{phone}</div>
-      <div className="contents max-md:hidden">{wide}</div>
-    </>
-  );
-}
 
 /**
  * Screenshot import: pick/paste/drop/share → processing (rows stream in, «Стоп») → review
@@ -70,6 +61,13 @@ export function ImportScreen() {
   const snackbar = useSnackbar();
   const desk = useDeskLayout();
   const { state, start, stop, cancelRetry, reset } = useExtract();
+  const anki = useAnkiImport();
+  const ankiState = anki.state;
+  const ankiOn = ankiState.phase !== "idle";
+  // Stopped Anki enrichment: «Дальше с N словами» was pressed.
+  const [ankiProceed, setAnkiProceed] = useState(false);
+  const [ankiSkipped, setAnkiSkipped] = useState(0);
+  const ankiInput = useRef<HTMLInputElement>(null);
   const liveFolders = useLiveQuery(() => listFolders(), []);
   const folders = liveFolders ?? NO_FOLDERS;
   const [picked, setPicked] = usePickedFiles();
@@ -90,10 +88,23 @@ export function ImportScreen() {
     setRows(null);
     setReviewing(false);
     setProceed(false);
+    setAnkiProceed(false);
+    setAnkiSkipped(0);
   }, []);
 
   const begin = useCallback(
     async (chosen: File[]) => {
+      // A deck file (.apkg, Anki text export) goes to the Anki import.
+      const deckFile = ankiFileOf(chosen);
+      if (deckFile) {
+        reset();
+        clearRows();
+        setPickError(null);
+        setPicked([]);
+        void anki.open(deckFile);
+        return;
+      }
+      anki.reset();
       const { accepted, rejected } = partitionImages(chosen);
       if (accepted.length === 0) {
         setPickError(rejected.length > 0 ? new ImagePrepError("unsupported").message : null);
@@ -115,10 +126,23 @@ export function ImportScreen() {
       ]);
       await start(accepted, foldersForExtract(list), { model: settings.ai_model_extract, notes: settings.notes_enabled });
     },
-    [reset, start, setPicked, clearRows],
+    [reset, start, setPicked, clearRows, anki],
   );
 
   const choose = useCallback(() => input.current?.click(), []);
+  const chooseAnki = useCallback(() => ankiInput.current?.click(), []);
+  const restartAnki = () => {
+    clearRows();
+    void anki.start();
+  };
+
+  /** «240 карточек из Anki · пропущено 3 · прогресс переносится» */
+  function ankiLine(): string {
+    const parts = [`${notesRu(ankiState.total)} из Anki`];
+    if (ankiSkipped > 0) parts.push(`пропущено ${ankiSkipped}`);
+    if (ankiState.deck?.hasProgress) parts.push(ankiState.carry ? "прогресс переносится" : "прогресс с нуля");
+    return parts.join(" · ");
+  }
   const onFiles = useCallback((files: File[]) => void begin(files), [begin]);
 
   // A file dropped outside the pick view must not make the browser navigate to it.
@@ -136,10 +160,11 @@ export function ImportScreen() {
 
   const restart = useCallback(() => {
     reset();
+    anki.reset();
     clearRows();
     setPickError(null);
     setPicked([]);
-  }, [reset, setPicked, clearRows]);
+  }, [reset, anki, setPicked, clearRows]);
 
   // Rows are in (or the user goes on with what arrived before «Стоп»): look for words already in
   // the library, then show the review list.
@@ -168,6 +193,36 @@ export function ImportScreen() {
     };
   }, [finished, rows, state.items]);
 
+  // Anki notes are enriched (or the user goes on after «Стоп»): the same review list.
+  const ankiFinished = ankiState.items.length > 0 && (ankiState.phase === "done" || (ankiState.phase === "stopped" && ankiProceed));
+  useEffect(() => {
+    if (!ankiFinished || rows) return;
+    let cancelled = false;
+    const items = ankiState.items;
+    Promise.all([findDuplicates(items.map((i) => i.fr)), listFolders(), getSettings()])
+      .then(([dups, fs, settings]) => {
+        if (cancelled) return;
+        const built = ankiRows(items, fs, dups, {
+          autoSort: settings.auto_sort_enabled,
+          slang: settings.slang_detect_enabled,
+          examples: settings.examples_enabled,
+        });
+        setAnkiSkipped(built.skipped);
+        setRows(built.rows);
+        setReviewing(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        const built = ankiRows(items, foldersRef.current ?? [], new Map());
+        setAnkiSkipped(built.skipped);
+        setRows(built.rows);
+        setReviewing(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ankiFinished, rows, ankiState.items]);
+
   // Done: step 03 ✓ and the full bar hold --dur-done-hold, then the review replaces the stream row
   // for row (I3). After «Дальше» the user asked for it, so it comes at once.
   useEffect(() => {
@@ -176,14 +231,39 @@ export function ImportScreen() {
     return () => window.clearTimeout(timer);
   }, [rows, reviewing, state.phase]);
 
-  const proposals = useMemo(() => proposalsOf(state.items), [state.items]);
+  const proposals = useMemo(() => proposalsOf(ankiOn ? ankiState.items : state.items), [ankiOn, ankiState.items, state.items]);
+
+  /** Anki: source, deck tag and (when chosen) the carried-over progress of each row's note. */
+  const ankiCommit = (): CommitOptions | undefined => {
+    const deck = ankiState.deck;
+    if (!ankiOn || !deck) return undefined;
+    const notes = new Map(deck.notes.map((n) => [n.id, n]));
+    const items = new Map(ankiState.items.map((i) => [i.ref, i]));
+    const deckNames = new Map(deck.decks.map((d) => [d.id, d.name]));
+    const carry = ankiState.carry && deck.hasProgress;
+    return {
+      source: "import",
+      tags: (row) => {
+        const note = row.ref ? notes.get(row.ref) : undefined;
+        const name = note ? deckNames.get(note.deckId) : undefined;
+        return name ? ["anki", name] : ["anki"];
+      },
+      states: carry
+        ? (row, word) => {
+            const note = row.ref ? notes.get(row.ref) : undefined;
+            if (!note) return null;
+            return noteStates(note, deck.crt, word.id, frFirst(note, items.get(note.id)), new Date());
+          }
+        : undefined,
+    };
+  };
 
   const add = async () => {
     if (!rows || saving) return;
     setSaving(true);
     let result: Awaited<ReturnType<typeof commitImport>>;
     try {
-      result = await commitImport(rows);
+      result = await commitImport(rows, new Date(), ankiCommit());
     } catch (error) {
       setSaving(false);
       snackbar.show({ message: error instanceof Error && error.message ? error.message : "Не удалось добавить слова" });
@@ -224,17 +304,56 @@ export function ImportScreen() {
       thumbs: picked.urls,
       images: state.images,
       tiles: state.tiles,
-      incomplete: state.phase === "stopped" ? ("stopped" as const) : state.incomplete ? ("cut" as const) : null,
+      incomplete: ankiOn
+        ? ankiState.phase === "stopped"
+          ? ("stopped" as const)
+          : null
+        : state.phase === "stopped"
+          ? ("stopped" as const)
+          : state.incomplete
+            ? ("cut" as const)
+            : null,
       saving,
       onAdd: add,
-      onRestart: () => void begin(picked.files),
+      onRestart: ankiOn ? restartAnki : () => void begin(picked.files),
+      deck: ankiOn && ankiState.deck ? { title: deckTitle(ankiState.deck, ankiState.chosen), line: ankiLine() } : undefined,
     };
     view = byLayout(desk, <ReviewView {...props} />, <DeskReviewView {...props} onPickOther={restart} />);
+  } else if (ankiOn) {
+    const back = () => restart();
+    const pickOther = () => ankiInput.current?.click();
+    if (ankiState.phase === "reading" || ankiState.phase === "setup") {
+      const setup = (wide: boolean) => (
+        <AnkiSetupView
+          wide={wide}
+          state={ankiState}
+          onToggleDeck={anki.toggleDeck}
+          onCarry={anki.setCarry}
+          onStart={() => void anki.start()}
+          onPickOther={pickOther}
+          onBack={back}
+        />
+      );
+      view = byLayout(desk, setup(false), setup(true));
+    } else {
+      const progress = (wide: boolean) => (
+        <AnkiProgressView
+          wide={wide}
+          state={ankiState}
+          onStop={anki.stop}
+          onRetry={restartAnki}
+          onContinue={() => setAnkiProceed(true)}
+          onPickOther={pickOther}
+          onBack={back}
+        />
+      );
+      view = byLayout(desk, progress(false), progress(true));
+    }
   } else if (state.phase === "idle") {
     view = byLayout(
       desk,
-      <PickView onChoose={choose} onFiles={onFiles} error={pickError} />,
-      <DeskPickView onChoose={choose} onFiles={onFiles} error={pickError} />,
+      <PickView onChoose={choose} onFiles={onFiles} error={pickError} onAnki={chooseAnki} />,
+      <DeskPickView onChoose={choose} onFiles={onFiles} error={pickError} onAnki={chooseAnki} />,
     );
   } else {
     const props = {
@@ -264,6 +383,19 @@ export function ImportScreen() {
         type="file"
         accept={IMAGE_ACCEPT}
         multiple
+        tabIndex={-1}
+        aria-hidden="true"
+        className="sr-only"
+        onChange={(e) => {
+          const files = Array.from(e.target.files ?? []);
+          e.target.value = "";
+          if (files.length > 0) void begin(files);
+        }}
+      />
+      <input
+        ref={ankiInput}
+        type="file"
+        accept={ANKI_ACCEPT}
         tabIndex={-1}
         aria-hidden="true"
         className="sr-only"

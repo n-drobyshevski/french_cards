@@ -2,7 +2,7 @@
 // transaction, and returns what is needed to undo the whole import.
 import { createFolder, deleteFolder, listFolders } from "@/lib/folders";
 import { findDuplicates, normalizeLemma } from "@/lib/text";
-import type { Folder, Word } from "@/lib/types";
+import type { Folder, ReviewState, Word, WordSource } from "@/lib/types";
 import { addWords, softDeleteWords } from "@/lib/words";
 import { checkedRows, newFoldersNeeded, toWordInput, type FolderChoice, type ImportRow } from "./rows";
 
@@ -16,7 +16,20 @@ export interface ImportCommit {
 
 const sameName = (a: string, b: string) => a.trim().toLocaleLowerCase("ru") === b.trim().toLocaleLowerCase("ru");
 
-export async function commitImport(rows: readonly ImportRow[], now: Date = new Date()): Promise<ImportCommit> {
+export interface CommitOptions {
+  /** Saved as the words' source ("screenshot" by default). */
+  source?: WordSource;
+  /** Tags for a row's word, e.g. its Anki deck. */
+  tags?: (row: ImportRow) => string[] | undefined;
+  /** Carried-over review progress for a row's new word (e.g. from Anki); null = fresh cards. */
+  states?: (row: ImportRow, word: Word) => ReviewState[] | null;
+}
+
+export async function commitImport(
+  rows: readonly ImportRow[],
+  now: Date = new Date(),
+  { source, tags, states }: CommitOptions = {},
+): Promise<ImportCommit> {
   const chosen = checkedRows(rows);
   if (chosen.length === 0) return { words: [], createdFolders: [], skipped: 0 };
 
@@ -63,8 +76,9 @@ export async function commitImport(rows: readonly ImportRow[], now: Date = new D
 
   try {
     const words = await addWords(
-      fresh.map((r) => toWordInput(r, resolve(r.folder))),
+      fresh.map((r) => toWordInput(r, resolve(r.folder), { source, tags: tags?.(r) })),
       now,
+      states ? (word, i) => states(fresh[i], word) : undefined,
     );
     return { words, createdFolders: created, skipped: chosen.length - fresh.length };
   } catch (error) {

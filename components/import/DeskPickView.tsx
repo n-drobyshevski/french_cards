@@ -23,7 +23,7 @@ export function DeskImportHeading() {
 }
 
 /** Margin notes beside the tray (replace the phone's step list). */
-function MarginNotes() {
+function MarginNotes({ onAnki }: { onAnki?: () => void }) {
   const note = "m-0 font-serif text-[14px] leading-5 text-muted italic";
   return (
     <aside aria-label="Примечания" className="flex w-[280px] shrink-0 flex-col gap-4">
@@ -34,6 +34,14 @@ function MarginNotes() {
         Слова, которые уже есть в библиотеке, помечены <DeskTag>УЖЕ ЕСТЬ</DeskTag> и не отмечены.
       </p>
       <p className={note}>{IMPORT_FOOTNOTE}</p>
+      {onAnki && (
+        <div className="mt-2 flex flex-col items-start gap-2 border-t border-rule pt-4">
+          <p className="m-0 text-[13px] leading-5 text-muted">Колода Anki: .apkg или текстовый экспорт. Перевод, примеры и темы дополним.</p>
+          <button type="button" onClick={onAnki} className={deskButton("secondary")}>
+            Импорт из Anki
+          </button>
+        </div>
+      )}
     </aside>
   );
 }
@@ -42,7 +50,7 @@ function MarginNotes() {
  * Desktop import page, idle (D-Import-Drop): title, the file drop tray (dashed, a red dashed rule
  * 48px from the top; solid while files are dragged over the window) and margin notes.
  */
-export function DeskPickView({ onChoose, onFiles, error }: PickViewProps) {
+export function DeskPickView({ onChoose, onFiles, error, onAnki }: PickViewProps) {
   const dragging = useImageDropAndPaste(onFiles);
   const clipboard = useClipboardPaste(onFiles);
   const keys = useFormatKeys();
@@ -106,7 +114,7 @@ export function DeskPickView({ onChoose, onFiles, error }: PickViewProps) {
             )}
           </div>
         </section>
-        <MarginNotes />
+        <MarginNotes onAnki={onAnki} />
       </div>
     </main>
   );

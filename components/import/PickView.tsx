@@ -15,6 +15,8 @@ export interface PickViewProps {
   onFiles: (files: File[]) => void;
   /** Problem with the last selection (wrong type, too many). */
   error: string | null;
+  /** Opens the chooser for an Anki deck (.apkg or a text export). */
+  onAnki?: () => void;
 }
 
 /** Why the pick waits for the network (MOTION-SPEC B4): said up front, muted, not as an error. */
@@ -24,7 +26,7 @@ export const OFFLINE_REASON = "Распознавание работает то�
 export const CANT_CLASS = "disabled:border-rule disabled:bg-surface disabled:text-boundary disabled:opacity-100!";
 
 /** Start of the import: choose, paste or drop screenshots. */
-export function PickView({ onChoose, onFiles, error }: PickViewProps) {
+export function PickView({ onChoose, onFiles, error, onAnki }: PickViewProps) {
   const online = useOnline();
   const dragging = useImageDropAndPaste(onFiles);
   const { supported: clipboard, error: clipboardError, paste: pasteFromClipboard } = useClipboardPaste(onFiles);
@@ -71,6 +73,20 @@ export function PickView({ onChoose, onFiles, error }: PickViewProps) {
           )}
         </div>
         <p className="m-0 mt-4 text-center text-[12px] leading-4 text-muted">{IMPORT_FOOTNOTE}</p>
+        {onAnki && (
+          <button
+            type="button"
+            onClick={onAnki}
+            className="mt-6 flex min-h-11 w-full items-center gap-3 border-y border-rule bg-transparent py-2 text-left active:bg-surface-2"
+          >
+            <Icon name="cards" size={18} strokeWidth={1.5} className="shrink-0 text-ink" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-[15px] leading-5 text-ink">Колода Anki</span>
+              <span className="block text-[13px] leading-5 text-muted">.apkg или текстовый экспорт — недостающее дополним</span>
+            </span>
+            <Icon name="chevron-right" size={14} strokeWidth={2} className="shrink-0 text-muted" />
+          </button>
+        )}
       </main>
     </>
   );
