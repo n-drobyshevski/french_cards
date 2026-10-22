@@ -13,6 +13,8 @@ import {
 } from "react";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
+import { Collapse } from "@/components/ui/Collapse";
+import { StatusLine } from "@/components/ui/StatusLine";
 import { Icon } from "@/components/ui/Icons";
 import { Kbd } from "@/components/ui/Kbd";
 import { Segmented } from "@/components/ui/Segmented";
@@ -26,6 +28,8 @@ import type { AiErrorBody, SuggestLine, Suggestion } from "@/lib/ai/schemas";
 import { db } from "@/lib/db";
 import { listFolders } from "@/lib/folders";
 import { useFormatKeys } from "@/lib/key-names";
+import { spotlight } from "@/lib/motion";
+import { useDelayedFlag } from "@/lib/use-delayed-flag";
 import { formatDueIn, formatStability, wordStatus, type CardStatus } from "@/lib/scheduler";
 import { findDuplicate, normalizeLemma } from "@/lib/text";
 import type { Direction, Folder, ReviewLog, SlangLevel, Word } from "@/lib/types";
@@ -347,7 +351,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
   );
 
   return (
-    <div className="flex flex-col px-4 pb-4">
+    <div data-word-detail="" className="flex flex-col px-4 pb-4">
       {/* Card header: theme chip + close, above the red index-card rule */}
       <div className="flex h-11 shrink-0 items-center justify-between">
         <Chip dropdown onClick={() => setPickerOpen(true)} aria-label={`Тема: ${folder?.name ?? "Входящие"}, изменить`}>
@@ -415,7 +419,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             </h2>
             <IconButton icon="pencil" label="Изменить слово и перевод" className="-mr-3 text-muted" onClick={() => editor.start("entry")} />
           </div>
-          <div className="mt-2 flex h-5 items-center gap-2">
+          <div data-refresh="slang pos" className="mt-2 flex h-5 items-center gap-2">
             {abbr && (
               <>
                 <AbbrHint abbr={abbr} className="text-[15px] leading-5" />
@@ -426,7 +430,9 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             )}
             <SlangMeter level={w.slang_level} verlan={w.verlan} hints />
           </div>
-          <p className="m-0 mt-1 text-[18px] leading-6">{w.ru}</p>
+          <p data-refresh="ru" className="m-0 mt-1 text-[18px] leading-6">
+            {w.ru}
+          </p>
         </>
       )}
 
@@ -434,6 +440,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
       <div className="mt-6 flex flex-col">
         <SheetField
           label="Заметка"
+          refresh="note"
           editLabel="Изменить заметку"
           editing={editing === "note"}
           onEdit={() => editor.start("note")}
@@ -461,6 +468,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
         </SheetField>
         <SheetField
           label="Пример"
+          refresh="example"
           editLabel="Изменить пример"
           editing={editing === "example"}
           onEdit={() => editor.start("example")}
@@ -538,6 +546,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
 
 function SheetField({
   label,
+  refresh,
   editLabel,
   editing,
   onEdit,
@@ -545,6 +554,8 @@ function SheetField({
   children,
 }: {
   label: string;
+  /** Lit when «Обновить перевод и заметку» rewrites it (data-refresh). */
+  refresh?: DiffField;
   editLabel: string;
   editing: boolean;
   onEdit: () => void;
@@ -552,7 +563,7 @@ function SheetField({
   children: ReactNode;
 }) {
   return (
-    <div className="flex items-start gap-2 border-t border-rule py-3">
+    <div data-refresh={refresh} className="flex items-start gap-2 border-t border-rule py-3">
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="meta">{label}</span>
         {editing ? form : children}
@@ -646,7 +657,8 @@ function PaneContent({
   const folders = data.folders;
   const editor = useWordEditor(word, folders);
   const actions = useWordActions(word, folders, onClose);
-  const refresh = useRefresh(word);
+  const refreshAnchor = useRef<HTMLButtonElement>(null);
+  const refresh = useRefresh(word, refreshAnchor);
   const showUndo = useUndoSnackbar();
   const saveExamples = useExampleSaver(word);
   const [themeMenu, setThemeMenu] = useState<HTMLElement | null>(null);
@@ -769,13 +781,13 @@ function PaneContent({
   );
 
   const note = (
-    <div className="flex items-start gap-2">
+    <div data-refresh="note" className="flex items-start gap-2">
       <p className={cx("m-0 min-w-0 flex-1 text-[14px] leading-5 whitespace-pre-line", !w.note && "text-muted")}>{w.note || "Нет заметки"}</p>
       {!editing && pencil("Изменить заметку", () => editor.start("note"))}
     </div>
   );
   const example = (
-    <div className="flex items-start gap-2">
+    <div data-refresh="example" className="flex items-start gap-2">
       <ExampleList
         size="pane"
         card={w}
@@ -788,7 +800,7 @@ function PaneContent({
   );
 
   return (
-    <div className="flex flex-col">
+    <div data-word-detail="" className="flex flex-col">
       {/* Theme button + previous / next */}
       <div className="flex h-8 items-center justify-between gap-2">
         <button
@@ -820,7 +832,7 @@ function PaneContent({
         aria-labelledby={`${id}-head`}
         className="mt-4 flex flex-col rounded-[6px] border border-rule bg-surface focus-visible:outline-offset-2"
       >
-        <div className="flex h-10 items-center justify-between px-5">
+        <div data-refresh="slang" className="flex h-10 items-center justify-between px-5">
           <span className="font-mono text-[11px] text-muted tabular-nums">FR · {cardNumber(data.number ?? 1)}</span>
           <SlangMeter level={w.slang_level} verlan={false} />
         </div>
@@ -895,11 +907,13 @@ function PaneContent({
                 <span className="mt-1.5">{pencil("Изменить слово и перевод", () => editor.start("entry"), "E")}</span>
               </div>
               {grammar && (
-                <p lang="fr" className="abbr m-0 mt-1 text-[15px] leading-5">
+                <p lang="fr" data-refresh="pos slang" className="abbr m-0 mt-1 text-[15px] leading-5">
                   {grammar}
                 </p>
               )}
-              <p className="m-0 mt-2 text-[18px] leading-6 font-medium">{w.ru}</p>
+              <p data-refresh="ru" className="m-0 mt-2 text-[18px] leading-6 font-medium">
+                {w.ru}
+              </p>
               <RefreshResult refresh={refresh} />
             </>
           )}
@@ -1033,16 +1047,36 @@ function PaneContent({
 
       {/* Actions */}
       <div className="mt-5 flex flex-col items-start gap-1">
-        <button
-          type="button"
-          aria-busy={refresh.state.status === "loading" || undefined}
-          disabled={refresh.state.status === "loading"}
-          onClick={() => void refresh.run()}
-          className={cx(paneAction(coarse), "disabled:cursor-default")}
-        >
-          <Icon name="spark" size={16} strokeWidth={1.5} />
-          {refresh.state.status === "loading" ? "Подбираем…" : "Обновить перевод и заметку"}
-        </button>
+        {/* E1: «Подбираем…» at once (it always waits on the network), «Отмена» next to it for the
+            whole wait, the ink run under the row after 1.5 s. */}
+        <div className="flex items-center gap-4">
+          <button
+            ref={refreshAnchor}
+            type="button"
+            aria-busy={refresh.loading || undefined}
+            aria-disabled={refresh.loading || undefined}
+            onClick={() => !refresh.loading && void refresh.run()}
+            className={cx(paneAction(coarse), refresh.loading && "cursor-default")}
+          >
+            <Icon name="spark" size={16} strokeWidth={1.5} />
+            <span className="grid">
+              <span className={cx("col-start-1 row-start-1", refresh.loading && "invisible")}>Обновить перевод и заметку</span>
+              <span aria-hidden={!refresh.loading || undefined} className={cx("col-start-1 row-start-1", !refresh.loading && "invisible")}>
+                Подбираем…
+              </span>
+            </span>
+          </button>
+          {refresh.loading && (
+            <button
+              type="button"
+              onClick={refresh.cancel}
+              className={cx(paneAction(coarse), "animate-[fade-in_var(--dur-quick)_var(--ease-enter)] underline decoration-1 underline-offset-4")}
+            >
+              Отмена
+            </button>
+          )}
+        </div>
+        <RefreshWait refresh={refresh} className="w-full" />
         <div className="flex items-center gap-5">
           <button type="button" onClick={() => void actions.reset()} className={paneAction(coarse)}>
             Сбросить прогресс
@@ -1237,10 +1271,17 @@ async function fetchSuggestion(fr: string, signal: AbortSignal): Promise<Suggest
   return found[0] ?? null;
 }
 
-function useRefresh(word: Word | null) {
+/**
+ * `anchor`: any element inside the word's view; the accepted fields are found from it
+ * (`[data-word-detail] [data-refresh~=field]`) and lit.
+ */
+function useRefresh(word: Word | null, anchor: RefObject<HTMLElement | null>) {
   const showUndo = useUndoSnackbar();
   const [state, setState] = useState<RefreshState>({ status: "idle" });
   const abort = useRef<AbortController | null>(null);
+  // The diff just shown, kept while its block closes (Collapse).
+  const [kept, setKept] = useState<Extract<RefreshState, { status: "diff" }> | null>(null);
+  if (state.status === "diff" && kept !== state) setKept(state);
 
   useEffect(() => () => abort.current?.abort(), []);
 
@@ -1265,6 +1306,13 @@ function useRefresh(word: Word | null) {
     }
   };
 
+  /** «Отмена» (§3.9): stops the request at once; the word keeps its values. */
+  const cancel = () => {
+    abort.current?.abort();
+    abort.current = null;
+    setState({ status: "idle" });
+  };
+
   const accept = async () => {
     if (!word || state.status !== "diff") return;
     const chosen = state.rows.filter((r) => state.picked.includes(r.field));
@@ -1274,6 +1322,11 @@ function useRefresh(word: Word | null) {
     try {
       await updateWord(word.id, patch);
       setState({ status: "idle" });
+      // The rewritten fields are lit together, one region (§5.14).
+      const root = anchor.current?.closest("[data-word-detail]");
+      const lit = new Set<Element>();
+      for (const r of chosen) root?.querySelectorAll(`[data-refresh~="${r.field}"]`).forEach((el) => lit.add(el));
+      lit.forEach((el) => spotlight(el));
       showUndo({ message: "Перевод и заметка обновлены", undo: () => void updateWord(word.id, undo).catch(() => {}) });
     } catch (e) {
       setState({ status: "error", message: e instanceof Error ? e.message : "Не получилось сохранить" });
@@ -1285,80 +1338,113 @@ function useRefresh(word: Word | null) {
       s.status === "diff" ? { ...s, picked: s.picked.includes(field) ? s.picked.filter((f) => f !== field) : [...s.picked, field] } : s,
     );
 
-  return { state, run, accept, toggle, dismiss: () => setState({ status: "idle" }) };
+  return {
+    state,
+    loading: state.status === "loading",
+    /** The last diff, also while its block is closing. */
+    diff: state.status === "diff" ? state : kept,
+    run,
+    cancel,
+    accept,
+    toggle,
+    dismiss: () => setState({ status: "idle" }),
+  };
 }
 
 type Refresh = ReturnType<typeof useRefresh>;
 
-/** Sheet: the secondary button with the proposed changes in place of it. */
-function SheetRefresh({ word }: { word: Word }) {
-  const refresh = useRefresh(word);
-  const { state } = refresh;
+/** Waits over 1.5 s get the status line's ink run under the button row (E1); elapsed after 3 s. */
+const REFRESH_SLOW_MS = 1500;
 
-  if (state.status === "diff") {
-    const { rows, picked } = state;
-    return (
-      <section aria-label="Предлагаемые изменения" className="mt-6 rounded-card border border-ink">
-        <p className="meta m-0 border-b border-rule px-3 py-2">
-          <span className="font-medium text-ink">Предлагаемые изменения</span>
-        </p>
-        <ul className="m-0 list-none p-0">
-          {rows.map((r) => {
-            const on = picked.includes(r.field);
-            return (
-              <li key={r.field} className="border-b border-rule last:border-b-0">
-                <label className="flex cursor-pointer items-start gap-3 px-3 py-2.5">
-                  <input
-                    type="checkbox"
-                    checked={on}
-                    onChange={() => refresh.toggle(r.field)}
-                    className="mt-0.5 size-[18px] shrink-0 accent-[var(--ink)]"
-                  />
-                  <span className="flex min-w-0 flex-1 flex-col gap-1">
-                    <span className="meta">{r.label}</span>
-                    <span className="text-[14px] leading-5 text-muted line-through decoration-1">{r.before}</span>
-                    <span className="text-[15px] leading-[22px] text-ink">{r.after}</span>
-                  </span>
-                </label>
-              </li>
-            );
-          })}
-        </ul>
-        <div className="flex items-center gap-2 border-t border-rule p-3">
-          <Button size="md" disabled={picked.length === 0} onClick={() => void refresh.accept()} trailing={picked.length}>
-            Принять
-          </Button>
-          <Button variant="tertiary" size="md" onClick={refresh.dismiss}>
-            Оставить как есть
-          </Button>
-        </div>
-      </section>
-    );
-  }
+function RefreshWait({ refresh, className }: { refresh: Refresh; className?: string }) {
+  const slow = useDelayedFlag(refresh.loading, { delay: REFRESH_SLOW_MS, min: 0 });
+  return (
+    // The line is mounted (closed) for the whole wait, so its own 1.5 s ink-run delay ends as it opens.
+    <Collapse open={slow && refresh.loading} className={className}>
+      <StatusLine className="pt-2" text="Подбираем перевод и заметку" active={refresh.loading} />
+    </Collapse>
+  );
+}
+
+/** Sheet: the secondary button; the proposed changes open in place of it (Collapse). */
+function SheetRefresh({ word }: { word: Word }) {
+  const anchor = useRef<HTMLDivElement>(null);
+  const refresh = useRefresh(word, anchor);
+  const { state, diff } = refresh;
+  const showDiff = state.status === "diff";
 
   return (
-    <div className="mt-6 flex flex-col">
-      <Button
-        variant="secondary"
-        block
-        icon="spark"
-        pending={state.status === "loading"}
-        pendingLabel="Подбираем…"
-        pendingDelay={0}
-        onClick={() => void refresh.run()}
-      >
-        Обновить перевод и заметку
-      </Button>
-      {state.status === "error" && (
-        <p role="alert" className="m-0 mt-2 text-[13px] leading-5 text-again">
-          {state.message}
-        </p>
-      )}
-      {state.status === "same" && (
-        <p role="status" className="m-0 mt-2 text-[13px] leading-5 text-muted">
-          Перевод и заметка уже актуальны.
-        </p>
-      )}
+    <div ref={anchor} className="mt-6 flex flex-col">
+      <Collapse open={!showDiff}>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="secondary"
+            icon="spark"
+            className="min-w-0 flex-1"
+            pending={refresh.loading}
+            pendingLabel="Подбираем…"
+            pendingDelay={0}
+            onClick={() => void refresh.run()}
+          >
+            Обновить перевод и заметку
+          </Button>
+          {refresh.loading && (
+            <Button variant="tertiary" className="animate-[fade-in_var(--dur-quick)_var(--ease-enter)] px-3" onClick={refresh.cancel}>
+              Отмена
+            </Button>
+          )}
+        </div>
+        <RefreshWait refresh={refresh} />
+        {state.status === "error" && (
+          <p role="alert" className="m-0 mt-2 text-[13px] leading-5 text-again">
+            {state.message}
+          </p>
+        )}
+        {state.status === "same" && (
+          <p role="status" className="m-0 mt-2 text-[13px] leading-5 text-muted">
+            Перевод и заметка уже актуальны.
+          </p>
+        )}
+      </Collapse>
+      <Collapse open={showDiff} innerClassName="px-px pb-px">
+        {diff && (
+          <section aria-label="Предлагаемые изменения" className="rounded-card border border-ink">
+            <p className="meta m-0 border-b border-rule px-3 py-2">
+              <span className="font-medium text-ink">Предлагаемые изменения</span>
+            </p>
+            <ul className="m-0 list-none p-0">
+              {diff.rows.map((r) => {
+                const on = diff.picked.includes(r.field);
+                return (
+                  <li key={r.field} className="border-b border-rule last:border-b-0">
+                    <label className="flex cursor-pointer items-start gap-3 px-3 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        onChange={() => refresh.toggle(r.field)}
+                        className="mt-0.5 size-[18px] shrink-0 accent-[var(--ink)]"
+                      />
+                      <span className="flex min-w-0 flex-1 flex-col gap-1">
+                        <span className="meta">{r.label}</span>
+                        <span className="text-[14px] leading-5 text-muted line-through decoration-1">{r.before}</span>
+                        <span className="text-[15px] leading-[22px] text-ink">{r.after}</span>
+                      </span>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+            <div className="flex items-center gap-2 border-t border-rule p-3">
+              <Button size="md" disabled={diff.picked.length === 0} onClick={() => void refresh.accept()} trailing={diff.picked.length}>
+                Принять
+              </Button>
+              <Button variant="tertiary" size="md" onClick={refresh.dismiss}>
+                Оставить как есть
+              </Button>
+            </div>
+          </section>
+        )}
+      </Collapse>
     </div>
   );
 }
@@ -1368,9 +1454,9 @@ const ALL_FIELDS: { field: DiffField; label: string }[] = [
   { field: "note", label: "Заметка" },
 ];
 
-/** Pane: the proposed changes inside the card, under the translation (D-Library-Refresh). */
+/** Pane: the proposed changes open inside the card, under the translation (D-Library-Refresh, Collapse). */
 function RefreshResult({ refresh }: { refresh: Refresh }) {
-  const { state } = refresh;
+  const { state, diff } = refresh;
   if (state.status === "error" || state.status === "same") {
     return (
       <p role={state.status === "error" ? "alert" : "status"} className="m-0 mt-3 text-[13px] leading-5 text-muted">
@@ -1378,8 +1464,14 @@ function RefreshResult({ refresh }: { refresh: Refresh }) {
       </p>
     );
   }
-  if (state.status !== "diff") return null;
-  const { rows, picked } = state;
+  return (
+    <Collapse open={state.status === "diff"} innerClassName="px-px pb-px">
+      {diff && <RefreshDiff refresh={refresh} rows={diff.rows} picked={diff.picked} />}
+    </Collapse>
+  );
+}
+
+function RefreshDiff({ refresh, rows, picked }: { refresh: Refresh; rows: DiffRow[]; picked: DiffField[] }) {
   // «Перевод» and «Заметка» always show, «без изменений» when the same.
   const unchanged = ALL_FIELDS.filter((f) => !rows.some((r) => r.field === f.field));
   const n = picked.length;

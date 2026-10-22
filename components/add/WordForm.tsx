@@ -1,7 +1,8 @@
 "use client";
 
-import { useId, type KeyboardEvent, type Ref } from "react";
+import { useId, useRef, type KeyboardEvent, type Ref } from "react";
 import { ExampleList } from "@/components/examples/ExampleList";
+import { cx } from "@/components/ui/cx";
 import type { Folder } from "@/lib/types";
 import type { DuplicateInfo } from "./data";
 import type { DraftErrors, WordDraft } from "./draft";
@@ -14,7 +15,11 @@ import {
   FieldRow,
   FolderChips,
   HeadwordInput,
+  PendingDots,
   SlangPicker,
+  useFieldSpotlight,
+  type FieldSpot,
+  type FormDetection,
 } from "./parts";
 
 export interface WordFormProps {
@@ -29,12 +34,33 @@ export interface WordFormProps {
   onAddAnyway: () => void;
   /** Return in «Русский»: save like «Добавить». */
   onSubmit: () => void;
-  /** Slang level and example are being detected for a manual entry. */
-  enriching?: boolean;
+  /** Slang level, example and theme being detected for a manual entry (A6). */
+  detection?: FormDetection;
+  /** The fields a pick or a detection just filled: lit together (A5, A6). */
+  spot?: FieldSpot | null;
 }
 
 const isEnter = (e: KeyboardEvent<HTMLInputElement>) =>
   e.key === "Enter" && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey && !e.nativeEvent.isComposing;
+
+/** What detection shows in each field while it runs or after it failed; nothing for what the user set. */
+export function detectionStates(draft: WordDraft, detection: FormDetection | undefined) {
+  const d = detection;
+  const slang = !!d && d.slang && !draft.slang_touched;
+  const example = !!d && d.examples && !draft.example_touched && !draft.example_fr.trim();
+  const theme = !!d && d.themes && !draft.folder_touched && draft.auto === null;
+  return {
+    slangPending: slang && d.waiting,
+    slangFailed: slang && d.failed,
+    examplePending: example && d.waiting,
+    themePending: theme && d.waiting,
+    // One «не определилось»: on the level, or on the theme when the level is not detected.
+    themeFailed: theme && d.failed && !slang,
+  };
+}
+
+const EXAMPLE_FR =
+  "h-[46px] min-w-0 bg-transparent p-0 font-serif text-[17px] leading-6 text-ink italic outline-none! placeholder:font-sans placeholder:text-[15px] placeholder:not-italic";
 
 /** Add-Filled: the editable catalog card for a picked suggestion or manual entry. */
 export function WordForm({
@@ -48,18 +74,23 @@ export function WordForm({
   onOpenWord,
   onAddAnyway,
   onSubmit,
-  enriching = false,
+  detection,
+  spot,
 }: WordFormProps) {
   const ruId = useId();
   const frErrorId = useId();
   const ruErrorId = useId();
   const themeId = useId();
+  const root = useRef<HTMLDivElement>(null);
   const abbr = draft.fr.trim() ? posAbbr(draft) : null;
+  const states = detectionStates(draft, detection);
+  useFieldSpotlight(root, spot);
 
   return (
-    <div className="flex flex-col pb-6">
+    <div ref={root} className="flex flex-col pb-6">
       <HeadwordInput
         inputRef={frRef}
+        spot="fr"
         value={draft.fr}
         onValueChange={(fr) => onChange({ fr })}
         ariaLabel="Французский"
@@ -82,7 +113,7 @@ export function WordForm({
       {duplicate && <DuplicateNotice info={duplicate} onOpen={() => onOpenWord(duplicate.word.id)} onAddAnyway={onAddAnyway} />}
 
       <div className="mx-4 mt-2 flex flex-col">
-        <FieldRow label="Русский">
+        <FieldRow label="Русский" spot="ru">
           <input
             ref={ruRef}
             id={ruId}
@@ -104,7 +135,7 @@ export function WordForm({
           />
         </FieldRow>
         <FieldError id={ruErrorId}>{errors.ru}</FieldError>
-        <FieldRow label="Заметка" align="start">
+        <FieldRow label="Заметка" align="start" spot="note">
           <textarea
             rows={2}
             value={draft.note}
@@ -114,8 +145,8 @@ export function WordForm({
             className="min-h-[63px] min-w-0 flex-1 resize-none bg-transparent pt-3 pb-[11px] text-[14px] leading-5 text-ink outline-none! [field-sizing:content] placeholder:text-muted pointer-coarse:text-[16px]"
           />
         </FieldRow>
-        <FieldRow label="Пример" align="start">
-          <span className="flex min-w-0 flex-1 flex-col pb-1.5">
+        <FieldRow label="Пример" align="start" spot="example">
+          <span className="relative flex min-w-0 flex-1 flex-col pb-1.5">
             <ExampleList
               editable
               size="form"
@@ -131,9 +162,15 @@ export function WordForm({
                   ...(firstChanged && { example_touched: true, example_auto: change.kind === "retry" }),
                 });
               }}
-              frInputClass="h-[46px] min-w-0 bg-transparent p-0 font-serif text-[17px] leading-6 text-ink italic outline-none! placeholder:font-sans placeholder:text-[15px] placeholder:not-italic placeholder:text-muted"
+              frInputClass={cx(EXAMPLE_FR, states.examplePending ? "placeholder:text-transparent" : "placeholder:text-muted")}
               ruInputClass="-mt-1.5 h-8 min-w-0 bg-transparent p-0 text-[14px] leading-5 text-muted outline-none! placeholder:text-muted pointer-coarse:text-[16px]"
             />
+            {/* The example on its way: a mono «…» in the placeholder's slot (A6). */}
+            {states.examplePending && (
+              <span data-example-pending="" className="pointer-events-none absolute top-0 left-0 flex h-[46px] items-center">
+                <PendingDots />
+              </span>
+            )}
             {draft.example_auto && <span className="pb-1.5 text-[12px] leading-4 text-muted">подобран автоматически</span>}
           </span>
         </FieldRow>
@@ -143,14 +180,22 @@ export function WordForm({
         level={draft.slang_level}
         verlan={draft.verlan}
         auto={draft.slang_auto}
-        pending={enriching && !draft.slang_touched}
+        pending={states.slangPending}
+        failed={states.slangFailed}
         onChange={(next) => onChange({ ...next, slang_auto: false, slang_touched: true })}
       />
 
-      <div className="mx-4 mt-6">
-        <span id={themeId} className="meta block font-medium">
-          Тема
-        </span>
+      <div data-spot="theme" className="mx-4 mt-6">
+        <div className="flex items-baseline justify-between gap-3">
+          <span id={themeId} className="meta block font-medium">
+            Тема
+          </span>
+          {(states.themePending || states.themeFailed) && (
+            <span role="status" className="text-[12px] leading-4 text-muted">
+              {states.themePending ? "подбираем тему…" : "не определилась"}
+            </span>
+          )}
+        </div>
         <FolderChips
           labelledBy={themeId}
           value={draft.folder}

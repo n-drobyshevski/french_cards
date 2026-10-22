@@ -14,7 +14,8 @@ export interface SegmentedOption<T extends string | number> {
 
 export interface SegmentedProps<T extends string | number> {
   options: readonly SegmentedOption<T>[];
-  value: T;
+  /** null: nothing selected yet (e.g. a slang level still being detected); the first segment takes focus. */
+  value: T | null;
   onChange: (value: T) => void;
   /** Accessible group name (or use ariaLabelledby). */
   ariaLabel?: string;
@@ -44,10 +45,13 @@ export function Segmented<T extends string | number>({
   className,
 }: SegmentedProps<T>) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
-  const selectedIndex = Math.max(
-    0,
-    options.findIndex((o) => o.value === value),
-  );
+  const selectedIndex =
+    value === null
+      ? -1
+      : Math.max(
+          0,
+          options.findIndex((o) => o.value === value),
+        );
 
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
@@ -112,7 +116,7 @@ export function Segmented<T extends string | number>({
             aria-label={option.ariaLabel}
             lang={option.lang}
             disabled={option.disabled}
-            tabIndex={selected ? 0 : -1}
+            tabIndex={selected || (selectedIndex === -1 && i === 0) ? 0 : -1}
             onClick={() => onChange(option.value)}
             onKeyDown={(e) => onKeyDown(e, i)}
             className={cx(

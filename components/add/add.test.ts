@@ -1,7 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { EnrichResult, Suggestion } from "@/lib/ai/schemas";
 import { MANUAL_KEY, moveActive, resolveActive, variantKey } from "./combobox";
-import { applyEnrichment, draftFromSuggestion, draftToSaveRequest, enrichKey, enrichScope, manualDraft, validateDraft } from "./draft";
+import {
+  applyEnrichment,
+  draftFromSuggestion,
+  draftToSaveRequest,
+  enrichKey,
+  enrichScope,
+  filledByDetection,
+  filledByPick,
+  manualDraft,
+  validateDraft,
+} from "./draft";
 import { choiceKey, choiceName, folderSource, foldersForSuggestion, INBOX_CHOICE, listFolderChoices } from "./folder-choice";
 import { cardNumber, nWords, posAbbr, splitTypedPrefix } from "./match";
 import { parseWordList } from "./parse-list";
@@ -189,6 +199,23 @@ describe("applyEnrichment", () => {
       example_fr: "",
       example_ru: "",
     });
+  });
+
+  it("names the fields a pick or a detection filled (they are lit together)", () => {
+    expect(filledByPick(draftFromSuggestion(sug(), FOLDERS))).toEqual(["fr", "ru", "note", "example", "slang", "theme"]);
+    expect(filledByPick(draftFromSuggestion(sug({ note: null }), FOLDERS, { autoSort: false, slang: false, examples: false }))).toEqual([
+      "fr",
+      "ru",
+    ]);
+
+    const before = manualDraft({ fr: "la caisse", ru: "тачка" });
+    const withTheme = applyEnrichment(before, { ...result, folder: "dengi" }, FOLDERS);
+    expect(filledByDetection(before, withTheme)).toEqual(["slang", "example", "theme"]);
+    // The same answer again changes nothing, so nothing is lit.
+    expect(filledByDetection(withTheme, applyEnrichment(withTheme, { ...result, folder: "dengi" }, FOLDERS))).toEqual([]);
+    // What the user set stays, and is not lit.
+    const touched = { ...before, slang_touched: true, example_fr: "Ma caisse.", example_touched: true };
+    expect(filledByDetection(touched, applyEnrichment(touched, result))).toEqual([]);
   });
 
   it("replaces its own example when the word changes, and clears it when there is none", () => {

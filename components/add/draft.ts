@@ -3,7 +3,7 @@
 import type { EnrichResult, Suggestion } from "@/lib/ai/schemas";
 import { cleanExamples } from "@/lib/examples";
 import type { Confidence, Folder, Gender, PartOfSpeech, SlangLevel, WordSource } from "@/lib/types";
-import { folderSource, foldersForSuggestion, INBOX_CHOICE, type FolderChoice, type SuggestionFolders } from "./folder-choice";
+import { choiceKey, folderSource, foldersForSuggestion, INBOX_CHOICE, type FolderChoice, type SuggestionFolders } from "./folder-choice";
 import type { SaveRequest } from "./save";
 
 export interface WordDraft {
@@ -150,6 +150,28 @@ export function applyEnrichment(
     );
   }
   return next;
+}
+
+/** Form fields that can be lit by the spotlight; elements carry `data-spot="…"`. */
+export type SpotField = "fr" | "ru" | "note" | "example" | "slang" | "theme";
+
+/** What a picked suggestion filled in (A5): lit together when the form opens. */
+export function filledByPick(d: WordDraft): SpotField[] {
+  const fields: SpotField[] = ["fr", "ru"];
+  if (d.note.trim()) fields.push("note");
+  if (d.example_fr.trim()) fields.push("example");
+  if (d.slang_auto) fields.push("slang");
+  if (d.auto !== null) fields.push("theme");
+  return fields;
+}
+
+/** What a detection result changed in the draft (A6): those fields land with the spotlight. */
+export function filledByDetection(before: WordDraft, after: WordDraft): SpotField[] {
+  const fields: SpotField[] = [];
+  if (after.slang_auto && (!before.slang_auto || before.slang_level !== after.slang_level || before.verlan !== after.verlan)) fields.push("slang");
+  if (after.example_fr !== before.example_fr && after.example_fr.trim()) fields.push("example");
+  if (after.auto !== null && (before.auto === null || choiceKey(before.folder) !== choiceKey(after.folder))) fields.push("theme");
+  return fields;
 }
 
 export interface DraftErrors {

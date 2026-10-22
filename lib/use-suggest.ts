@@ -269,6 +269,16 @@ export class SuggestController {
     this.setQuery(this.snapshot.query, { immediate: true });
   };
 
+  /**
+   * The network went away (MOTION-SPEC B4): a wait that has not answered yet becomes the offline
+   * notice at once instead of running into a timeout; rows already shown stay.
+   */
+  goOffline = (): void => {
+    if (this.snapshot.status !== "loading") return;
+    this.abortPending();
+    this.set({ ...this.snapshot, status: "error", error: "offline", requesting: false });
+  };
+
   /** Stops the pending timer and the request in flight. */
   cancel = (): void => {
     this.abortPending();
@@ -295,6 +305,11 @@ export class SuggestController {
   }
 
   private async run(query: string, direction: SuggestDirection, kept: readonly Suggestion[]): Promise<void> {
+    // Offline is decided before the wait, also when the network went away during the debounce.
+    if (!this.isOnline()) {
+      this.set({ query, direction, results: [...kept], status: "error", error: "offline", requesting: false });
+      return;
+    }
     const controller = new AbortController();
     this.inflight = controller;
     const { signal } = controller;
@@ -368,7 +383,10 @@ export interface SuggestApi extends SuggestSnapshot {
   cancel: () => void;
 }
 
-/** Binds a SuggestController to the component. Retries automatically when the network comes back. */
+/**
+ * Binds a SuggestController to the component. Shows the offline notice as soon as the network goes
+ * and retries automatically when it comes back.
+ */
 export function useSuggest({ folders, enabled, preferences = DEFAULT_SUGGEST_PREFERENCES }: UseSuggestOptions): SuggestApi {
   const [controller] = useState(() => new SuggestController());
   const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
@@ -378,9 +396,12 @@ export function useSuggest({ folders, enabled, preferences = DEFAULT_SUGGEST_PRE
   useEffect(() => controller.setPreferences(preferences), [controller, preferences]);
   useEffect(() => {
     const online = () => controller.retry();
+    const offline = () => controller.goOffline();
     window.addEventListener("online", online);
+    window.addEventListener("offline", offline);
     return () => {
       window.removeEventListener("online", online);
+      window.removeEventListener("offline", offline);
       controller.cancel();
     };
   }, [controller]);
