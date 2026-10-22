@@ -42,11 +42,13 @@ export class BackupError extends Error {}
 export async function exportBackup(now: Date = new Date()): Promise<BackupFile> {
   return db.transaction("r", [...SYNC_TABLES.map((t) => db.table(t)), db.settings], async () => {
     const entries = await Promise.all(SYNC_TABLES.map(async (t) => [t, await db.table<Syncable>(t).toArray()] as const));
+    // Only the "settings" row: the "sync" row next to it is this device's sync bookkeeping.
+    const settings = await db.settings.get("settings");
     return {
       format: BACKUP_FORMAT,
       version: BACKUP_VERSION,
       exported_at: now.toISOString(),
-      tables: { ...(Object.fromEntries(entries) as { [T in SyncTable]: Syncable[] }), settings: await db.settings.toArray() },
+      tables: { ...(Object.fromEntries(entries) as { [T in SyncTable]: Syncable[] }), settings: settings ? [settings] : [] },
     };
   });
 }

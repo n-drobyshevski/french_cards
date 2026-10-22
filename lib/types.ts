@@ -146,8 +146,11 @@ export interface Settings {
    * `review_sets` table on upgrade (lib/db.ts) and in old backups; not written any more.
    */
   review_sets?: unknown[];
+  /**
+   * Sync bookkeeping as the first version kept it. lib/sync.ts now keeps both in its own "sync"
+   * row (SyncMeta) and reads these only until that row exists; not written any more.
+   */
   last_sync_at: string | null;
-  /** Pull cursors per synced table: the server `synced_at` of the last row received. Owned by lib/sync.ts. */
   sync_cursors?: Partial<Record<SyncTable, string>>;
 }
 
