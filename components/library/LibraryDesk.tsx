@@ -696,7 +696,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
   const rowMenuItem = rowMenu ? byId.get(rowMenu.id) : undefined;
 
   return (
-    <main data-wide="" style={{ height: "calc(100dvh - env(safe-area-inset-top))" }} className="flex min-h-0 w-full flex-none overflow-hidden">
+    <main data-wide="" style={{ height: "calc(100dvh - var(--safe-top))" }} className="flex min-h-0 w-full flex-none overflow-hidden">
       <Suspense fallback={null}>
         <LibraryParams onParams={onParams} />
       </Suspense>

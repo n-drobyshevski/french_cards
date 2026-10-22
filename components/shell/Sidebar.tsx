@@ -129,7 +129,7 @@ function SidebarView({ data, active }: { data: ShellData | undefined; active: Na
     <aside
       data-shell-nav=""
       aria-label="Разделы"
-      className="sticky top-0 hidden h-dvh w-[248px] shrink-0 flex-col overflow-y-auto overscroll-contain border-r border-rule bg-paper px-3 pt-[calc(16px+env(safe-area-inset-top))] pb-3 xl:flex"
+      className="sticky top-0 hidden h-dvh w-[248px] shrink-0 flex-col overflow-y-auto overscroll-contain border-r border-rule bg-paper px-3 pt-[calc(16px+var(--safe-top))] pb-3 xl:flex"
     >
       <div className="flex h-10 shrink-0 items-center px-2">
         <AppMark />

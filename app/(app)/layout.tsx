@@ -14,7 +14,7 @@ import { TabBar } from "@/components/ui/TabBar";
  */
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="mx-auto flex w-full max-w-[440px] flex-1 flex-col pt-[env(safe-area-inset-top)] pb-(--shell-bottom) [--shell-bottom:env(safe-area-inset-bottom)] max-md:[&:has([data-tabbar])]:[--shell-bottom:calc(61px+env(safe-area-inset-bottom))] md:max-w-none md:flex-row md:pt-0">
+    <div className="mx-auto flex w-full max-w-[440px] flex-1 flex-col pt-(--safe-top) pb-(--shell-bottom) [--shell-bottom:env(safe-area-inset-bottom)] max-md:[&:has([data-tabbar])]:[--shell-bottom:calc(61px+env(safe-area-inset-bottom))] md:max-w-none md:flex-row md:pt-0">
       <AppProviders>
         <AuthGate>
           <AppShell>{children}</AppShell>

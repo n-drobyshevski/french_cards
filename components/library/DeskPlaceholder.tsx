@@ -54,7 +54,7 @@ export function DeskPlaceholder({ title, scope = "all" }: { title: string; scope
       data-wide=""
       aria-busy="true"
       inert
-      style={{ height: "calc(100dvh - env(safe-area-inset-top))" }}
+      style={{ height: "calc(100dvh - var(--safe-top))" }}
       className="hidden min-h-0 w-full flex-none overflow-hidden md:flex"
     >
       <section aria-label={title} className="relative flex min-w-0 flex-1 flex-col min-[1600px]:max-w-[1148px]">
