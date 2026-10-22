@@ -549,6 +549,371 @@
    "title": "Повторение · карточка слова, «Вариант»",
    "is_interactive": true,
    "radius": 28
+  },
+  "Exercise-Tab-A.dc.html": {
+   "x": 0,
+   "y": 22960,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D1 · A — вместо Контекста, третья вкладка",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-Tab-B.dc.html": {
+   "x": 470,
+   "y": 22960,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D1 · B — вторая вкладка, рядом с Повторением",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-Tab-C.dc.html": {
+   "x": 940,
+   "y": 22960,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D1 · C — как A, плюс точка о новых наборах",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-Lib-A.dc.html": {
+   "x": 1410,
+   "y": 22960,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D2 · A — Контекст значком в шапке Библиотеки",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-Lib-B.dc.html": {
+   "x": 1880,
+   "y": 22960,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D2 · B — Контекст строкой под счётчиками, с недавними",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-Lib-C.dc.html": {
+   "x": 2350,
+   "y": 22960,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D2 · C — Контекст строкой в результатах поиска",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-List-A.dc.html": {
+   "x": 2820,
+   "y": 22960,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D3 · A — строки по группам",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-List-B.dc.html": {
+   "x": 3290,
+   "y": 22960,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D3 · B — плитки в две колонки",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-List-C.dc.html": {
+   "x": 3760,
+   "y": 22960,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D3 · C — «Следующее» над строками",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-Empty-A.dc.html": {
+   "x": 4230,
+   "y": 22960,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D7 · A — пусто, конструктор запроса",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-Empty-B.dc.html": {
+   "x": 4700,
+   "y": 22960,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D7 · B — шаги и готовые запросы",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-Empty-C.dc.html": {
+   "x": 5170,
+   "y": 22960,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D7 · C — одна строка и шторка",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-Commit-A.dc.html": {
+   "x": 0,
+   "y": 24304,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D4 · A — выбор, затем «Проверить»",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-Commit-B.dc.html": {
+   "x": 470,
+   "y": 24304,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D4 · B — тап проверяет, затем «Дальше»",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-Commit-C.dc.html": {
+   "x": 940,
+   "y": 24304,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D4 · C — тап и авто-переход",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-Options-A.dc.html": {
+   "x": 1410,
+   "y": 24304,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D6 · A — варианты списком",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-Options-B.dc.html": {
+   "x": 1880,
+   "y": 24304,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D6 · B — варианты сеткой 2×2",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-Feedback-A-Right.dc.html": {
+   "x": 2350,
+   "y": 24304,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D5 · A — белая панель с чертой, верно",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-Feedback-A-Wrong.dc.html": {
+   "x": 2820,
+   "y": 24304,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D5 · A — белая панель с чертой, неверно",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-Feedback-B-Right.dc.html": {
+   "x": 3290,
+   "y": 24304,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D5 · B — тонированная панель, верно",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-Feedback-B-Wrong.dc.html": {
+   "x": 3760,
+   "y": 24304,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D5 · B — тонированная панель, неверно",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-Feedback-C-Right.dc.html": {
+   "x": 4230,
+   "y": 24304,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D5 · C — штамп на карточке, верно",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-Feedback-C-Wrong.dc.html": {
+   "x": 4700,
+   "y": 24304,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · D5 · C — штамп на карточке, неверно",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-S-Choice.dc.html": {
+   "x": 0,
+   "y": 25648,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · вопрос · выбор — ситуация",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-S-Cloze.dc.html": {
+   "x": 470,
+   "y": 25648,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · вопрос · пропуск",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-S-Register.dc.html": {
+   "x": 940,
+   "y": 25648,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · вопрос · регистр",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-S-Pairs.dc.html": {
+   "x": 1410,
+   "y": 25648,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · вопрос · пары",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-S-NewWord.dc.html": {
+   "x": 1880,
+   "y": 25648,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · состояние · новое слово из веба",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-S-Requeue.dc.html": {
+   "x": 2350,
+   "y": 25648,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · состояние · повтор после ошибки",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-S-Done.dc.html": {
+   "x": 2820,
+   "y": 25648,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · состояние · готово",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-S-Resume.dc.html": {
+   "x": 3290,
+   "y": 25648,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · состояние · продолжить незаконченный",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-S-Waiting.dc.html": {
+   "x": 3760,
+   "y": 25648,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · состояние — ждём набор из чата",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-S-Offline.dc.html": {
+   "x": 4230,
+   "y": 25648,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · состояние — без сети",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-S-Request-Sheet.dc.html": {
+   "x": 4700,
+   "y": 25648,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · лист — попросить набор",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-S-Connector-Help.dc.html": {
+   "x": 5170,
+   "y": 25648,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · лист — как подключить коннектор",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-S-Context-Back.dc.html": {
+   "x": 5640,
+   "y": 25648,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · Контекст из Библиотеки — шапка с назад",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-S-Player-Dark.dc.html": {
+   "x": 6110,
+   "y": 25648,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · тёмная тема · неверный ответ",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "D-Exercise-List.dc.html": {
+   "x": 0,
+   "y": 26992,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Упражнения · список наборов",
+   "is_interactive": true
+  },
+  "D-Exercise-Player.dc.html": {
+   "x": 1520,
+   "y": 26992,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Упражнения · вопрос, неверный ответ",
+   "is_interactive": true
+  },
+  "D-Exercise-Done.dc.html": {
+   "x": 3040,
+   "y": 26992,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Упражнения · готово",
+   "is_interactive": true
+  },
+  "M-Exercise-Answer.dc.html": {
+   "x": 4560,
+   "y": 26992,
+   "w": 2190,
+   "h": 1044,
+   "title": "Упражнения · ответ и переход — движение",
+   "is_interactive": true
   }
  },
  "order": [
@@ -616,7 +981,48 @@
   "M-D-Library-Pane.dc.html",
   "M-D-Dialogs-Drop.dc.html",
   "Review-Edit.dc.html",
-  "Review-Edit-Sheet.dc.html"
+  "Review-Edit-Sheet.dc.html",
+  "Exercise-Tab-A.dc.html",
+  "Exercise-Tab-B.dc.html",
+  "Exercise-Tab-C.dc.html",
+  "Exercise-Lib-A.dc.html",
+  "Exercise-Lib-B.dc.html",
+  "Exercise-Lib-C.dc.html",
+  "Exercise-List-A.dc.html",
+  "Exercise-List-B.dc.html",
+  "Exercise-List-C.dc.html",
+  "Exercise-Empty-A.dc.html",
+  "Exercise-Empty-B.dc.html",
+  "Exercise-Empty-C.dc.html",
+  "Exercise-Commit-A.dc.html",
+  "Exercise-Commit-B.dc.html",
+  "Exercise-Commit-C.dc.html",
+  "Exercise-Options-A.dc.html",
+  "Exercise-Options-B.dc.html",
+  "Exercise-Feedback-A-Right.dc.html",
+  "Exercise-Feedback-A-Wrong.dc.html",
+  "Exercise-Feedback-B-Right.dc.html",
+  "Exercise-Feedback-B-Wrong.dc.html",
+  "Exercise-Feedback-C-Right.dc.html",
+  "Exercise-Feedback-C-Wrong.dc.html",
+  "Exercise-S-Choice.dc.html",
+  "Exercise-S-Cloze.dc.html",
+  "Exercise-S-Register.dc.html",
+  "Exercise-S-Pairs.dc.html",
+  "Exercise-S-NewWord.dc.html",
+  "Exercise-S-Requeue.dc.html",
+  "Exercise-S-Done.dc.html",
+  "Exercise-S-Resume.dc.html",
+  "Exercise-S-Waiting.dc.html",
+  "Exercise-S-Offline.dc.html",
+  "Exercise-S-Request-Sheet.dc.html",
+  "Exercise-S-Connector-Help.dc.html",
+  "Exercise-S-Context-Back.dc.html",
+  "Exercise-S-Player-Dark.dc.html",
+  "D-Exercise-List.dc.html",
+  "D-Exercise-Player.dc.html",
+  "D-Exercise-Done.dc.html",
+  "M-Exercise-Answer.dc.html"
  ],
  "notes": {
   "row1": {
@@ -737,6 +1143,34 @@
    "text": "17 · Повторение · правка карточки",
    "kind": "title1",
    "maxW": 860
+  },
+  "row18": {
+   "x": 0,
+   "y": 22710,
+   "text": "18 · Упражнения — вкладка, Контекст в библиотеке, список",
+   "kind": "title1",
+   "maxW": 5560
+  },
+  "row19": {
+   "x": 0,
+   "y": 24054,
+   "text": "19 · Упражнения — ответ: подтверждение, варианты, отклик",
+   "kind": "title1",
+   "maxW": 5090
+  },
+  "row20": {
+   "x": 0,
+   "y": 25398,
+   "text": "20 · Упражнения — типы вопросов и состояния",
+   "kind": "title1",
+   "maxW": 6500
+  },
+  "row21": {
+   "x": 0,
+   "y": 26742,
+   "text": "21 · Упражнения — десктоп и движение",
+   "kind": "title1",
+   "maxW": 6750
   }
  },
  "designSystems": []

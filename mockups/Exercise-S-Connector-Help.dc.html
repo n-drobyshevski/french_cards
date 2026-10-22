@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Упражнения · лист — как подключить коннектор</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#111111}a:hover{color:#c8331f}
+button{font:inherit}
+input,textarea{font:inherit}
+::placeholder{color:#5a5a57;opacity:1}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #f1f1ee; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif; display: flex; flex-direction: column">
+  <div aria-hidden="true" style="position: absolute; inset: 0; padding: 16px 16px 0; box-sizing: border-box; display: flex; flex-direction: column">
+    <header style="height: 44px; flex-shrink: 0; display: flex; align-items: center; gap: 12px">
+      <h1 style="margin: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 28px; line-height: 36px; letter-spacing: -0.01em">Упражнения</h1>
+      <div style="flex: 1"></div>
+      <a href="Exercise-S-Request-Sheet.dc.html" style="height: 36px; padding: 0 12px; display: inline-flex; align-items: center; box-sizing: border-box; border: 1px solid #111111; border-radius: 6px; background: #ffffff; color: #111111; text-decoration: none; font-size: 13px; font-weight: 500; white-space: nowrap">Попросить набор</a>
+    </header>
+    <p style="margin: 4px 0 0; flex-shrink: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57">5 наборов · составлены в чате</p>
+    <div style="flex-shrink: 0; margin-top: 20px; padding-bottom: 8px; border-bottom: 1px solid #111111; display: flex; align-items: baseline; justify-content: space-between; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57">
+      <span style="color: #111111; font-weight: 500">Новые</span>
+      <span>2</span>
+    </div>
+    <div style="height: 64px; flex-shrink: 0; box-sizing: border-box; display: flex; align-items: center; gap: 12px; color: #111111; text-decoration: none">
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <span style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Сленг на каждый день</span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">12 вопросов · Люди, Эмоции · из чата</span>
+      </span>
+      <span style="flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase">
+        <span style="color: #c8331f; font-weight: 500; line-height: 24px">Новый</span>
+        <span style="color: #5a5a57">22.10</span>
+      </span>
+    </div>
+    <div style="height: 64px; flex-shrink: 0; box-sizing: border-box; border-top: 1px solid #d6d6d1; display: flex; align-items: center; gap: 12px; color: #111111; text-decoration: none">
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <span style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Вечеринка</span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">12 вопросов · своя тема · 3 новых слова</span>
+      </span>
+      <span style="flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase">
+        <span style="color: #c8331f; font-weight: 500; line-height: 24px">Новый</span>
+        <span style="color: #5a5a57">22.10</span>
+      </span>
+    </div>
+    <div style="flex-shrink: 0; margin-top: 20px; padding-bottom: 8px; border-bottom: 1px solid #111111; display: flex; align-items: baseline; justify-content: space-between; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57">
+      <span style="color: #111111; font-weight: 500">Пройденные</span>
+      <span>3</span>
+    </div>
+    <div style="height: 64px; flex-shrink: 0; box-sizing: border-box; display: flex; align-items: center; gap: 12px; color: #111111; text-decoration: none">
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <span style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Верлан: основы</span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">8 вопросов · верлан</span>
+      </span>
+      <span style="flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase">
+        <span style="color: #111111; font-weight: 500; line-height: 24px">Прервано · 5/8</span>
+        <span style="color: #5a5a57">21.10</span>
+      </span>
+    </div>
+  </div>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 88px; background: #ffffff; border-top: 1px solid #d6d6d1"></div>
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(17,17,17,.4)"></div>
+  <section role="dialog" aria-modal="true" aria-label="Как подключить коннектор" style="position: absolute; left: 0; right: 0; top: 196px; bottom: 0; background: #f1f1ee; border-top: 1px solid #111111; border-radius: 12px 12px 0 0; display: flex; flex-direction: column; overflow: hidden">
+    <div aria-hidden="true" style="height: 20px; flex-shrink: 0; display: flex; align-items: center; justify-content: center"><span style="width: 36px; height: 4px; border-radius: 2px; background: #d6d6d1"></span></div>
+    <div style="height: 44px; flex-shrink: 0; padding: 0 4px 0 16px; display: flex; align-items: center; gap: 8px">
+      <h2 style="flex: 1; margin: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 22px; line-height: 28px; letter-spacing: -0.01em">Как подключить коннектор</h2>
+      <a href="Exercise-List-A.dc.html" aria-label="Закрыть" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #111111; text-decoration: none"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></a>
+    </div>
+
+    <div style="flex: 1; min-height: 0; overflow: hidden; padding: 0 16px 28px; display: flex; flex-direction: column">
+      <p style="margin: 0; font-size: 15px; line-height: 22px; color: #5a5a57">Наборы составляет Claude в чате. Для этого ему нужен коннектор «Карточки» — один раз.</p>
+      <ol style="margin: 14px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; border-bottom: 1px solid #d6d6d1">
+      <li style="display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 12px; padding: 14px 0; border-top: 1px solid #d6d6d1">
+        <span aria-hidden="true" style="width: 28px; height: 28px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid #111111; border-radius: 4px; background: #ffffff; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 500">1</span>
+        <div style="min-width: 0; display: flex; flex-direction: column; gap: 8px; padding-top: 3px">
+          <p style="margin: 0; font-size: 15px; line-height: 22px">Откройте настройки коннекторов</p>
+          <p style="margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 18px; color: #111111"><span>claude.ai</span><span aria-hidden="true" style="color: #8a8a85">›</span><span>Настройки</span><span aria-hidden="true" style="color: #8a8a85">›</span><span>Коннекторы</span><span aria-hidden="true" style="color: #8a8a85">›</span><span>Добавить свой</span></p>
+        </div>
+      </li>
+      <li style="display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 12px; padding: 14px 0; border-top: 1px solid #d6d6d1">
+        <span aria-hidden="true" style="width: 28px; height: 28px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid #111111; border-radius: 4px; background: #ffffff; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 500">2</span>
+        <div style="min-width: 0; display: flex; flex-direction: column; gap: 8px; padding-top: 3px">
+          <p style="margin: 0; font-size: 15px; line-height: 22px">Вставьте адрес коннектора</p>
+          <div style="height: 44px; box-sizing: border-box; padding: 0 12px; display: flex; align-items: center; gap: 8px; border: 1px dashed #8a8a85; border-radius: 4px; background: #ffffff; color: #5a5a57">
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="1"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+            <span style="flex: 1; min-width: 0; font-size: 13px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Адрес коннектора — у владельца</span>
+          </div>
+          <p style="margin: 0; font-size: 12px; line-height: 16px; color: #5a5a57">Адрес личный, как пароль. В приложении он не показывается.</p>
+        </div>
+      </li>
+      <li style="display: grid; grid-template-columns: 28px minmax(0, 1fr); column-gap: 12px; padding: 14px 0; border-top: 1px solid #d6d6d1">
+        <span aria-hidden="true" style="width: 28px; height: 28px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid #111111; border-radius: 4px; background: #ffffff; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 500">3</span>
+        <div style="min-width: 0; display: flex; flex-direction: column; gap: 8px; padding-top: 3px">
+          <p style="margin: 0; font-size: 15px; line-height: 22px">Проверьте в новом чате</p>
+          <div style="height: 44px; box-sizing: border-box; padding: 0 12px; display: flex; align-items: center; gap: 10px; border: 1px solid #d6d6d1; border-radius: 4px; background: #ffffff">
+            <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57">Инструменты</span>
+            <span style="flex: 1; min-width: 0; font-size: 15px; line-height: 20px; font-weight: 500">Карточки</span>
+            <span style="display: inline-flex; color: #1d6b45"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg></span>
+          </div>
+          <p style="margin: 0; font-size: 12px; line-height: 16px; color: #5a5a57">«Карточки» должны быть в списке инструментов чата.</p>
+        </div>
+      </li>
+      </ol>
+      <div role="note" style="margin-top: 14px; flex-shrink: 0; display: flex; align-items: flex-start; gap: 10px; color: #5a5a57">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex: none; margin-top: 2px"><path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 4v7h-7"></path></svg>
+        <p style="margin: 0; font-size: 13px; line-height: 20px">Набор приходит при следующей синхронизации — когда вы вернётесь в приложение.</p>
+      </div>
+      <div style="flex: 1; min-height: 12px"></div>
+      <a href="Exercise-S-Request-Sheet.dc.html" style="height: 52px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: #111111; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 500">Понятно</a>
+    </div>
+  </section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Упражнения · D7 · B — шаги и готовые запросы</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#111111}a:hover{color:#c8331f}
+button{font:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #f1f1ee; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif; display: flex; flex-direction: column">
+
+  <main style="flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 16px 104px; box-sizing: border-box">
+    <header style="height: 44px; flex-shrink: 0; display: flex; align-items: center; gap: 12px">
+      <h1 style="margin: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 28px; line-height: 36px; letter-spacing: -0.01em">Упражнения</h1>
+      <div style="flex: 1"></div>
+      <a href="Exercise-S-Request-Sheet.dc.html" style="height: 36px; padding: 0 12px; display: inline-flex; align-items: center; box-sizing: border-box; border: 1px solid #111111; border-radius: 6px; background: #ffffff; color: #111111; text-decoration: none; font-size: 13px; font-weight: 500; white-space: nowrap">Попросить набор</a>
+    </header>
+    <h2 style="margin: 20px 0 0; flex-shrink: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 22px; line-height: 28px">Упражнений пока нет</h2>
+    <p style="margin: 6px 0 0; flex-shrink: 0; font-size: 15px; line-height: 22px; color: #5a5a57">Наборы составляет Claude в чате. Это три шага.</p>
+    <ol style="margin: 12px 0 0; padding: 0; list-style: none; flex-shrink: 0; border-top: 1px solid #111111; border-bottom: 1px solid #d6d6d1">
+      <li style="min-height: 52px; box-sizing: border-box; border-top: 1px solid #d6d6d1; display: flex; align-items: center; gap: 12px; padding: 6px 0">
+        <span aria-hidden="true" style="flex: none; width: 28px; height: 28px; box-sizing: border-box; border: 1px solid #111111; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; font-weight: 500">1</span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+          <span style="font-size: 15px; font-weight: 500; line-height: 20px">Скопируйте запрос</span>
+          <span style="font-size: 12px; line-height: 16px; color: #5a5a57">Тапните по готовому ниже или соберите свой</span>
+        </span>
+      </li>
+      <li style="min-height: 52px; box-sizing: border-box; border-top: 1px solid #d6d6d1; display: flex; align-items: center; gap: 12px; padding: 6px 0">
+        <span aria-hidden="true" style="flex: none; width: 28px; height: 28px; box-sizing: border-box; border: 1px solid #111111; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; font-weight: 500">2</span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+          <span style="font-size: 15px; font-weight: 500; line-height: 20px">Вставьте в чат Claude</span>
+          <span style="font-size: 12px; line-height: 16px; color: #5a5a57">Нужен подключённый коннектор «Карточки»</span>
+        </span>
+      </li>
+      <li style="min-height: 52px; box-sizing: border-box; border-top: 1px solid #d6d6d1; display: flex; align-items: center; gap: 12px; padding: 6px 0">
+        <span aria-hidden="true" style="flex: none; width: 28px; height: 28px; box-sizing: border-box; border: 1px solid #111111; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; font-weight: 500">3</span>
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+          <span style="font-size: 15px; font-weight: 500; line-height: 20px">Вернитесь — набор появится здесь</span>
+          <span style="font-size: 12px; line-height: 16px; color: #5a5a57">Обычно через минуту, после синхронизации</span>
+        </span>
+      </li>
+    </ol>
+    <div style="flex-shrink: 0; margin-top: 20px; display: flex; align-items: baseline; justify-content: space-between; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57">
+      <span style="color: #111111; font-weight: 500">Готовые запросы</span>
+      <span>тап — скопировать</span>
+    </div>
+    <div style="flex-shrink: 0; margin-top: 8px; display: flex; flex-direction: column; gap: 8px">
+      <button type="button" aria-label="Скопировать запрос: По теме «Люди»" style="width: 100%; box-sizing: border-box; padding: 10px 4px 10px 14px; display: flex; align-items: center; gap: 8px; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; color: #111111; text-align: left; cursor: pointer">
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57; font-weight: 500">По теме «Люди»</span>
+          <span style="font-size: 14px; line-height: 20px">Сделай упражнение в Карточках по теме «Люди», 12 вопросов.</span>
+        </span>
+        <span style="flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #111111"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11" height="12" rx="1"></rect><path d="M15.5 8.5V4.5a1 1 0 0 0-1-1h-9a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h3"></path></svg></span>
+      </button>
+      <button type="button" aria-label="Скопировать запрос: По всем темам" style="width: 100%; box-sizing: border-box; padding: 10px 4px 10px 14px; display: flex; align-items: center; gap: 8px; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; color: #111111; text-align: left; cursor: pointer">
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57; font-weight: 500">По всем темам</span>
+          <span style="font-size: 14px; line-height: 20px">Сделай упражнение в Карточках по всем темам, 12 вопросов.</span>
+        </span>
+        <span style="flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #111111"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11" height="12" rx="1"></rect><path d="M15.5 8.5V4.5a1 1 0 0 0-1-1h-9a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h3"></path></svg></span>
+      </button>
+      <button type="button" aria-label="Скопировать запрос: На свою тему" style="width: 100%; box-sizing: border-box; padding: 10px 4px 10px 14px; display: flex; align-items: center; gap: 8px; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; color: #111111; text-align: left; cursor: pointer">
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57; font-weight: 500">На свою тему</span>
+          <span style="font-size: 14px; line-height: 20px">Сделай упражнение в Карточках на тему «вечеринка», 12 вопросов, можно новые слова.</span>
+        </span>
+        <span style="flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #111111"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11" height="12" rx="1"></rect><path d="M15.5 8.5V4.5a1 1 0 0 0-1-1h-9a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h3"></path></svg></span>
+      </button>
+      <button type="button" aria-label="Скопировать запрос: Работа над ошибками" style="width: 100%; box-sizing: border-box; padding: 10px 4px 10px 14px; display: flex; align-items: center; gap: 8px; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; color: #111111; text-align: left; cursor: pointer">
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px">
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57; font-weight: 500">Работа над ошибками</span>
+          <span style="font-size: 14px; line-height: 20px">Сделай в Карточках работу над ошибками за две недели.</span>
+        </span>
+        <span style="flex: none; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #111111"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="8.5" y="8.5" width="11" height="12" rx="1"></rect><path d="M15.5 8.5V4.5a1 1 0 0 0-1-1h-9a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h3"></path></svg></span>
+      </button>
+    </div>
+  </main>
+
+  <nav aria-label="Основная навигация" style="position: absolute; left: 0; right: 0; bottom: 0; height: 88px; box-sizing: border-box; padding-bottom: 28px; background: #ffffff; border-top: 1px solid #d6d6d1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr))">
+    <a href="Main.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; font-size: 12px; font-weight: 500; text-decoration: none">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="14" height="13" rx="1"></rect><path d="M3.5 11h14"></path><path d="M7 4.5h12.5a1 1 0 0 1 1 1V17"></path></svg>
+      <span>Повторение</span>
+    </a>
+    <a href="Add-Empty.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; font-size: 12px; font-weight: 500; text-decoration: none">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+      <span>Добавить</span>
+    </a>
+    <a href="Exercise-List-A.dc.html" aria-current="page" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #111111; font-size: 12px; font-weight: 600; text-decoration: none">
+      <span aria-hidden="true" style="position: absolute; top: -1px; left: 0; right: 0; height: 2px; background: #c8331f"></span>
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="1.5"></rect><path d="m7.5 9 1.5 1.5 3-3"></path><path d="M14 9h3"></path><path d="M7.5 15h2"></path><path d="M14 15h3"></path></svg>
+      <span>Упражнения</span>
+    </a>
+    <a href="Library.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; font-size: 12px; font-weight: 500; text-decoration: none">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="1"></rect><path d="M3.5 12h17"></path><path d="M10 8h4"></path><path d="M10 16h4"></path></svg>
+      <span>Библиотека</span>
+    </a>
+  </nav>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
