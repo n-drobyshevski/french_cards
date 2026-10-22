@@ -333,12 +333,12 @@ const Row = memo(function Row({ item, index, leaving, returning, columns, curren
   const dueText = (
     <span className={cx("flex min-w-0 items-baseline justify-end gap-1.5 whitespace-nowrap", hoverActions && "pointer-fine:group-hover/row:hidden")}>
       {columns.dueCompact ? (
-        <span title={difficult ? "трудное" : undefined} className={cx("font-mono text-[12px] tabular-nums", schedule.tone === "later" ? "text-muted" : "font-medium text-ink")}>
+        <span title={difficult ? "трудное" : undefined} className={cx("font-mono text-[12px] tabular-nums", schedule.tone === "later" || schedule.tone === "paused" ? "text-muted" : "font-medium text-ink")}>
           {schedule.dueLabel.replace(/^через /, "")}
         </span>
       ) : (
         <>
-          <span className={cx("text-[13px] tabular-nums", schedule.tone === "later" ? "text-muted" : "font-medium text-ink")}>{schedule.dueLabel}</span>
+          <span className={cx("text-[13px] tabular-nums", schedule.tone === "later" || schedule.tone === "paused" ? "text-muted" : "font-medium text-ink")}>{schedule.dueLabel}</span>
           {difficult && <span className="font-serif text-[13px] text-muted italic">трудн.</span>}
         </>
       )}

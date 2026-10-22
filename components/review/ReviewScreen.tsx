@@ -22,7 +22,7 @@ import { listReviewSets, setIdOf, setSessionFilter } from "@/lib/review-sets";
 import { getSettings } from "@/lib/settings";
 import { useDelayedFlag } from "@/lib/use-delayed-flag";
 import { useLayoutClass } from "@/lib/use-media";
-import { getLastReview, getWord, gradeCard, undoLastReview } from "@/lib/words";
+import { getLastReview, getWord, gradeCard, restoreWords, softDeleteWords, undoLastReview, updateWord } from "@/lib/words";
 import { returnSide, type CardArrival, type CardExit, type ReturnSide } from "./card-motion";
 import { loadDoneScreen, loadReviewScreen, type ReviewScreenData } from "./data";
 import { EmptyFolder, EmptyLibrary } from "./EmptyStates";
@@ -479,6 +479,46 @@ export function ReviewScreen() {
     })();
     return "done";
   };
+  /**
+   * «На паузу» / «Удалить слово» on the answer side: the word leaves review (and the practice round,
+   * history included, so an undone grade cannot bring it back); the next card takes its place and
+   * the snackbar offers «Отменить».
+   */
+  const takeOut = (kind: "mute" | "delete") => {
+    if (!current || busy.current || holding) return;
+    const { id, fr } = current.word;
+    busy.current = true;
+    void (async () => {
+      try {
+        if (kind === "delete") await softDeleteWords([id]);
+        else await updateWord(id, { muted: true });
+        setPinned(null);
+        setInstance((n) => n + 1);
+        if (practice) {
+          const keep = (q: QueueItem[]) => q.filter((i) => i.word.id !== id);
+          const rest = keep(practice.queue);
+          setPractice(rest.length ? { ...practice, queue: rest, history: practice.history.map((h) => ({ ...h, queue: keep(h.queue) })) } : null);
+        }
+        snackbar.show({
+          message: (
+            <>
+              {kind === "delete" ? "Удалено" : "На паузе"} ·{" "}
+              <span lang="fr" className="font-serif text-[16px] italic">
+                {fr}
+              </span>
+            </>
+          ),
+          actionLabel: "Отменить",
+          onAction: () => void (kind === "delete" ? restoreWords([id]) : updateWord(id, { muted: false })).catch(() => {}),
+        });
+      } catch (error) {
+        snackbar.show({ message: errorText(error) });
+      } finally {
+        busy.current = false;
+      }
+    })();
+  };
+
   // The flash below commits after --dur-flash, with the screen as it is then.
   const commitLatest = useRef(commitGrade);
   useLayoutEffect(() => {
@@ -813,6 +853,8 @@ export function ReviewScreen() {
                   onEdit={() => {
                     if (!holding) setEditId(card.word.id);
                   }}
+                  onMute={() => takeOut("mute")}
+                  onDelete={() => takeOut("delete")}
                 />
               )}
               {leaving.map((l) => (

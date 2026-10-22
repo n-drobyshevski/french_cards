@@ -5,7 +5,7 @@ import { matchesSlang, type SlangKey } from "./SlangFilter";
 import { DEFAULT_SORT, sortWords } from "./table";
 import type { LibraryWord } from "./useLibraryWords";
 
-export type StatusFilter = "all" | "due" | "difficult" | "new";
+export type StatusFilter = "all" | "due" | "difficult" | "new" | "paused";
 
 /** "all", "inbox" («Входящие») or a folder id. */
 export type ThemeFilter = string;
@@ -38,7 +38,7 @@ export function narrows(filter: PhoneFilter): boolean {
 /** Badge on the filter button: what the sheet changed that the ledger strip does not show. */
 export function sheetFilterCount(filter: PhoneFilter): number {
   return (
-    Number(filter.status === "new") +
+    Number(filter.status === "new" || filter.status === "paused") +
     Number(filter.slang.length > 0) +
     Number(filter.theme !== ALL_THEMES) +
     Number(filter.order !== DEFAULT_PHONE_FILTER.order)
@@ -50,9 +50,11 @@ function matchesStatus(item: LibraryWord, status: StatusFilter): boolean {
     case "due":
       return item.schedule.due;
     case "difficult":
-      return item.schedule.status === "difficult";
+      return item.schedule.status === "difficult" && !item.word.muted;
     case "new":
       return item.schedule.tone === "new";
+    case "paused":
+      return !!item.word.muted;
     default:
       return true;
   }

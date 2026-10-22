@@ -22,6 +22,7 @@ export interface LibraryFilterCounts {
   due?: number;
   difficult?: number;
   fresh?: number;
+  paused?: number;
 }
 
 export interface LibraryFilterSheetProps {
@@ -74,6 +75,8 @@ export function LibraryFilterSheet({ open, onOpenChange, value, onChange, folder
     { key: "due", label: "К повторению", count: counts.due },
     { key: "difficult", label: "Трудные", count: counts.difficult },
     { key: "new", label: "Новые", count: counts.fresh },
+    // Only once some word is «на паузе» (or the filter is on).
+    ...(counts.paused || value.status === "paused" ? [{ key: "paused" as const, label: "На паузе", count: counts.paused }] : []),
   ];
   const themes = [
     { key: ALL_THEMES, label: "Все темы" },

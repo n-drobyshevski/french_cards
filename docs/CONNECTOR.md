@@ -35,7 +35,7 @@ An optional skill (`claude/skills/kartochki/`) teaches Claude the card conventio
 | `restore_field` | write | Brings a deleted field back by id. |
 | `study_summary` | read | Cards due today, new cards left, reviews done, words by status, words due soonest. |
 | `add_words` | write | 1–50 words with every field, custom fields included; skips duplicates by lemma (`on_duplicate: "add"` overrides); `folder_chosen_by_user` (per call, or per word) decides `folder_source`. Returns the ids for undo. |
-| `update_word` | write | Patches one word's text, example, note, tags, part of speech, level, verlan, custom fields, `origin` or a verb's `conjugation`; `both_directions` adds or removes the RU→FR card. |
+| `update_word` | write | Patches one word's text, example, note, tags, part of speech, level, verlan, custom fields, `origin`, a verb's `conjugation` or `muted` («на паузе»); `both_directions` adds or removes the RU→FR card. |
 | `move_words` | write | Moves words to a theme or `inbox`. `mode: "auto"` skips words placed by hand and words in locked themes. Returns an `undo` list for `restore_moves`. |
 | `restore_moves` | write | Undoes `move_words` exactly: theme, and whether automatic sorting may move the word again. |
 | `delete_words` | write | Soft-deletes words and their cards. |
@@ -59,6 +59,11 @@ The shared definitions are edited in the app (Settings → «Свои поля»
 - **Output:** words carry `origin` when they have one; verbs carry the saved `conjugation` (same flat shape) or `conjugation_builtin` (true when the app conjugates the verb itself from Lexique, false when it cannot, so Claude knows which ones to fill).
 - **Storage:** `words.origin` (text) and `words.conjugation` (jsonb, `{auxiliary, remark, tenses: {present…}}`), migration `0008_word_origin_conjugation.sql`, synced like the other word columns. The app shows them in «Контекст» (they win over the lookup's origin line and the built-in conjugation) and the origin under the translation in the word card.
 
+### «На паузе»
+- `update_word` `patch.muted`: `true` keeps the word in the library but takes it out of every review and practice round (the review card's mute button does the same); `false` brings it back with its progress.
+- **Output:** such words carry `muted: true`; their `due_today` is false and `study_summary` leaves them out of the due and new counts.
+- **Storage:** `words.muted` (boolean, default false), migration `0009_word_muted.sql`, synced like the other word columns.
+
 ## Setup
 
 1. Generate a secret:
@@ -72,7 +77,7 @@ The shared definitions are edited in the app (Settings → «Свои поля»
    - `MCP_TIMEZONE` (optional): your IANA time zone, for example `Europe/Moscow`. The default is `Europe/Paris`.
 
    Then redeploy.
-   Apply `supabase/migrations/0005_connector_grants.sql`, `0006_custom_fields.sql`, `0007_connector_field_writes.sql` and `0008_word_origin_conjugation.sql` if you haven't (README, step 1).
+   Apply `supabase/migrations/0005_connector_grants.sql`, `0006_custom_fields.sql`, `0007_connector_field_writes.sql`, `0008_word_origin_conjugation.sql` and `0009_word_muted.sql` if you haven't (README, step 1).
 3. Check the endpoint. A wrong key must give `404`, with no redirect:
    ```sh
    curl -s -o /dev/null -w "%{http_code}\n" -X POST https://frenchcards.vercel.app/api/mcp/wrong

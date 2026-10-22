@@ -64,6 +64,7 @@ export function WordRowContent({ item, showFolder, struck = false }: { item: Lib
             schedule.tone === "due" && "font-medium text-red",
             schedule.tone === "new" && "font-medium text-ink",
             schedule.tone === "later" && "text-muted",
+            schedule.tone === "paused" && "text-muted",
           )}
         >
           {schedule.dueLabel}
@@ -79,6 +80,7 @@ export function rowLabel(item: LibraryWord, showFolder?: boolean): string {
   const parts = [`${word.fr} — ${word.ru}`, slangAbbr(word.slang_level, word.verlan), STATUS_LABELS[schedule.status]];
   if (schedule.tone === "due") parts.push("к повторению");
   else if (schedule.tone === "later") parts.push(`следующий показ ${schedule.dueLabel}`);
+  else if (schedule.tone === "paused") parts.push("на паузе");
   if (showFolder) parts.push(`тема: ${item.folder?.name ?? "Входящие"}`);
   return parts.join(", ");
 }

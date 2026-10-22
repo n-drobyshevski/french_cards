@@ -38,6 +38,7 @@ export function buildWord(input: NewWordInput, now: Date): Word {
     custom_fields: cleanCustomFields(input.custom_fields),
     origin: cleanOrigin(input.origin),
     conjugation: cleanConjugation(input.conjugation),
+    muted: input.muted ?? false,
     pos: input.pos ?? "other",
     gender: input.gender ?? "none",
     slang_level: input.slang_level ?? 0,

@@ -240,6 +240,8 @@ function PhoneLibrary() {
         ? "Трудных слов нет."
         : filter.status === "new"
           ? "Новых слов нет."
+          : filter.status === "paused"
+            ? "Слов на паузе нет."
           : filter.slang.length > 0
             ? "С таким уровнем сленга слов нет."
             : "В этой теме таких слов нет.";
@@ -447,7 +449,7 @@ function PhoneLibrary() {
         value={filter}
         onChange={setFilter}
         folders={stats?.folders ?? []}
-        counts={{ due: totals?.due, difficult: totals?.difficult, fresh: totals?.fresh }}
+        counts={{ due: totals?.due, difficult: totals?.difficult, fresh: totals?.fresh, paused: totals?.paused }}
         resultCount={results ? results.length : null}
         onShow={() => {
           if (!filtered) setView("words");

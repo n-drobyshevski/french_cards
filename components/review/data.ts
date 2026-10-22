@@ -70,7 +70,7 @@ export async function loadDoneScreen(filter: SessionFilter, now: Date = new Date
   const dayEnd = endOfStudyDay(now).toISOString();
   const loading = loadSessionData();
   const [pre, summary] = await Promise.all([loading, getDaySummary(filter, now, loading)]);
-  const ids = new Set(wordsMatching(filter, pre).map((w) => w.id));
+  const ids = new Set(wordsMatching(filter, pre).filter((w) => !w.muted).map((w) => w.id));
   let nextDue: string | null = null;
   for (const s of pre.states) {
     if (s.state === 0 || s.due < dayEnd) continue;

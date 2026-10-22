@@ -794,6 +794,20 @@ describe("study_summary", () => {
   });
 });
 
+describe("muted («на паузе»)", () => {
+  it("update_word mutes and unmutes; search shows it and the word is never due", async () => {
+    const fake = createFakeRepo({ words: [word("w1", "relou", "занудный")], review_state: cards("w1", false).map((s) => ({ ...s, state: 2 as const, due: OLD.toISOString() })) });
+    expect((await ok(searchWords, fake, { query: "relou" })).words[0]).toMatchObject({ due_today: true });
+    await ok(updateWord, fake, { id: "w1", patch: { muted: true } });
+    expect(fake.tables.words.get("w1")).toMatchObject({ muted: true });
+    const found = (await ok(searchWords, fake, { query: "relou" })).words[0];
+    expect(found).toMatchObject({ muted: true, due_today: false });
+    expect((await ok(studySummary, fake, { new_per_day: 3 })).due_cards).toBe(0);
+    await ok(updateWord, fake, { id: "w1", patch: { muted: false } });
+    expect((await ok(searchWords, fake, { query: "relou" })).words[0]).not.toHaveProperty("muted");
+  });
+});
+
 describe("rate limit", () => {
   it("limits write tools inside tools/call and leaves read tools alone", async () => {
     const fake = createFakeRepo({ folders: FOLDERS });
