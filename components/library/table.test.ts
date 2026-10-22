@@ -7,6 +7,7 @@ import {
   guideRange,
   listKeyAction,
   nextSort,
+  orderLabel,
   rangeIds,
   sortWords,
   tableColumns,
@@ -15,9 +16,12 @@ import type { LibraryWord } from "./useLibraryWords";
 
 const folder = (id: string, sort: number) => ({ id, sort, name: id }) as Folder;
 
-function item(fr: string, opts: { ru?: string; level?: 0 | 1 | 2 | 3; folder?: Folder; schedule?: Partial<WordSchedule> } = {}): LibraryWord {
+function item(
+  fr: string,
+  opts: { ru?: string; level?: 0 | 1 | 2 | 3; folder?: Folder; schedule?: Partial<WordSchedule>; added?: string } = {},
+): LibraryWord {
   return {
-    word: { id: fr, fr, ru: opts.ru ?? fr, slang_level: opts.level ?? 0, verlan: false } as Word,
+    word: { id: fr, fr, ru: opts.ru ?? fr, slang_level: opts.level ?? 0, verlan: false, created_at: opts.added ?? "2026-10-01T00:00:00Z" } as Word,
     folder: opts.folder,
     schedule: { status: "new", dueLabel: "новое", tone: "new", due: false, nextDue: null, ...opts.schedule },
   };
@@ -41,6 +45,28 @@ describe("sortWords", () => {
       item("d", { schedule: { tone: "later", nextDue: 100 } }),
     ];
     expect(frs(sortWords(list, { key: "due", dir: 1 }))).toEqual(["c", "b", "d", "a"]);
+  });
+
+  it("«Сначала новые»: the newest words first", () => {
+    const list = [item("a", { added: "2026-10-01" }), item("b", { added: "2026-10-03" }), item("c", { added: "2026-10-02" })];
+    expect(frs(sortWords(list, { key: "added", dir: 1 }))).toEqual(["b", "c", "a"]);
+  });
+
+  it("«Сначала трудные»: difficult words first, newest first inside each group", () => {
+    const list = [
+      item("a", { added: "2026-10-04" }),
+      item("b", { added: "2026-10-01", schedule: { status: "difficult" } }),
+      item("c", { added: "2026-10-02" }),
+      item("d", { added: "2026-10-03", schedule: { status: "difficult" } }),
+    ];
+    expect(frs(sortWords(list, { key: "difficult", dir: 1 }))).toEqual(["d", "b", "a", "c"]);
+  });
+
+  it("names the order in the strip, column heads included", () => {
+    expect(orderLabel({ key: "added", dir: 1 })).toBe("Сначала новые");
+    expect(orderLabel({ key: "fr", dir: 1 })).toBe("По алфавиту");
+    expect(orderLabel({ key: "ru", dir: 1 })).toBe("По переводу");
+    expect(orderLabel({ key: "fr", dir: -1 })).toBe("По алфавиту ↓");
   });
 
   it("sorts «Тема» by folder order with «Входящие» first", () => {

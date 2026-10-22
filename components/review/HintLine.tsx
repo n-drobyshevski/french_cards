@@ -31,6 +31,7 @@ export function HintLine({ revealed, practice, letters, gradeButtons }: HintLine
         { keys: ["Пробел"], label: "вопрос" },
       ]
     : [{ before: "после переворота:", keys: gradeButtons === 2 ? ["1", "2"] : ["1", "2", "3"], label: "оценить" }];
+  if (revealed && letters) hints.push({ keys: ["E"], label: "изменить" });
   if (practice) hints.push({ keys: ["Esc"], label: "закончить практику" });
   else if (letters) hints.push({ keys: ["Z"], label: "отменить" });
 
