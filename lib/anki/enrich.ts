@@ -35,6 +35,8 @@ export interface AnkiEnrichOptions extends AiPostOptions {
   model: ModelTierInput;
   /** Called before the first request (0 / n) and as each chunk comes back: (notes done, notes total). */
   onProgress?: (done: number, total: number) => void;
+  /** Each chunk's items as they come back (what a stopped run keeps). */
+  onItems?: (items: AnkiItem[]) => void;
 }
 
 const clip = (s: string, max: number) => s.replace(/\s+/g, " ").trim().slice(0, max).trim();
@@ -92,7 +94,9 @@ export async function enrichAnkiNotes(notes: readonly AnkiNote[], opts: AnkiEnri
         throw error;
       }
       const sent = new Set(part.map((n) => n.ref));
-      for (const item of items) if (sent.has(item.ref) && !byRef.has(item.ref)) byRef.set(item.ref, item);
+      const fresh = items.filter((item) => sent.has(item.ref) && !byRef.has(item.ref));
+      for (const item of fresh) byRef.set(item.ref, item);
+      opts.onItems?.(fresh);
       done += part.length;
       opts.onProgress?.(done, total);
     }
