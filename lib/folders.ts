@@ -3,7 +3,7 @@ import { db, newId } from "./db";
 import { cardMastery, cardStatus, wordStatus } from "./scheduler";
 import { endOfStudyDay } from "./session";
 import { slugify } from "./text";
-import type { Folder, ReviewState, Word } from "./types";
+import type { Confidence, Folder, ReviewState, Word } from "./types";
 import type { MoveRecord } from "./words";
 
 export interface DefaultFolder {
@@ -200,6 +200,57 @@ export async function deleteFolder(id: string, now: Date = new Date()): Promise<
   });
 }
 
+/** Where «Расформировать» puts one word of the theme. */
+export interface FolderPlacement {
+  wordId: string;
+  /** Another live theme; null = «Входящие». */
+  to: string | null;
+  /** "user" when picked by hand in the plan. */
+  source: Word["folder_source"];
+  confidence: Confidence | null;
+}
+
+/**
+ * «Расформировать»: deletes the theme and moves its words to the placements in one transaction.
+ * Words without a placement (added since the plan), or whose target theme is gone, go to
+ * «Входящие». Returns the moves; `restoreFolder(id, moves)` undoes it. Null when the theme is gone.
+ */
+export async function disbandFolder(
+  id: string,
+  placements: readonly FolderPlacement[],
+  now: Date = new Date(),
+): Promise<MoveRecord[] | null> {
+  const iso = now.toISOString();
+  return db.transaction("rw", FOLDER_TABLES(), async () => {
+    const folder = await getFolder(id);
+    if (!folder) return null;
+    const others = new Set((await listFolders()).filter((f) => f.id !== id).map((f) => f.id));
+    const byWord = new Map(placements.map((p) => [p.wordId, p]));
+    const words = await db.words.where("folder_id").equals(id).filter((w) => w.deleted_at === null).toArray();
+    const moves: MoveRecord[] = [];
+    const updated: Word[] = [];
+    for (const w of words) {
+      const p = byWord.get(w.id);
+      const to = p && p.to !== null && others.has(p.to) ? p.to : null;
+      moves.push({ word_id: w.id, from: id, to, from_source: w.folder_source, from_confidence: w.folder_confidence });
+      updated.push({
+        ...w,
+        folder_id: to,
+        folder_source: to === null ? "auto" : p!.source,
+        folder_confidence: to === null || p!.source === "user" ? null : p!.confidence,
+        updated_at: iso,
+      });
+    }
+    await db.words.bulkPut(updated);
+    await db.folders.put({ ...folder, deleted_at: iso, updated_at: iso });
+    return moves;
+  });
+}
+
+/**
+ * Brings a deleted or disbanded theme back and returns its words to it — only those still where
+ * the deletion put them (a word moved since stays where the user put it).
+ */
 export async function restoreFolder(id: string, moves: readonly MoveRecord[], now: Date = new Date()): Promise<void> {
   const iso = now.toISOString();
   await db.transaction("rw", FOLDER_TABLES(), async () => {
@@ -209,7 +260,7 @@ export async function restoreFolder(id: string, moves: readonly MoveRecord[], no
     const restored: Word[] = [];
     for (const m of moves) {
       const w = await db.words.get(m.word_id);
-      if (!w || w.deleted_at !== null || w.folder_id !== null) continue;
+      if (!w || w.deleted_at !== null || w.folder_id !== m.to) continue;
       restored.push({ ...w, folder_id: m.from, folder_source: m.from_source, folder_confidence: m.from_confidence, updated_at: iso });
     }
     await db.words.bulkPut(restored);
@@ -227,7 +278,12 @@ export interface FolderStats {
   fresh: number;
   /** 0..1 mean card mastery (stability / 21 d, new = 0). */
   mastery: number;
+  /** Up to SAMPLE_WORDS French headwords, newest first (the phone tiles show them). */
+  samples: string[];
 }
+
+/** How many headwords a theme tile previews. */
+export const SAMPLE_WORDS = 3;
 
 export interface FolderWithStats extends Folder {
   stats: FolderStats;
@@ -241,7 +297,7 @@ export interface LibraryStats {
   folders: FolderWithStats[];
 }
 
-const emptyStats = (): FolderStats => ({ total: 0, due: 0, difficult: 0, fresh: 0, mastery: 0 });
+const emptyStats = (): FolderStats => ({ total: 0, due: 0, difficult: 0, fresh: 0, mastery: 0, samples: [] });
 
 interface Acc {
   stats: FolderStats;
@@ -275,6 +331,8 @@ export async function getLibraryStats(now: Date = new Date()): Promise<LibrarySt
   };
   const total = acc("__all__");
   const folderIds = new Set(folders.map((f) => f.id));
+  // Newest first, so each folder's samples are its latest words.
+  words.sort((a, b) => b.created_at.localeCompare(a.created_at));
   for (const w of words) {
     const key = w.folder_id !== null && folderIds.has(w.folder_id) ? w.folder_id : null;
     const ws = statesByWord.get(w.id) ?? [];
@@ -283,6 +341,7 @@ export async function getLibraryStats(now: Date = new Date()): Promise<LibrarySt
     const m = ws.reduce((sum, s) => sum + cardMastery(s), 0);
     for (const a of [acc(key), total]) {
       a.stats.total++;
+      if (a.stats.samples.length < SAMPLE_WORDS) a.stats.samples.push(w.fr);
       if (due) a.stats.due++;
       if (status === "difficult") a.stats.difficult++;
       if (ws.every((s) => cardStatus(s) === "new")) a.stats.fresh++;

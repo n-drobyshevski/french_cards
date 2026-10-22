@@ -232,6 +232,30 @@ describe("practice", () => {
     expect(await db.review_state.toArray()).toEqual(statesBefore);
   });
 
+  it("'all' takes every card of the theme, new and learned, shuffled, in one direction", async () => {
+    const f = await createFolder({ name: "Тема" }, NOON);
+    const a = await word("a", { folder_id: f.id });
+    const b = await word("b", { folder_id: f.id });
+    await word("elsewhere");
+    await setReview(b, "fr_ru", at(30 * DAY));
+    const statesBefore = await db.review_state.toArray();
+
+    const q = await buildPracticeQueue({ scope: "all", folderId: f.id, direction: "fr_ru", random: () => 0 }, NOON);
+    expect(q.map((i) => i.word.fr).sort()).toEqual(["a", "b"]);
+    expect(q.every((i) => i.direction === "fr_ru")).toBe(true);
+    expect(await db.review_state.toArray()).toEqual(statesBefore);
+
+    // Both directions, and the cap.
+    expect(await buildPracticeQueue({ scope: "all", folderId: f.id }, NOON)).toHaveLength(4);
+    expect(await buildPracticeQueue({ scope: "all", folderId: f.id, limit: 3 }, NOON)).toHaveLength(3);
+    // The order depends on the random source.
+    const one = keys(await buildPracticeQueue({ scope: "all", folderId: f.id, random: () => 0 }, NOON));
+    const other = keys(await buildPracticeQueue({ scope: "all", folderId: f.id, random: () => 0.99 }, NOON));
+    expect(one).not.toEqual(other);
+    expect([...one].sort()).toEqual([...other].sort());
+    expect(one).toContain(`${a.id}:ru_fr`);
+  });
+
   it("'recent' takes failed/hard cards of the last days and tops up with the weakest", async () => {
     const a = await word("a", { both_directions: false });
     const b = await word("b", { both_directions: false });

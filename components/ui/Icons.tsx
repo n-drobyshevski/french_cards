@@ -67,6 +67,16 @@ const PATHS = {
       <path d="m20 20-3.5-3.5" />
     </>
   ),
+  sliders: (
+    <>
+      <path d="M4 7h10" />
+      <path d="M18 7h2" />
+      <circle cx="16" cy="7" r="2" />
+      <path d="M4 17h4" />
+      <path d="M12 17h8" />
+      <circle cx="10" cy="17" r="2" />
+    </>
+  ),
   camera: (
     <>
       <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z" />

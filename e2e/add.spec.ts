@@ -28,10 +28,10 @@ test("add a word from a suggestion and find it in its theme", async ({ page }) =
   await expect(page.getByText("00 / 12", { exact: true })).toBeVisible();
 
   await tabBar(page).getByRole("link", { name: "Библиотека" }).click();
-  await expect(page.getByText("12 слов", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Все слова: 12", exact: true })).toBeVisible();
   await page.getByRole("link", { name: /^Деньги:/ }).click();
   await expect(page.getByRole("heading", { name: "Деньги" })).toBeVisible();
-  await expect(page.getByText("la thune", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^la thune — / })).toBeVisible();
   await expect(page.getByText("бабки, деньги", { exact: true })).toBeVisible();
 });
 

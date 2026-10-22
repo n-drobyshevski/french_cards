@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { mockClassifyAssign } from "./fixtures";
 
 // Desktop library (mockups/DESKTOP-SPEC.md §5 #6–10, §4 «Library / Theme»): the sortable word table,
 // the detail pane, keys, multi-select with the bulk bar, undo, search via `/` and dragging rows onto
@@ -129,4 +130,19 @@ test("a theme page: header, «Повторить тему» with R, theme menu",
   const opened = page.waitForURL(/\/\?folder=/, { waitUntil: "commit" });
   await page.keyboard.press("r");
   await opened;
+});
+
+test("«Расформировать…» in the theme menu: a dialog with the plan, then the theme is gone", async ({ page }) => {
+  await mockClassifyAssign(page, (_w, folders) => folders.find((f) => f.name === "Повседневное")!.slug);
+  await page.goto("/library");
+  await themes(page).getByRole("link", { name: /^Эмоции/ }).click();
+  await page.getByRole("button", { name: "Ещё действия с темой" }).click();
+  await page.getByRole("menu", { name: "Действия с темой" }).getByRole("menuitem", { name: /Расформировать/ }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Расформировать «Эмоции»" });
+  await expect(dialog.getByRole("region", { name: "Повседневное: 2 слова" })).toBeVisible();
+  await dialog.getByRole("button", { name: "Расформировать" }).click();
+  await expect(page).toHaveURL(/\/library$/);
+  await expect(page.getByText(/Тема «Эмоции» расформирована · 2 слова в других темах/)).toBeVisible();
+  await expect(themes(page).getByRole("link", { name: /^Эмоции/ })).toHaveCount(0);
 });

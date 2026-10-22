@@ -8,18 +8,17 @@ import { useAddSheet } from "@/components/providers/AddSheetContext";
 import { bottomBarRef } from "@/components/ui/bottom-clearance";
 import { Button, IconButton, buttonClasses } from "@/components/ui/Button";
 import { Header } from "@/components/ui/Header";
-import { Icon } from "@/components/ui/Icons";
-import { Sheet, SheetCloseButton, SheetTitle } from "@/components/ui/Sheet";
 import { useSnackbar } from "@/components/ui/Snackbar";
-import { Toggle } from "@/components/ui/Toggle";
-import { deleteFolder, getFolder, getLibraryStats, restoreFolder, updateFolder } from "@/lib/folders";
+import { deleteFolder, getFolder, getLibraryStats, restoreFolder } from "@/lib/folders";
 import { getSessionCounts } from "@/lib/session";
 import type { Folder } from "@/lib/types";
 import { useLayoutClass } from "@/lib/use-media";
 import { DeskPlaceholder } from "./DeskPlaceholder";
 import { FolderFormSheet } from "./FolderFormSheet";
+import { DisbandSheet, disbandMessage } from "./DisbandSheet";
+import { FolderMenuSheet } from "./FolderMenuSheet";
 import { LibraryDesk } from "./LibraryDesk";
-import { nWords, reviewHref } from "./format";
+import { nWords, practiceHref, reviewHref } from "./format";
 import { useLibraryWords } from "./useLibraryWords";
 import { WordList } from "./WordList";
 
@@ -50,6 +49,7 @@ function PhoneFolder({ id }: { id: string }) {
   const addSheet = useAddSheet();
   const [menuOpen, setMenuOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [disbandOpen, setDisbandOpen] = useState(false);
 
   const meta = useLiveQuery(async () => {
     const [folder, lib, counts] = await Promise.all([
@@ -182,10 +182,18 @@ function PhoneFolder({ id }: { id: string }) {
         {/* «Повторить тему» stays above the tab bar */}
         {items && items.length > 0 && meta && (
           <div ref={bottomBarRef} className="sticky bottom-(--shell-bottom) z-[2] -mx-4 mt-auto border-t border-rule bg-paper p-4">
-            <Link href={reviewHref(folderId)} className={buttonClasses({ block: true })}>
-              Повторить тему
-              <span className="font-mono text-[13px] tracking-[.04em]">{meta.cards}</span>
-            </Link>
+            {meta.cards > 0 ? (
+              <Link href={reviewHref(folderId)} className={buttonClasses({ block: true })}>
+                Повторить тему
+                <span className="font-mono text-[13px] tracking-[.04em]">{meta.cards}</span>
+              </Link>
+            ) : (
+              // Nothing due: a practice round over the whole theme instead.
+              <Link href={practiceHref(folderId)} className={buttonClasses({ block: true })}>
+                Тренировка всей темы
+                <span className="font-mono text-[13px] tracking-[.04em]">{items.length}</span>
+              </Link>
+            )}
           </div>
         )}
       </div>
@@ -196,11 +204,33 @@ function PhoneFolder({ id }: { id: string }) {
             open={menuOpen}
             onOpenChange={setMenuOpen}
             folder={folder}
+            words={stats?.total ?? 0}
             onEdit={() => {
               setMenuOpen(false);
               setEditOpen(true);
             }}
+            onDisband={
+              stats && stats.total > 0
+                ? () => {
+                    setMenuOpen(false);
+                    setDisbandOpen(true);
+                  }
+                : undefined
+            }
             onDelete={() => void remove(folder)}
+          />
+          <DisbandSheet
+            open={disbandOpen}
+            onOpenChange={setDisbandOpen}
+            folder={folder}
+            onDisbanded={(moves) => {
+              router.push("/library");
+              snackbar.show({
+                message: disbandMessage(folder.name, moves),
+                actionLabel: "Отменить",
+                onAction: () => void restoreFolder(folder.id, moves),
+              });
+            }}
           />
           <FolderFormSheet
             open={editOpen}
@@ -211,63 +241,5 @@ function PhoneFolder({ id }: { id: string }) {
         </>
       )}
     </main>
-  );
-}
-
-function FolderMenuSheet({
-  open,
-  onOpenChange,
-  folder,
-  onEdit,
-  onDelete,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  folder: Folder;
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
-  const lockLabelId = `lock-${folder.id}`;
-  return (
-    <Sheet open={open} onOpenChange={onOpenChange} description="Действия с темой">
-      <div className="flex h-11 items-center justify-between pr-1 pl-4">
-        <SheetTitle className="min-w-0 truncate">{folder.name}</SheetTitle>
-        <SheetCloseButton />
-      </div>
-      <div className="mt-2 flex flex-col px-4 pb-4">
-        <button
-          type="button"
-          onClick={onEdit}
-          className="flex h-[52px] items-center gap-3 border-t border-rule bg-transparent text-left text-[15px] text-ink active:bg-surface-2"
-        >
-          <Icon name="pencil" size={18} />
-          Название, описание и цвет
-        </button>
-        <div className="flex items-center gap-3 border-t border-rule py-1.5">
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span id={lockLabelId} className="text-[15px] leading-5">
-              Закрепить тему
-            </span>
-            <span className="text-[12px] leading-4 text-muted">
-              Раскладка по темам не переименует её и не будет забирать из неё слова.
-            </span>
-          </span>
-          <Toggle
-            checked={folder.locked}
-            onCheckedChange={(locked) => void updateFolder(folder.id, { locked })}
-            aria-labelledby={lockLabelId}
-          />
-        </div>
-        <button
-          type="button"
-          onClick={onDelete}
-          className="flex h-[52px] items-center gap-3 border-t border-rule bg-transparent text-left text-[15px] font-medium text-again active:bg-surface-2"
-        >
-          <Icon name="trash" size={18} />
-          Удалить тему
-        </button>
-        <p className="m-0 text-[12px] leading-4 text-muted">Слова из удалённой темы попадут во «Входящие».</p>
-      </div>
-    </Sheet>
   );
 }

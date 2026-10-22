@@ -36,9 +36,10 @@ import type { Folder } from "@/lib/types";
 import { useFinePointer, useLayoutClass, useMediaQuery } from "@/lib/use-media";
 import { moveWords, restoreMoves, restoreWords, softDeleteWords } from "@/lib/words";
 import { BulkBar, EmptyPane, FilterStrip, SelectionSummary, summaryTargets, TextLink, type StatusFilter } from "./DeskParts";
+import { DisbandSheet, disbandMessage } from "./DisbandSheet";
 import { EnrichPlanSheet } from "./EnrichPlanSheet";
 import { FolderFormSheet } from "./FolderFormSheet";
-import { nWords, plural, reviewHref } from "./format";
+import { nWords, plural, practiceHref, reviewHref } from "./format";
 import { Menu, MenuCheckboxItem, MenuItem, MenuSeparator, type MenuAnchor } from "./Menu";
 import { INBOX_KEY, MoveMenu, ThemeSquare } from "./MoveMenu";
 import { matchesSlang, type SlangKey } from "./SlangFilter";
@@ -298,6 +299,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
   const [themeMenu, setThemeMenu] = useState<HTMLElement | null>(null);
   const [themeFilter, setThemeFilter] = useState<HTMLElement | null>(null);
   const [folderForm, setFolderForm] = useState<FolderForm>(null);
+  const [disbandOpen, setDisbandOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const [enrichOpen, setEnrichOpen] = useState(false);
 
@@ -979,6 +981,11 @@ function Desk({ scope }: { scope: LibraryScope }) {
 
       {folder && (
         <Menu open={!!themeMenu} anchor={themeMenu ? { element: themeMenu, align: "end" } : null} onClose={() => setThemeMenu(null)} label="Действия с темой" width={320} exactWidth>
+          {(stats?.folders.find((f) => f.id === folder.id)?.stats.total ?? 0) > 0 && (
+            <MenuItem icon="refresh" caption="Все слова вперемешку, не влияет на расписание." onSelect={() => router.push(practiceHref(folder.id))}>
+              Тренировка всей темы
+            </MenuItem>
+          )}
           <MenuItem icon="pencil" shortcut="F2" onSelect={() => setFolderForm({ mode: "edit" })}>
             Название, описание и цвет
           </MenuItem>
@@ -990,6 +997,11 @@ function Desk({ scope }: { scope: LibraryScope }) {
             Закрепить тему
           </MenuCheckboxItem>
           <MenuSeparator />
+          {(stats?.folders.find((f) => f.id === folder.id)?.stats.total ?? 0) > 0 && (
+            <MenuItem icon="move" caption="Удалить тему, а слова разложить по другим темам." onSelect={() => setDisbandOpen(true)}>
+              Расформировать…
+            </MenuItem>
+          )}
           <MenuItem icon="trash" danger caption="Слова из удалённой темы попадут во «Входящие»." onSelect={() => void removeTheme(folder)}>
             Удалить тему
           </MenuItem>
@@ -1036,6 +1048,17 @@ function Desk({ scope }: { scope: LibraryScope }) {
           }
         }}
       />
+      {folder && (
+        <DisbandSheet
+          open={disbandOpen}
+          onOpenChange={setDisbandOpen}
+          folder={folder}
+          onDisbanded={(moves) => {
+            router.push("/library");
+            showUndo({ message: disbandMessage(folder.name, moves), undo: () => void restoreFolder(folder.id, moves) });
+          }}
+        />
+      )}
       <SortPlanSheet open={sortOpen} onOpenChange={setSortOpen} />
       {scope.kind === "all" && <EnrichPlanSheet open={enrichOpen} onOpenChange={setEnrichOpen} />}
     </main>
