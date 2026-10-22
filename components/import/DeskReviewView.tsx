@@ -12,8 +12,9 @@ import { cx } from "@/components/ui/cx";
 import { useFormatKeys, useIsMac } from "@/lib/key-names";
 import { getSettings } from "@/lib/settings";
 import type { Folder } from "@/lib/types";
-import { CheckMark, deskButton, DeskTag, ROW_GRID } from "./desk";
+import { CheckMark, deskButton, DeskTag, ROW_GRID, WIDE_ONLY } from "./desk";
 import { FrCell, LevelCell } from "./DeskProcessingView";
+import { IMPORT_FOOTNOTE } from "./ProcessingView";
 import { DeskRowEditor } from "./DeskRowEditor";
 import { themeOptions } from "./FolderPicker";
 import { incompleteNotice, saveRowEdit, type ReviewViewProps } from "./ReviewView";
@@ -293,7 +294,7 @@ export function DeskReviewView({
     <div data-wide="" className="flex h-dvh min-h-0 flex-none">
       <ReviewShotPane thumbs={thumbs} tiles={tiles} onPickOther={onPickOther} />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="@container flex min-w-0 flex-1 flex-col">
         <main aria-labelledby="import-review-title" className="min-h-0 flex-1 overflow-y-auto overscroll-contain pt-5 pb-6">
           <div className={cx(ROW_PAD, "flex h-9 items-center justify-between gap-4")}>
             <h1 id="import-review-title" className="m-0 truncate font-serif text-[28px] leading-9 font-medium tracking-[-0.015em] text-ink">
@@ -340,7 +341,8 @@ export function DeskReviewView({
               Перевод
             </span>
             <span aria-hidden="true" className="truncate px-2 font-mono text-[11px] tracking-[.06em] text-muted uppercase">
-              Уровень
+              <span className="@max-[680px]:hidden">Уровень</span>
+              <span className="@min-[680px]:hidden">Ур.</span>
             </span>
             <span aria-hidden="true" className="truncate px-2 font-mono text-[11px] tracking-[.06em] text-muted uppercase">
               Тема
@@ -406,7 +408,7 @@ export function DeskReviewView({
             <Icon name="chevron" size={14} strokeWidth={1.75} className="-ml-1 text-muted" />
           </button>
           <p className="m-0 min-w-0 flex-1 text-[12px] leading-4 text-muted">
-            Скриншот не сохраняется — только слова.
+            <span className={WIDE_ONLY}>{IMPORT_FOOTNOTE}</span>
           </p>
           <button
             type="button"

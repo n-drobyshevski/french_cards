@@ -84,8 +84,16 @@ export function DeskTag({ children, title }: { children: ReactNode; title?: stri
  */
 export const SHOT_PANE = "w-[280px] min-[1100px]:w-[320px] min-[1200px]:w-[400px] min-[1440px]:w-[456px]";
 
-/** Column grid of the rows table: checkbox 32 · FR 200 · RU 190 · Уровень 110 · Тема 139 at 1440, fluid below. */
-export const ROW_GRID = "grid grid-cols-[32px_minmax(0,200fr)_minmax(0,190fr)_110px_minmax(0,139fr)]";
+/**
+ * Column grid of the rows table: checkbox 32 · FR 200 · RU 190 · Уровень 110 · Тема 139 at 1440,
+ * fluid below. In a rows pane narrower than 680 (the `@container` column; rail + 280 screenshot)
+ * «Уровень» shrinks to the italic abbreviation, 56 wide, as in the library table.
+ */
+export const ROW_GRID =
+  "grid grid-cols-[32px_minmax(0,200fr)_minmax(0,190fr)_110px_minmax(0,139fr)] @max-[680px]:grid-cols-[32px_minmax(0,1fr)_minmax(0,1fr)_56px_minmax(0,104px)]";
+
+/** The bottom-bar footnote only fits a rows pane of 600 and more. */
+export const WIDE_ONLY = "@max-[600px]:hidden";
 
 /** Inline alert line for pick/paste problems. */
 export function DeskAlert({ children }: { children: ReactNode }) {

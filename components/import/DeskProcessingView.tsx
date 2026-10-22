@@ -5,7 +5,7 @@ import { Icon } from "@/components/ui/Icons";
 import { SlangMeter } from "@/components/ui/SlangMeter";
 import { cx } from "@/components/ui/cx";
 import type { SlangLevel } from "@/lib/types";
-import { deskButton, ROW_GRID } from "./desk";
+import { deskButton, ROW_GRID, WIDE_ONLY } from "./desk";
 import { IMPORT_FOOTNOTE, processingProgress, type ProcessingViewProps } from "./ProcessingView";
 import { wordsRu } from "./rows";
 import { ProcessingShotPane } from "./ShotPane";
@@ -51,7 +51,12 @@ export function FrCell({ fr, verlan, muted }: { fr: string; verlan: boolean; mut
 
 /** Slang meter + abbreviation at table size (14px); «verl.» sits with the headword. */
 export function LevelCell({ level, muted }: { level: SlangLevel; muted?: boolean }) {
-  return <SlangMeter level={level} className={cx("[&_.abbr]:text-[14px]", muted && "opacity-60")} />;
+  return (
+    <SlangMeter
+      level={level}
+      className={cx("[&_.abbr]:text-[14px] @max-[680px]:[&>span:first-child]:hidden", muted && "opacity-60")}
+    />
+  );
 }
 
 const SKELETON_WIDTHS = [
@@ -76,7 +81,7 @@ export function DeskProcessingView({ phase, items, images, tiles, thumbs, checki
   return (
     <div data-wide="" className="flex h-dvh min-h-0 flex-none">
       <ProcessingShotPane thumbs={thumbs} tiles={tiles} percent={percent} />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="@container flex min-w-0 flex-1 flex-col">
         <main aria-labelledby="import-processing-title" aria-busy={!checking} className="min-h-0 flex-1 overflow-y-auto px-6 pt-5 pb-6 xl:px-8">
           <h1
             id="import-processing-title"
@@ -149,7 +154,9 @@ export function DeskProcessingView({ phase, items, images, tiles, thumbs, checki
         </main>
 
         <footer ref={bottomBarRef} className="flex h-16 shrink-0 items-center gap-4 border-t border-rule px-6 xl:px-8">
-          <p className="m-0 min-w-0 flex-1 text-[12px] leading-4 text-muted">{IMPORT_FOOTNOTE}</p>
+          <p className="m-0 min-w-0 flex-1 text-[12px] leading-4 text-muted">
+            <span className={WIDE_ONLY}>{IMPORT_FOOTNOTE}</span>
+          </p>
           <button type="button" onClick={onStop} disabled={checking} className={deskButton("secondary")}>
             Стоп
           </button>
