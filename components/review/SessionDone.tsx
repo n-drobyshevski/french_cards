@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Kbd } from "@/components/ui/Kbd";
 import { SlangMeter } from "@/components/ui/SlangMeter";
 import { formatInterval } from "@/lib/scheduler";
-import type { SessionFilter } from "@/lib/session";
+import { sessionFilterKey, type SessionFilter } from "@/lib/session";
 import { loadDoneScreen } from "./data";
 import { countWords, formatDayMonth, formatPercent, pluralRu } from "./format";
 
@@ -66,7 +66,7 @@ export function SessionDone({
   desktop = false,
   letters = true,
 }: SessionDoneProps) {
-  const data = useLiveQuery(() => loadDoneScreen(filter), [filter.direction, filter.folderId, tick]);
+  const data = useLiveQuery(() => loadDoneScreen(filter), [sessionFilterKey(filter), tick]);
   const columnRef = useRef<HTMLDivElement>(null);
   const landed = useRef(false);
   const ready = !!data;

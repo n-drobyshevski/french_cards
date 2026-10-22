@@ -1,9 +1,9 @@
 // Daily review sessions: today's queue (due first, then new up to the daily limit), header counts,
 // the end-of-session summary and practice rounds that never touch scheduling.
 import { db } from "./db";
-import { reviewStateId, type Rating } from "./scheduler";
+import { reviewStateId, wordStatus, type Rating } from "./scheduler";
 import { getSettings } from "./settings";
-import type { Direction, ReviewLog, ReviewState, Word } from "./types";
+import type { Direction, ReviewLog, ReviewSetStatus, ReviewState, SlangLevel, Word } from "./types";
 
 /** A study day starts at 04:00 local time, so late-night reviews count for the previous day. */
 export const DAY_START_HOUR = 4;
@@ -13,6 +13,24 @@ export interface SessionFilter {
   folderId?: string | null;
   /** undefined = both directions. */
   direction?: Direction;
+  /** «Мои наборы»: words in any of these folders (null = «Входящие»). Takes over from folderId. */
+  folderIds?: readonly (string | null)[];
+  /** Slang levels (OR-ed); "verl" also requires a verlan word. */
+  slang?: readonly (SlangLevel | "verl")[];
+  /** Word statuses (wordStatus). */
+  statuses?: readonly ReviewSetStatus[];
+  /** Only words created at or after this instant (ISO). */
+  addedSince?: string;
+}
+
+/** Stable key of a filter, for live-query dependencies. */
+export const sessionFilterKey = (filter: SessionFilter) => JSON.stringify(filter);
+
+/** Selected levels are OR-ed; "verl" additionally requires a verlan word. Empty = any. */
+export function matchesSlangKeys(word: Pick<Word, "slang_level" | "verlan">, keys: readonly (SlangLevel | "verl")[]): boolean {
+  const levels = keys.filter((k): k is SlangLevel => k !== "verl");
+  if (levels.length > 0 && !levels.includes(word.slang_level)) return false;
+  return !keys.includes("verl") || word.verlan;
 }
 
 export interface QueueItem {
@@ -59,16 +77,41 @@ export function endOfStudyDay(now: Date = new Date()): Date {
 
 const ms = (iso: string) => Date.parse(iso);
 
-/** Live words matching the folder filter. Words whose folder is gone count as «Входящие». */
-async function liveWords(filter: SessionFilter): Promise<Map<string, Word>> {
-  let match: (w: Word) => boolean = () => true;
-  if (filter.folderId === null) {
-    const live = new Set((await db.folders.filter((f) => f.deleted_at === null).toArray()).map((f) => f.id));
-    match = (w) => w.folder_id === null || !live.has(w.folder_id);
+/**
+ * Live words matching the filter: folder (or a set's folders), slang, statuses and age. Words
+ * whose folder is gone count as «Входящие».
+ */
+export async function liveWords(filter: SessionFilter): Promise<Map<string, Word>> {
+  const needsLive = filter.folderId === null || (filter.folderIds?.includes(null) ?? false);
+  const live = needsLive ? new Set((await db.folders.filter((f) => f.deleted_at === null).toArray()).map((f) => f.id)) : null;
+  const inInbox = (w: Word) => w.folder_id === null || !live!.has(w.folder_id);
+  let inFolder: (w: Word) => boolean = () => true;
+  if (filter.folderIds && filter.folderIds.length > 0) {
+    const ids = new Set(filter.folderIds.filter((id): id is string => id !== null));
+    const inbox = filter.folderIds.includes(null);
+    inFolder = (w) => (w.folder_id !== null && ids.has(w.folder_id)) || (inbox && inInbox(w));
+  } else if (filter.folderId === null) {
+    inFolder = inInbox;
   } else if (filter.folderId !== undefined) {
-    match = (w) => w.folder_id === filter.folderId;
+    inFolder = (w) => w.folder_id === filter.folderId;
   }
-  const words = await db.words.filter((w) => w.deleted_at === null && match(w)).toArray();
+  const slang = filter.slang ?? [];
+  const since = filter.addedSince;
+  let words = await db.words
+    .filter((w) => w.deleted_at === null && inFolder(w) && matchesSlangKeys(w, slang) && (!since || w.created_at >= since))
+    .toArray();
+  if (filter.statuses && filter.statuses.length > 0) {
+    const wanted = new Set(filter.statuses);
+    const ids = new Set(words.map((w) => w.id));
+    const states = await db.review_state.filter((s) => s.deleted_at === null && ids.has(s.word_id)).toArray();
+    const byWord = new Map<string, ReviewState[]>();
+    for (const st of states) {
+      const list = byWord.get(st.word_id);
+      if (list) list.push(st);
+      else byWord.set(st.word_id, [st]);
+    }
+    words = words.filter((w) => wanted.has(wordStatus(byWord.get(w.id) ?? [])));
+  }
   return new Map(words.map((w) => [w.id, w]));
 }
 

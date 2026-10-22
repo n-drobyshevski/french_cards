@@ -274,3 +274,8 @@ Intervals under grade buttons (FSRS): Не знаю «<1 мин», Сложно 
 Pixel-careful, consistent spacing (8px grid), real hierarchy, nothing overlapping unintentionally, text never clipped mid-word inside fixed boxes (choose sizes so Russian fits), everything inside 390×844.
 - Review header in the built app: one row — direction + theme chips on the left, undo + settings on the right, no app mark (user request, 2026-10-22).
 - Review grading in the built app: the card swipes on either side (no flip needed, the hint under it reads «тап — ответ» / «тап — вопрос»), and grading shows no «Знаю · …» snackbar — undo is the header button or Z (user request, 2026-10-22).
+
+### Повторение — «Мои наборы» (added 2026-10-22, option C of canvas «Повторение — свой набор»)
+- The theme chip opens «Что повторять»: section «МОИ НАБОРЫ» (name Newsreader 19, mono count «3 К ПОВТ.» in red ink or «31 · ТРЕНИРОВКА», a muted one-line summary «Повседневное, Эмоции · fam., arg.», check when selected, pencil «Изменить набор»), «+ Новый набор», then «ТЕМЫ» as before.
+- «Новый набор» / «Изменить набор» sheet: «Название» input; chip groups «Темы» (ни одной = все; «Входящие» dashed), «Карточки» (Новые / В изучении / Трудные / Выученные), «Уровень сленга» (meters + «verl.» dashed), «Добавлены» (Всё время / За неделю / За месяц); segmented «Как повторять: По расписанию / Тренировка» with a live line («Сейчас 3 карточки к повторению…» / «31 карточка вперемешку. Расписание не меняется.»); footer «Отмена» + «Сохранить N»; «Удалить набор» (danger text button) when editing, with undo.
+
