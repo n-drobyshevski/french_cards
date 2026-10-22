@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { haptic, thresholdNotifier } from "@/lib/haptics";
 import {
   IDLE_SWIPE,
@@ -35,7 +35,8 @@ const REST: SwipeView = { dx: 0, width: 0, mode: "idle", pressed: false };
 /**
  * Pointer handlers for swipe-to-grade, and the card's press state (MOTION-SPEC §5.1: a gesture
  * surface sets data-pressed from pointer events and drops it once a drag passes the slop). The
- * element should have `touch-action: pan-y` so vertical scrolling stays native.
+ * element should have `touch-action: pan-y` so vertical scrolling stays native. A mouse swipes the
+ * same way (click and hold, drag sideways); a vertical mouse drag is left to text selection.
  *
  * A decided release calls `onDecide` at once with the release pose (the screen flies a snapshot of
  * the card on from there); it returns false when the grade was not taken, and the card springs back.
@@ -107,6 +108,11 @@ export function useSwipe({
       release();
     }
     if (state.current.phase !== "pending" && state.current.phase !== "dragging") return;
+    // A mouse let go outside the window (no capture yet) never sends pointerup: end it here.
+    if (event.pointerType === "mouse" && (event.buttons & 1) === 0) {
+      onPointerCancel();
+      return;
+    }
     const { prev, next } = dispatch({
       type: "move",
       pointerId: event.pointerId,
@@ -126,6 +132,8 @@ export function useSwipe({
         // The pointer may already be gone; the drag still works without capture.
       }
     }
+    // A mouse press on text starts a selection; a sideways drag is a swipe, so drop it.
+    if (event.pointerType === "mouse") window.getSelection()?.removeAllRanges();
     threshold.update(swipeDecision(next.dx, next.width, 0) !== null, haptics);
     setView({ dx: next.dx, width: next.width, mode: "dragging", pressed: false });
   };
@@ -179,7 +187,8 @@ export function useSwipe({
       onPointerCancel,
       onPointerMove,
       onPointerLeave: release,
-      ...(enabled ? { onLostPointerCapture } : {}),
+      // Text already selected on the card would start a native drag-and-drop instead of the swipe.
+      ...(enabled ? { onLostPointerCapture, onDragStart: (event: ReactDragEvent<HTMLElement>) => event.preventDefault() } : {}),
     },
   };
 }
