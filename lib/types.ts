@@ -113,6 +113,8 @@ export interface Settings {
   auto_sort_enabled: boolean;
   /** Single-key shortcuts on desktop (N, /, ?, G…, [, library J/K/X/M…). Off for screen-reader users (WCAG 2.1.4). */
   shortcuts: boolean;
+  /** Desktop review: the hint line of keys under the card («Пробел вопрос · Z отменить»). */
+  key_hints: boolean;
   last_sync_at: string | null;
   /** Pull cursors per synced table: the server `synced_at` of the last row received. Owned by lib/sync.ts. */
   sync_cursors?: Partial<Record<SyncTable, string>>;
@@ -129,6 +131,7 @@ export const DEFAULT_SETTINGS: Settings = {
   suggestions_enabled: true,
   auto_sort_enabled: true,
   shortcuts: true,
+  key_hints: true,
   last_sync_at: null,
 };
 
