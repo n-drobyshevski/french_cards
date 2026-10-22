@@ -316,7 +316,8 @@ export function DeskReviewView({
           {notice && (
             <div className={cx(ROW_PAD, "mt-3 flex items-center gap-3 text-[13px] leading-5 text-muted")}>
               <p className="m-0 min-w-0">{notice}</p>
-              <button type="button" onClick={onRestart} className={deskButton("tertiary", "underline decoration-1 underline-offset-[3px]")}>
+              <button type="button" onClick={onRestart} className={deskButton("tertiary", "gap-1 underline decoration-1 underline-offset-[3px]")}>
+                <Icon name="spark" size={14} strokeWidth={1.5} className="shrink-0" />
                 Распознать заново
               </button>
             </div>

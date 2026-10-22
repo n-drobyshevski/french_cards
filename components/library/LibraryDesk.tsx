@@ -578,7 +578,8 @@ function Desk({ scope }: { scope: LibraryScope }) {
     const sortLink = (
       <span className="inline-flex items-baseline gap-2">
         {stats && stats.inbox.total > 0 && <span>{nWords(stats.inbox.total)} без темы</span>}
-        <TextLink aria-haspopup="dialog" onClick={() => setSortOpen(true)}>
+        <TextLink aria-haspopup="dialog" onClick={() => setSortOpen(true)} className="items-center gap-1">
+          <Icon name="spark" size={14} strokeWidth={1.5} className="shrink-0" />
           Разложить по темам
         </TextLink>
       </span>
@@ -629,7 +630,8 @@ function Desk({ scope }: { scope: LibraryScope }) {
             <span className="tabular-nums">
               {toEnrich.noExample > 0 ? `${nWords(toEnrich.noExample)} без примера` : `Уровень сленга для ${nWords(toEnrich.total)}`}
             </span>
-            <TextLink aria-haspopup="dialog" onClick={() => setEnrichOpen(true)}>
+            <TextLink aria-haspopup="dialog" onClick={() => setEnrichOpen(true)} className="items-center gap-1">
+              <Icon name="spark" size={14} strokeWidth={1.5} className="shrink-0" />
               Дополнить карточки
             </TextLink>
           </span>
@@ -998,7 +1000,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
           </MenuCheckboxItem>
           <MenuSeparator />
           {(stats?.folders.find((f) => f.id === folder.id)?.stats.total ?? 0) > 0 && (
-            <MenuItem icon="move" caption="Удалить тему, а слова разложить по другим темам." onSelect={() => setDisbandOpen(true)}>
+            <MenuItem icon="spark" caption="Удалить тему, а слова разложить по другим темам." onSelect={() => setDisbandOpen(true)}>
               Расформировать…
             </MenuItem>
           )}

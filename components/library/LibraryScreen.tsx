@@ -279,7 +279,8 @@ function PhoneLibrary() {
                 </span>
                 <span className="meta font-medium text-red">{inbox.total} без темы</span>
               </Link>
-              <Button variant="tertiary" size="sm" className="text-[13px] no-underline" onClick={() => setSortOpen(true)}>
+              <Button variant="tertiary" size="sm" className="gap-1.5 text-[13px] no-underline" onClick={() => setSortOpen(true)}>
+                <Icon name="spark" size={15} strokeWidth={1.5} />
                 Разложить
                 <Icon name="chevron-right" size={16} />
               </Button>
@@ -318,11 +319,12 @@ function PhoneLibrary() {
           {totals && totals.total > 0 && (
             <div className="mt-6 flex flex-col border-t border-ink">
               {inbox && inbox.total === 0 && (
-                <UpkeepRow caption="Все слова разложены" action="Разложить по темам" onClick={() => setSortOpen(true)} />
+                <UpkeepRow ai caption="Все слова разложены" action="Разложить по темам" onClick={() => setSortOpen(true)} />
               )}
               {toEnrich && toEnrich.total > 0 && (
                 <UpkeepRow
                   caption={toEnrich.noExample > 0 ? `${nWords(toEnrich.noExample)} без примера` : `Уровень сленга для ${nWords(toEnrich.total)}`}
+                  ai
                   action="Дополнить карточки"
                   onClick={() => setEnrichOpen(true)}
                 />
@@ -444,11 +446,13 @@ function LedgerCell({ value, label, ariaLabel, pressed, attention = false, onCli
   );
 }
 
-function UpkeepRow({ caption, action, onClick }: { caption: string; action: string; onClick: () => void }) {
+/** `ai`: the action asks Claude (a spark before it). */
+function UpkeepRow({ caption, action, onClick, ai = false }: { caption: string; action: string; onClick: () => void; ai?: boolean }) {
   return (
     <p className="m-0 flex min-h-11 items-center justify-between gap-3 border-b border-rule text-[13px] leading-[18px] text-muted">
       <span className="min-w-0">{caption}</span>
-      <Button variant="tertiary" size="sm" className="shrink-0 text-[13px]" onClick={onClick}>
+      <Button variant="tertiary" size="sm" className="shrink-0 gap-1.5 text-[13px]" onClick={onClick}>
+        {ai && <Icon name="spark" size={15} strokeWidth={1.5} className="shrink-0" />}
         {action}
       </Button>
     </p>

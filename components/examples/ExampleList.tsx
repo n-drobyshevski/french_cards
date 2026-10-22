@@ -116,7 +116,7 @@ export function ExampleList({
           size === "pane" ? "size-7 pointer-coarse:size-11" : "-my-1.5 size-11",
         )}
       >
-        <Icon name="refresh" size={16} className={cx(isBusy(i) && "animate-spin")} />
+        <Icon name={isBusy(i) ? "refresh" : "spark-refresh"} size={isBusy(i) ? 16 : 20} strokeWidth={1.5} className={cx(isBusy(i) && "animate-spin")} />
       </button>
     );
 
@@ -181,7 +181,12 @@ export function ExampleList({
             "h-9 before:absolute before:-inset-y-1 before:inset-x-0",
           )}
         >
-          <Icon name={busy?.kind === "add" ? "refresh" : "plus"} size={14} className={cx(busy?.kind === "add" && "animate-spin")} />
+          <Icon
+            name={busy?.kind === "add" ? "refresh" : ready ? "spark-plus" : "plus"}
+            size={ready && busy?.kind !== "add" ? 17 : 14}
+            strokeWidth={ready ? 1.5 : 1.75}
+            className={cx(busy?.kind === "add" && "animate-spin")}
+          />
           {busy?.kind === "add" ? "Подбираем пример…" : list.length === 0 ? "Подобрать пример" : "Ещё пример"}
         </button>
       )}

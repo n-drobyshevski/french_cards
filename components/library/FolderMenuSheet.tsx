@@ -104,7 +104,7 @@ export function FolderMenuSheet({ open, onOpenChange, folder, navigation = false
             aria-describedby={`disband-${folder.id}`}
             className={cx(ROW, "h-auto min-h-[52px] py-2 text-ink")}
           >
-            <Icon name="move" size={18} className="shrink-0" />
+            <Icon name="spark" size={18} strokeWidth={1.5} className="shrink-0" />
             <span className="flex min-w-0 flex-col">
               <span className="leading-5">Расформировать</span>
               <span id={`disband-${folder.id}`} className="text-[12px] leading-4 text-muted">

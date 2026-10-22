@@ -6,7 +6,7 @@ just one dimension: every word gets a detected slang level). App name everywhere
 
 ## v3 DIRECTION — read this first, it overrides any older habit
 The user said the previous mockups looked "AI-styled". v3 must NOT look like a generic AI-generated app:
-- NO sparkle/magic icons anywhere. NO «ИИ» / «AI» labels in the UI, except the Settings section «ИИ» and its privacy line (changed 2026-10-22 at the user's request).
+- Sparkle: only as the ink «spark» glyph (Icons `spark`, `spark-refresh`, `spark-plus`: thin 1.5px four-point stars, ink colour, never filled, coloured or animated) on buttons that call Claude — «Обновить перевод и заметку», «Другой пример» ↻, «+ Ещё пример» / «Подобрать пример», «Разложить» / «Разложить по темам», «Дополнить карточки», «Расформировать», «Распознать заново» (option B of canvas «Пометка ИИ — варианты», chosen 2026-10-22). No other magic imagery. NO «ИИ» / «AI» labels in the UI, except the Settings section «ИИ» and its privacy line (changed 2026-10-22 at the user's request).
   Automatic features just work quietly and are described by what they do: «Варианты», «подобрано автоматически»,
   «догадка» (translation not visible on screenshot), «Разложить по темам».
 - NO pastel pill soup, no tinted icon chips, no soft drop shadows, no big rounded "bubbly" cards, no gradient, no shimmer.

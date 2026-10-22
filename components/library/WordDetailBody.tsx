@@ -1016,7 +1016,7 @@ function PaneBody({ wordId, onClose, onPrev, onNext, onOpenWord, onNewTheme, edi
           onClick={() => void refresh.run()}
           className={cx(paneAction(coarse), "disabled:cursor-default")}
         >
-          <Icon name="refresh" size={14} />
+          <Icon name="spark" size={16} strokeWidth={1.5} />
           {refresh.state.status === "loading" ? "Подбираем…" : "Обновить перевод и заметку"}
         </button>
         <div className="flex items-center gap-5">
@@ -1314,7 +1314,7 @@ function SheetRefresh({ word }: { word: Word }) {
 
   return (
     <div className="mt-6 flex flex-col">
-      <Button variant="secondary" block icon="refresh" loading={state.status === "loading"} onClick={() => void refresh.run()}>
+      <Button variant="secondary" block icon="spark" loading={state.status === "loading"} onClick={() => void refresh.run()}>
         {state.status === "loading" ? "Подбираем…" : "Обновить перевод и заметку"}
       </Button>
       {state.status === "error" && (
