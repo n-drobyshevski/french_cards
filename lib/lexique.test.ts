@@ -19,9 +19,10 @@ const FIXTURE: LexiqueEntry[] = [
 ];
 
 /** FIXTURE as the build script writes it: sorted by folded key, the key appended where it differs. */
-const FILE_FIXTURE: LexiqueEntry[] = FIXTURE.map((e): LexiqueEntry => (foldKey(e[0]) === e[0] ? e : [...e, foldKey(e[0])])).sort(
-  (a, b) => ((a[4] ?? a[0]) < (b[4] ?? b[0]) ? -1 : 1),
-);
+const FILE_FIXTURE: LexiqueEntry[] = FIXTURE.map((e): LexiqueEntry => {
+  const key = foldKey(e[0]);
+  return key === e[0] ? e : [e[0], e[1], e[2], e[3], key];
+}).sort((a, b) => ((a[4] ?? a[0]) < (b[4] ?? b[0]) ? -1 : 1));
 
 describe("createLexique / search", () => {
   const lex = createLexique(FIXTURE); // deliberately unsorted
