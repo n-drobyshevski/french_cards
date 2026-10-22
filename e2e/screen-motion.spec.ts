@@ -84,10 +84,18 @@ test("a sort-plan group switched off dims and «Применить N» swaps its
   const apply = sheet.getByRole("button", { name: /^Применить/ });
   await expect(apply).toHaveAccessibleName("Применить 3");
 
+  // Record animation starts from before the click: the fades are short enough to end before a
+  // getAnimations() call lands under load.
+  await apply.evaluate((el) => {
+    const names: string[] = [];
+    (window as unknown as { __applyFades: string[] }).__applyFades = names;
+    el.addEventListener("animationstart", (e) => names.push((e as AnimationEvent).animationName));
+  });
   await group.getByRole("switch").click();
   // The old count fades out while the new one fades in, in one cell.
-  const fades = await apply.evaluate((el) => el.getAnimations({ subtree: true }).map((a) => (a as CSSAnimation).animationName));
-  expect(fades).toEqual(expect.arrayContaining(["fade-out", "fade-in"]));
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { __applyFades: string[] }).__applyFades))
+    .toEqual(expect.arrayContaining(["fade-out", "fade-in"]));
   await expect(apply).toHaveAccessibleName("Применить 0");
   await expect(apply).toBeDisabled();
   const label = group.locator(".transition-opacity").first();
