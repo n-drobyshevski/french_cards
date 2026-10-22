@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
-import { useAddSheet } from "@/components/providers/AddSheetContext";
+import { useAddSheetActions } from "@/components/providers/AddSheetContext";
 import { useLayoutClass } from "@/lib/use-media";
 import {
   blocksGlobalKeys,
@@ -23,7 +23,7 @@ import { isSidebarHidden, toggleSidebar } from "./sidebar-state";
 export function GlobalKeys() {
   const layout = useLayoutClass();
   const enabled = useShortcutsEnabled();
-  const addSheet = useAddSheet();
+  const addSheet = useAddSheetActions();
   const shell = useShell();
   const router = useRouter();
   const { open: openAdd } = addSheet;

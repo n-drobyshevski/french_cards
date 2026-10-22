@@ -1,20 +1,30 @@
 import "fake-indexeddb/auto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { KartochkiDB } from "./db";
 import { installOutboxTracking } from "./outbox";
 import {
   PULL_OVERLAP_MS,
   PUSH_BATCH,
+  SYNC_META_ID,
   fromRemoteRow,
   mergeRemoteRows,
   pullChanges,
   pushOutbox,
+  readSyncMeta,
   remoteWins,
   runSyncCycle,
+  subscribeSyncStatus,
+  getSyncStatus,
+  syncNow,
   toRemoteRow,
+  type SyncMeta,
 } from "./sync";
-import { DEFAULT_SETTINGS, type Folder, type ReviewLog, type Word } from "./types";
+import { DEFAULT_SETTINGS, SYNC_TABLES, type Folder, type ReviewLog, type Word } from "./types";
+
+// syncNow() takes its client from here.
+const browser = vi.hoisted(() => ({ client: null as unknown }));
+vi.mock("./supabase/client", () => ({ getSupabaseBrowserClient: () => browser.client }));
 
 // ---------------------------------------------------------------------------------------------
 // A small in-memory stand-in for the parts of supabase-js that lib/sync.ts uses. It behaves like
@@ -28,6 +38,10 @@ interface MockOptions {
   offline?: boolean;
   /** Reject any upsert that contains one of these ids with a 400. */
   badIds?: Set<string>;
+  /** Answer every select on these tables with this HTTP status. */
+  failSelects?: Record<string, number>;
+  /** Hold every select answer until this settles. */
+  gate?: Promise<void>;
 }
 
 function createMockSupabase(options: MockOptions = {}) {
@@ -94,12 +108,19 @@ function createMockSupabase(options: MockOptions = {}) {
           },
           then<T>(resolve: (v: unknown) => T, reject?: (e: unknown) => T) {
             calls.push({ table, op: "select", filter: filterText });
-            if (options.offline) return Promise.resolve(networkError).then(resolve, reject);
-            const rows = [...tableOf(table).values()]
-              .filter((r) => filters.every((f) => f(r)))
-              .sort((a, b) => (a.synced_at === b.synced_at ? (a.id < b.id ? -1 : 1) : a.synced_at < b.synced_at ? -1 : 1))
-              .slice(0, limit);
-            return Promise.resolve({ data: rows, error: null, status: 200 }).then(resolve, reject);
+            const answer = () => {
+              if (options.offline) return networkError;
+              const failStatus = options.failSelects?.[table];
+              if (failStatus) return { data: null, error: { message: `select ${table} failed` }, status: failStatus };
+              const rows = [...tableOf(table).values()]
+                .filter((r) => filters.every((f) => f(r)))
+                .sort((a, b) => (a.synced_at === b.synced_at ? (a.id < b.id ? -1 : 1) : a.synced_at < b.synced_at ? -1 : 1))
+                .slice(0, limit);
+              return { data: rows, error: null, status: 200 };
+            };
+            return Promise.resolve(options.gate)
+              .then(answer)
+              .then(resolve, reject);
           },
         };
         return builder;
@@ -189,6 +210,17 @@ function log(id: string): ReviewLog {
 }
 
 let testDb: KartochkiDB;
+
+const syncRow = (database: KartochkiDB) => database.table<SyncMeta, string>("settings").get(SYNC_META_ID);
+
+/** Counts writes to each key of the settings table. */
+function countSettingsWrites(database: KartochkiDB): Map<string, number> {
+  const writes = new Map<string, number>();
+  const count = (key: unknown) => writes.set(String(key), (writes.get(String(key)) ?? 0) + 1);
+  database.settings.hook("creating", (key, obj) => void count(key ?? (obj as { id: string }).id));
+  database.settings.hook("updating", (_mods, key) => void count(key));
+  return writes;
+}
 
 beforeEach(async () => {
   testDb = new KartochkiDB(`sync-test-${crypto.randomUUID()}`);
@@ -431,6 +463,7 @@ describe("pullChanges", () => {
     const remote = createMockSupabase();
     for (let i = 0; i < 1203; i++) remote.seed("words", word(`w${String(i).padStart(4, "0")}`));
     remote.seed("folders", folder("f1"));
+    const writes = countSettingsWrites(testDb);
 
     const merged = await pullChanges(remote.client, testDb);
 
@@ -440,16 +473,81 @@ describe("pullChanges", () => {
     const selects = remote.calls.filter((c) => c.op === "select" && c.table === "words");
     expect(selects).toHaveLength(3);
     expect(selects[1].filter).toMatch(/^or:synced_at\.gt\."/);
-    const cursors = (await testDb.settings.get("settings"))?.sync_cursors;
+    const cursors = (await syncRow(testDb))?.sync_cursors;
     expect(cursors?.words).toBe(remote.tables.get("words")?.get("w1202")?.synced_at);
     expect(cursors?.folders).toBeDefined();
+    // One cursor write per table that moved (not one per page), none to the "settings" row.
+    expect(Object.fromEntries(writes)).toEqual({ [SYNC_META_ID]: 2 });
+    expect((await testDb.settings.get("settings"))?.sync_cursors).toBeUndefined();
+  });
+
+  it("does not rewrite cursors that did not move", async () => {
+    const remote = createMockSupabase();
+    remote.seed("words", word("w1"));
+    await pullChanges(remote.client, testDb);
+    const before = await syncRow(testDb);
+    const writes = countSettingsWrites(testDb);
+
+    // The overlap window returns w1 again; the cursor stays where it was.
+    const merged = await pullChanges(remote.client, testDb);
+
+    expect(merged).toBe(0);
+    expect(remote.calls.filter((c) => c.op === "select" && c.table === "words").at(-1)?.filter).toMatch(/^gt:/);
+    expect(writes.size).toBe(0);
+    expect(await syncRow(testDb)).toEqual(before);
+  });
+
+  it("starts from the cursors the settings row used to hold, then keeps them in the sync row", async () => {
+    const legacy = new Date(Date.parse(T0) + 5 * PULL_OVERLAP_MS).toISOString();
+    await testDb.settings.update("settings", { sync_cursors: { words: legacy }, last_sync_at: T1 });
+    expect(await readSyncMeta(testDb)).toEqual({ id: SYNC_META_ID, last_sync_at: T1, sync_cursors: { words: legacy } });
+
+    const remote = createMockSupabase();
+    remote.advanceClock(10 * PULL_OVERLAP_MS);
+    remote.seed("words", word("w1"));
+    await pullChanges(remote.client, testDb);
+
+    const select = remote.calls.find((c) => c.op === "select" && c.table === "words");
+    expect(select?.filter).toBe(`gt:${new Date(Date.parse(legacy) - PULL_OVERLAP_MS).toISOString()}`);
+    const meta = await syncRow(testDb);
+    expect(meta).toMatchObject({ last_sync_at: T1, sync_cursors: { words: remote.tables.get("words")?.get("w1")?.synced_at } });
+    // The old fields are left alone and no longer read once the sync row exists.
+    expect((await testDb.settings.get("settings"))?.sync_cursors).toEqual({ words: legacy });
+    await testDb.settings.update("settings", { sync_cursors: {}, last_sync_at: null });
+    expect(await readSyncMeta(testDb)).toEqual(meta);
+  });
+
+  it("pulls the tables in parallel", async () => {
+    let open!: () => void;
+    const remote = createMockSupabase({ gate: new Promise<void>((resolve) => (open = resolve)) });
+    remote.seed("words", word("w1"));
+
+    const pulling = pullChanges(remote.client, testDb);
+    // Every table has asked before any answer arrived.
+    await vi.waitFor(() => expect(new Set(remote.calls.map((c) => c.table)).size).toBe(SYNC_TABLES.length));
+    open();
+
+    expect(await pulling).toBe(1);
+  });
+
+  it("rethrows the first failed table and keeps what the others pulled", async () => {
+    const remote = createMockSupabase({ failSelects: { review_state: 401, review_log: 503 } });
+    remote.seed("words", word("w1"));
+    remote.seed("folders", folder("f1"));
+
+    await expect(pullChanges(remote.client, testDb)).rejects.toMatchObject({ name: "SyncAbort", kind: "auth" });
+
+    expect(await testDb.words.get("w1")).toBeDefined();
+    expect(await testDb.folders.get("f1")).toBeDefined();
+    const cursors = (await syncRow(testDb))?.sync_cursors;
+    expect(Object.keys(cursors ?? {}).sort()).toEqual(["folders", "words"]);
   });
 
   it("asks only for rows after the cursor minus the overlap window", async () => {
     const remote = createMockSupabase();
     remote.seed("words", word("w1"));
     await pullChanges(remote.client, testDb);
-    const cursor = (await testDb.settings.get("settings"))!.sync_cursors!.words!;
+    const cursor = (await syncRow(testDb))!.sync_cursors.words!;
 
     remote.advanceClock(10 * 60_000);
     remote.seed("words", word("w2", { updated_at: T1 }));
@@ -493,7 +591,8 @@ describe("runSyncCycle", () => {
       expect((await other.words.get("w1"))?.ru).toBe("B");
       expect(remote.tables.get("words")?.get("w1")?.ru).toBe("B");
       expect(await testDb.outbox.count()).toBe(0);
-      expect((await testDb.settings.get("settings"))?.last_sync_at).not.toBeNull();
+      expect((await syncRow(testDb))?.last_sync_at).not.toBeNull();
+      expect((await testDb.settings.get("settings"))?.last_sync_at).toBeNull();
     } finally {
       await other.delete();
     }
@@ -505,7 +604,7 @@ describe("runSyncCycle", () => {
     remote.seed("words", word("w1", { ru: "server", updated_at: T2 }));
     remote.advanceClock(10 * PULL_OVERLAP_MS);
     const cursor = new Date(Date.parse("2026-10-21T08:00:00.000Z") + 5 * PULL_OVERLAP_MS).toISOString();
-    await testDb.settings.update("settings", { sync_cursors: { words: cursor } });
+    await testDb.table<SyncMeta, string>("settings").put({ id: SYNC_META_ID, last_sync_at: null, sync_cursors: { words: cursor } });
     await testDb.words.put(word("w1", { ru: "local", updated_at: T1 }));
 
     const result = await runSyncCycle(remote.client, testDb);
@@ -514,5 +613,97 @@ describe("runSyncCycle", () => {
     expect(remote.tables.get("words")?.get("w1")?.ru).toBe("server");
     expect((await testDb.words.get("w1"))?.ru).toBe("server");
     expect(await testDb.outbox.count()).toBe(0);
+  });
+
+  it("pushes without pulling when asked to", async () => {
+    const remote = createMockSupabase();
+    remote.seed("words", word("remote"));
+    await testDb.words.put(word("w1"));
+
+    const result = await runSyncCycle(remote.client, testDb, { pull: false });
+
+    expect(result).toMatchObject({ pushed: 1, pulled: 0 });
+    expect(remote.calls.map((c) => c.op)).toEqual(["upsert"]);
+    expect(await testDb.words.get("remote")).toBeUndefined();
+    expect(await testDb.outbox.count()).toBe(0);
+    // Only a full cycle counts as «last synced».
+    expect(result.lastSyncAt).toBeNull();
+    expect((await syncRow(testDb))?.last_sync_at ?? null).toBeNull();
+  });
+});
+
+describe("syncNow", () => {
+  let getSession: ReturnType<typeof vi.fn>;
+
+  function connect(options: MockOptions = {}) {
+    const remote = createMockSupabase(options);
+    getSession = vi.fn(async () => ({ data: { session: { user: { id: "u1" } } }, error: null }));
+    browser.client = { ...remote.client, auth: { getSession } };
+    return remote;
+  }
+
+  /** Resolves once `n` cycles have run (each goes «syncing», then back to rest). */
+  function cyclesDone(n: number): Promise<void> {
+    return new Promise((resolve) => {
+      let syncing = false;
+      let done = 0;
+      const stop = subscribeSyncStatus(() => {
+        const busy = getSyncStatus().state === "syncing";
+        if (syncing && !busy && ++done === n) {
+          stop();
+          resolve();
+        }
+        syncing = busy;
+      });
+    });
+  }
+
+  afterEach(() => {
+    browser.client = null;
+  });
+
+  it("follows a push-only cycle with a full one when a pull was asked for meanwhile", async () => {
+    const remote = connect();
+    const done = cyclesDone(2);
+
+    void syncNow({ pull: false });
+    void syncNow({ pull: false });
+    void syncNow();
+    await done;
+
+    expect(getSession).toHaveBeenCalledTimes(2);
+    // Only the second cycle pulled: one select per table.
+    expect(remote.calls.filter((c) => c.op === "select")).toHaveLength(SYNC_TABLES.length);
+  });
+
+  it("answers a pull asked for during a push-only cycle once that pull has run", async () => {
+    const remote = connect();
+    void syncNow({ pull: false });
+    const full = await syncNow();
+
+    expect(full.ok).toBe(true);
+    expect(remote.calls.filter((c) => c.op === "select")).toHaveLength(SYNC_TABLES.length);
+  });
+
+  it("keeps a pull failure on show through a push-only cycle", async () => {
+    connect({ failSelects: { words: 500 } });
+    await syncNow();
+    expect(getSyncStatus()).toMatchObject({ state: "error", errorKind: "server" });
+
+    const push = await syncNow({ pull: false });
+    expect(push.ok).toBe(true);
+    expect(getSyncStatus()).toMatchObject({ state: "error", errorKind: "server" });
+  });
+
+  it("keeps the follow-up cycle push-only when no call asked for a pull", async () => {
+    const remote = connect();
+    const done = cyclesDone(2);
+
+    void syncNow({ pull: false });
+    void syncNow({ pull: false });
+    await done;
+
+    expect(getSession).toHaveBeenCalledTimes(2);
+    expect(remote.calls).toHaveLength(0);
   });
 });

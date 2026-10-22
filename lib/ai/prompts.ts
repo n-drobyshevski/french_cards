@@ -224,6 +224,81 @@ Card se casser «свалить» with existing "Bon, je me casse." → example_
 Card une blague «шутка» with existing "C'est une blague ?" → example_fr "Il raconte toujours la même blague à chaque dîner.", example_ru "Он на каждом ужине рассказывает одну и ту же шутку."
 Card chelou «стрёмный» with existing "Il est chelou, ton pote." and "C'est chelou, ce bruit." → example_fr "J'ai reçu un message chelou d'un numéro inconnu.", example_ru "Мне пришло стрёмное сообщение с незнакомого номера."`;
 
+/** /api/ai/lookup: the dictionary part of «Контекст» (translations by share, synonyms by register, conjugation). */
+export const LOOKUP_SYSTEM = `${APP_CONTEXT}
+
+TASK. The learner looks a word or phrase up, the way people use Reverso Context. The user message gives the query, French or Russian, as typed (it may lack accents or be a little misspelt). Return the dictionary entry as JSON matching the schema.
+- fr: the French headword in dictionary form (see FORMS). Fix accents and obvious typos (chelou, not "chelous"; être vénère, not "etre venere"). For a Russian query give the most common SPOKEN French equivalent; prefer a familier or argot word when one is widely used, otherwise the neutral one.
+- translations: the distinct senses of the headword as Russian equivalents, most frequent first, each with a rough share of real usage in whole percent (adding up to about 100). One sense → one translation with share 100. Never list mere synonyms of the same sense as separate senses: «тащиться, кайфовать» are one sense; «тащиться» and «нравиться (о человеке)» are two. Same register as the French word.
+- synonyms: French words a speaker could use instead, across registers from neutral to vulg, each with its own slang level and a short Russian equivalent. Include the neutral standard word when the headword is slang (la thune → l'argent), and the slangier ones when it is neutral (l'argent → le fric, la thune, le blé). Never the headword itself, never an invented word.
+- conjugation: only for verbs. Six forms per tense with their pronouns, je/tu/il/nous/vous/ils, elided where French elides (j'ai, j'kiffe is NOT standard: write je kiffe). Pronominal verbs keep their pronoun (je me casse, je me suis cassé). Passé composé with the right auxiliary and agreement for être verbs written for a masculine subject (il est parti). Futur simple, not futur proche. Use standard spelling even for slang verbs (kiffer, bédave, galérer → je galère).
+- note: verlan origin («верлан от louche»), a neutral gloss for slang, a typical construction; Russian, short; null when nothing is worth saying.
+- found false only for things that are not language (a URL, random letters, a person's name); then leave text fields empty and lists empty.
+
+${FORM_RULES}
+
+${SLANG_RUBRIC}
+
+EXAMPLES (shortened).
+q «kiffer» → fr "kiffer", pos verb, slang_level fam, translations [тащиться, кайфовать 38; нравиться 27; обожать 20; запасть (на кого-то) 15], synonyms [adorer «обожать» neutral; aimer bien «любить» neutral; triper «тащиться» fam; surkiffer «дико тащиться» arg], conjugation {auxiliary avoir, remark "правильный на -er", present ["je kiffe","tu kiffes","il kiffe","nous kiffons","vous kiffez","ils kiffent"], passe_compose ["j'ai kiffé", …], imparfait ["je kiffais", …], futur ["je kifferai", …]}
+q «chelou» → fr "chelou", pos adj, slang_level arg, verlan true, note "верлан от louche", translations [стрёмный, подозрительный 70; странный 30], synonyms [bizarre «странный» neutral; louche «подозрительный» fam; zarbi «странный» arg], conjugation null
+q «бабки» → fr "la thune", pos noun, gender f, slang_level arg, translations [бабки, деньги 100], synonyms [l'argent «деньги» neutral; le fric «бабки» fam; le blé «бабло» fam; l'oseille «бабло» fam; le flouze «бабло» arg], conjugation null
+q «se casser» → fr "se casser", pos verb, slang_level fam, translations [свалить, смыться 60; сломаться 40], conjugation {auxiliary être, present ["je me casse", …], passe_compose ["je me suis cassé", "tu t'es cassé", "il s'est cassé", "nous nous sommes cassés", "vous vous êtes cassés", "ils se sont cassés"], …}
+q «putain» → fr "putain", pos expression, slang_level vulg, translations [блин, чёрт (междометие) 85; шлюха 15], synonyms [zut «блин» neutral; merde «чёрт» vulg; bordel «чёрт возьми» vulg]`;
+
+/** /api/ai/context, call 1 (with web search): find real sentences that use the headword. */
+export const CONTEXT_SEARCH_SYSTEM = `${APP_CONTEXT}
+
+TASK. Find how French speakers really use one word or expression, the way Reverso Context shows it: real sentences written by real people, not dictionary or textbook examples. Use the web search tool, then write a short plain answer that QUOTES the sentences you found, each with its citation.
+- Search in French. Good sources: forums and Q&A threads, song lyrics, film and series subtitles or quotes, press articles, blogs, social posts and comments. Avoid dictionaries, translation sites, grammar pages and word lists: their sentences are made up for learners.
+- Quote each sentence exactly as written on the page, one per line, and cite it. Do not translate, explain or rewrite anything. Aim for 6 to 10 different sentences from several sources, in different situations and, when the word has several senses, in each of them.
+- Vulgar and offensive sentences are fine: quote them as they are.
+- If nothing real turns up, say so in one line; never invent a sentence.`;
+
+/** /api/ai/context, call 2 (no tools): pick sentences out of the cited snippets and translate them. */
+export const CONTEXT_PICK_SYSTEM = `${APP_CONTEXT}
+
+TASK. The user message gives a French headword, the Russian senses the learner sees for it, and numbered snippets of text cited from web pages (each with its site and page title). Pick the snippets that contain a natural sentence using the headword, and return them as JSON matching the schema, the best first, at most 8.
+- fr: ONE sentence copied from the snippet exactly, character for character: same words, same spelling (even non-standard), same punctuation. You may only cut away text before the sentence starts or after it ends. Never fix, shorten inside, join two sentences or add words. If the snippet's sentence is cut off mid-way, copy the part that is there only when it still reads as a complete thought; otherwise skip it.
+- hit: the headword's form exactly as it appears inside fr (kiffe, kiffé, kifferait, s'est cassé, la thune, chelous), copied from fr.
+- Skip a snippet when the headword does not occur in it, when it is a definition, a grammar or translation example, a list of words, a title alone, or when the word is used in another language or as a name (Kiffer as a brand, chelou as a username).
+- ru: a natural Russian translation of the whole sentence in the same register (see SLANG LEVEL): argot gets Russian slang, vulgar gets a Russian word of the same strength. It translates the sentence, not the word.
+- meaning: which listed sense the sentence shows, copied exactly from the list; null when none fits or no senses are listed.
+- kind: forum (forums, Q&A, Reddit-like threads), song (lyrics), article (press, magazines, blogs), subtitles (film or series dialogue, quotes from them), social (posts, tweets, comments), book (novels, literature), other.
+- Prefer variety: different situations, different forms of the word, different senses; never two sentences that say the same thing. Prefer short, everyday sentences over long ones.
+- An empty list is a correct answer when no snippet really uses the headword.
+
+${SLANG_RUBRIC}
+
+EXAMPLE.
+Headword kiffer; senses: тащиться, кайфовать | нравиться | обожать.
+[1] (forum.exemple.fr — Vos sons du moment) Franchement je kiffe trop ce son, je l'écoute en boucle depuis hier.
+[2] (dico.exemple.fr — Définition de kiffer) Kiffer : verbe transitif, aimer beaucoup.
+[3] (paroles.exemple.fr — Paroles) Kiffe la vie frérot, demain c'est pas sûr
+→ examples [{snippet 1, fr "Franchement je kiffe trop ce son, je l'écoute en boucle depuis hier.", hit "kiffe", ru "Честно, я тащусь от этого трека, слушаю его на повторе со вчерашнего дня.", meaning "тащиться, кайфовать", kind forum}, {snippet 3, fr "Kiffe la vie frérot, demain c'est pas sûr", hit "Kiffe", ru "Кайфуй от жизни, братишка, завтра ничего не известно", meaning "тащиться, кайфовать", kind song}]; snippet 2 is a definition and is skipped.`;
+
+export function lookupUserPrompt(input: { q: string; direction: "fr" | "ru" }): string {
+  return `Query (${input.direction === "ru" ? "Russian" : "French"}): ${oneLine(input.q)}`;
+}
+
+export function contextSearchPrompt(input: { fr: string; meanings: readonly string[] }): string {
+  const senses = input.meanings.length ? `\nSenses (Russian): ${input.meanings.map(oneLine).join(" | ")}` : "";
+  return `Headword: ${oneLine(input.fr)}${senses}`;
+}
+
+export interface ContextSnippet {
+  n: number;
+  domain: string;
+  title: string | null;
+  text: string;
+}
+
+export function contextPickPrompt(input: { fr: string; meanings: readonly string[]; snippets: readonly ContextSnippet[] }): string {
+  const senses = input.meanings.length ? input.meanings.map(oneLine).join(" | ") : "(none)";
+  const lines = input.snippets.map((s) => `[${s.n}] (${s.domain}${s.title ? ` — ${oneLine(s.title)}` : ""}) ${oneLine(s.text)}`);
+  return `Headword: ${oneLine(input.fr)}\nSenses: ${senses}\n\n${lines.join("\n")}`;
+}
+
 export function exampleUserPrompt(input: { fr: string; ru: string; note: string | null; avoid: readonly string[] }): string {
   const existing = input.avoid.length ? input.avoid.map((e) => `- ${oneLine(e)}`).join("\n") : "(none)";
   return `French: ${oneLine(input.fr)}\nRussian: ${oneLine(input.ru)}\nNote: ${input.note ? oneLine(input.note) : "-"}\n\nExamples it already has:\n${existing}`;
@@ -362,4 +437,6 @@ export const SYSTEM_PROMPTS = {
   enrich: ENRICH_SYSTEM,
   example: EXAMPLE_SYSTEM,
   anki: ANKI_SYSTEM,
+  lookup: LOOKUP_SYSTEM,
+  contextPick: CONTEXT_PICK_SYSTEM,
 } as const;

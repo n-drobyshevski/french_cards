@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Builds public/lexique/fr-lemmas.json for instant local suggestions (lib/lexique.ts):
-// an array of [lemma, pos, gender, freq] for the most frequent French lemmas, sorted by the
-// accent-folded lemma. Source: Lexique 3.83 (New & Pallier, www.lexique.org, CC BY-SA 4.0),
+// an array of [lemma, pos, gender, freq, key?] for the most frequent French lemmas, sorted by the
+// accent-folded lemma. `key` is that folded lemma, present only when it differs from the lemma,
+// so the app builds its index without folding 25k strings at runtime. Source: Lexique 3.83 (New & Pallier, www.lexique.org, CC BY-SA 4.0),
 // plus the curated slang list in lexique-slang.mjs. Without network it falls back to the
 // bundled scripts/lexique-fallback.json (top lemmas from an earlier Lexique run + slang).
 //
@@ -129,6 +130,14 @@ function sortByKey(entries) {
     .map((x) => x.e);
 }
 
+/** Appends the folded key where it differs from the lemma (read by createLexique in lib/lexique.ts). */
+function withKeys(entries) {
+  return entries.map((e) => {
+    const key = foldKey(e[0]);
+    return key === e[0] ? e : [...e, key];
+  });
+}
+
 /** Adds curated slang that is missing, and fixes noun genders Lexique gets wrong for slang (keuf). */
 function withSlang(entries) {
   const index = new Map(entries.map((e, i) => [e[0], i]));
@@ -173,7 +182,7 @@ async function main() {
     throw new Error("Lexique unreachable and scripts/lexique-fallback.json is missing");
   }
 
-  const final = sortByKey(withSlang(entries));
+  const final = withKeys(sortByKey(withSlang(entries)));
   mkdirSync(dirname(OUT), { recursive: true });
   writeFileSync(OUT, `[\n${final.map((e) => JSON.stringify(e)).join(",\n")}\n]\n`);
   const kb = Math.round(readFileSync(OUT).byteLength / 1024);

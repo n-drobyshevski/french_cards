@@ -4,7 +4,7 @@
 import { generateText, Output } from "ai";
 import { guardAiRequest, jsonError, limitAiRequest, NO_STORE } from "@/lib/ai/auth";
 import { finalizeExample } from "@/lib/ai/example";
-import { cachedInstructions, modelFor, providerOptions } from "@/lib/ai/model";
+import { cachedInstructions, modelFor, modelIdFor, providerOptionsFor } from "@/lib/ai/model";
 import { EXAMPLE_SYSTEM, exampleUserPrompt } from "@/lib/ai/prompts";
 import { ExampleModelSchema, ExampleRequestSchema, type ExampleModel, type ExampleResponse } from "@/lib/ai/schemas";
 
@@ -32,7 +32,7 @@ export async function POST(req: Request): Promise<Response> {
       instructions: cachedInstructions(EXAMPLE_SYSTEM),
       prompt: exampleUserPrompt({ fr, ru, note: note ?? null, avoid }),
       output: Output.object({ schema: ExampleModelSchema, name: "example" }),
-      providerOptions,
+      providerOptions: providerOptionsFor(modelIdFor("example", model)),
       maxOutputTokens: 400,
       abortSignal: req.signal,
     });

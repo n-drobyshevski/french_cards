@@ -11,6 +11,8 @@ import {
   buildEnrichPlan,
   countEnrichCandidates,
   EnrichError,
+  ENRICH_CONCURRENCY,
+  ENRICH_REQUEST_SIZE,
   enrichFraction,
   enrichmentPatch,
   enrichWords,
@@ -73,10 +75,14 @@ describe("network", () => {
 
   it("chunks the words and collects results by id", async () => {
     const fetchImpl = fakeFetch((id) => (id === "w3" ? null : result(id)));
-    const words = Array.from({ length: ENRICH_CHUNK_MAX + 5 }, (_, i) => ({ id: `w${i}`, fr: `mot${i}`, ru: `слово${i}` }));
+    const words = Array.from({ length: ENRICH_REQUEST_SIZE + 5 }, (_, i) => ({ id: `w${i}`, fr: `mot${i}`, ru: `слово${i}` }));
     const progress: number[] = [];
     const out = await enrichWords(words, { fetchImpl, onProgress: (done) => progress.push(done) });
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+    for (const [, init] of fetchImpl.mock.calls) {
+      expect(JSON.parse(String(init?.body)).words.length).toBeLessThanOrEqual(ENRICH_REQUEST_SIZE);
+    }
+    expect(ENRICH_REQUEST_SIZE).toBeLessThanOrEqual(ENRICH_CHUNK_MAX);
     expect(out.size).toBe(words.length - 1);
     expect(out.has("w3")).toBe(false);
     expect(progress.at(-1)).toBe(words.length);
@@ -84,7 +90,7 @@ describe("network", () => {
 
   it("reports the opening 0 / n and every batch through onStage, keeping onProgress", async () => {
     const fetchImpl = fakeFetch();
-    const words = Array.from({ length: ENRICH_CHUNK_MAX * 2 + 3 }, (_, i) => ({ id: `w${i}`, fr: `mot${i}`, ru: `слово${i}` }));
+    const words = Array.from({ length: ENRICH_REQUEST_SIZE * 2 + 3 }, (_, i) => ({ id: `w${i}`, fr: `mot${i}`, ru: `слово${i}` }));
     const stages: EnrichProgress[] = [];
     const progress: [number, number][] = [];
     await enrichWords(words, { fetchImpl, onStage: (p) => stages.push(p), onProgress: (d, t) => progress.push([d, t]) });
@@ -101,6 +107,44 @@ describe("network", () => {
     expect(fractions.at(-1)).toBe(1);
     expect(progress.at(-1)).toEqual([words.length, words.length]);
     expect(enrichFraction({ done: 0, total: 0 })).toBe(1);
+  });
+
+  it("keeps at most ENRICH_CONCURRENCY requests in flight", async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const answer = fakeFetch();
+    const fetchImpl = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      peak = Math.max(peak, ++inFlight);
+      await new Promise((r) => setTimeout(r, 1));
+      inFlight--;
+      return answer(url, init);
+    });
+    const words = Array.from({ length: ENRICH_REQUEST_SIZE * (ENRICH_CONCURRENCY + 2) }, (_, i) => ({ id: `w${i}`, fr: `mot${i}`, ru: `слово${i}` }));
+    const out = await enrichWords(words, { fetchImpl });
+    expect(fetchImpl).toHaveBeenCalledTimes(ENRICH_CONCURRENCY + 2);
+    expect(peak).toBe(ENRICH_CONCURRENCY);
+    expect(out.size).toBe(words.length);
+  });
+
+  it("stops sending requests once one has failed", async () => {
+    const answer = fakeFetch();
+    let calls = 0;
+    const fetchImpl = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (++calls === 1) return new Response("{}", { status: 500 });
+      await new Promise((r) => setTimeout(r, 5));
+      return answer(url, init);
+    });
+    const words = Array.from({ length: ENRICH_REQUEST_SIZE * (ENRICH_CONCURRENCY * 3) }, (_, i) => ({ id: `w${i}`, fr: `mot${i}`, ru: `слово${i}` }));
+    await expect(enrichWords(words, { fetchImpl, retries: 0 })).rejects.toBeInstanceOf(EnrichError);
+    // Only the first wave went out; nothing after the failure.
+    expect(fetchImpl.mock.calls.length).toBeLessThanOrEqual(ENRICH_CONCURRENCY);
+  });
+
+  it("sends larger requests when asked to", async () => {
+    const fetchImpl = vi.fn(fakeFetch());
+    const words = Array.from({ length: 50 }, (_, i) => ({ id: `w${i}`, fr: `mot${i}`, ru: `слово${i}` }));
+    await enrichWords(words, { fetchImpl, requestSize: 50 });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it("retries after 429 and maps errors", async () => {

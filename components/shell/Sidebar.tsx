@@ -7,7 +7,7 @@ import { FolderFormSheet } from "@/components/library/FolderFormSheet";
 import { ThemeActions, type ThemeActionsTarget } from "@/components/library/ThemeActions";
 import { useLongPress } from "@/components/library/use-long-press";
 import { nWords } from "@/components/library/format";
-import { useAddSheet } from "@/components/providers/AddSheetContext";
+import { useAddSheetActions } from "@/components/providers/AddSheetContext";
 import { AppMark } from "@/components/ui/AppMark";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
@@ -131,7 +131,7 @@ function SyncButton() {
 }
 
 function SidebarView({ data, active }: { data: ShellData | undefined; active: NavKey | null }) {
-  const addSheet = useAddSheet();
+  const addSheet = useAddSheetActions();
   const shortcuts = useShortcutsEnabled();
   const snackbar = useSnackbar();
   const router = useRouter();

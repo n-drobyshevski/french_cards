@@ -27,16 +27,55 @@ export function searchKey(input: string): string {
   return foldAccents(input.normalize("NFC").toLowerCase()).replace(APOSTROPHES, "'").replace(SPACES, " ").trim();
 }
 
-/** True if every whitespace-separated term of `query` occurs in FR, RU, note, tags or custom fields (accent-insensitive). */
-export function matchesSearch(
-  word: Pick<Word, "fr" | "ru"> & Partial<Pick<Word, "note" | "tags" | "custom_fields">>,
-  query: string,
-): boolean {
+/**
+ * Memo for a pure string → key function. Keyed by the input string, so an edited word simply looks
+ * up its new text; cleared when full (a library's strings fit many times over).
+ */
+export function memoString(fn: (s: string) => string, max = 20_000): (s: string) => string {
+  const cache = new Map<string, string>();
+  return (s) => {
+    let out = cache.get(s);
+    if (out === undefined) {
+      if (cache.size >= max) cache.clear();
+      out = fn(s);
+      cache.set(s, out);
+    }
+    return out;
+  };
+}
+
+type Searchable = Pick<Word, "fr" | "ru"> & Partial<Pick<Word, "note" | "tags" | "custom_fields">>;
+
+/** The folded terms of a search query ([] matches everything). Fold once per query, not per word. */
+export function searchTerms(query: string): string[] {
   const q = searchKey(query);
-  if (!q) return true;
+  return q ? q.split(" ") : [];
+}
+
+// Per word object, with the raw text it was folded from, so a row changed in place folds again.
+const haystacks = new WeakMap<object, { raw: string; key: string }>();
+
+/** FR, RU, note, tags and custom field values of a word as one folded string (cached per word object). */
+export function searchHaystack(word: Searchable): string {
   const fields = (word.custom_fields ?? []).map((f) => f.value);
-  const hay = searchKey([word.fr, word.ru, word.note ?? "", ...(word.tags ?? []), ...fields].join(" \u0001 "));
-  return q.split(" ").every((term) => hay.includes(term));
+  const raw = [word.fr, word.ru, word.note ?? "", ...(word.tags ?? []), ...fields].join(" \u0001 ");
+  const hit = haystacks.get(word);
+  if (hit?.raw === raw) return hit.key;
+  const key = searchKey(raw);
+  haystacks.set(word, { raw, key });
+  return key;
+}
+
+/** True if every term (from `searchTerms`) occurs in the word's FR, RU, note, tags or custom fields. */
+export function matchesTerms(word: Searchable, terms: readonly string[]): boolean {
+  if (terms.length === 0) return true;
+  const hay = searchHaystack(word);
+  return terms.every((term) => hay.includes(term));
+}
+
+/** True if every whitespace-separated term of `query` occurs in FR, RU, note, tags or custom fields (accent-insensitive). */
+export function matchesSearch(word: Searchable, query: string): boolean {
+  return matchesTerms(word, searchTerms(query));
 }
 
 const LEADING_ARTICLE = /^(?:(?:les|le|la|un|une|des)\s+|l')(?=\S)/;
@@ -47,7 +86,7 @@ const TRAILING_PUNCT = /[\s.!?…,;:]+$/;
  * NFC, lowercase, unified apostrophes, leading article (le/la/l'/les/un/une/des) removed,
  * trailing sentence punctuation removed, spaces collapsed. Accents are kept (pâte ≠ pate).
  */
-export function normalizeLemma(fr: string): string {
+export const normalizeLemma = memoString((fr: string): string => {
   const s = fr
     .normalize("NFC")
     .toLowerCase()
@@ -57,7 +96,7 @@ export function normalizeLemma(fr: string): string {
     .replace(TRAILING_PUNCT, "")
     .trim();
   return s.replace(LEADING_ARTICLE, "") || s;
-}
+});
 
 const TRANSLIT: Record<string, string> = {
   а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "e", ж: "zh", з: "z", и: "i", й: "y", к: "k",

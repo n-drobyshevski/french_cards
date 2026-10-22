@@ -19,6 +19,7 @@ import {
   setSessionFilter,
   updateReviewSet,
 } from "@/lib/review-sets";
+import { loadSessionData } from "@/lib/session";
 import type { Direction, ReviewSet } from "@/lib/types";
 import type { FolderChoice } from "./filter";
 import { ReviewSetSheet } from "./ReviewSetSheet";
@@ -65,13 +66,19 @@ export function FolderPickerSheet({ open, onOpenChange, value, onChange, sets = 
   const folders = lib?.folders ?? [];
 
   const setsKey = JSON.stringify(sets);
+  // The folder ids, not `lib`: a stats re-run with the same themes must not recount every set.
+  const folderIdsKey = lib ? lib.folders.map((f) => f.id).join(",") : undefined;
   const counts = useLiveQuery(async () => {
-    if (!open || !lib) return undefined;
-    const live = new Set(lib.folders.map((f) => f.id));
-    const out = new Map<string, number>();
-    for (const s of sets) out.set(s.id, await countSetCards(setSessionFilter(s, direction, live), s.mode));
-    return out;
-  }, [open, lib, setsKey, direction]);
+    if (!open || folderIdsKey === undefined) return undefined;
+    const live = new Set(folderIdsKey ? folderIdsKey.split(",") : []);
+    // One read of the library for every set's count.
+    const pre = await loadSessionData();
+    const now = new Date();
+    const entries = await Promise.all(
+      sets.map(async (s) => [s.id, await countSetCards(setSessionFilter(s, direction, live, now), s.mode, now, pre)] as const),
+    );
+    return new Map(entries);
+  }, [open, folderIdsKey, setsKey, direction]);
 
   const options: Option[] = [{ value: "all", name: "Все темы", stats: lib?.totals }];
   if (!lib || lib.inbox.total > 0 || value === "inbox") options.push({ value: "inbox", name: "Входящие", stats: lib?.inbox });

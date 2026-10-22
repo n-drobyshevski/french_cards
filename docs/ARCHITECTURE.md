@@ -14,7 +14,7 @@ Read with `docs/plan.md` (scope and phases), `mockups/SPEC.md` (the v3 visual de
   - Sync is last-write-wins on `updated_at` with soft deletes (`deleted_at`). `review_log` rows are only ever soft-deleted (undo).
 - **AI:**
   - Packages: `ai@7`, `@ai-sdk/anthropic@4`, `zod@4`.
-  - Model `claude-haiku-5-5` with `providerOptions.anthropic.thinking = {type:'disabled'}`. Never set temperature/top_p/top_k and never prefill.
+  - Model `claude-haiku-5-5`; «Точнее» is `claude-sonnet-5-5`. Provider options come from `providerOptionsFor(modelId)` (`lib/ai/model.ts`), chosen by the resolved model id: Haiku gets `thinking: {type:'disabled'}`; Sonnet 5.5 rejects `disabled`, so it gets `thinking: {type:'between_tools'}` with `effort: 'medium'` (faster than its default high, without trimming «Точнее» answers). Keep them fixed per model (a changed effort breaks the prompt cache). Never set temperature/top_p/top_k and never prefill.
   - Use `streamText`/`generateText` with `output: Output.object|array(...)`.
   - Schemas: no `.min/.max/.length`, every field required (use `.nullable()`), confidence is an enum. Limits go in `.describe()` text, and results are sliced on the server.
   - The v7 API changed (`instructions`, `type:'file'` image parts, `Output`). Read the typings in `node_modules/ai` and `node_modules/@ai-sdk/anthropic` before writing calls.
@@ -56,6 +56,14 @@ If `NEXT_PUBLIC_SUPABASE_URL` is unset, the app runs fully local: there is no lo
 - `CRON_SECRET`
 - `MCP_SECRET`, `SUPABASE_SECRET_KEY`, `MCP_USER_ID`, `MCP_TIMEZONE` (optional): the Claude connector (`docs/CONNECTOR.md`). Server-only. Without all three required values `/api/mcp/*` answers 404.
 - See `.env.example`.
+
+## Performance conventions
+- Dexie reads: `liveRows(table)` (`lib/db.ts`) or an index range + `.toArray()`, then filter in JS. Never `table.filter(...).toArray()` / `.each()` / filtered `.count()` over a whole table: those walk a cursor and skip Dexie's live-query cache.
+- Sync bookkeeping (`sync_cursors`, `last_sync_at`) lives in the settings row with id `"sync"` (`readSyncMeta`), so a sync never wakes the `getSettings()` live queries. Local writes push only; pulls run on open, focus, online, sign-in, the 5-minute timer and manual sync.
+- French sort and search keys are cached by string (`frSortKey`, `normalizeLemma`, `searchHaystack` in `lib/text.ts`); sort with keys computed once per word (`compareFrKeyed`), fold the query once (`searchTerms`).
+- The React Compiler is on (`reactCompiler: true`). Components it skips (try/catch in render paths, e.g. `Desk`, `ReviewScreen`) rely on hand-written `memo`/`useMemo`; keep row props stable (handlers through a ref, as in `WordTable` and `WordList`).
+- Lazy chunks: the desktop library (`components/library/lazy-desk.ts`) and the quick-add sheet load on demand through `loadChunk` (`lib/chunk-load.ts`: one retry, then one reload, since the shell HTML is served stale-while-revalidate and a deploy may have removed an older build's chunks).
+- `/api/ai/*` is gated only in the route handlers (`guardAiRequest`); `proxy.ts` passes those requests through and refreshes cookies only on page loads.
 
 ## Module map (ownership during the parallel build)
 | Area | Files |

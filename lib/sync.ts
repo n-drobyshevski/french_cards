@@ -6,7 +6,10 @@
 // Pull: per table, fetch rows whose server `synced_at` is past the stored cursor (with a short
 //   overlap for transactions that committed late) and merge them last-write-wins on
 //   `updated_at`. Merged rows are not queued for upload again.
-// Loop: startSyncLoop() syncs on open, focus, reconnect and 3 s after local writes.
+// Loop: startSyncLoop() pushes 3 s after local writes, and pushes then pulls on open, focus,
+//   reconnect, sign-in, every 5 minutes and on demand.
+// Bookkeeping (cursors, last sync time) lives in its own settings row, id "sync", so a cycle
+//   does not wake the UI's live queries on the "settings" row.
 import { liveQuery, type Subscription } from "dexie";
 import { useSyncExternalStore } from "react";
 import { isAuthRetryableFetchError, type SupabaseClient } from "@supabase/supabase-js";
@@ -15,7 +18,7 @@ import { db as defaultDb, nowIso, type KartochkiDB, type Outbox } from "./db";
 import { isSyncTable, skipOutboxFor } from "./outbox";
 import { getSupabaseBrowserClient } from "./supabase/client";
 import { isSupabaseConfigured } from "./supabase/config";
-import { DEFAULT_SETTINGS, SYNC_TABLES, type Settings, type SyncTable } from "./types";
+import { SYNC_TABLES, type Settings, type SyncTable } from "./types";
 
 export { fromRemoteRow, REMOTE_COLUMNS, toRemoteRow } from "./core/rows";
 
@@ -200,14 +203,31 @@ export async function pushOutbox(client: SupabaseClient, database: KartochkiDB =
 // ---------------------------------------------------------------------------------------------
 // Pull
 
-async function readSettings(database: KartochkiDB): Promise<Settings> {
-  return { ...DEFAULT_SETTINGS, ...(await database.settings.get("settings")), id: "settings" };
+export const SYNC_META_ID = "sync";
+
+/** Sync bookkeeping, stored in the settings table under its own key. */
+export interface SyncMeta {
+  id: typeof SYNC_META_ID;
+  /** Client time of the last successful cycle. */
+  last_sync_at: string | null;
+  /** Pull cursors per synced table: the server `synced_at` of the last row received. */
+  sync_cursors: Partial<Record<SyncTable, string>>;
 }
 
-async function patchSettings(database: KartochkiDB, patch: (s: Settings) => Partial<Settings>): Promise<void> {
+const metaTable = (database: KartochkiDB) => database.table<SyncMeta, string>("settings");
+
+/** The "sync" row; until it exists, the fields the "settings" row used to carry. */
+export async function readSyncMeta(database: KartochkiDB = defaultDb): Promise<SyncMeta> {
+  const meta = await metaTable(database).get(SYNC_META_ID);
+  if (meta) return { id: SYNC_META_ID, last_sync_at: meta.last_sync_at ?? null, sync_cursors: { ...meta.sync_cursors } };
+  const legacy: Partial<Settings> | undefined = await database.settings.get("settings");
+  return { id: SYNC_META_ID, last_sync_at: legacy?.last_sync_at ?? null, sync_cursors: { ...legacy?.sync_cursors } };
+}
+
+async function patchSyncMeta(database: KartochkiDB, patch: (m: SyncMeta) => Partial<Omit<SyncMeta, "id">>): Promise<void> {
   await database.transaction("rw", database.settings, async () => {
-    const current = await readSettings(database);
-    await database.settings.put({ ...current, ...patch(current) });
+    const current = await readSyncMeta(database);
+    await metaTable(database).put({ ...current, ...patch(current), id: SYNC_META_ID });
   });
 }
 
@@ -221,14 +241,19 @@ function laterCursor(a: string | undefined, b: string): string {
 
 const quote = (value: string) => `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 
-export async function pullChanges(client: SupabaseClient, database: KartochkiDB = defaultDb): Promise<number> {
+/** Pages one table from its cursor. The cursor is saved once at the end, and only if it moved. */
+async function pullTable(client: SupabaseClient, table: SyncTable, start: string | undefined, database: KartochkiDB): Promise<number> {
   let merged = 0;
-  for (const table of SYNC_TABLES) {
-    const cursors = (await readSettings(database)).sync_cursors ?? {};
-    let cursor = cursors[table];
-    const since = cursor ? new Date(toMs(cursor) - PULL_OVERLAP_MS).toISOString() : null;
-    let after: { at: string; id: string } | null = null;
+  let cursor = start;
+  const since = cursor ? new Date(toMs(cursor) - PULL_OVERLAP_MS).toISOString() : null;
+  let after: { at: string; id: string } | null = null;
 
+  const saveCursor = async () => {
+    if (cursor === start) return;
+    const saved = cursor;
+    await patchSyncMeta(database, (m) => ({ sync_cursors: { ...m.sync_cursors, [table]: saved } }));
+  };
+  try {
     for (;;) {
       let query = client.from(table).select("*");
       if (after) {
@@ -243,14 +268,27 @@ export async function pullChanges(client: SupabaseClient, database: KartochkiDB 
       merged += await mergeRemoteRows(table, rows, database);
 
       const last = rows.at(-1);
-      if (last && typeof last.synced_at === "string") {
-        cursor = laterCursor(cursor, last.synced_at);
-        const saved = cursor;
-        await patchSettings(database, (s) => ({ sync_cursors: { ...s.sync_cursors, [table]: saved } }));
-      }
+      if (last && typeof last.synced_at === "string") cursor = laterCursor(cursor, last.synced_at);
       if (rows.length < PULL_PAGE || !last) break;
       after = { at: String(last.synced_at), id: String(last.id) };
     }
+  } catch (error: unknown) {
+    // Pages merged before a failure keep their progress; the failure (and its kind) goes on.
+    await saveCursor().catch(() => {});
+    throw error;
+  }
+  await saveCursor();
+  return merged;
+}
+
+/** Pulls every table at once (no foreign keys between them); the first failure is rethrown. */
+export async function pullChanges(client: SupabaseClient, database: KartochkiDB = defaultDb): Promise<number> {
+  const { sync_cursors: cursors } = await readSyncMeta(database);
+  const settled = await Promise.allSettled(SYNC_TABLES.map((table) => pullTable(client, table, cursors[table], database)));
+  let merged = 0;
+  for (const result of settled) {
+    if (result.status === "rejected") throw result.reason;
+    merged += result.value;
   }
   return merged;
 }
@@ -262,7 +300,7 @@ export type SyncState = "idle" | "syncing" | "error" | "offline" | "disabled";
 
 export interface SyncStatus {
   state: SyncState;
-  /** Client time of the last fully successful cycle. */
+  /** Client time of the last successful cycle (a push-only one included). */
   lastSyncAt: string | null;
   /** Short technical reason for `error` (not user copy). */
   error: string | null;
@@ -321,20 +359,34 @@ export interface SyncResult {
 
 const isOffline = () => typeof navigator !== "undefined" && navigator.onLine === false;
 
-/** Push then pull with an explicit client and database. Used by syncNow() and by tests. */
-export async function runSyncCycle(client: SupabaseClient, database: KartochkiDB = defaultDb) {
+export interface SyncOptions {
+  /** false: push the outbox only (the debounce after local writes). Default true. */
+  pull?: boolean;
+}
+
+/**
+ * Push then pull with an explicit client and database. Used by syncNow() and by tests. Only a
+ * full cycle counts as a sync for «last synced» (`lastSyncAt` stays null when pushing only).
+ */
+export async function runSyncCycle(client: SupabaseClient, database: KartochkiDB = defaultDb, { pull = true }: SyncOptions = {}) {
   const push = await pushOutbox(client, database);
+  if (!pull) return { ...push, pulled: 0, lastSyncAt: null };
   const pulled = await pullChanges(client, database);
   const lastSyncAt = nowIso();
-  await patchSettings(database, () => ({ last_sync_at: lastSyncAt }));
+  await patchSyncMeta(database, () => ({ last_sync_at: lastSyncAt }));
   return { ...push, pulled, lastSyncAt };
 }
 
 let inflight: Promise<SyncResult> | null = null;
+/** Whether the running cycle pulls. */
+let inflightPulls = false;
 let rerun = false;
+let rerunPull = false;
+/** Settles with the follow-up cycle, for a pull asked for while a push-only cycle runs. */
+let followUp: { promise: Promise<SyncResult>; resolve: (r: Promise<SyncResult>) => void } | null = null;
 let failures = 0;
 
-async function cycle(): Promise<SyncResult> {
+async function cycle(opts: SyncOptions): Promise<SyncResult> {
   const empty = { pushed: 0, pulled: 0, rejected: 0 };
   const client = getSupabaseBrowserClient();
   if (!client) {
@@ -356,13 +408,20 @@ async function cycle(): Promise<SyncResult> {
       return { ok: false, state, ...empty };
     }
 
+    // A push-only cycle says nothing about pulling: it keeps an earlier failure on show (and its
+    // retry backoff) until a full cycle gets through.
+    const pullFailure = opts.pull === false && status.state === "error" && status.errorKind !== "rejected" ? status : null;
     setStatus({ state: "syncing", error: null });
-    const result = await runSyncCycle(client);
+    const result = await runSyncCycle(client, defaultDb, opts);
+    if (pullFailure && result.rejected === 0) {
+      setStatus(pullFailure);
+      return { ok: true, state: "idle", pushed: result.pushed, pulled: 0, rejected: 0 };
+    }
     failures = 0;
     const state: SyncState = result.rejected > 0 ? "error" : "idle";
     setStatus({
       state,
-      lastSyncAt: result.lastSyncAt,
+      ...(result.lastSyncAt ? { lastSyncAt: result.lastSyncAt } : {}),
       error: result.lastRejection,
       errorKind: state === "error" ? "rejected" : null,
       errorAt: state === "error" ? nowIso() : null,
@@ -382,19 +441,34 @@ async function cycle(): Promise<SyncResult> {
 }
 
 /**
- * Runs one push+pull cycle now. Concurrent calls share the running cycle, and a call made
- * while one is running triggers exactly one more cycle afterwards (to pick up new writes).
+ * Runs one push+pull cycle now (push only with `pull: false`). Concurrent calls share the
+ * running cycle, and a call made while one is running triggers exactly one more cycle
+ * afterwards (to pick up new writes), which pulls if any of those calls asked for a pull.
  */
-export function syncNow(): Promise<SyncResult> {
+export function syncNow({ pull = true }: SyncOptions = {}): Promise<SyncResult> {
   if (inflight) {
     rerun = true;
-    return inflight;
+    rerunPull ||= pull;
+    if (!pull || inflightPulls) return inflight;
+    // The running cycle doesn't pull: answer with the follow-up that does (manual sync waits on it).
+    if (!followUp) {
+      let resolve!: (r: Promise<SyncResult>) => void;
+      const promise = new Promise<SyncResult>((r) => (resolve = r));
+      followUp = { promise, resolve };
+    }
+    return followUp.promise;
   }
-  inflight = cycle().finally(() => {
+  inflightPulls = pull;
+  inflight = cycle({ pull }).finally(() => {
     inflight = null;
     if (rerun) {
+      const next = rerunPull;
+      const waiting = followUp;
       rerun = false;
-      void syncNow();
+      rerunPull = false;
+      followUp = null;
+      const again = syncNow({ pull: next });
+      waiting?.resolve(again);
     }
   });
   return inflight;
@@ -414,6 +488,8 @@ function scheduleRetry(): void {
 
 function createLoop(): { schedule: (ms: number) => void; stop: () => void } {
   let timer: ReturnType<typeof setTimeout> | undefined;
+  // Its own timer, so a write does not cancel a pending retry.
+  let pushTimer: ReturnType<typeof setTimeout> | undefined;
   let lastEventKick = 0;
   const kick = () => void syncNow();
   // focus and visibilitychange usually fire together when the app comes back.
@@ -434,9 +510,9 @@ function createLoop(): { schedule: (ms: number) => void; stop: () => void } {
     return { schedule: () => {}, stop: () => {} };
   }
 
-  void readSettings(defaultDb)
-    .then((s) => {
-      if (s.last_sync_at && !status.lastSyncAt) setStatus({ lastSyncAt: s.last_sync_at });
+  void readSyncMeta(defaultDb)
+    .then((m) => {
+      if (m.last_sync_at && !status.lastSyncAt) setStatus({ lastSyncAt: m.last_sync_at });
     })
     .catch(() => {});
 
@@ -454,7 +530,8 @@ function createLoop(): { schedule: (ms: number) => void; stop: () => void } {
   window.addEventListener("offline", onOffline);
   document.addEventListener("visibilitychange", onVisible);
 
-  // Debounced push after local writes: every write re-queues its row with a newer queued_at.
+  // Debounced push after local writes (no pull: remote changes come with the other kicks).
+  // Every write re-queues its row with a newer queued_at.
   // The first emission only records the starting point; the initial kick below covers it.
   let newestQueued: string | null = null;
   let primed = false;
@@ -463,16 +540,30 @@ function createLoop(): { schedule: (ms: number) => void; stop: () => void } {
       const queuedAt = entry?.queued_at ?? null;
       const isNewer = queuedAt !== null && (newestQueued === null || queuedAt > newestQueued);
       if (isNewer) newestQueued = queuedAt;
-      if (primed && isNewer) schedule(WRITE_DEBOUNCE_MS);
+      if (primed && isNewer) {
+        clearTimeout(pushTimer);
+        pushTimer = setTimeout(() => void syncNow({ pull: false }), WRITE_DEBOUNCE_MS);
+      }
       primed = true;
     },
     error() {},
   });
 
-  const { data: auth } = client.auth.onAuthStateChange((event) => {
+  // supabase-js re-emits SIGNED_IN for the same session when a tab comes back, and the
+  // visibility kick covers that; only a new user (a real sign-in or a switch) syncs here.
+  let knownUser: string | null | undefined;
+  const { data: auth } = client.auth.onAuthStateChange((event, session) => {
     // Never await Supabase calls inside this callback; defer instead.
-    if (event === "SIGNED_IN") schedule(0);
-    if (event === "SIGNED_OUT") setStatus({ state: "disabled", error: null });
+    const user = session?.user?.id ?? null;
+    if (event === "INITIAL_SESSION") knownUser = user;
+    if (event === "SIGNED_IN" && user !== knownUser) {
+      knownUser = user;
+      schedule(0);
+    }
+    if (event === "SIGNED_OUT") {
+      knownUser = null;
+      setStatus({ state: "disabled", error: null });
+    }
   });
 
   const periodic = setInterval(() => {
@@ -485,6 +576,7 @@ function createLoop(): { schedule: (ms: number) => void; stop: () => void } {
     schedule,
     stop() {
       clearTimeout(timer);
+      clearTimeout(pushTimer);
       clearInterval(periodic);
       outboxWatch.unsubscribe();
       auth.subscription.unsubscribe();

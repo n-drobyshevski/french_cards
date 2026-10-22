@@ -20,6 +20,10 @@ export const RATE_LIMITS = {
   example: { capacity: 20, refillPerSec: 1 / 3 },
   // Anki import: up to 300 notes in chunks of 25, three in flight.
   anki: { capacity: 15, refillPerSec: 1 / 3 },
+  // «Контекст»: the dictionary part, once per query (repeat queries open from the device's history).
+  lookup: { capacity: 20, refillPerSec: 1 / 3 },
+  // «Контекст» web examples: each run makes up to 3 billed web searches.
+  context: { capacity: 6, refillPerSec: 1 / 30 },
   // Claude connector write tools (lib/mcp/tools.ts), taken inside tools/call only.
   mcp: { capacity: 20, refillPerSec: 1 / 3 },
 } satisfies Record<string, BucketConfig>;

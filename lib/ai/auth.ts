@@ -1,6 +1,6 @@
-// Gate for every /api/ai/* handler: same access rule as proxy.ts (Supabase user whose email is
-// ALLOWED_EMAIL, or local-only mode outside production) and a check that an Anthropic key is
-// configured. After validating the body, handlers take a rate-limit token (invalid requests are free).
+// Gate for every /api/ai/* handler, and the only one (proxy.ts passes these requests through): a
+// Supabase user whose email is in ALLOWED_EMAIL (or local-only mode outside production) and a check
+// that an Anthropic key is configured. After validating the body, handlers take a rate-limit token (invalid requests are free).
 import { checkAiAccess } from "@/lib/supabase/server";
 import { isAiConfigured } from "./model";
 import { clientKey, rateLimit, type RateLimitedRoute } from "./rate-limit";

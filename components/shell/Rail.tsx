@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense } from "react";
 import { nWords } from "@/components/library/format";
-import { useAddSheet } from "@/components/providers/AddSheetContext";
+import { useAddSheetActions } from "@/components/providers/AddSheetContext";
 import { CardGlyph } from "@/components/ui/AppMark";
 import { cx } from "@/components/ui/cx";
 import { Icon, type IconName } from "@/components/ui/Icons";
@@ -121,7 +121,7 @@ function SyncedSettingsLink({ active }: { active: boolean }) {
 }
 
 function RailView({ data, active }: { data: ShellData | undefined; active: NavKey | null }) {
-  const addSheet = useAddSheet();
+  const addSheet = useAddSheetActions();
   const shortcuts = useShortcutsEnabled();
   const layout = useLayoutClass();
   const library = active === "library" || !!active?.startsWith("theme:");

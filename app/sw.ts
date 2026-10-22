@@ -1,7 +1,8 @@
 /// <reference lib="webworker" />
 // Service worker, bundled by @serwist/turbopack (see app/serwist/[path]/route.ts) and served at /serwist/sw.js.
 // - Precaches the build's static assets, public/ (icons, lexique) and the offline page.
-// - App pages: network first with a short timeout, cached copies when offline, /~offline as a last resort.
+// - Shell routes open from the HTML warmShell cached for this deploy and refresh it in the background;
+//   other pages are network first with a 1 s timeout. Cached copies offline, /~offline as a last resort.
 // - Never touches /api/* or cross-origin requests (Supabase), so they always hit the network uncached.
 // - Android share target: POST /import is answered here (see components/pwa/share-target.ts).
 import type { PrecacheEntry, RouteMatchCallbackOptions, RuntimeCaching, SerwistGlobalConfig } from "serwist";
@@ -34,25 +35,36 @@ function isPageRequest({ request, url, sameOrigin }: RouteMatchCallbackOptions):
   return request.mode === "navigate" || (request.headers.get("Accept") ?? "").includes("text/html");
 }
 
+/**
+ * A shell route without a query: its cached HTML was fetched by warmShell for this deploy, so it
+ * matches the precached chunks. Queries (/import?shared=N, a stray ?code=) still go to the network.
+ */
+const isShellPage = (options: RouteMatchCallbackOptions) =>
+  isPageRequest(options) && options.url.search === "" && SHELL_ROUTES.includes(options.url.pathname);
+
 const ok = () => new CacheableResponsePlugin({ statuses: [200] });
+/** One instance for both page rules, since they share the cache. */
+const pagesExpiration = new ExpirationPlugin({ maxEntries: 48, maxAgeSeconds: 30 * DAY });
 
 const runtimeCaching: RuntimeCaching[] = DEV
   ? [{ matcher: ({ sameOrigin, url }) => sameOrigin && !isApi(url.pathname), handler: new NetworkOnly() }]
   : [
       {
+        // A cold open never waits on a slow network for the static shell.
+        matcher: isShellPage,
+        handler: new StaleWhileRevalidate({ cacheName: PAGES_CACHE, plugins: [ok(), pagesExpiration] }),
+      },
+      {
         matcher: isPageRequest,
-        handler: new NetworkFirst({
-          cacheName: PAGES_CACHE,
-          networkTimeoutSeconds: 3,
-          plugins: [ok(), new ExpirationPlugin({ maxEntries: 48, maxAgeSeconds: 30 * DAY })],
-        }),
+        handler: new NetworkFirst({ cacheName: PAGES_CACHE, networkTimeoutSeconds: 1, plugins: [ok(), pagesExpiration] }),
       },
       {
         // Router payloads for client-side navigations (and their prefetches).
         matcher: ({ request, url, sameOrigin }) => sameOrigin && isRsc(request) && !isApi(url.pathname),
         handler: new NetworkFirst({
           cacheName: "pages-rsc",
-          networkTimeoutSeconds: 3,
+          // Longer than pages: a payload from an older deploy turns the navigation into a hard one.
+          networkTimeoutSeconds: 2,
           plugins: [ok(), new ExpirationPlugin({ maxEntries: 64, maxAgeSeconds: 7 * DAY })],
         }),
       },

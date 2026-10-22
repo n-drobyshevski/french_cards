@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalRedirect, strayAuthCodeRedirect } from "./proxy-redirects";
+import { canonicalRedirect, isBackgroundRequest, strayAuthCodeRedirect } from "./proxy-redirects";
 
 const req = (url: string, host = new URL(url).host) => ({ nextUrl: new URL(url), headers: new Headers({ host }) });
 const prod = { VERCEL_ENV: "production", VERCEL_PROJECT_PRODUCTION_URL: "frenchcards.vercel.app" };
@@ -29,5 +29,22 @@ describe("strayAuthCodeRedirect", () => {
     expect(strayAuthCodeRedirect(req("https://frenchcards.vercel.app/auth/confirm?code=abc"))).toBeNull();
     expect(strayAuthCodeRedirect(req("https://frenchcards.vercel.app/api/ai/suggest?code=abc"))).toBeNull();
     expect(strayAuthCodeRedirect(req("https://frenchcards.vercel.app/library"))).toBeNull();
+  });
+});
+
+describe("isBackgroundRequest", () => {
+  const headers = (init: Record<string, string>) => ({ headers: new Headers(init) });
+
+  it("keeps document navigations, and requests without Sec-Fetch-Dest, as documents", () => {
+    expect(isBackgroundRequest(headers({ "sec-fetch-dest": "document", "sec-fetch-mode": "navigate" }))).toBe(false);
+    expect(isBackgroundRequest(headers({}))).toBe(false);
+  });
+
+  it("treats router payloads, prefetches and subresource fetches as background", () => {
+    expect(isBackgroundRequest(headers({ "sec-fetch-dest": "empty" }))).toBe(true);
+    expect(isBackgroundRequest(headers({ rsc: "1" }))).toBe(true);
+    expect(isBackgroundRequest(headers({ "next-router-prefetch": "1" }))).toBe(true);
+    expect(isBackgroundRequest(headers({ "sec-fetch-dest": "document", "sec-purpose": "prefetch;prerender" }))).toBe(true);
+    expect(isBackgroundRequest(headers({ purpose: "prefetch" }))).toBe(true);
   });
 });

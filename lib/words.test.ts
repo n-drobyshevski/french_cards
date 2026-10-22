@@ -20,6 +20,7 @@ import {
   softDeleteWords,
   undoLastReview,
   updateWord,
+  updateWords,
 } from "./words";
 
 const MIN = 60_000;
@@ -127,6 +128,65 @@ describe("updateWord", () => {
     await expect(updateWord("nope", { ru: "x" })).rejects.toThrow();
     const w = await addWord({ fr: "a", ru: "b" });
     await expect(updateWord(w.id, { fr: "  " })).rejects.toThrow();
+  });
+});
+
+describe("updateWords", () => {
+  it("patches every word in one go, skips deleted ones and queues each written row", async () => {
+    const a = await addWord({ fr: "bouffer", ru: "жрать" }, T0);
+    const b = await addWord({ fr: "le fric", ru: "бабло", folder_id: "f1", folder_confidence: "high" }, T0);
+    const c = await addWord({ fr: "chelou", ru: "стрёмный" }, T0);
+    await softDeleteWord(c.id, T0);
+    await db.outbox.clear();
+    const out = await updateWords(
+      [
+        { id: a.id, patch: { note: "  fam. " } },
+        { id: c.id, patch: { note: "x" } },
+        { id: "missing", patch: { note: "x" } },
+        { id: b.id, patch: { folder_id: "f2" } },
+      ],
+      at(MIN),
+    );
+    expect(out.map((w) => w.id)).toEqual([a.id, b.id]);
+    expect(out[0]).toMatchObject({ note: "fam.", updated_at: at(MIN).toISOString() });
+    expect(out[1]).toMatchObject({ folder_id: "f2", folder_source: "user", folder_confidence: null });
+    expect((await db.words.get(a.id))?.note).toBe("fam.");
+    expect((await db.words.get(c.id))?.note).toBeNull();
+    expect(await outboxKeys()).toEqual([`words:${a.id}`, `words:${b.id}`].sort());
+  });
+
+  it("applies several patches to one word in order and syncs cards only when both_directions changes", async () => {
+    const a = await addWord({ fr: "la meuf", ru: "девушка" }, T0);
+    const b = await addWord({ fr: "le keuf", ru: "мент" }, T0);
+    await db.outbox.clear();
+    const out = await updateWords(
+      [
+        { id: a.id, patch: { ru: "девушка, тёлка" } },
+        { id: b.id, patch: { note: "verl." } },
+        { id: a.id, patch: { both_directions: false } },
+      ],
+      at(MIN),
+    );
+    expect(out.map((w) => w.id)).toEqual([a.id, b.id, a.id]);
+    expect(await db.words.get(a.id)).toMatchObject({ ru: "девушка, тёлка", both_directions: false });
+    expect((await getWordStates(a.id)).map((s) => s.direction)).toEqual(["fr_ru"]);
+    expect((await getWordStates(b.id)).map((s) => s.direction)).toEqual(["fr_ru", "ru_fr"]);
+    expect(await outboxKeys()).toEqual([`review_state:${a.id}:ru_fr`, `words:${a.id}`, `words:${b.id}`].sort());
+  });
+
+  it("writes nothing when a patch is invalid", async () => {
+    const a = await addWord({ fr: "bouffer", ru: "жрать" }, T0);
+    const b = await addWord({ fr: "le fric", ru: "бабло" }, T0);
+    await expect(
+      updateWords(
+        [
+          { id: a.id, patch: { note: "fam." } },
+          { id: b.id, patch: { ru: "  " } },
+        ],
+        at(MIN),
+      ),
+    ).rejects.toThrow();
+    expect((await db.words.get(a.id))?.note).toBeNull();
   });
 });
 

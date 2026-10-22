@@ -4,6 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import {
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -54,7 +55,7 @@ import { useRevealClass } from "./first-paint";
 import { formatDate, plural, posAbbr, SOURCE_LABELS, STATUS_LABELS } from "./format";
 import { markLeaving, markReturning } from "./leaving";
 import { INBOX_KEY, MoveMenu, ThemeSquare } from "./MoveMenu";
-import { alphaNeighbours, type Neighbour } from "./table";
+import { alphaOrder, catalogNumbers, neighboursAt, type Neighbour } from "./table";
 import { folderOptions, TargetPickerSheet } from "./TargetPickerSheet";
 import { TextOptions } from "./TextOptions";
 import { useTranslationProposal, type TranslationProposal } from "./translation-proposal";
@@ -113,17 +114,16 @@ interface DetailData {
   neighbours?: Neighbour[];
 }
 
-function useWordDetail(wordId: string, extended: boolean) {
+function useWordDetail(wordId: string) {
   return useLiveQuery(async (): Promise<{ word: null } | DetailData> => {
     const now = new Date();
     const word = await db.words.get(wordId);
     if (!word || word.deleted_at !== null) return { word: null };
-    const [states, history, reviews, folders, all] = await Promise.all([
+    const [states, history, reviews, folders] = await Promise.all([
       getWordStates(wordId),
       getWordHistory(wordId, HISTORY_SLOTS),
       db.review_log.where("word_id").equals(wordId).filter((l) => l.deleted_at === null).count(),
       listFolders(),
-      extended ? db.words.filter((w) => w.deleted_at === null).toArray() : Promise.resolve(null),
     ]);
     const schedule = states.map((s, i) => {
       const due = formatDueIn(s, now);
@@ -131,13 +131,27 @@ function useWordDetail(wordId: string, extended: boolean) {
       const full = s.state === 0 ? "ещё не показывалось" : due === "сейчас" ? "к повторению" : `следующий показ ${due}`;
       return { direction: s.direction, text, full, stability: formatStability(s) };
     });
-    const data: DetailData = { word, schedule, history, reviews, folders, status: wordStatus(states) };
-    if (all) {
-      data.number = all.filter((w) => w.created_at < word.created_at || (w.created_at === word.created_at && w.id <= word.id)).length;
-      data.neighbours = alphaNeighbours(all, word.id);
-    }
-    return data;
-  }, [wordId, extended]);
+    return { word, schedule, history, reviews, folders, status: wordStatus(states) };
+  }, [wordId]);
+}
+
+interface CatalogIndex {
+  numbers: ReadonlyMap<string, number>;
+  alpha: readonly { id: string; fr: string }[];
+  /** Word id → its place in `alpha`. */
+  at: ReadonlyMap<string, number>;
+}
+
+/**
+ * Catalog numbers and the alphabetical order of the whole library, for the pane. One read per
+ * change of the words, not per cursor move: each word then looks itself up.
+ */
+function useCatalogIndex(): CatalogIndex | undefined {
+  return useLiveQuery(async () => {
+    const all = (await db.words.toArray()).filter((w) => w.deleted_at === null);
+    const alpha = alphaOrder(all).map((w) => ({ id: w.id, fr: w.fr }));
+    return { numbers: catalogNumbers(all), alpha, at: new Map(alpha.map((w, i) => [w.id, i])) };
+  }, []);
 }
 
 /** Editing state of one word: which field is open, the draft, saving with the duplicate guard. */
@@ -329,7 +343,7 @@ function useCloseWhenGone(data: { word: Word | null } | undefined, onClose: () =
 
 function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void }) {
   const id = useId();
-  const data = useWordDetail(wordId, false);
+  const data = useWordDetail(wordId);
   const word = data && data.word ? data.word : null;
   const folders = data && "folders" in data ? data.folders : [];
   const defs = useFieldDefs();
@@ -707,11 +721,26 @@ const fieldInput =
  */
 function PaneBody(props: Omit<WordDetailBodyProps, "variant">) {
   const { wordId, onClose, editSignal = 0 } = props;
-  const data = useWordDetail(wordId, true);
-  useCloseWhenGone(data, onClose);
+  const detail = useWordDetail(wordId);
+  const index = useCatalogIndex();
+  useCloseWhenGone(detail, onClose);
   // Lives across words, so an `E` pressed while the next word is still being read is not lost.
   const handledEditRef = useRef(editSignal);
-  if (!data || !data.word) {
+  const ready = useMemo((): DetailData | null => {
+    if (!detail?.word || !index) return null;
+    const number = index.numbers.get(detail.word.id);
+    const at = index.at.get(detail.word.id);
+    // A word the index has not caught up with yet (just added): the last complete entry stays.
+    if (number === undefined || at === undefined) return null;
+    // The word's own spelling from its read, should an edit land a frame before the index's.
+    const word = detail.word;
+    const neighbours = neighboursAt(index.alpha, at).map((n) => (n.current ? { ...n, fr: word.fr } : n));
+    return { ...detail, number, neighbours };
+  }, [detail, index]);
+  const [held, setHeld] = useState(ready);
+  if (ready && ready !== held) setHeld(ready);
+  const data = detail?.word ? (ready ?? held) : null;
+  if (!data) {
     return <div className="min-h-40" aria-busy="true" />;
   }
   return <PaneContent key={data.word.id} {...props} data={data} handledEditRef={handledEditRef} />;
