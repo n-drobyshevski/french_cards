@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/Button";
 import { Header } from "@/components/ui/Header";
 import { Icon } from "@/components/ui/Icons";
 import { cx } from "@/components/ui/cx";
+import { useOnline } from "@/lib/use-online";
 import { useClipboardPaste, useImageDropAndPaste } from "./clipboard";
 import { IMPORT_FOOTNOTE } from "./ProcessingView";
 
@@ -16,8 +17,15 @@ export interface PickViewProps {
   error: string | null;
 }
 
+/** Why the pick waits for the network (MOTION-SPEC B4): said up front, muted, not as an error. */
+export const OFFLINE_REASON = "Распознавание работает только онлайн. Подключитесь к сети, и можно продолжать.";
+
+/** «Нужна сеть»: a button that can't, in the disabled look (white, muted text), not a greyed slab. */
+export const CANT_CLASS = "disabled:border-rule disabled:bg-surface disabled:text-boundary disabled:opacity-100!";
+
 /** Start of the import: choose, paste or drop screenshots. */
 export function PickView({ onChoose, onFiles, error }: PickViewProps) {
+  const online = useOnline();
   const dragging = useImageDropAndPaste(onFiles);
   const { supported: clipboard, error: clipboardError, paste: pasteFromClipboard } = useClipboardPaste(onFiles);
 
@@ -52,11 +60,12 @@ export function PickView({ onChoose, onFiles, error }: PickViewProps) {
         )}
 
         <div className="mt-6 flex flex-col gap-3">
-          <Button block icon="camera" onClick={onChoose}>
-            Выбрать скриншот
+          <Button block icon={online ? "camera" : "cloud-off"} disabled={!online} className={CANT_CLASS} onClick={onChoose}>
+            {online ? "Выбрать скриншот" : "Нужна сеть"}
           </Button>
+          {!online && <p className="m-0 -mt-1 text-[13px] leading-5 text-muted">{OFFLINE_REASON}</p>}
           {clipboard && (
-            <Button block variant="secondary" icon="clipboard" onClick={pasteFromClipboard}>
+            <Button block variant="secondary" icon="clipboard" disabled={!online} className={CANT_CLASS} onClick={pasteFromClipboard}>
               Вставить из буфера
             </Button>
           )}

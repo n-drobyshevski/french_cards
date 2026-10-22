@@ -24,7 +24,13 @@ export interface ShotPaneProps {
  * Processing: the first screenshot cut by the column, a red scan line at the progress (travelling
  * top↔bottom while the first row is awaited), a «1/2» badge.
  */
-export function ProcessingShotPane({ thumbs, tiles, percent, travel = false }: ShotPaneProps & { percent: number; travel?: boolean }) {
+export function ProcessingShotPane({
+  thumbs,
+  tiles,
+  percent,
+  travel = false,
+  muted = false,
+}: ShotPaneProps & { percent: number; travel?: boolean; muted?: boolean }) {
   const count = Math.max(1, thumbs.length);
   return (
     <aside aria-label="Скриншот" className={cx(SHOT_PANE, "flex min-h-0 shrink-0 flex-col border-r border-rule px-6 pt-6")}>
@@ -34,7 +40,7 @@ export function ProcessingShotPane({ thumbs, tiles, percent, travel = false }: S
       <div className="flex min-h-0 flex-1 flex-col pt-2 pb-6">
         <div className="relative min-h-0 shrink overflow-hidden rounded-[6px] border border-rule bg-surface">
           {thumbs[0] ? <img src={thumbs[0]} alt="Скриншот" className="block h-auto w-full" /> : <div className="h-[480px]" />}
-          <ScanLine percent={percent} travel={travel} veil={false} thick />
+          <ScanLine percent={percent} travel={travel} veil={false} thick muted={muted} />
           {thumbs.length > 1 && (
             <span
               aria-hidden="true"
