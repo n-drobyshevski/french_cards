@@ -2,10 +2,10 @@
 // quick save, «Список»), and slang level + example for words already in the library
 // («Дополнить карточки»), via POST /api/ai/enrich.
 // The network part is small; deciding what to change is in pure functions so it is unit-tested.
+import { AiClientError, postAiJson, type AiClientErrorCode, type AiPostOptions } from "./ai-client";
 import { db } from "./db";
 import {
   ENRICH_CHUNK_MAX,
-  type AiErrorBody,
   type EnrichResponse,
   type EnrichResult,
   type FolderInput,
@@ -29,7 +29,7 @@ export interface EnrichInput {
   note?: string | null;
 }
 
-export type EnrichErrorCode = "offline" | "auth" | "unavailable" | "rate_limited" | "upstream" | "aborted";
+export type EnrichErrorCode = AiClientErrorCode;
 
 const ERROR_MESSAGES: Record<EnrichErrorCode, string> = {
   offline: "Нет сети. Дополнить карточки можно только онлайн.",
@@ -40,20 +40,14 @@ const ERROR_MESSAGES: Record<EnrichErrorCode, string> = {
   aborted: "Отменено.",
 };
 
-export class EnrichError extends Error {
-  constructor(public readonly code: EnrichErrorCode) {
-    super(ERROR_MESSAGES[code]);
+export class EnrichError extends AiClientError {
+  constructor(code: EnrichErrorCode) {
+    super(code, ERROR_MESSAGES[code]);
     this.name = "EnrichError";
   }
 }
 
-export interface EnrichOptions {
-  signal?: AbortSignal;
-  fetchImpl?: typeof fetch;
-  /** Retries after a 429, waiting for Retry-After (capped). */
-  retries?: number;
-  /** Injected for tests. */
-  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+export interface EnrichOptions extends AiPostOptions {
   /** Called as chunks finish: (words done, words total). */
   onProgress?: (done: number, total: number) => void;
   /** Called before the first request (0 / n) and as each batch comes back, with that batch's results. */
@@ -63,19 +57,6 @@ export interface EnrichOptions {
   /** Settings «Модель для подсказок». */
   model?: ModelTierInput;
 }
-
-const defaultSleep = (ms: number, signal?: AbortSignal) =>
-  new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    signal?.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timer);
-        reject(new EnrichError("aborted"));
-      },
-      { once: true },
-    );
-  });
 
 const clip = (s: string, max: number) => s.replace(/\s+/g, " ").trim().slice(0, max).trim();
 
@@ -95,42 +76,9 @@ export function toEnrichWords(words: readonly EnrichInput[]): EnrichInput[] {
 
 /** One request (≤ ENRICH_CHUNK_MAX words). */
 export async function postEnrich(words: readonly EnrichInput[], opts: EnrichOptions = {}): Promise<EnrichResult[]> {
-  const fetchImpl = opts.fetchImpl ?? fetch;
-  const sleep = opts.sleep ?? defaultSleep;
-  let retries = opts.retries ?? 3;
-  for (;;) {
-    if (opts.signal?.aborted) throw new EnrichError("aborted");
-    let res: Response;
-    try {
-      res = await fetchImpl(ENRICH_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ words, ...(opts.folders && { folders: opts.folders }), ...(opts.model && { model: opts.model }) }),
-        signal: opts.signal,
-      });
-    } catch {
-      if (opts.signal?.aborted) throw new EnrichError("aborted");
-      throw new EnrichError(typeof navigator !== "undefined" && navigator.onLine === false ? "offline" : "upstream");
-    }
-    if (res.ok) return ((await res.json()) as EnrichResponse).results ?? [];
-    if (res.status === 429 && retries > 0) {
-      retries--;
-      const after = Number(res.headers.get("Retry-After"));
-      await sleep(Math.min(20, Number.isFinite(after) && after > 0 ? after : 3) * 1000, opts.signal);
-      continue;
-    }
-    let error = "";
-    try {
-      error = ((await res.json()) as AiErrorBody).error ?? "";
-    } catch {
-      // not JSON
-    }
-    if (res.status === 401) throw new EnrichError("auth");
-    if (res.status === 403 || res.status === 503 || error === "not_configured") throw new EnrichError("unavailable");
-    if (res.status === 429) throw new EnrichError("rate_limited");
-    if (res.status === 499) throw new EnrichError("aborted");
-    throw new EnrichError("upstream");
-  }
+  const body = { words, ...(opts.folders && { folders: opts.folders }), ...(opts.model && { model: opts.model }) };
+  const res = await postAiJson<EnrichResponse>(ENRICH_URL, body, (code) => new EnrichError(code), opts);
+  return res.results ?? [];
 }
 
 /**
