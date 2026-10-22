@@ -14,9 +14,17 @@ export const FLICK_VELOCITY = 0.5;
 export const FLICK_MIN_DISTANCE = 32;
 /** Velocity is measured over the last part of the gesture only. */
 export const VELOCITY_WINDOW_MS = 100;
-/** Card tilt at one full card width of travel (deg); clamped to ±MAX_ROTATION. */
+/** Card tilt at one full card width of travel (deg); clamped to ±MAX_ROTATION (MOTION-SPEC R4). */
 export const ROTATION_PER_WIDTH = 30;
-export const MAX_ROTATION = 15;
+export const MAX_ROTATION = 8;
+/** The stamp starts to show at this much travel (px) and reaches STAMP_RAMP just before the threshold. */
+export const STAMP_START = 16;
+export const STAMP_RAMP = 0.6;
+/** A decided swipe flies out to this share of the card width… */
+export const FLY_DISTANCE = 1.2;
+/** …at the release velocity, in this many ms at least / at most. */
+export const FLY_MIN_MS = 120;
+export const FLY_MAX_MS = 220;
 
 export interface SwipeSample {
   x: number;
@@ -126,11 +134,41 @@ export interface SwipeVisual {
   progress: number;
   /** Which stamp shows: «ЗНАЮ» (right) or «НЕ ЗНАЮ» (left). */
   side: SwipeOutcome | null;
+  /** Past the threshold: releasing now grades, and the stamp has landed. */
+  locked: boolean;
+  /** Stamp opacity: 0 up to STAMP_START, ramping to STAMP_RAMP just before the threshold, 1 once locked. */
+  stamp: number;
 }
 
 export function swipeVisual(dx: number, width: number): SwipeVisual {
-  if (width <= 0 || dx === 0) return { rotate: 0, progress: 0, side: null };
+  if (width <= 0 || dx === 0) return { rotate: 0, progress: 0, side: null, locked: false, stamp: 0 };
   const rotate = Math.max(-MAX_ROTATION, Math.min(MAX_ROTATION, (dx / width) * ROTATION_PER_WIDTH));
-  const progress = Math.min(1, Math.abs(dx) / (width * SWIPE_THRESHOLD));
-  return { rotate, progress, side: dx > 0 ? "good" : "again" };
+  const threshold = width * SWIPE_THRESHOLD;
+  const distance = Math.abs(dx);
+  const progress = Math.min(1, distance / threshold);
+  const locked = distance >= threshold;
+  const ramp = Math.max(0, Math.min(1, (distance - STAMP_START) / (threshold - STAMP_START)));
+  return { rotate, progress, side: dx > 0 ? "good" : "again", locked, stamp: locked ? 1 : ramp * STAMP_RAMP };
+}
+
+/**
+ * The card behind (MOTION-SPEC R5): scale .96 and 8 px down at rest, growing with the drag to
+ * .99 / 2 px at the threshold.
+ */
+export function stackPose(progress: number): { scale: number; y: number } {
+  const p = Math.max(0, Math.min(1, progress));
+  return { scale: 0.96 + 0.03 * p, y: 8 - 6 * p };
+}
+
+/**
+ * Fly-out of a decided swipe: to FLY_DISTANCE × width on the drag's side at the release velocity
+ * (px/ms; none, or against the drag, → the slowest), clamped to FLY_MIN_MS–FLY_MAX_MS.
+ */
+export function flyOut(dx: number, width: number, velocity: number): { to: number; ms: number } {
+  const sign = dx < 0 ? -1 : 1;
+  const to = sign * width * FLY_DISTANCE;
+  const remaining = Math.abs(to - dx);
+  const speed = Math.sign(velocity) === sign ? Math.abs(velocity) : 0;
+  const ms = speed > 0 ? remaining / speed : FLY_MAX_MS;
+  return { to, ms: Math.round(Math.max(FLY_MIN_MS, Math.min(FLY_MAX_MS, ms))) };
 }

@@ -98,9 +98,11 @@ export function ReviewTopBar({ canUndo, onUndo, letters = true, progress, headin
 /**
  * Phones: «23 К ПОВТОРЕНИЮ · 4 НОВЫХ ……… 07 / 30» with the 1px ink progress line under it.
  * From 768 up the two texts join the running head and the line becomes its bottom rule's fill.
+ * The fill steps as `scaleX` from the left and the phone's tick with `translateX` (never width or
+ * left), --dur-move --ease-standard; the counter is a plain tabular swap (MOTION-SPEC R8, §5.5).
  */
 export function ProgressLine({ left, right, ratio, pending }: ReviewProgress) {
-  const pct = `${(ratio * 100).toFixed(1)}%`;
+  const p = Math.max(0, Math.min(1, ratio));
   // While pending the spans stay (empty) so nothing shifts; the counts fade in when they arrive.
   return (
     <>
@@ -115,7 +117,7 @@ export function ProgressLine({ left, right, ratio, pending }: ReviewProgress) {
         </span>
         <span
           className={cx(
-            "shrink-0 font-medium text-ink md:order-3 md:ml-auto md:text-[13px] md:leading-5 md:tracking-normal md:tabular-nums",
+            "shrink-0 font-medium text-ink tabular-nums md:order-3 md:ml-auto md:text-[13px] md:leading-5 md:tracking-normal",
             !pending && WRITE_IN,
           )}
         >
@@ -127,13 +129,18 @@ export function ProgressLine({ left, right, ratio, pending }: ReviewProgress) {
         {!pending && (
           <>
             <div
-              className="absolute top-[2px] left-0 h-px bg-ink transition-[width] duration-(--dur-move) ease-standard md:top-0 md:h-0.5"
-              style={{ width: pct }}
+              data-progress-fill=""
+              className="absolute inset-x-0 top-[2px] h-px origin-left bg-ink transition-transform duration-(--dur-move) ease-standard md:top-0 md:h-0.5"
+              style={{ transform: `scaleX(${p})` }}
             />
+            {/* The tick travels over the width less its own 1px, so at 100 % it ends on the line's end. */}
             <div
-              className="absolute top-0 h-[5px] w-px bg-ink transition-[left] duration-(--dur-move) ease-standard md:hidden"
-              style={{ left: `min(${pct}, calc(100% - 1px))` }}
-            />
+              aria-hidden="true"
+              className="absolute inset-y-0 right-px left-0 transition-transform duration-(--dur-move) ease-standard md:hidden"
+              style={{ transform: `translateX(${(p * 100).toFixed(2)}%)` }}
+            >
+              <div className="h-[5px] w-px bg-ink" />
+            </div>
           </>
         )}
       </div>

@@ -77,6 +77,11 @@ export function formatDayMonth(date: Date): string {
   return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long" }).format(date);
 }
 
+/** The date stamp on «Готово на сегодня»: «22.10». */
+export function formatDateStamp(date: Date): string {
+  return `${String(date.getDate()).padStart(2, "0")}.${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
 /** Left part of the progress row: «23 к повторению · 4 новых». */
 export function queueSummary(due: number, fresh: number): string {
   const parts: string[] = [];

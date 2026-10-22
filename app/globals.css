@@ -192,30 +192,6 @@ body {
   }
 }
 
-/* Card flip (tap): the side that appears turns in over the horizontal axis, up to the answer
-   and down back to the question. Disabled by prefers-reduced-motion below. */
-@keyframes card-turn-up {
-  from {
-    transform: perspective(1000px) rotateX(-45deg);
-    opacity: 0.4;
-  }
-  to {
-    transform: perspective(1000px) rotateX(0deg);
-    opacity: 1;
-  }
-}
-
-@keyframes card-turn-down {
-  from {
-    transform: perspective(1000px) rotateX(45deg);
-    opacity: 0.4;
-  }
-  to {
-    transform: perspective(1000px) rotateX(0deg);
-    opacity: 1;
-  }
-}
-
 /* Motion tokens (mockups/MOTION-SPEC.md §2). Durations live in :root, not @theme, because they
    shrink under reduced motion; every transition names one of these and one --ease-* curve. */
 :root {
@@ -237,6 +213,8 @@ body {
   --link-pending-delay: 100ms;
   --dist-row: 4px;
   --dist-pop: 8px;
+  --dist-exit-card: 56px;
+  --dist-sink: 24px;
   --motion-scale: 1;
   --press-scale: 0.98;
   --press-scale-sm: 0.96;
@@ -316,6 +294,29 @@ body {
   }
   to {
     translate: 0 calc(100% - 1px);
+  }
+}
+
+/* A rubber stamp landing (swipe lock R4, the «Готово на сегодня» date stamp §5.12): 1.04 → 1 on
+   --spring-stamp over 300ms; under reduced motion it is simply there. */
+@keyframes stamp-land {
+  from {
+    scale: calc(1 + 0.04 * var(--motion-scale));
+  }
+}
+
+/* A rule drawn left → right (§5.12): scaleX 0 → 1 over --dur-rule-draw, linear; set
+   transform-origin left. */
+@keyframes rule-draw {
+  from {
+    scale: 0 1;
+  }
+}
+
+/* A headline settling into place (§5.12): 6px rise, on --spring-lift over 480ms. */
+@keyframes settle-rise {
+  from {
+    translate: 0 calc(6px * var(--motion-scale));
   }
 }
 
@@ -517,13 +518,6 @@ body {
 
   .motion-loop {
     animation: none !important;
-  }
-
-  /* Card turn: the side that appears fades instead of turning. */
-  [data-review-reveal],
-  [data-review-answer] {
-    animation-name: fade-in !important;
-    animation-duration: var(--dur-quick) !important;
   }
 
   /* Sheets appear and leave in place; --dur-sheet and --dur-enter are --dur-quick here. */

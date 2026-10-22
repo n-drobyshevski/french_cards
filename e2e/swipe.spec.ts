@@ -124,7 +124,7 @@ test("grading swipes vibrate: a tick at the threshold, then one pulse for Зна
 
   await questionCard(page).tap();
   await expect(page.locator("[data-review-answer]")).toBeVisible();
-  await expect(page.locator("[data-review-answer]")).toHaveClass(/card-turn-up/);
+  // Turning the card over does not vibrate.
   expect(await vibrations()).toEqual([]);
 
   await touchSwipe(page, 1);

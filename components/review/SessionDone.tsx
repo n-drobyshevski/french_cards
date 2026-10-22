@@ -1,21 +1,31 @@
 "use client";
 
-import { useLiveQuery } from "dexie-react-hooks";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { Button } from "@/components/ui/Button";
+import { cx } from "@/components/ui/cx";
 import { Kbd } from "@/components/ui/Kbd";
 import { SlangMeter } from "@/components/ui/SlangMeter";
+import { haptic } from "@/lib/haptics";
+import { prefersReducedMotion } from "@/lib/motion";
 import { formatInterval } from "@/lib/scheduler";
-import { sessionFilterKey, type SessionFilter } from "@/lib/session";
-import { loadDoneScreen } from "./data";
-import { countWords, formatDayMonth, formatPercent, pluralRu } from "./format";
+import type { DoneScreenData } from "./data";
+import { countWords, formatDateStamp, formatDayMonth, formatPercent, pluralRu } from "./format";
 
 const HARD_LIMIT = 5;
 
+/** When the date stamp lands in the «Готово на сегодня» moment (§5.12), with the one `done` haptic. */
+const STAMP_AT_MS = 1100;
+
 export interface SessionDoneProps {
-  filter: SessionFilter;
-  /** Re-reads when it changes (focus, minute tick). */
-  tick: number;
+  /** The day's summary, read by the screen during the last grade's hold (R10). */
+  data: DoneScreenData;
+  /**
+   * The session has just been finished: play the «Готово на сегодня» moment once (§5.12). Without
+   * it (a cold open, back from practice) the view is simply there.
+   */
+  moment?: boolean;
+  /** The «Вибрация» setting: one `done` haptic with the moment. */
+  haptics?: boolean;
   onRepeatMistakes: () => void;
   onPractice: () => void;
   onAddWords: () => void;
@@ -28,9 +38,18 @@ export interface SessionDoneProps {
   letters?: boolean;
 }
 
-function ReceiptRow({ label, value }: { label: string; value: string }) {
+/** A receipt row; the first and last carry the table's ink rules, so they rule in with their rows. */
+function ReceiptRow({ label, value, edge, style }: { label: string; value: string; edge?: "top" | "bottom"; style?: CSSProperties }) {
   return (
-    <div className="flex h-10 items-center gap-2 md:h-11 md:gap-3">
+    <div
+      style={style}
+      className={cx(
+        "flex items-center gap-2 md:gap-3",
+        edge ? "h-[41px] border-ink md:h-[45px]" : "h-10 md:h-11",
+        edge === "top" && "border-t",
+        edge === "bottom" && "border-b",
+      )}
+    >
       <span className="text-[15px]">{label}</span>
       <span aria-hidden="true" className="mt-1.5 h-0 flex-1 border-b border-dotted border-muted md:border-rule" />
       <span className="min-w-12 text-right font-mono text-[15px] font-medium tabular-nums md:font-normal">{value}</span>
@@ -54,10 +73,17 @@ const INPUT_GUARD_MS = 400;
  * Phones: the actions sit at the bottom of the column. From 768 up (D-Session-Done): a 720 column
  * under the top, the actions in one row under the receipt with their keys (P, N), «Трудные» below;
  * focus lands on «Повторить ошибки» so ↵ / Пробел press it.
+ *
+ * Right after the last card (`moment`, §5.12, ≈1.4 s, once): the headline fades in over --dur-turn
+ * while it settles 6px on --spring-lift; the red rule under it is drawn left → right; the receipt
+ * rows rule in 40ms apart (numbers static), then «Трудные»; the date stamp lands (1.04 → 1,
+ * --spring-stamp) with one `done` haptic; the actions fade in. Reduced motion: all of it fades in
+ * together over 110ms, the rule drawn at once. No confetti, no count-up.
  */
 export function SessionDone({
-  filter,
-  tick,
+  data,
+  moment = false,
+  haptics = true,
   onRepeatMistakes,
   onPractice,
   onAddWords,
@@ -66,14 +92,10 @@ export function SessionDone({
   desktop = false,
   letters = true,
 }: SessionDoneProps) {
-  const data = useLiveQuery(() => loadDoneScreen(filter), [sessionFilterKey(filter), tick]);
   const columnRef = useRef<HTMLDivElement>(null);
-  const landed = useRef(false);
-  const ready = !!data;
 
   useEffect(() => {
-    if (!desktop || !ready || landed.current) return;
-    landed.current = true;
+    if (!desktop) return;
     const root = columnRef.current;
     const target = root?.querySelector<HTMLElement>("[data-done-primary]:not(:disabled)") ?? root?.querySelector<HTMLElement>("h1");
     target?.focus({ preventScroll: true });
@@ -88,47 +110,89 @@ export function SessionDone({
       window.clearTimeout(timer);
       window.removeEventListener("keydown", swallow, true);
     };
-  }, [desktop, ready]);
+  }, [desktop]);
 
-  if (!data) return <div className="flex-1" />;
+  // The moment's one haptic, with the stamp (its visual twin).
+  const playMoment = useRef(moment);
+  useEffect(() => {
+    if (!playMoment.current || !haptics) return;
+    const timer = window.setTimeout(() => haptic("done"), prefersReducedMotion() ? 0 : STAMP_AT_MS);
+    return () => window.clearTimeout(timer);
+  }, [haptics]);
+
+  /** One beat of the moment: `animation` starting `ms` after the view appears (at once under reduced motion). */
+  const beat = (animation: string, ms: number): CSSProperties | undefined =>
+    moment ? { animation: animation.replaceAll("$at", `calc(${ms}ms * var(--motion-scale))`) } : undefined;
+  const rise = (ms: number) => beat("enter-rise var(--dur-enter) var(--ease-enter) $at both", ms);
+  const fade = (ms: number) => beat("fade-in var(--dur-quick) var(--ease-enter) $at both", ms);
 
   const { summary } = data;
   const next = nextLine(summary.dueTomorrow, data.nextDue, data.at);
   const hard = summary.hardWords.slice(0, HARD_LIMIT);
   const moreHard = summary.hardWords.length - hard.length;
-  const day = formatDayMonth(new Date(data.at));
+  const date = new Date(data.at);
+  const day = formatDayMonth(date);
   const moreText = moreHard > 0 ? `И ещё ${moreHard} ${pluralRu(moreHard, ["слово", "слова", "слов"])}` : null;
 
   return (
-    <div className="contents md:block md:min-h-0 md:flex-1 md:overflow-y-auto">
+    <div data-session-done="" data-moment={moment ? "" : undefined} className="contents md:block md:min-h-0 md:flex-1 md:overflow-y-auto">
       <div
         ref={columnRef}
         className="contents md:mx-auto md:flex md:w-(--col-w) md:max-w-[calc(100%-48px)] md:flex-col md:pt-16 md:pb-6"
       >
-        <span className="meta mt-8 leading-4 md:hidden">Сессия · {day}</span>
-        <h1
-          tabIndex={-1}
-          className="mt-2 mb-0 font-serif text-[34px] leading-10 font-medium tracking-[-0.015em] outline-none md:mt-0 md:text-[40px] md:leading-[44px] md:tracking-[-0.02em] md:focus-visible:outline-2"
+        <div
+          style={beat("fade-in var(--dur-turn) linear $at both, settle-rise 480ms var(--spring-lift) $at both", 0)}
+          className="flex shrink-0 flex-col"
         >
-          Готово на сегодня
-        </h1>
+          <span className="meta mt-8 leading-4 md:hidden">Сессия · {day}</span>
+          <div className="mt-2 flex items-center justify-between gap-3 md:mt-0">
+            <h1
+              tabIndex={-1}
+              className="m-0 font-serif text-[34px] leading-10 font-medium tracking-[-0.015em] outline-none md:text-[40px] md:leading-[44px] md:tracking-[-0.02em] md:focus-visible:outline-2"
+            >
+              Готово на сегодня
+            </h1>
+            {/* The date stamp (§5.12): 1.5px ink border, −4°, landing like a rubber stamp. */}
+            <span
+              aria-hidden="true"
+              data-date-stamp=""
+              style={beat(`fade-in var(--dur-instant) linear $at both, stamp-land 300ms var(--spring-stamp) $at both`, STAMP_AT_MS)}
+              className="mr-0.5 inline-flex h-[23px] shrink-0 -rotate-4 items-center rounded-[2px] border-[1.5px] border-ink px-1.5 font-mono text-[13px] leading-4 font-medium tabular-nums"
+            >
+              {formatDateStamp(date)}
+            </span>
+          </div>
+        </div>
+        {/* The 2px red rule under the headline, drawn left → right. */}
+        <div
+          aria-hidden="true"
+          data-done-rule=""
+          style={beat("rule-draw var(--dur-rule-draw) linear $at both", 320)}
+          className="mt-2 h-0.5 shrink-0 origin-left bg-red"
+        />
 
         {summary.reviewed > 0 ? (
-          <section aria-label="Итоги сессии" className="mt-6 border-y border-ink">
-            <ReceiptRow label="Повторено" value={String(summary.reviewed)} />
-            <ReceiptRow label="Новых" value={String(summary.newCount)} />
-            <ReceiptRow label="Верно" value={formatPercent(summary.correctRate)} />
+          <section aria-label="Итоги сессии" className="mt-3.5">
+            <ReceiptRow label="Повторено" value={String(summary.reviewed)} edge="top" style={rise(720)} />
+            <ReceiptRow label="Новых" value={String(summary.newCount)} style={rise(760)} />
+            <ReceiptRow label="Верно" value={formatPercent(summary.correctRate)} edge="bottom" style={rise(800)} />
           </section>
         ) : (
-          <p className="mt-6 mb-0 border-y border-ink py-2.5 text-[15px] leading-5 text-muted">Сегодня повторять нечего.</p>
+          <p style={rise(720)} className="mt-3.5 mb-0 border-y border-ink py-2.5 text-[15px] leading-5 text-muted">
+            Сегодня повторять нечего.
+          </p>
         )}
-        {next && <span className="meta mt-2 leading-4 md:hidden">{next}</span>}
-        <p className="mt-3 mb-0 text-[13px] leading-5 text-muted tabular-nums max-md:hidden">
+        {next && (
+          <span style={fade(1400)} className="meta mt-2 leading-4 md:hidden">
+            {next}
+          </span>
+        )}
+        <p style={fade(1400)} className="mt-3 mb-0 text-[13px] leading-5 text-muted tabular-nums max-md:hidden">
           {next ? `${day} · ${next}` : day}
         </p>
 
         {hard.length > 0 && (
-          <section aria-labelledby="hard-title" className="mt-8 md:order-2 md:mt-10">
+          <section aria-labelledby="hard-title" style={rise(840)} className="mt-8 md:order-2 md:mt-10">
             <div className="flex h-4 items-baseline justify-between font-mono text-[11px] leading-4 tracking-[.06em] uppercase md:h-7 md:items-center md:justify-start md:gap-2 md:border-b md:border-ink md:font-sans md:tracking-normal md:normal-case">
               <h2 id="hard-title" className="m-0 text-[11px] font-normal text-muted md:text-[13px] md:leading-5 md:font-medium md:text-ink">
                 Трудные
@@ -163,7 +227,10 @@ export function SessionDone({
         <div className="min-h-4 flex-1 md:hidden" />
         {snackbar}
 
-        <div className="flex shrink-0 flex-col gap-2 md:order-1 md:mt-5 md:flex-row md:flex-wrap md:items-center md:gap-x-4 md:gap-y-2">
+        <div
+          style={fade(1400)}
+          className="flex shrink-0 flex-col gap-2 md:order-1 md:mt-5 md:flex-row md:flex-wrap md:items-center md:gap-x-4 md:gap-y-2"
+        >
           {summary.mistakes > 0 && (
             <Button
               block
