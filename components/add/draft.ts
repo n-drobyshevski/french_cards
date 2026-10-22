@@ -1,7 +1,9 @@
 // The filled form's state: built from a picked suggestion or empty for manual entry, then
 // turned into a save request. Pure (no Dexie), so it is unit-tested.
 import type { EnrichResult, Suggestion } from "@/lib/ai/schemas";
-import { cleanCustomFields } from "@/lib/core/custom-fields";
+import { conjDraftError, type ConjDraft } from "@/components/library/word-editor";
+import { cleanConjugation, cleanOrigin } from "@/lib/core/conjugate";
+import { cleanCustomFields, MAX_WORD_FIELDS } from "@/lib/core/custom-fields";
 import { cleanExamples } from "@/lib/examples";
 import type { Confidence, CustomFieldValue, FieldDef, Folder, Gender, PartOfSpeech, SlangLevel, WordSource } from "@/lib/types";
 import { choiceKey, folderSource, foldersForSuggestion, INBOX_CHOICE, type FolderChoice, type SuggestionFolders } from "./folder-choice";
@@ -17,6 +19,13 @@ export interface WordDraft {
   extra_examples: { fr: string; ru: string }[];
   /** «Свои поля» typed in the form (shared fields only), as typed; cleaned when saved. */
   customFields: CustomFieldValue[];
+  /** «+ Поле» → «Происхождение»: shown once added (or prefilled), as typed. */
+  origin: string;
+  originShown: boolean;
+  /** «+ Поле» → «Спряжение» (a verb the dictionary does not know); null = not added. */
+  conjugation: ConjDraft | null;
+  /** «+ Поле» → «Своё поле»: the word's one-off fields, as typed. */
+  extraFields: { label: string; value: string }[];
   pos: PartOfSpeech;
   gender: Gender;
   slang_level: SlangLevel;
@@ -66,6 +75,10 @@ export function draftFromSuggestion(
     example_touched: false,
     extra_examples: [],
     customFields: [],
+    origin: "",
+    originShown: false,
+    conjugation: null,
+    extraFields: [],
     both_directions: true,
     folder: autoSort ? picks.auto : INBOX_CHOICE,
     folder_touched: false,
@@ -91,6 +104,10 @@ export function manualDraft(init: { fr?: string; ru?: string; folder?: FolderCho
     example_touched: false,
     extra_examples: [],
     customFields: [],
+    origin: "",
+    originShown: false,
+    conjugation: null,
+    extraFields: [],
     both_directions: true,
     folder: init.folder ?? INBOX_CHOICE,
     folder_touched: init.folder !== undefined && init.folder.kind !== "inbox",
@@ -110,6 +127,8 @@ export interface DraftPrefill {
   verlan?: boolean;
   example_fr?: string;
   example_ru?: string;
+  /** «Происхождение» (a looked-up word's origin line). */
+  origin?: string | null;
 }
 
 /**
@@ -127,6 +146,7 @@ export function prefilledDraft(p: DraftPrefill, init: { folder?: FolderChoice } 
     gender: p.gender ?? base.gender,
     ...(p.slang_level !== undefined && { slang_level: p.slang_level, verlan: p.verlan ?? false, slang_auto: true, slang_touched: true }),
     ...(example && { example_fr: example, example_ru: (p.example_ru ?? "").trim(), example_touched: true }),
+    ...(cleanOrigin(p.origin) && { origin: cleanOrigin(p.origin)!, originShown: true }),
   };
 }
 
@@ -234,16 +254,33 @@ export function draftFieldsSummary(d: Pick<WordDraft, "customFields">, defs: rea
 export interface DraftErrors {
   fr?: string;
   ru?: string;
+  /** «Спряжение» added but not every form filled in. */
+  conjugation?: string;
+  /** A one-off field with a value and no name. */
+  fields?: string;
 }
 
-export function validateDraft(d: Pick<WordDraft, "fr" | "ru">): DraftErrors {
+export function validateDraft(d: Pick<WordDraft, "fr" | "ru"> & Partial<Pick<WordDraft, "conjugation" | "extraFields">>): DraftErrors {
   const errors: DraftErrors = {};
   if (!d.fr.trim()) errors.fr = "Нужно французское слово";
   if (!d.ru.trim()) errors.ru = "Нужен перевод";
+  // Added and left empty, it is simply not saved; half filled, it waits for the rest.
+  const conj = d.conjugation && !conjDraftEmpty(d.conjugation) ? conjDraftError(d.conjugation) : null;
+  if (conj) errors.conjugation = conj;
+  if ((d.extraFields ?? []).some((f) => f.value.trim() && !f.label.trim())) errors.fields = "Дайте полю название";
   return errors;
 }
 
-export const hasErrors = (e: DraftErrors) => Boolean(e.fr || e.ru);
+const conjDraftEmpty = (c: ConjDraft) => Object.values(c.tenses).every((forms) => forms.every((f) => !f.trim()));
+
+export const hasErrors = (e: DraftErrors) => Boolean(e.fr || e.ru || e.conjugation || e.fields);
+
+/** How many fields the draft holds (shared values and one-off rows), against MAX_WORD_FIELDS. */
+export function draftFieldCount(d: Pick<WordDraft, "customFields" | "extraFields">): number {
+  return d.customFields.filter((f) => f.value.trim()).length + d.extraFields.length;
+}
+
+export const canAddField = (d: Pick<WordDraft, "customFields" | "extraFields">) => draftFieldCount(d) < MAX_WORD_FIELDS;
 
 /** Save request for the draft: kept automatic theme → folder_source "auto", anything chosen → "user". */
 export function draftToSaveRequest(d: WordDraft): SaveRequest {
@@ -257,7 +294,9 @@ export function draftToSaveRequest(d: WordDraft): SaveRequest {
         example_fr: d.example_fr,
         example_ru: d.example_fr.trim() ? d.example_ru : null,
         extra_examples: cleanExamples(d.extra_examples),
-        custom_fields: cleanCustomFields(d.customFields),
+        custom_fields: cleanCustomFields([...d.customFields, ...d.extraFields.map((f) => ({ field_id: null, ...f }))]),
+        origin: cleanOrigin(d.origin),
+        conjugation: d.conjugation ? cleanConjugation(d.conjugation) : null,
         pos: d.pos,
         gender: d.pos === "noun" ? d.gender : "none",
         slang_level: d.slang_level,

@@ -8,6 +8,7 @@ import { Icon } from "@/components/ui/Icons";
 import { FIELD_VALUE_MAX, useFieldDefs } from "@/lib/custom-fields";
 import type { Folder } from "@/lib/types";
 import type { DuplicateInfo } from "./data";
+import { DraftExtras } from "./DraftExtras";
 import { draftFieldsSummary, draftFieldValue, withDraftField, type DraftErrors, type WordDraft } from "./draft";
 import { posAbbr } from "./match";
 import {
@@ -237,6 +238,7 @@ export function WordForm({
           </span>
         </FieldRow>
         <DraftFields draft={draft} onChange={onChange} />
+        <DraftExtras draft={draft} onChange={onChange} errors={errors} layout="phone" />
       </div>
 
       <SlangPicker
