@@ -1,13 +1,21 @@
 "use client";
 
-import { Fragment, useId, useState, type MouseEvent, type ReactNode, type Ref } from "react";
+import { Fragment, useId, type MouseEvent, type ReactNode, type Ref } from "react";
 import { posAbbr } from "@/components/add/match";
 import { AbbrHint } from "@/components/ui/AbbrHint";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { Collapse } from "@/components/ui/Collapse";
 import { cx } from "@/components/ui/cx";
-import { ConjugationBrief, ConjugationCards, type ConjSentence } from "@/components/conjugation/ConjugationViews";
+import {
+  ConjugationBrief,
+  ConjugationCards,
+  QuizIconButton,
+  QuizStatus,
+  useConjQuiz,
+  useConjugationView,
+  type ConjSentence,
+} from "@/components/conjugation/ConjugationViews";
 import { Icon } from "@/components/ui/Icons";
 import { SkeletonRows } from "@/components/ui/Skeleton";
 import { SlangMeter } from "@/components/ui/SlangMeter";
@@ -767,28 +775,36 @@ export function SynonymList({
 // ---------------------------------------------------------------------------------------------
 // Conjugation
 
-/** Phone: collapsed to a one-line présent preview; open, a card per tense (ConjugationCards). */
+/**
+ * Phone: collapsed to a one-line présent preview; open, a card per tense (ConjugationCards). The
+ * eye beside the heading («Проверь себя», F4) opens it with the forms hidden.
+ */
 export function ConjugationSection({ conj, sentences }: { conj: Conjugation; sentences: readonly ConjSentence[] }) {
-  const [open, setOpen] = useState(false);
+  const view = useConjugationView();
+  const open = view.expanded;
   const bodyId = useId();
   const headingId = useId();
   return (
     <section aria-labelledby={headingId} className="mt-8">
-      <h2 id={headingId} className="m-0">
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={bodyId}
-          onClick={() => setOpen((o) => !o)}
-          className="flex min-h-11 w-full items-end justify-between gap-3 border-b border-ink bg-transparent p-0 pb-2 text-left text-ink"
-        >
-          <span className="font-serif text-[22px] leading-7 font-medium">Спряжение</span>
-          <span className="meta mb-1 inline-flex items-center gap-1">
-            {open ? "свернуть" : "4 времени"}
-            <Icon name={open ? "chevron-up" : "chevron"} size={14} />
-          </span>
-        </button>
-      </h2>
+      <div className="flex items-end gap-1 border-b border-ink">
+        <h2 id={headingId} className="m-0 min-w-0 flex-1">
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={bodyId}
+            onClick={() => view.setExpanded(!open)}
+            className="flex min-h-11 w-full items-end justify-between gap-3 bg-transparent p-0 pb-2 text-left text-ink"
+          >
+            <span className="font-serif text-[22px] leading-7 font-medium">Спряжение</span>
+            <span className="meta mb-1 inline-flex items-center gap-1">
+              {open ? "свернуть" : "4 времени"}
+              <Icon name={open ? "chevron-up" : "chevron"} size={14} />
+            </span>
+          </button>
+        </h2>
+        <QuizIconButton on={view.quiz.on} onClick={view.toggleQuiz} className="-mr-2 mb-0.5" />
+      </div>
+      <QuizStatus quiz={view.quiz} className="mt-2.5" />
       {!open && (
         <p lang="fr" className="m-0 mt-2.5 font-serif text-[16px] leading-[22px] text-muted">
           {conjugationPreview(conj.tenses.present)}
@@ -796,22 +812,26 @@ export function ConjugationSection({ conj, sentences }: { conj: Conjugation; sen
       )}
       <Collapse open={open} innerClassName="px-px">
         <div id={bodyId} className="pt-3">
-          {open && <ConjugationCards conj={conj} sentences={sentences} />}
+          {open && <ConjugationCards conj={conj} sentences={sentences} quiz={view.quiz} />}
         </div>
       </Collapse>
     </section>
   );
 }
 
-/** Desktop rail: the présent and «Таблица спряжения» (ConjugationBrief). */
+/** Desktop rail: the présent and «Таблица спряжения» (ConjugationBrief), the eye beside the heading. */
 export function ConjugationAside({ conj, sentences, word }: { conj: Conjugation; sentences: readonly ConjSentence[]; word: string }) {
   const headingId = useId();
+  const quiz = useConjQuiz();
   return (
     <section aria-labelledby={headingId} className="mt-7">
-      <h2 id={headingId} className="m-0 border-b border-ink pb-1.5 font-serif text-[20px] leading-7 font-medium">
-        Спряжение
-      </h2>
-      <ConjugationBrief conj={conj} sentences={sentences} word={word} className="mt-2" />
+      <div className="flex items-center gap-1 border-b border-ink pb-1">
+        <h2 id={headingId} className="m-0 flex-1 font-serif text-[20px] leading-7 font-medium">
+          Спряжение
+        </h2>
+        <QuizIconButton on={quiz.on} onClick={quiz.toggle} className="-mr-1 md:size-8" />
+      </div>
+      <ConjugationBrief conj={conj} sentences={sentences} word={word} quiz={quiz} className="mt-2" />
     </section>
   );
 }

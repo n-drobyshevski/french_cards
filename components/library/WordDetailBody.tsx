@@ -67,6 +67,7 @@ import { LifeExamplesLink } from "@/components/context/ContextLink";
 import { ExampleList, toDrafts, type ExampleDraft } from "@/components/examples/ExampleList";
 import { examplesPatch, wordExamples } from "@/lib/examples";
 import { conjDraftError, draftOf, isDirty, patchFor, undoFor, withConjugationDraft, type Draft, type Editing } from "./word-editor";
+import { QuizIconButton, useConjugationView } from "@/components/conjugation/ConjugationViews";
 import { AddFieldButton, type FieldKind } from "./AddFieldButton";
 import { AutoFillButton } from "./AutoFill";
 import { conjugationShown, ConjugationForm, ConjugationShown, offersConjugation, useBuiltinConjugation } from "./WordConjugation";
@@ -419,6 +420,8 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
   const defs = useFieldDefs();
   const editor = useWordEditor(word, folders, defs);
   const builtin = useBuiltinConjugation(word ?? NO_WORD);
+  // «Спряжение»: «Все формы» and «Проверь себя» (the eye in the field's header) share this state.
+  const conjView = useConjugationView();
   const actions = useWordActions(word, folders, onClose);
   const saveExamples = useExampleSaver(word);
   const proposal = useTranslationProposal(editor.draft?.fr ?? "", editor.draft?.ru ?? "", editor.editing === "entry");
@@ -617,6 +620,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             label="Спряжение"
             editLabel="Изменить спряжение"
             editing={editing === "conjugation"}
+            tools={(cleanConjugation(w.conjugation) ?? builtin) && <QuizIconButton on={conjView.quiz.on} onClick={conjView.toggleQuiz} />}
             onEdit={() => editor.start("conjugation", withConjugationDraft(draftOf(w, defs), cleanConjugation(w.conjugation) ?? builtin))}
             form={
               draft && (
@@ -628,7 +632,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
               )
             }
           >
-            <ConjugationShown word={w} builtin={builtin} size="sheet" />
+            <ConjugationShown word={w} builtin={builtin} size="sheet" view={conjView} />
           </SheetField>
         )}
         <SheetField
@@ -744,11 +748,14 @@ function SheetField({
   editing,
   onEdit,
   form,
+  tools,
   children,
 }: {
   label: string;
   /** Lit when «Обновить перевод и заметку» rewrites it (data-refresh). */
   refresh?: DiffField;
+  /** Icon buttons before the pencil («Проверь себя» on «Спряжение»). */
+  tools?: ReactNode;
   editLabel: string;
   editing: boolean;
   onEdit: () => void;
@@ -761,7 +768,12 @@ function SheetField({
         <span className="meta">{label}</span>
         {editing ? form : children}
       </div>
-      {!editing && <IconButton icon="pencil" label={editLabel} className="-mt-1 -mr-3 text-muted" onClick={onEdit} />}
+      {!editing && (
+        <div className="-mt-1 -mr-3 flex shrink-0">
+          {tools}
+          <IconButton icon="pencil" label={editLabel} className="text-muted" onClick={onEdit} />
+        </div>
+      )}
     </div>
   );
 }

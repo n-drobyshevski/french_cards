@@ -5,7 +5,15 @@
 // built on the device from Lexique), and the form that edits the four tenses.
 import { useEffect, useState, type ReactNode } from "react";
 import { TENSE_NAMES } from "@/components/context/data";
-import { ConjugationBrief, ConjugationCards } from "@/components/conjugation/ConjugationViews";
+import {
+  ConjugationBrief,
+  ConjugationCards,
+  QuizIconButton,
+  QuizStatus,
+  useConjugationView,
+} from "@/components/conjugation/ConjugationViews";
+
+export type ConjugationViewState = ReturnType<typeof useConjugationView>;
 import { useUndoSnackbar } from "@/components/library/undo";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
@@ -66,11 +74,25 @@ export function ConjugationPreview({ saved, builtin, size }: { saved: Conjugatio
 
 /**
  * The field's view. Phone sheet: the one-line preview and «Все формы» opening a card per tense
- * (ConjugationCards). Desktop pane: «своё / из словаря · aux», then ConjugationBrief (the présent
- * and the full table in a dialog).
+ * (ConjugationCards); the eye («Проверь себя») is in the sheet field's header, so the state comes
+ * from there (`view`). Desktop pane: «своё / из словаря · aux», the eye and the pencil, then
+ * ConjugationBrief (the présent and the full table in a dialog).
  */
-export function ConjugationShown({ word, builtin, size, onEdit }: { word: Word; builtin: Conjugation | null | undefined; size: "sheet" | "pane"; onEdit?: ReactNode }) {
-  const [open, setOpen] = useState(false);
+export function ConjugationShown({
+  word,
+  builtin,
+  size,
+  onEdit,
+  view,
+}: {
+  word: Word;
+  builtin: Conjugation | null | undefined;
+  size: "sheet" | "pane";
+  onEdit?: ReactNode;
+  view?: ConjugationViewState;
+}) {
+  const own = useConjugationView();
+  const { quiz, expanded: open, setExpanded } = view ?? own;
   const saved = cleanConjugation(word.conjugation);
   const conj = saved ?? builtin ?? null;
   const sentences = wordExamples(word);
@@ -82,26 +104,28 @@ export function ConjugationShown({ word, builtin, size, onEdit }: { word: Word; 
           <span className="min-w-0 flex-1 truncate text-[12px] leading-4 text-muted">
             {conj ? `${saved ? "своё" : "из словаря"} · ${conj.auxiliary}` : builtin === undefined ? "…" : "Нет спряжения — можно заполнить"}
           </span>
+          {conj && <QuizIconButton on={quiz.on} onClick={quiz.toggle} className="size-8! pointer-coarse:size-11!" />}
           {onEdit}
         </div>
-        {conj && <ConjugationBrief conj={conj} sentences={sentences} word={word.fr} className="mt-1" />}
+        {conj && <ConjugationBrief conj={conj} sentences={sentences} word={word.fr} quiz={quiz} className="mt-1" />}
       </div>
     );
   }
   return (
     <>
+      <QuizStatus quiz={quiz} className="my-1" />
       <ConjugationPreview saved={saved} builtin={builtin} size="sheet" />
       {conj && (
         <button
           type="button"
           aria-expanded={open}
-          onClick={() => setOpen((o) => !o)}
+          onClick={() => setExpanded(!open)}
           className="-my-1 inline-flex h-11 items-center gap-1 self-start bg-transparent p-0 text-[14px] font-medium text-ink underline decoration-1 underline-offset-4"
         >
           {open ? "Свернуть" : "Все формы — 4 времени"}
         </button>
       )}
-      {open && conj && <ConjugationCards conj={conj} sentences={sentences} className="mt-1" />}
+      {open && conj && <ConjugationCards conj={conj} sentences={sentences} quiz={quiz} className="mt-1" />}
     </>
   );
 }

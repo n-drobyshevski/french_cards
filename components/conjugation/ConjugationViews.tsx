@@ -3,10 +3,11 @@
 // «Спряжение» as shown (mockups: canvas «Спряжение — мокапы», chosen 2026-10-22): phones get one
 // card per tense — when it is used, an example from the word's own sentences and the six forms
 // (variant C); desktop gets a brief block with the présent and a dialog with the full 6 × 4 table
-// (variant E). Both have «Проверь себя» (variant D): the forms hide behind blanks, a tap shows one.
+// (variant E). Both have «Проверь себя» (variant D, placed as F4: an eye beside the pencil in the
+// conjugation's header; a status strip under it): the forms hide behind blanks, a tap shows one.
 // What changes from person to person (the ending, the auxiliary) is lit in red.
 import { useState } from "react";
-import { Button } from "@/components/ui/Button";
+import { Button, IconButton } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import { DialogChrome, Sheet } from "@/components/ui/Sheet";
 import { TENSE_NAMES } from "@/components/context/data";
@@ -57,41 +58,62 @@ export function useConjQuiz() {
     count: open.size,
   };
 }
-type Quiz = ReturnType<typeof useConjQuiz>;
 
-export function QuizToggle({ quiz, className }: { quiz: Quiz; className?: string }) {
+export type Quiz = ReturnType<typeof useConjQuiz>;
+
+/**
+ * The conjugation's state where its header and its body live apart (the word card's sheet field):
+ * whether all forms are open, and the quiz. Turning the quiz on opens them; closing them ends it.
+ */
+export function useConjugationView() {
+  const quiz = useConjQuiz();
+  const [expanded, setExpandedState] = useState(false);
+  return {
+    quiz,
+    expanded,
+    setExpanded: (open: boolean) => {
+      setExpandedState(open);
+      if (!open && quiz.on) quiz.toggle();
+    },
+    toggleQuiz: () => {
+      if (!quiz.on) setExpandedState(true);
+      quiz.toggle();
+    },
+  };
+}
+
+/** F4: the eye beside the pencil; pressed (ink disc) while the forms are hidden. */
+export function QuizIconButton({ on, onClick, className }: { on: boolean; onClick: () => void; className?: string }) {
   return (
-    <button
-      type="button"
-      aria-pressed={quiz.on}
-      onClick={quiz.toggle}
-      className={cx(
-        "inline-flex h-9 shrink-0 items-center rounded-chip border px-3 text-[13px] font-medium pointer-coarse:h-11",
-        quiz.on ? "border-ink bg-ink text-on-ink" : "border-rule bg-surface text-ink hoverable:border-ink",
-        className,
-      )}
-    >
-      Проверь себя
-    </button>
+    <IconButton
+      icon="eye-off"
+      label="Проверь себя"
+      title={on ? "Проверь себя — показать формы" : "Проверь себя — спрятать формы"}
+      aria-pressed={on}
+      iconSize={18}
+      onClick={onClick}
+      // IconButton's own bg-transparent / text-ink would win over the pressed colours without «!».
+      className={cx("rounded-full", on ? "bg-ink! text-on-ink!" : "text-muted hoverable:bg-hover-surface hoverable:text-ink", className)}
+    />
   );
 }
 
-/** Under the toggle while it is on: how many are open, «Показать всё», «Скрыть». */
-function QuizBar({ quiz, total }: { quiz: Quiz; total: number }) {
+/** Under the header while the quiz is on: «Проверь себя · открыто N из M», «Показать всё», «Выйти». */
+export function QuizStatus({ quiz, total = 24, className }: { quiz: Quiz; total?: number; className?: string }) {
   if (!quiz.on) return null;
+  const link = "h-9 shrink-0 bg-transparent p-0 text-[13px] font-medium text-ink underline decoration-1 underline-offset-4 pointer-coarse:h-11";
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-      <p role="status" className="m-0 flex-1 text-[13px] leading-[18px] text-muted">
-        Вспомните форму и нажмите на неё · открыто {Math.min(quiz.count, total)} из {total}
+    <div className={cx("flex items-center gap-x-3.5 rounded-[6px] bg-surface-2 px-3 py-0.5", className)}>
+      <p role="status" className="m-0 min-w-0 flex-1 text-[13px] leading-[18px]">
+        <span className="font-medium">Проверь себя</span>
+        <span className="text-muted"> · открыто {Math.min(quiz.count, total)} из {total}</span>
       </p>
-      <span className="flex gap-3">
-        <button type="button" onClick={quiz.revealAll} className="h-9 bg-transparent p-0 text-[13px] font-medium text-ink underline decoration-1 underline-offset-4 pointer-coarse:h-11">
-          Показать всё
-        </button>
-        <button type="button" onClick={quiz.hideAll} className="h-9 bg-transparent p-0 text-[13px] font-medium text-ink underline decoration-1 underline-offset-4 pointer-coarse:h-11">
-          Скрыть
-        </button>
-      </span>
+      <button type="button" onClick={quiz.revealAll} className={link}>
+        Показать всё
+      </button>
+      <button type="button" onClick={quiz.toggle} className={link}>
+        Выйти
+      </button>
     </div>
   );
 }
@@ -154,15 +176,11 @@ function ExampleLine({ example, className }: { example: TenseExample; className?
 // ---------------------------------------------------------------------------------------------
 // Phones (variant C): a card per tense.
 
-export function ConjugationCards({ conj, sentences = [], className }: { conj: Conjugation; sentences?: readonly ConjSentence[]; className?: string }) {
-  const quiz = useConjQuiz();
+/** Its header (with the eye) is the caller's; the quiz state comes from there. */
+export function ConjugationCards({ conj, sentences = [], quiz, className }: { conj: Conjugation; sentences?: readonly ConjSentence[]; quiz: Quiz; className?: string }) {
   return (
     <div className={cx("flex flex-col gap-3", className)}>
-      <div className="flex items-center justify-between gap-3">
-        <ConjFacts conj={conj} />
-        <QuizToggle quiz={quiz} />
-      </div>
-      <QuizBar quiz={quiz} total={24} />
+      <ConjFacts conj={conj} />
       {CONJ_TENSE_ORDER.map((tense) => {
         const parts = tenseParts(conj.tenses[tense], tense);
         const example = quiz.on ? null : tenseExample(conj.tenses[tense], sentences);
@@ -197,31 +215,35 @@ export function ConjugationBrief({
   conj,
   sentences = [],
   word,
+  quiz,
   className,
 }: {
   conj: Conjugation;
   sentences?: readonly ConjSentence[];
   /** The headword, for the dialog's title. */
   word: string;
+  /** Shared with the dialog: the eye in the caller's header and the one in the dialog are the same. */
+  quiz: Quiz;
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const parts = tenseParts(conj.tenses.present, "present");
   return (
     <div className={cx("flex flex-col", className)}>
+      <QuizStatus quiz={quiz} className="mb-2" />
       <ConjFacts conj={conj} />
       <p className="meta m-0 mt-2">{TENSE_NAMES.present}</p>
       <ul className="m-0 grid list-none grid-cols-2 gap-x-4 p-0">
         {PAIRED.map((i) => (
           <li key={i} className="flex min-h-7 items-center border-b border-surface-2 py-0.5 text-[16px] leading-5">
-            <FormText parts={parts[i]} />
+            <QuizForm parts={parts[i]} quiz={quiz} id={keyOf("present", i)} />
           </li>
         ))}
       </ul>
       <Button variant="tertiary" size="sm" className="mt-1 -ml-0.5 h-9 self-start px-0 text-[14px]" onClick={() => setOpen(true)}>
         Таблица спряжения — 4 времени
       </Button>
-      <ConjugationTableDialog open={open} onOpenChange={setOpen} conj={conj} sentences={sentences} word={word} />
+      <ConjugationTableDialog open={open} onOpenChange={setOpen} conj={conj} sentences={sentences} word={word} quiz={quiz} />
     </div>
   );
 }
@@ -233,14 +255,15 @@ export function ConjugationTableDialog({
   conj,
   sentences,
   word,
+  quiz,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   conj: Conjugation;
   sentences: readonly ConjSentence[];
   word: string;
+  quiz: Quiz;
 }) {
-  const quiz = useConjQuiz();
   const parts = Object.fromEntries(CONJ_TENSE_ORDER.map((t) => [t, tenseParts(conj.tenses[t], t)])) as Record<ConjTenseKey, FormParts[]>;
   let example: (TenseExample & { tense: ConjTenseKey }) | null = null;
   for (const t of CONJ_TENSE_ORDER) {
@@ -256,12 +279,17 @@ export function ConjugationTableDialog({
       onOpenChange={onOpenChange}
       title={`Спряжение: ${word}`}
       dialogWidth={800}
-      header={<DialogChrome label="Спряжение" tools={<QuizToggle quiz={quiz} className="h-8" />} title={<span lang="fr">{word}</span>} />}
-      onClosed={() => quiz.on && quiz.toggle()}
+      header={
+        <DialogChrome
+          label="Спряжение"
+          actions={<QuizIconButton on={quiz.on} onClick={quiz.toggle} className="md:size-8" />}
+          title={<span lang="fr">{word}</span>}
+        />
+      }
     >
       <div className="flex flex-col gap-3 px-6 pt-4 pb-6">
+        <QuizStatus quiz={quiz} />
         <ConjFacts conj={conj} />
-        <QuizBar quiz={quiz} total={24} />
         <table lang="fr" className="w-full table-fixed border-collapse">
           <caption className="sr-only">Спряжение {word} в четырёх временах</caption>
           <thead>
