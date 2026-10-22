@@ -25,7 +25,7 @@ function RevealButton() {
         setSidebarHidden(false);
         requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-shell-nav] a, [data-shell-nav] button")?.focus());
       }}
-      className="fixed top-[calc(12px+env(safe-area-inset-top))] left-3 z-30 hidden size-8 items-center justify-center rounded-[4px] bg-transparent text-ink hoverable:bg-hover"
+      className="fixed top-[calc(12px+env(safe-area-inset-top))] left-3 z-30 hidden size-8 items-center justify-center rounded-[4px] bg-transparent text-ink hover-fade hoverable:bg-hover"
     >
       <Icon name="sidebar" size={20} strokeWidth={1.5} />
     </button>

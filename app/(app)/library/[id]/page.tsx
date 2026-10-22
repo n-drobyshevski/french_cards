@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { FolderRoute, FolderScreen } from "@/components/library/FolderScreen";
+import { NavSlide } from "@/components/library/NavSlide";
 import { APP_NAME } from "@/lib/brand";
 
 export const metadata: Metadata = { title: `Тема · ${APP_NAME}` };
@@ -12,8 +13,10 @@ export const metadata: Metadata = { title: `Тема · ${APP_NAME}` };
  */
 export default function FolderPage() {
   return (
-    <Suspense fallback={<FolderScreen id={null} />}>
-      <FolderRoute />
-    </Suspense>
+    <NavSlide>
+      <Suspense fallback={<FolderScreen id={null} />}>
+        <FolderRoute />
+      </Suspense>
+    </NavSlide>
   );
 }
