@@ -1,6 +1,15 @@
 // Live-query loaders for the review screen. Each runs as one read inside useLiveQuery.
-import { db } from "@/lib/db";
-import { endOfStudyDay, getDaySummary, liveWords, loadSession, type DaySummary, type Session, type SessionFilter } from "@/lib/session";
+import {
+  endOfStudyDay,
+  getDaySummary,
+  loadSession,
+  loadSessionData,
+  matchWords,
+  type DaySummary,
+  type Session,
+  type SessionData,
+  type SessionFilter,
+} from "@/lib/session";
 import type { Word } from "@/lib/types";
 
 export interface ReviewScreenData {
@@ -32,20 +41,20 @@ export function wordOrdinals(words: readonly Pick<Word, "id" | "created_at">[]):
   return map;
 }
 
-async function wordsMatching(filter: SessionFilter): Promise<{ all: Word[]; matching: Word[] }> {
-  const all = await db.words.filter((w) => w.deleted_at === null).toArray();
+function wordsMatching(filter: SessionFilter, pre: SessionData): readonly Word[] {
   const narrowed = filter.folderId !== undefined || !!filter.folderIds || !!filter.slang || !!filter.statuses || !!filter.addedSince;
-  if (!narrowed) return { all, matching: all };
-  return { all, matching: [...(await liveWords(filter)).values()] };
+  return narrowed ? [...matchWords(pre.words, pre.states, pre.liveFolderIds, filter).values()] : pre.words;
 }
 
+// The library is read once per run (grades re-run this), and the session and counts derive from it.
 export async function loadReviewScreen(filter: SessionFilter, now: Date = new Date()): Promise<ReviewScreenData> {
-  const [session, words] = await Promise.all([loadSession(filter, now), wordsMatching(filter)]);
+  const pre = await loadSessionData();
+  const session = await loadSession(filter, now, pre);
   return {
     session,
-    libraryWords: words.all.length,
-    filterWords: words.matching.length,
-    ordinals: wordOrdinals(words.all),
+    libraryWords: pre.words.length,
+    filterWords: wordsMatching(filter, pre).length,
+    ordinals: wordOrdinals(pre.words),
   };
 }
 
@@ -59,18 +68,12 @@ export interface DoneScreenData {
 
 export async function loadDoneScreen(filter: SessionFilter, now: Date = new Date()): Promise<DoneScreenData> {
   const dayEnd = endOfStudyDay(now).toISOString();
-  const [summary, words, states] = await Promise.all([
-    getDaySummary(filter, now),
-    wordsMatching(filter),
-    db.review_state
-      .where("due")
-      .aboveOrEqual(dayEnd)
-      .filter((s) => s.deleted_at === null && s.state !== 0)
-      .toArray(),
-  ]);
-  const ids = new Set(words.matching.map((w) => w.id));
+  const pre = await loadSessionData();
+  const summary = await getDaySummary(filter, now, pre);
+  const ids = new Set(wordsMatching(filter, pre).map((w) => w.id));
   let nextDue: string | null = null;
-  for (const s of states) {
+  for (const s of pre.states) {
+    if (s.state === 0 || s.due < dayEnd) continue;
     if (!ids.has(s.word_id) || (filter.direction && s.direction !== filter.direction)) continue;
     if (nextDue === null || s.due < nextDue) nextDue = s.due;
   }

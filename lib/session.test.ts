@@ -9,8 +9,12 @@ import {
   endOfStudyDay,
   getDaySummary,
   getSessionCounts,
+  liveWords,
   loadSession,
+  loadSessionData,
+  matchWords,
   startOfStudyDay,
+  type SessionFilter,
 } from "./session";
 import { updateSettings } from "./settings";
 import type { Direction, ReviewState, Word } from "./types";
@@ -279,5 +283,57 @@ describe("practice", () => {
     expect(advancePractice(q, 2)).toEqual(["b", "c", "d", "e", "a"]);
     expect(advancePractice(q, 3)).toEqual(["b", "c", "d", "e"]);
     expect(advancePractice([], 3)).toEqual([]);
+  });
+});
+
+describe("preloaded library (SessionData)", () => {
+  async function library() {
+    const f = await createFolder({ name: "Деньги" }, NOON);
+    const money = await word("la thune", { folder_id: f.id, slang_level: 1 });
+    const inbox = await word("bouffer");
+    const orphan = await word("chelou", { folder_id: "gone", both_directions: false });
+    const verlan = await word("relou", { folder_id: f.id, slang_level: 2, verlan: true });
+    const gone = await word("deleted", { folder_id: f.id });
+    await setReview(money, "fr_ru", at(-DAY));
+    await setReview(verlan, "fr_ru", at(-HOUR), { lapses: 3, difficulty: 9, stability: 1 });
+    await gradeCard(inbox.id, "fr_ru", 1, at(-HOUR));
+    await softDeleteWord(gone.id, NOON);
+    return { f, money, inbox, orphan, verlan };
+  }
+
+  it("gives the same sessions, summaries and practice rounds as reading the tables", async () => {
+    const { f } = await library();
+    const pre = await loadSessionData();
+    const filters: SessionFilter[] = [
+      {},
+      { folderId: null },
+      { folderId: f.id },
+      { folderId: f.id, direction: "fr_ru" },
+      { folderIds: [f.id, null] },
+      { folderIds: [null], slang: [2, "verl"] },
+      { statuses: ["new"] },
+      { statuses: ["difficult", "learning"], folderIds: [f.id] },
+      { addedSince: new Date(NOON.getTime() - 30 * DAY + 2500).toISOString() },
+    ];
+    for (const filter of filters) {
+      expect(await loadSession(filter, NOON, pre)).toEqual(await loadSession(filter, NOON));
+      expect(await liveWords(filter, pre)).toEqual(await liveWords(filter));
+      expect(await getDaySummary(filter, NOON, pre)).toEqual(await getDaySummary(filter, NOON));
+      for (const scope of ["today", "recent", "all"] as const) {
+        const opts = { ...filter, scope, random: () => 0 };
+        expect(await buildPracticeQueue(opts, NOON, pre)).toEqual(await buildPracticeQueue(opts, NOON));
+      }
+    }
+  });
+
+  it("matchWords filters in memory: folders, «Входящие» with orphans, slang and statuses", async () => {
+    const { f, money, inbox, orphan, verlan } = await library();
+    const { words, states, liveFolderIds } = await loadSessionData();
+    const ids = (filter: SessionFilter) => [...matchWords(words, states, liveFolderIds, filter).keys()].sort();
+    expect(ids({})).toEqual([money.id, inbox.id, orphan.id, verlan.id].sort());
+    expect(ids({ folderId: null })).toEqual([inbox.id, orphan.id].sort());
+    expect(ids({ folderId: f.id })).toEqual([money.id, verlan.id].sort());
+    expect(ids({ slang: ["verl"] })).toEqual([verlan.id]);
+    expect(ids({ statuses: ["new"] })).toEqual([orphan.id]);
   });
 });

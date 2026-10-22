@@ -1,6 +1,6 @@
 // On-device source of truth (IndexedDB via Dexie). The UI reads with useLiveQuery;
 // lib/sync.ts mirrors these tables to Supabase.
-import Dexie, { type EntityTable } from "dexie";
+import Dexie, { type EntityTable, type Table } from "dexie";
 import { installOutboxTracking } from "./outbox";
 import type { Folder, ReorgRun, ReviewLog, ReviewSet, ReviewState, Settings, Word } from "./types";
 
@@ -52,6 +52,15 @@ export class KartochkiDB extends Dexie {
 }
 
 export const db = new KartochkiDB();
+
+/**
+ * Rows not soft-deleted. A plain `toArray()` is one getAll that Dexie's liveQuery cache shares
+ * between subscribers; `table.filter(...)` would walk a cursor, one IDB event per row, every time.
+ * Index ranges (`where(...).equals(...).toArray()`) stay plain too, so filter their result the same way.
+ */
+export async function liveRows<T extends { deleted_at: string | null }, I>(table: Table<T, string, I>): Promise<T[]> {
+  return (await table.toArray()).filter((r) => r.deleted_at === null);
+}
 
 /**
  * Sets stored the old way (an array in Settings, or in an old backup's settings) as table rows.

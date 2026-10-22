@@ -290,10 +290,11 @@ export async function fillSavedWords(items: readonly SavedWordFill[], opts: Omit
   }
   const patches: { id: string; patch: WordPatch }[] = [];
   await db.transaction("r", db.words, async () => {
-    for (const { word, scope } of wanted) {
+    const stored = await db.words.bulkGet(wanted.map(({ word }) => word.id));
+    for (const [i, { word, scope }] of wanted.entries()) {
       const r = results.get(word.id);
       if (!r) continue;
-      const current = await db.words.get(word.id);
+      const current = stored[i];
       if (!current || current.deleted_at !== null || current.updated_at !== word.updated_at) continue;
       const patch = enrichmentPatch(current, r, scope);
       if (withFolders && scope.folder) Object.assign(patch, folderPatch(current, r, folders));
@@ -323,7 +324,7 @@ export function isEnrichCandidate(w: Word, prefs: BackfillPreferences = ALL): bo
 
 /** Live words worth looking at, newest first. */
 export async function loadEnrichCandidates(prefs: BackfillPreferences = ALL): Promise<Word[]> {
-  const words = await db.words.filter((w) => isEnrichCandidate(w, prefs)).toArray();
+  const words = (await db.words.toArray()).filter((w) => isEnrichCandidate(w, prefs));
   return words.sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
 }
 
@@ -331,11 +332,11 @@ export async function loadEnrichCandidates(prefs: BackfillPreferences = ALL): Pr
 export async function countEnrichCandidates(prefs: BackfillPreferences = ALL): Promise<{ total: number; noExample: number }> {
   let total = 0;
   let noExample = 0;
-  await db.words.each((w) => {
-    if (!isEnrichCandidate(w, prefs)) return;
+  for (const w of await db.words.toArray()) {
+    if (!isEnrichCandidate(w, prefs)) continue;
     total++;
     if (prefs.examples && lacksExample(w)) noExample++;
-  });
+  }
   return { total, noExample };
 }
 
