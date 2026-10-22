@@ -23,6 +23,7 @@ import { getLastReview, getWord, gradeCard, undoLastReview } from "@/lib/words";
 import { loadReviewScreen, type ReviewScreenData } from "./data";
 import { EmptyFolder, EmptyLibrary } from "./EmptyStates";
 import { effectiveDirection, nextDirection, toSessionFilter, type FolderChoice } from "./filter";
+import { WordDetailSheet } from "@/components/library/WordDetailSheet";
 import { FolderPickerSheet } from "./FolderPickerSheet";
 import { DIRECTION_LABELS, DIRECTION_NAMES, GRADE_LABELS, formatProgress, progressRatio, queueSummary } from "./format";
 import { GradeBar } from "./GradeBar";
@@ -107,6 +108,8 @@ export function ReviewScreen() {
   const folders = useLiveQuery(() => listFolders(), []);
   const [tick, setTick] = useState(0);
   const [pickerOpen, setPickerOpen] = useState(false);
+  /** «Изменить карточку»: the word whose sheet is open over the card. */
+  const [editId, setEditId] = useState<string | null>(null);
   const [pinned, setPinned] = useState<Pinned | null>(null);
   const [awaiting, setAwaiting] = useState<Awaiting | null>(null);
   const [instance, setInstance] = useState(0);
@@ -433,6 +436,12 @@ export function ReviewScreen() {
       endPractice();
       return;
     }
+    if (action.type === "edit") {
+      if (!current || holding) return;
+      event.preventDefault();
+      setEditId(current.word.id);
+      return;
+    }
     if (action.type === "undo") {
       if (!canUndo) return;
       event.preventDefault();
@@ -521,6 +530,10 @@ export function ReviewScreen() {
   /** The card on screen; none while loading or when a held card waits too long (the placeholder shows). */
   const card = !loading && !(holding && slowHold) ? current : undefined;
   const cardKey = card ? `${card.key}:${instance}` : null;
+  // The word as stored now: an edit shows on the card at once (practice rounds keep their own copies).
+  const cardWordId = card?.word.id;
+  const storedWord = useLiveQuery(() => (cardWordId ? getWord(cardWordId) : undefined), [cardWordId]);
+  const cardWord = card && storedWord?.id === card.word.id ? storedWord : card?.word;
 
   // R1: the card that replaces the placeholder writes its text in; later cards swap in one frame.
   const [afterPlaceholder, setAfterPlaceholder] = useState(true);
@@ -612,23 +625,26 @@ export function ReviewScreen() {
           hint row and the grade bar's space reserved, so nothing moves when the queue arrives. */}
       {(loading || cardsShown) && (
         <div className={DESK}>
-          {card && cardKey ? (
+          {card && cardKey && cardWord ? (
             <ReviewCard
               key={cardKey}
-              word={card.word}
+              word={cardWord}
               direction={card.direction}
               revealed={revealed}
               onReveal={reveal}
               onHide={hide}
               flip={pinned?.key === card.key ? pinned.flip : undefined}
               haptics={hapticsEnabled}
-              folderName={(card.word.folder_id && folderNames.get(card.word.folder_id)) || "Входящие"}
+              folderName={(cardWord.folder_id && folderNames.get(cardWord.folder_id)) || "Входящие"}
               swipeEnabled={cardSwipe}
               onSwipe={(outcome) => void grade(outcome === "good" ? 3 : 1, true)}
               hasNext={hasNext}
               number={ordinal ? cardNumber(ordinal) : undefined}
               remaining={remaining}
               enter={writeInKey === cardKey}
+              onEdit={() => {
+                if (!holding) setEditId(cardWord.id);
+              }}
             />
           ) : (
             <ReviewCardPlaceholder />
@@ -663,6 +679,9 @@ export function ReviewScreen() {
           )}
         </div>
       )}
+
+      {/* Editing never grades: the sheet closes back onto the same card, still unanswered. */}
+      <WordDetailSheet wordId={editId} onClose={() => setEditId(null)} />
 
       <FolderPickerSheet
         open={pickerOpen}

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { openReview, questionCard, tabBar } from "./fixtures";
+import { mockSuggest, openReview, questionCard, tabBar, type SuggestionWire } from "./fixtures";
 import { slowDatabase, watchPlaceholder } from "./review-loading";
 
 test.describe("review", () => {
@@ -174,5 +174,61 @@ test.describe("loading and moving on (MOTION-SPEC R1, R2, R9)", () => {
       expect(box.y + box.height).toBeCloseTo(grades.y - 8, 0);
       expect(box.y).toBeLessThan(card.y + card.height);
     }).toPass();
+  });
+});
+
+test.describe("editing from review (canvas «Повторение — правка карточки», A)", () => {
+  test("edit the card from its answer side: a translation is proposed, the card is not graded", async ({ page }) => {
+    const vanne: SuggestionWire = {
+      fr: "une vanne",
+      ru: "прикол, подкол",
+      note: null,
+      example_fr: null,
+      example_ru: null,
+      pos: "noun",
+      gender: "f",
+      slang_level: 1,
+      verlan: false,
+      folder: "INBOX",
+      folder_alternatives: [],
+      new_folder: null,
+      confidence: "high",
+    };
+    const asked: string[] = [];
+    await mockSuggest(page, [vanne], (body) => asked.push((body as { q: string }).q));
+    await openReview(page);
+
+    // Only the answer side has the pencil.
+    await expect(page.getByRole("button", { name: "Изменить карточку" })).toHaveCount(0);
+    await questionCard(page).click();
+    await page.getByRole("button", { name: "Изменить карточку" }).click();
+    const sheet = page.getByRole("dialog", { name: "Карточка слова" });
+    await expect(sheet).toBeVisible();
+    // Review keys stay quiet while the sheet is open.
+    await page.keyboard.press("3");
+    await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
+
+    await sheet.getByRole("button", { name: "Изменить слово и перевод" }).click();
+    await sheet.getByLabel("Французский").fill("une vanne");
+    const proposal = sheet.getByRole("status").filter({ hasText: "Вариант" });
+    await expect(proposal).toContainText("прикол, подкол");
+    expect(asked).toContain("une vanne");
+    await proposal.getByRole("button", { name: "Подставить" }).click();
+    await expect(sheet.getByLabel("Русский")).toHaveValue("прикол, подкол");
+    // What the field says is not proposed again.
+    await expect(sheet.getByText("прикол, подкол", { exact: true })).toHaveCount(0);
+    await sheet.getByRole("button", { name: "Сохранить" }).click();
+    await sheet.getByRole("button", { name: "Закрыть" }).click();
+    await expect(sheet).toHaveCount(0);
+
+    // Back on the same card, still unanswered, with the new text.
+    const answer = page.locator("[data-review-answer]");
+    await expect(answer.getByRole("heading", { name: "une vanne" })).toBeVisible();
+    await expect(answer.getByText("прикол, подкол", { exact: true })).toBeVisible();
+    await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
+
+    // E opens it again from the keyboard.
+    await page.keyboard.press("e");
+    await expect(sheet).toBeVisible();
   });
 });

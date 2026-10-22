@@ -17,6 +17,7 @@ import { Icon } from "@/components/ui/Icons";
 import { Kbd } from "@/components/ui/Kbd";
 import { Segmented } from "@/components/ui/Segmented";
 import { SheetCloseButton } from "@/components/ui/Sheet";
+import { SkeletonBar } from "@/components/ui/Skeleton";
 import { AbbrHint } from "@/components/ui/AbbrHint";
 import { SlangMeter, slangAbbr } from "@/components/ui/SlangMeter";
 import { Toggle } from "@/components/ui/Toggle";
@@ -48,6 +49,7 @@ import { INBOX_KEY, MoveMenu, ThemeSquare } from "./MoveMenu";
 import { alphaNeighbours, type Neighbour } from "./table";
 import { folderOptions, TargetPickerSheet } from "./TargetPickerSheet";
 import { TextOptions } from "./TextOptions";
+import { useTranslationProposal, type TranslationProposal } from "./translation-proposal";
 import { useUndoSnackbar } from "./undo";
 import { ExampleList, toDrafts, type ExampleDraft } from "@/components/examples/ExampleList";
 import { examplesPatch, wordExamples } from "@/lib/examples";
@@ -313,6 +315,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
   const editor = useWordEditor(word, folders);
   const actions = useWordActions(word, folders, onClose);
   const saveExamples = useExampleSaver(word);
+  const proposal = useTranslationProposal(editor.draft?.fr ?? "", editor.draft?.ru ?? "", editor.editing === "entry");
   const [pickerOpen, setPickerOpen] = useState(false);
   useCloseWhenGone(data, onClose);
 
@@ -384,6 +387,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             autoComplete="off"
             className="mt-2 h-12 rounded-chip border border-rule bg-surface px-3 text-[16px] text-ink outline-none focus:border-ink"
           />
+          <ProposalLine proposal={proposal} onUse={(ru) => set("ru", ru)} />
           <span id={`${id}-slang`} className="meta mt-4">
             Уровень сленга
           </span>
@@ -562,6 +566,36 @@ function SheetField({
   );
 }
 
+/**
+ * «Вариант» under «Русский»: the translation proposed for the French as it is now, with «Подставить».
+ * Its row is kept while proposals are on, so the form does not move when one arrives; a request
+ * that takes a while shows a static bar (MOTION-SPEC §3.1), never «думает…».
+ */
+function ProposalLine({ proposal, onUse }: { proposal: TranslationProposal; onUse: (ru: string) => void }) {
+  if (!proposal.enabled) return null;
+  const { ru } = proposal;
+  return (
+    <div role="status" className="mt-2 flex min-h-8 items-center gap-3">
+      {ru ? (
+        <>
+          <span className="meta shrink-0">Вариант</span>
+          <span className="min-w-0 flex-1 text-[15px] leading-5 break-words">{ru}</span>
+          <Button variant="secondary" size="sm" onClick={() => onUse(ru)}>
+            Подставить
+          </Button>
+        </>
+      ) : (
+        proposal.pending && (
+          <>
+            <span className="meta shrink-0">Вариант</span>
+            <SkeletonBar width="40%" height={6} className="delayed-in" />
+          </>
+        )
+      )}
+    </div>
+  );
+}
+
 function HistoryStrip({ history }: { history: readonly ReviewLog[] }) {
   const label =
     history.length === 0
@@ -649,6 +683,7 @@ function PaneContent({
   const refresh = useRefresh(word);
   const showUndo = useUndoSnackbar();
   const saveExamples = useExampleSaver(word);
+  const proposal = useTranslationProposal(editor.draft?.fr ?? "", editor.draft?.ru ?? "", editor.editing === "entry");
   const [themeMenu, setThemeMenu] = useState<HTMLElement | null>(null);
   const ruRef = useRef<HTMLInputElement>(null);
 
@@ -855,6 +890,7 @@ function PaneContent({
                 autoComplete="off"
                 className={cx(fieldInput, "mt-1.5 text-[16px]")}
               />
+              <ProposalLine proposal={proposal} onUse={(ru) => set("ru", ru)} />
               <span id={`${id}-slang`} className="mt-4 text-[12px] leading-4 text-muted">
                 Уровень сленга
               </span>

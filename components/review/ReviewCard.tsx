@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { AbbrHint } from "@/components/ui/AbbrHint";
+import { IconButton } from "@/components/ui/Button";
 import { Kbd } from "@/components/ui/Kbd";
 import { SkeletonBar } from "@/components/ui/Skeleton";
 import { SlangMeter } from "@/components/ui/SlangMeter";
@@ -158,6 +159,8 @@ export interface ReviewCardProps {
   remaining?: number;
   /** Replaces the loading placeholder: the text fades in over the same frame (R1). */
   enter?: boolean;
+  /** Pencil in the answer side's header: «Изменить карточку» (opens the word's sheet). */
+  onEdit?: () => void;
 }
 
 /**
@@ -181,6 +184,7 @@ export function ReviewCard({
   number,
   remaining = 0,
   enter = false,
+  onEdit,
 }: ReviewCardProps) {
   const swipe = useSwipe({ enabled: swipeEnabled, haptics, onDecide: onSwipe });
   const { dx, width, mode } = swipe.view;
@@ -308,7 +312,28 @@ export function ReviewCard({
           )}
         >
           <CardHeader label={<CallNumber side={label} number={number} />}>
-            <SlangMeter level={word.slang_level} verlan={word.verlan} hints hintAlign="end" />
+            <span className="flex items-center gap-1">
+              <SlangMeter level={word.slang_level} verlan={word.verlan} hints hintAlign="end" />
+              {onEdit && (
+                <>
+                  <span aria-hidden="true" className="ml-2 h-5 w-px bg-rule" />
+                  {/* Its own tap: neither a flip back nor the start of a swipe. */}
+                  <IconButton
+                    icon="pencil"
+                    label="Изменить карточку"
+                    title="Изменить карточку (E)"
+                    aria-keyshortcuts="E"
+                    iconSize={18}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onEdit();
+                    }}
+                    className="-mr-3 text-muted md:-mr-2 md:size-9 hoverable:bg-hover-surface hoverable:text-ink"
+                  />
+                </>
+              )}
+            </span>
           </CardHeader>
 
           {/* The scroller needs pan-y too: touch-action is resolved up to the nearest scroll container,
