@@ -231,7 +231,8 @@ TASK. The learner looks a word or phrase up, the way people use Reverso Context.
 - fr: the French headword in dictionary form (see FORMS). Fix accents and obvious typos (chelou, not "chelous"; être vénère, not "etre venere"). For a Russian query give the most common SPOKEN French equivalent; prefer a familier or argot word when one is widely used, otherwise the neutral one.
 - translations: the distinct senses of the headword as Russian equivalents, most frequent first, each with a rough share of real usage in whole percent (adding up to about 100). One sense → one translation with share 100. Never list mere synonyms of the same sense as separate senses: «тащиться, кайфовать» are one sense; «тащиться» and «нравиться (о человеке)» are two. Same register as the French word.
 - synonyms: French words a speaker could use instead, across registers from neutral to vulg, each with its own slang level and a short Russian equivalent. Include the neutral standard word when the headword is slang (la thune → l'argent), and the slangier ones when it is neutral (l'argent → le fric, la thune, le blé). Never the headword itself, never an invented word.
-- note: verlan origin («верлан от louche»), a neutral gloss for slang, a typical construction; Russian, short; null when nothing is worth saying.
+- origin: one short Russian line that helps remember the word: what it is built on and what that means («от volonté „воля“ + -aire „относящийся к“»), the verlan source («верлан от lourd „тяжёлый, нудный“»), the language it came from («из арабского kif „кайф, гашиш“»), the image behind an idiom («букв. „иметь ненависть“»). Only what you are sure of; null otherwise. Never a long etymology, never Latin roots nobody can use.
+- note: a neutral gloss for slang or a typical construction; Russian, short; never repeat origin (here the verlan source goes into origin, not note); null when nothing is worth saying.
 - found false only for things that are not language (a URL, random letters, a person's name); then leave text fields empty and lists empty.
 
 ${FORM_RULES}
@@ -239,10 +240,11 @@ ${FORM_RULES}
 ${SLANG_RUBRIC}
 
 EXAMPLES (shortened).
-q «kiffer» → fr "kiffer", pos verb, slang_level fam, translations [тащиться, кайфовать 38; нравиться 27; обожать 20; запасть (на кого-то) 15], synonyms [adorer «обожать» neutral; aimer bien «любить» neutral; triper «тащиться» fam; surkiffer «дико тащиться» arg]
-q «chelou» → fr "chelou", pos adj, slang_level arg, verlan true, note "верлан от louche", translations [стрёмный, подозрительный 70; странный 30], synonyms [bizarre «странный» neutral; louche «подозрительный» fam; zarbi «странный» arg]
-q «бабки» → fr "la thune", pos noun, gender f, slang_level arg, translations [бабки, деньги 100], synonyms [l'argent «деньги» neutral; le fric «бабки» fam; le blé «бабло» fam; l'oseille «бабло» fam; le flouze «бабло» arg]
-q «se casser» → fr "se casser", pos verb, slang_level fam, translations [свалить, смыться 60; сломаться 40]
+q «kiffer» → fr "kiffer", pos verb, slang_level fam, origin "от арабского kif „кайф“", translations [тащиться, кайфовать 38; нравиться 27; обожать 20; запасть (на кого-то) 15], synonyms [adorer «обожать» neutral; aimer bien «любить» neutral; triper «тащиться» fam; surkiffer «дико тащиться» arg]
+q «chelou» → fr "chelou", pos adj, slang_level arg, verlan true, origin "верлан от louche „мутный, подозрительный“", note null, translations [стрёмный, подозрительный 70; странный 30], synonyms [bizarre «странный» neutral; louche «подозрительный» fam; zarbi «странный» arg]
+q «бабки» → fr "la thune", pos noun, gender f, slang_level arg, origin null, translations [бабки, деньги 100], synonyms [l'argent «деньги» neutral; le fric «бабки» fam; le blé «бабло» fam; l'oseille «бабло» fam; le flouze «бабло» arg]
+q «volontaire» → fr "volontaire", pos adj, slang_level neutral, origin "от volonté „воля“ + -aire", translations [добровольный 55; волевой, решительный 30; доброволец 15]
+q «se casser» → fr "se casser", pos verb, slang_level fam, origin "букв. „сломаться“ → „сорваться с места“", translations [свалить, смыться 60; сломаться 40]
 q «putain» → fr "putain", pos expression, slang_level vulg, translations [блин, чёрт (междометие) 85; шлюха 15], synonyms [zut «блин» neutral; merde «чёрт» vulg; bordel «чёрт возьми» vulg]`;
 
 /** /api/ai/context, call 1 (with web search): find real sentences that use the headword. */

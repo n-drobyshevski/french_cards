@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type MouseEvent, type ReactNode, type Ref } from "react";
+import { Fragment, useId, useState, type MouseEvent, type ReactNode, type Ref } from "react";
 import { posAbbr } from "@/components/add/match";
 import { AbbrHint } from "@/components/ui/AbbrHint";
 import { Button } from "@/components/ui/Button";
@@ -15,6 +15,7 @@ import { CONJ_TENSES } from "@/lib/ai/constants";
 import type { Conjugation, ContextExample, LookupResponse } from "@/lib/ai/schemas";
 import { detectDirection } from "@/lib/ai/normalize";
 import type { LookupEntry } from "@/lib/db";
+import type { Morpho } from "@/lib/morpho";
 import type { SlangLevel } from "@/lib/types";
 import {
   conjugationPreview,
@@ -172,6 +173,82 @@ export function Translations({ lookup }: { lookup: LookupResponse }) {
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * «Слово по частям»: how the word is made (Lexique: «volonté + -aire „относящийся к …“», the root
+ * opens in «Контекст»), where it comes from (one line from the lookup) and words on the same root.
+ */
+export function WordMakeup({
+  origin,
+  morpho,
+  onOpen,
+  wide = false,
+}: {
+  origin: string | null | undefined;
+  morpho: Morpho | null;
+  onOpen: (q: string) => void;
+  wide?: boolean;
+}) {
+  const parts = morpho?.parts ?? null;
+  const family = morpho?.family ?? [];
+  if (!origin && !parts && family.length === 0) return null;
+  const word = "font-serif text-[17px] leading-6 text-ink";
+  return (
+    <section aria-label="Слово по частям" className={cx(wide ? "mt-3.5" : "mt-4 border-t border-rule pt-3")}>
+      <p className="meta m-0">Слово по частям</p>
+      {parts && (
+        <p className="m-0 mt-1.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
+          {parts.map((p, i) => (
+            <Fragment key={`${i}${p.text}`}>
+              {i > 0 && (
+                <span aria-hidden="true" className="text-muted">
+                  +
+                </span>
+              )}
+              {p.kind === "root" ? (
+                <a
+                  href={contextHref(p.text)}
+                  onClick={routeClick(() => onOpen(p.text))}
+                  lang="fr"
+                  className={cx(word, "underline decoration-red decoration-[1.5px] underline-offset-4 hoverable:text-red")}
+                >
+                  {p.text}
+                </a>
+              ) : (
+                <span>
+                  <span lang="fr" className={word}>
+                    {p.text}
+                  </span>
+                  {p.gloss && <span className="text-[13px] leading-5 text-muted"> «{p.gloss}»</span>}
+                </span>
+              )}
+            </Fragment>
+          ))}
+        </p>
+      )}
+      {origin && <p className="m-0 mt-1 text-[14px] leading-5 text-muted">{origin}</p>}
+      {family.length > 0 && (
+        <div className="mt-2.5">
+          <p className="meta m-0 mb-1.5">Однокоренные</p>
+          <ul aria-label="Однокоренные" className="m-0 flex list-none flex-wrap gap-x-1.5 gap-y-2 p-0">
+            {family.map((w) => (
+              <li key={w}>
+                <a
+                  href={contextHref(w)}
+                  onClick={routeClick(() => onOpen(w))}
+                  lang="fr"
+                  className="press-sm relative inline-flex h-[30px] items-center rounded-chip border border-rule bg-surface px-2.5 font-serif text-[15px] text-ink no-underline before:absolute before:-inset-y-[7px] before:inset-x-0 active:bg-surface-2 hoverable:border-ink"
+                >
+                  {w}
+                </a>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }
 

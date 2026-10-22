@@ -600,7 +600,13 @@ export const LookupModelSchema = z.object({
   gender: genderField(),
   slang_level: slangField(),
   verlan: z.boolean().describe("true only for verlan forms."),
-  note: z.string().nullable().describe("Optional Russian note, at most about 120 characters: verlan origin, a neutral gloss, a typical construction. Null when nothing is worth saying."),
+  note: z.string().nullable().describe("Optional Russian note, at most about 120 characters: a neutral gloss or a typical construction (the origin goes into origin). Null when nothing is worth saying."),
+  origin: z
+    .string()
+    .nullable()
+    .describe(
+      "One short Russian line on where the word comes from, to help remember it: the word it is built on with its meaning, the verlan source, the language it was borrowed from, the image behind an idiom. Null when you are not sure.",
+    ),
   translations: z
     .array(
       z.object({
@@ -653,6 +659,8 @@ export interface LookupResponse {
   slang_level: SlangLevel;
   verlan: boolean;
   note: string | null;
+  /** «от volonté „воля“ + -aire», «верлан от lourd»; missing in entries saved before it existed. */
+  origin?: string | null;
   translations: LookupTranslation[];
   synonyms: LookupSynonym[];
   conjugation: Conjugation | null;

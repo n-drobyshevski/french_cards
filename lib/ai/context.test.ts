@@ -10,6 +10,7 @@ const lookupModel = (extra: Partial<LookupModel> = {}): LookupModel => ({
   slang_level: "fam",
   verlan: false,
   note: null,
+  origin: " от арабского kif ",
   translations: [
     { ru: "тащиться, кайфовать", share: 40 },
     { ru: "нравиться", share: 30 },
@@ -28,7 +29,7 @@ const lookupModel = (extra: Partial<LookupModel> = {}): LookupModel => ({
 describe("finalizeLookup", () => {
   it("cleans, de-duplicates and scales shares to 100", () => {
     const r = finalizeLookup(lookupModel(), "kiffer");
-    expect(r).toMatchObject({ found: true, q: "kiffer", direction: "fr", fr: "kiffer", pos: "verb", gender: "none", slang_level: 1 });
+    expect(r).toMatchObject({ found: true, q: "kiffer", direction: "fr", fr: "kiffer", pos: "verb", gender: "none", slang_level: 1, origin: "от арабского kif" });
     expect(r.translations.map((t) => t.ru)).toEqual(["тащиться, кайфовать", "нравиться", "обожать"]);
     expect(r.translations.reduce((a, t) => a + t.share, 0)).toBe(100);
     expect(r.translations.every((t) => t.share >= 1)).toBe(true);

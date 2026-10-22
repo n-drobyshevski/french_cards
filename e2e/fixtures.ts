@@ -263,6 +263,7 @@ export interface LookupWire {
   slang_level: 0 | 1 | 2 | 3;
   verlan: boolean;
   note: string | null;
+  origin?: string | null;
   translations: { ru: string; share: number }[];
   synonyms: { fr: string; ru: string; slang_level: 0 | 1 | 2 | 3 }[];
   conjugation: {

@@ -38,7 +38,7 @@ const FUT = ["ai", "as", "a", "ons", "ez", "ont"];
 const COND = ["ais", "ais", "ait", "ions", "iez", "aient"];
 
 const text = await readLexique();
-const lines = text.split("\n");
+const lines = text.split(/\r?\n/);
 const header = lines[0].split("\t");
 const col = (name) => header.indexOf(name);
 const [cOrtho, cLemme, cCgram, cGenre, cNombre, cFf, cFl, cInfo] = ["ortho", "lemme", "cgram", "genre", "nombre", "freqfilms2", "freqlivres", "infover"].map(col);

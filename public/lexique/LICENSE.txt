@@ -6,3 +6,6 @@ accent-folded lemma. Rebuild with: node scripts/build-lexique.mjs
 fr-conj.json (verb tables for «Контекст» → «Спряжение») is derived from the same Lexique 3.83 data under
 the same licence: the verbs the conjugation rules in lib/core/conjugate.ts get wrong, as présent, imparfait,
 futur and past participle. Rebuild with: node scripts/build-conjugation.mjs
+
+fr-morpho.json («Контекст» → «Слово по частям») is derived from Lexique 3.83's morphology column under the
+same licence: [lemma, "prefix-|root|-suffix", frequency]. Rebuild with: node scripts/build-morpho.mjs

@@ -46,7 +46,24 @@ const CASSE: ContextExampleWire[] = [
   },
 ];
 
-const lookups = { kiffer: KIFFER_LOOKUP, triper: TRIPER, "se casser": SE_CASSER } as Record<string, LookupWire>;
+const VOLONTAIRE: LookupWire = {
+  ...KIFFER_LOOKUP,
+  q: "volontaire",
+  fr: "volontaire",
+  pos: "adj",
+  slang_level: 0,
+  note: null,
+  origin: "от volonté „воля“ + -aire",
+  translations: [
+    { ru: "добровольный", share: 70 },
+    { ru: "волевой", share: 30 },
+  ],
+  synonyms: [],
+  conjugation: null,
+};
+const VOLONTE: LookupWire = { ...VOLONTAIRE, q: "volonté", fr: "volonté", pos: "noun", gender: "f", origin: null, translations: [{ ru: "воля", share: 100 }] };
+
+const lookups = { kiffer: KIFFER_LOOKUP, triper: TRIPER, "se casser": SE_CASSER, volontaire: VOLONTAIRE, "volonté": VOLONTE } as Record<string, LookupWire>;
 
 async function mockAll(page: Page) {
   const calls = { lookup: [] as string[], context: [] as string[], tatoeba: [] as string[] };
@@ -255,4 +272,19 @@ test("a history row can be removed on its own, with «Отменить»", async
   await expect(rows).toHaveCount(1);
   await page.reload();
   await expect(page.getByRole("region", { name: "Недавние" }).getByRole("listitem")).toHaveCount(1);
+});
+
+test("«Слово по частям»: the parts from Lexique, the origin line, words on the same root", async ({ page }) => {
+  const calls = await mockAll(page);
+  await page.goto("/context?q=volontaire");
+  await expect(page.getByRole("heading", { level: 1, name: "volontaire" })).toBeVisible();
+  const makeup = page.getByRole("region", { name: "Слово по частям" });
+  await expect(makeup.getByText("«относящийся к …»")).toBeVisible();
+  await expect(makeup.getByText("от volonté „воля“ + -aire")).toBeVisible();
+  const family = makeup.getByRole("list", { name: "Однокоренные" });
+  await expect(family.getByRole("link", { name: "involontaire" })).toBeVisible();
+  await expect(family.getByRole("link", { name: "volontairement" })).toBeVisible();
+  await makeup.getByRole("link", { name: "volonté", exact: true }).first().click();
+  await expect(page.getByRole("heading", { level: 1, name: "volonté" })).toBeVisible();
+  expect(calls.lookup).toEqual(["volontaire", "volonté"]);
 });

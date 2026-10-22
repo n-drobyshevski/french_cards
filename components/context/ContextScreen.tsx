@@ -15,6 +15,7 @@ import type { LookupResponse } from "@/lib/ai/schemas";
 import { cleanQuery, clearHistory, deleteLookup, useContextSearch, useLookupHistory, type ContextSearchState } from "@/lib/context";
 import { db, type LookupEntry } from "@/lib/db";
 import { ExampleError, requestExample } from "@/lib/examples";
+import { loadWordMorpho, type Morpho } from "@/lib/morpho";
 import { getSettings } from "@/lib/settings";
 import { useLayoutClass } from "@/lib/use-media";
 import { useOnline } from "@/lib/use-online";
@@ -37,6 +38,7 @@ import {
   ExamplesEmpty,
   TatoebaCredit,
   WebMore,
+  WordMakeup,
   ExamplesHalt,
   ExamplesWait,
   ExampleTableRow,
@@ -97,6 +99,17 @@ function ContextView({ q }: { q: string }) {
   const [inventError, setInventError] = useState<string | null>(null);
   const [sheetExample, setSheetExample] = useState<ShownExample | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  // «Слово по частям» from Lexique, on the device, for the shown headword.
+  const [morpho, setMorpho] = useState<{ fr: string; data: Morpho | null } | null>(null);
+  const headword = state.lookup?.found ? state.lookup.fr : null;
+  useEffect(() => {
+    if (!headword) return;
+    let live = true;
+    void loadWordMorpho(headword).then((data) => live && setMorpho({ fr: headword, data }));
+    return () => {
+      live = false;
+    };
+  }, [headword]);
 
   useEffect(() => {
     if (q) search(q);
@@ -206,6 +219,7 @@ function ContextView({ q }: { q: string }) {
       onStop={stop}
       onRetry={retry}
       onWeb={searchWeb}
+      morpho={morpho && morpho.fr === headword ? morpho.data : null}
       onRefresh={refresh}
     />
   ) : null;
@@ -282,6 +296,8 @@ interface ResultsProps {
   onRetry: () => void;
   /** «Искать ещё в вебе»: the paid search. */
   onWeb: () => void;
+  /** «Слово по частям» (Lexique), null while loading or when there is none. */
+  morpho: Morpho | null;
   onRefresh: () => void;
 }
 
@@ -378,6 +394,7 @@ function Results(props: ResultsProps) {
             {body}
           </section>
           <aside aria-label="Синонимы и спряжение" className="max-w-[360px] min-w-0 flex-[1_1_280px]">
+            <WordMakeup origin={lookup.origin} morpho={props.morpho} onOpen={props.onGo} wide />
             {hasSynonyms && <SynonymList columns={columns} onOpen={props.onGo} onAdd={props.onAddSynonym} />}
             {conj && <ConjugationAside conj={conj} />}
           </aside>
@@ -395,6 +412,7 @@ function Results(props: ResultsProps) {
         </h1>
         <MetaLine lookup={lookup} />
         <Translations lookup={lookup} />
+        <WordMakeup origin={lookup.origin} morpho={props.morpho} onOpen={props.onGo} />
         <WordStatus saved={savedWord} onOpen={props.onOpenSaved} onAdd={props.onAddWord} />
       </article>
 

@@ -52,6 +52,7 @@ export function finalizeLookup(raw: LookupModel, q: string): LookupResponse {
     slang_level: 0,
     verlan: false,
     note: null,
+    origin: null,
     translations: [],
     synonyms: [],
     conjugation: null,
@@ -92,6 +93,7 @@ export function finalizeLookup(raw: LookupModel, q: string): LookupResponse {
     slang_level: slangLevelFromCode(raw.slang_level),
     verlan: raw.verlan === true,
     note: cleanText(raw.note, 160),
+    origin: cleanText(raw.origin, 160),
     translations: translations.map((t, i) => ({ ru: t.ru, share: shares[i] })),
     synonyms,
     // Filled on the device from Lexique (lib/conjugation.ts).
