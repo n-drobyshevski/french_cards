@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Ответ: тап по карточке</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#111111}
+button{font:inherit}
+@keyframes mrr-press {
+  0% { transform: scale(1); }
+  17.667% { transform: scale(1); animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  20% { transform: scale(.98); animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  23.667% { transform: scale(1); }
+  100% { transform: scale(1); }
+}
+@keyframes mrr-head {
+  0% { transform: translateY(137.5px); }
+  20% { transform: translateY(137.5px); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  26.667% { transform: translateY(0); }
+  84.667% { transform: translateY(0); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  91.333% { transform: translateY(137.5px); }
+  100% { transform: translateY(137.5px); }
+}
+@keyframes mrr-ans {
+  0% { opacity: 0; transform: translateY(4px); }
+  24% { opacity: 0; transform: translateY(4px); animation-timing-function: cubic-bezier(0, 0, 0.3, 1); }
+  32% { opacity: 1; transform: translateY(0); }
+  80% { opacity: 1; transform: translateY(0); animation-timing-function: cubic-bezier(0.4, 0.14, 1, 1); }
+  84.667% { opacity: 0; transform: translateY(0); }
+  85.333% { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 0; transform: translateY(4px); }
+}
+@keyframes mrr-ansfade {
+  0% { opacity: 0; }
+  24% { opacity: 0; animation-timing-function: cubic-bezier(0, 0, 0.3, 1); }
+  32% { opacity: 1; }
+  80% { opacity: 1; animation-timing-function: cubic-bezier(0.4, 0.14, 1, 1); }
+  84.667% { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes mrr-qout {
+  0% { opacity: 1; }
+  20% { opacity: 1; animation-timing-function: cubic-bezier(0.4, 0.14, 1, 1); }
+  23.667% { opacity: 0; }
+  84.667% { opacity: 0; animation-timing-function: cubic-bezier(0, 0, 0.3, 1); }
+  88.333% { opacity: 1; }
+  100% { opacity: 1; }
+}
+@keyframes mrr-grade {
+  0% { opacity: 0; }
+  26.667% { opacity: 0; animation-timing-function: cubic-bezier(0, 0, 0.3, 1); }
+  30.333% { opacity: 1; }
+  80% { opacity: 1; animation-timing-function: cubic-bezier(0.4, 0.14, 1, 1); }
+  84.667% { opacity: 0; }
+  100% { opacity: 0; }
+}
+</style>
+</helmet>
+<div style="width: 1760px; height: 1044px; position: relative; overflow: hidden; background: #e8e8e4; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif">
+  <div style="position: absolute; left: 40px; top: 9px; height: 24px; display: flex; align-items: baseline; gap: 16px">
+    <h1 style="margin: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; letter-spacing: -0.01em; color: #111111">Ответ: тап по карточке</h1>
+    <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57">M-Review-Reveal · R3 · §5.1 · §5.2</span>
+  </div>
+  <section aria-label="Кадр 1" style="position: absolute; left: 40px; top: 40px; width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; background: #f1f1ee; outline: 1px solid #d6d6d1; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif">
+    <div style="position: absolute; left: 16px; right: 16px; top: 16px; height: 44px; display: flex; align-items: center; gap: 8px">
+      <button type="button" aria-label="Направление FR → RU, сменить" style="height: 30px; padding: 0 10px; display: inline-flex; align-items: center; gap: 8px; box-sizing: border-box; border-radius: 4px; background: #ffffff; border: 1px solid #d6d6d1; color: #111111; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 500; letter-spacing: .06em; white-space: nowrap; cursor: pointer">
+        <span>FR → RU</span><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5a5a57" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4 3 8l4 4"></path><path d="M3 8h14"></path><path d="m17 12 4 4-4 4"></path><path d="M21 16H7"></path></svg>
+      </button>
+      <button type="button" aria-haspopup="dialog" style="height: 30px; padding: 0 8px 0 10px; display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; border-radius: 4px; background: #ffffff; border: 1px solid #d6d6d1; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 13px; white-space: nowrap; cursor: pointer">
+        <span>Все темы</span><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5a5a57" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+      </button>
+      <div style="flex: 1"></div>
+      <div style="display: flex; align-items: center; margin-right: -12px">
+        <button type="button" aria-label="Отменить последний ответ" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 4px; background: transparent; color: #111111; padding: 0; cursor: pointer; "><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"></path></svg></button>
+        <a href="Settings.dc.html" aria-label="Настройки" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #111111; text-decoration: none"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg></a>
+      </div>
+    </div>
+    <div style="position: absolute; left: 16px; right: 16px; top: 76px; height: 16px; display: flex; align-items: baseline; justify-content: space-between; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase">
+      <span style="color: #5a5a57; ">23 к повторению · 4 новых</span>
+      <span style="color: #111111; font-weight: 500; font-variant-numeric: tabular-nums; ">07 / 30</span>
+    </div>
+    <div aria-hidden="true" style="position: absolute; left: 16px; width: 358px; top: 100px; height: 5px">
+      <div style="position: absolute; left: 0; right: 0; top: 2px; height: 1px; background: #d6d6d1"></div>
+      <div style="position: absolute; left: 0; right: 0; top: 2px; height: 1px; background: #111111; transform-origin: left; transform: scaleX(0.2330); "></div>
+      <div style="position: absolute; left: calc(23.3% - 1px); top: 0; width: 1px; height: 5px; background: #111111; "></div>
+    </div>
+    <article aria-label="Карточка se casser" style="position: absolute; left: 16px; top: 121px; width: 358px; height: 515px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; ">
+      <div style="position: absolute; left: 0; right: 0; top: 0; height: 46px; box-sizing: border-box; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #c8331f">
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; color: #5a5a57; font-variant-numeric: tabular-nums; ">FR · № 042</span>
+      </div>
+      <div style="position: absolute; left: 24px; right: 24px; top: 70px; display: flex; flex-direction: column; transform: translateY(137.5px); ">
+        <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 40px; line-height: 44px; letter-spacing: -0.015em; color: #111111; white-space: nowrap">se casser</span>
+        <span lang="fr" style="margin-top: 8px; font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; line-height: 20px; color: #5a5a57">v. pron.</span>
+      </div>
+      <div aria-hidden="true" style="position: absolute; left: 20px; right: 20px; bottom: 47px; height: 1px; background: #d6d6d1"></div>
+      <div style="position: absolute; left: 20px; right: 20px; bottom: 0; height: 47px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #5a5a57; "><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path d="M3 3v5h5"></path></svg><span>тапни, чтобы перевернуть</span></div>
+    </article>
+    <p aria-hidden="true" style="position: absolute; left: 16px; right: 16px; top: 652px; height: 16px; margin: 0; display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57; ">
+      <span>← Не знаю</span><span>тап — ответ</span><span>Знаю →</span>
+    </p>
+    <div role="group" aria-label="Оценка" style="position: absolute; left: 16px; right: 16px; top: 684px; height: 56px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr) minmax(0, 1.15fr); gap: 8px; visibility: hidden; ">
+      <button type="button" style="height: 56px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 6px; background: #ffffff; border: 1px solid #b3261e; color: #b3261e; padding: 0; cursor: pointer; font-family: 'IBM Plex Sans', system-ui, sans-serif;  ">
+        <span style="font-size: 15px; font-weight: 500; line-height: 20px">Не знаю</span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .04em; color: #b3261e; ">&lt;1 мин</span>
+      </button>
+      <button type="button" style="height: 56px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 6px; background: #ffffff; border: 1px solid #d6d6d1; color: #111111; padding: 0; cursor: pointer; font-family: 'IBM Plex Sans', system-ui, sans-serif;  ">
+        <span style="font-size: 15px; font-weight: 500; line-height: 20px">Сложно</span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .04em; color: #5a5a57; ">6 мин</span>
+      </button>
+      <button type="button" style="height: 56px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 6px; background: #ffffff; border: 1px solid #1d6b45; color: #1d6b45; padding: 0; cursor: pointer; font-family: 'IBM Plex Sans', system-ui, sans-serif;  ">
+        <span style="font-size: 15px; font-weight: 500; line-height: 20px">Знаю</span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .04em; color: #1d6b45; ">1 д</span>
+      </button>
+    </div>
+    <nav aria-label="Основная навигация" style="position: absolute; left: 0; right: 0; top: 756px; height: 88px; box-sizing: border-box; padding-bottom: 28px; background: #ffffff; border-top: 1px solid #d6d6d1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))">
+      <a href="Main.dc.html" aria-current="page" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #111111; text-decoration: none; font-size: 12px; font-weight: 600">
+        <span aria-hidden="true" style="position: absolute; top: -1px; left: 0; right: 0; height: 2px; background: #c8331f"></span>
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="14" height="13" rx="1"></rect><path d="M3.5 11h14"></path><path d="M7 4.5h12.5a1 1 0 0 1 1 1V17"></path></svg>
+        <span>Повторение</span>
+      </a>
+      <a href="Add-Empty.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; text-decoration: none; font-size: 12px; font-weight: 500">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+        <span>Добавить</span>
+      </a>
+      <a href="Library.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; text-decoration: none; font-size: 12px; font-weight: 500">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="1"></rect><path d="M3.5 12h17"></path><path d="M10 8h4"></path><path d="M10 16h4"></path></svg>
+        <span>Библиотека</span>
+      </a>
+    </nav>
+    <span aria-hidden="true" style="position: absolute; left: 12px; top: 680px; width: 366px; height: 64px; box-sizing: border-box; border: 1px dashed #c8331f; border-radius: 2px; "></span>
+    <span aria-hidden="true" style="position: absolute; left: 195px; top: 705px; transform: translateX(-50%); white-space: nowrap; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 13px; letter-spacing: .02em; color: #c8331f;  ">место под кнопки занято заранее</span>
+  </section>
+  <section aria-label="Кадр 2" style="position: absolute; left: 470px; top: 40px; width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; background: #f1f1ee; outline: 1px solid #d6d6d1; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif">
+    <div style="position: absolute; left: 16px; right: 16px; top: 16px; height: 44px; display: flex; align-items: center; gap: 8px">
+      <button type="button" aria-label="Направление FR → RU, сменить" style="height: 30px; padding: 0 10px; display: inline-flex; align-items: center; gap: 8px; box-sizing: border-box; border-radius: 4px; background: #ffffff; border: 1px solid #d6d6d1; color: #111111; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 500; letter-spacing: .06em; white-space: nowrap; cursor: pointer">
+        <span>FR → RU</span><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5a5a57" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4 3 8l4 4"></path><path d="M3 8h14"></path><path d="m17 12 4 4-4 4"></path><path d="M21 16H7"></path></svg>
+      </button>
+      <button type="button" aria-haspopup="dialog" style="height: 30px; padding: 0 8px 0 10px; display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; border-radius: 4px; background: #ffffff; border: 1px solid #d6d6d1; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 13px; white-space: nowrap; cursor: pointer">
+        <span>Все темы</span><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5a5a57" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+      </button>
+      <div style="flex: 1"></div>
+      <div style="display: flex; align-items: center; margin-right: -12px">
+        <button type="button" aria-label="Отменить последний ответ" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 4px; background: transparent; color: #111111; padding: 0; cursor: pointer; "><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"></path></svg></button>
+        <a href="Settings.dc.html" aria-label="Настройки" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #111111; text-decoration: none"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg></a>
+      </div>
+    </div>
+    <div style="position: absolute; left: 16px; right: 16px; top: 76px; height: 16px; display: flex; align-items: baseline; justify-content: space-between; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase">
+      <span style="color: #5a5a57; ">23 к повторению · 4 новых</span>
+      <span style="color: #111111; font-weight: 500; font-variant-numeric: tabular-nums; ">07 / 30</span>
+    </div>
+    <div aria-hidden="true" style="position: absolute; left: 16px; width: 358px; top: 100px; height: 5px">
+      <div style="position: absolute; left: 0; right: 0; top: 2px; height: 1px; background: #d6d6d1"></div>
+      <div style="position: absolute; left: 0; right: 0; top: 2px; height: 1px; background: #111111; transform-origin: left; transform: scaleX(0.2330); "></div>
+      <div style="position: absolute; left: calc(23.3% - 1px); top: 0; width: 1px; height: 5px; background: #111111; "></div>
+    </div>
+    <article aria-label="Карточка se casser" style="position: absolute; left: 16px; top: 121px; width: 358px; height: 515px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; transform: scale(.98);">
+      <div style="position: absolute; left: 0; right: 0; top: 0; height: 46px; box-sizing: border-box; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #c8331f">
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; color: #5a5a57; font-variant-numeric: tabular-nums; ">FR · № 042</span>
+      </div>
+      <div style="position: absolute; left: 24px; right: 24px; top: 70px; display: flex; flex-direction: column; transform: translateY(137.5px); ">
+        <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 40px; line-height: 44px; letter-spacing: -0.015em; color: #111111; white-space: nowrap">se casser</span>
+        <span lang="fr" style="margin-top: 8px; font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; line-height: 20px; color: #5a5a57">v. pron.</span>
+      </div>
+      <div aria-hidden="true" style="position: absolute; left: 20px; right: 20px; bottom: 47px; height: 1px; background: #d6d6d1"></div>
+      <div style="position: absolute; left: 20px; right: 20px; bottom: 0; height: 47px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #5a5a57; "><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path d="M3 3v5h5"></path></svg><span>тапни, чтобы перевернуть</span></div>
+    </article>
+    <p aria-hidden="true" style="position: absolute; left: 16px; right: 16px; top: 652px; height: 16px; margin: 0; display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57; ">
+      <span>← Не знаю</span><span>тап — ответ</span><span>Знаю →</span>
+    </p>
+    <div role="group" aria-label="Оценка" style="position: absolute; left: 16px; right: 16px; top: 684px; height: 56px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr) minmax(0, 1.15fr); gap: 8px; visibility: hidden; ">
+      <button type="button" style="height: 56px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 6px; background: #ffffff; border: 1px solid #b3261e; color: #b3261e; padding: 0; cursor: pointer; font-family: 'IBM Plex Sans', system-ui, sans-serif;  ">
+        <span style="font-size: 15px; font-weight: 500; line-height: 20px">Не знаю</span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .04em; color: #b3261e; ">&lt;1 мин</span>
+      </button>
+      <button type="button" style="height: 56px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 6px; background: #ffffff; border: 1px solid #d6d6d1; color: #111111; padding: 0; cursor: pointer; font-family: 'IBM Plex Sans', system-ui, sans-serif;  ">
+        <span style="font-size: 15px; font-weight: 500; line-height: 20px">Сложно</span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .04em; color: #5a5a57; ">6 мин</span>
+      </button>
+      <button type="button" style="height: 56px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 6px; background: #ffffff; border: 1px solid #1d6b45; color: #1d6b45; padding: 0; cursor: pointer; font-family: 'IBM Plex Sans', system-ui, sans-serif;  ">
+        <span style="font-size: 15px; font-weight: 500; line-height: 20px">Знаю</span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .04em; color: #1d6b45; ">1 д</span>
+      </button>
+    </div>
+    <nav aria-label="Основная навигация" style="position: absolute; left: 0; right: 0; top: 756px; height: 88px; box-sizing: border-box; padding-bottom: 28px; background: #ffffff; border-top: 1px solid #d6d6d1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))">
+      <a href="Main.dc.html" aria-current="page" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #111111; text-decoration: none; font-size: 12px; font-weight: 600">
+        <span aria-hidden="true" style="position: absolute; top: -1px; left: 0; right: 0; height: 2px; background: #c8331f"></span>
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="14" height="13" rx="1"></rect><path d="M3.5 11h14"></path><path d="M7 4.5h12.5a1 1 0 0 1 1 1V17"></path></svg>
+        <span>Повторение</span>
+      </a>
+      <a href="Add-Empty.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; text-decoration: none; font-size: 12px; font-weight: 500">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+        <span>Добавить</span>
+      </a>
+      <a href="Library.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; text-decoration: none; font-size: 12px; font-weight: 500">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="1"></rect><path d="M3.5 12h17"></path><path d="M10 8h4"></path><path d="M10 16h4"></path></svg>
+        <span>Библиотека</span>
+      </a>
+    </nav>
+    <span aria-hidden="true" style="position: absolute; left: 183px; top: 440px; width: 24px; height: 24px; box-sizing: border-box; border: 1px solid #c8331f; border-radius: 50%"></span>
+    <span aria-hidden="true" style="position: absolute; left: 207px; top: 452px; width: 40px; height: 1px; background: #c8331f; "></span>
+    <span aria-hidden="true" style="position: absolute; left: 250px; top: 446px;  white-space: nowrap; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 13px; letter-spacing: .02em; color: #c8331f;  ">pointerdown</span>
+    <span aria-hidden="true" style="position: absolute; left: 16px; top: 121px; width: 358px; height: 515px; box-sizing: border-box; border: 1px dashed #c8331f; border-radius: 2px; border-style: dashed; opacity: .55"></span>
+    <span aria-hidden="true" style="position: absolute; left: 120px; top: 637px; width: 1px; height: 66px; background: #c8331f; "></span>
+    <span aria-hidden="true" style="position: absolute; left: 126px; top: 697px;  white-space: nowrap; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 13px; letter-spacing: .02em; color: #c8331f;  ">scale .98 на pointerdown · от центра</span>
+  </section>
+  <section aria-label="Кадр 3, живой" style="position: absolute; left: 900px; top: 40px; width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; background: #f1f1ee; outline: 1px solid #d6d6d1; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif">
+    <div style="position: absolute; left: 16px; right: 16px; top: 16px; height: 44px; display: flex; align-items: center; gap: 8px">
+      <button type="button" aria-label="Направление FR → RU, сменить" style="height: 30px; padding: 0 10px; display: inline-flex; align-items: center; gap: 8px; box-sizing: border-box; border-radius: 4px; background: #ffffff; border: 1px solid #d6d6d1; color: #111111; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 500; letter-spacing: .06em; white-space: nowrap; cursor: pointer">
+        <span>FR → RU</span><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5a5a57" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4 3 8l4 4"></path><path d="M3 8h14"></path><path d="m17 12 4 4-4 4"></path><path d="M21 16H7"></path></svg>
+      </button>
+      <button type="button" aria-haspopup="dialog" style="height: 30px; padding: 0 8px 0 10px; display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; border-radius: 4px; background: #ffffff; border: 1px solid #d6d6d1; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 13px; white-space: nowrap; cursor: pointer">
+        <span>Все темы</span><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5a5a57" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+      </button>
+      <div style="flex: 1"></div>
+      <div style="display: flex; align-items: center; margin-right: -12px">
+        <button type="button" aria-label="Отменить последний ответ" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 4px; background: transparent; color: #111111; padding: 0; cursor: pointer; "><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"></path></svg></button>
+        <a href="Settings.dc.html" aria-label="Настройки" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #111111; text-decoration: none"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg></a>
+      </div>
+    </div>
+    <div style="position: absolute; left: 16px; right: 16px; top: 76px; height: 16px; display: flex; align-items: baseline; justify-content: space-between; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase">
+      <span style="color: #5a5a57; ">23 к повторению · 4 новых</span>
+      <span style="color: #111111; font-weight: 500; font-variant-numeric: tabular-nums; ">07 / 30</span>
+    </div>
+    <div aria-hidden="true" style="position: absolute; left: 16px; width: 358px; top: 100px; height: 5px">
+      <div style="position: absolute; left: 0; right: 0; top: 2px; height: 1px; background: #d6d6d1"></div>
+      <div style="position: absolute; left: 0; right: 0; top: 2px; height: 1px; background: #111111; transform-origin: left; transform: scaleX(0.2330); "></div>
+      <div style="position: absolute; left: calc(23.3% - 1px); top: 0; width: 1px; height: 5px; background: #111111; "></div>
+    </div>
+    <article aria-label="Карточка se casser" style="position: absolute; left: 16px; top: 121px; width: 358px; height: 515px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; animation: mrr-press 3000ms linear infinite">
+      <div style="position: absolute; left: 0; right: 0; top: 0; height: 46px; box-sizing: border-box; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #c8331f">
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; color: #5a5a57; font-variant-numeric: tabular-nums; ">FR · № 042</span><span style="display: inline-flex; align-items: center; gap: 8px; animation: mrr-ansfade 3000ms linear infinite">
+          <span role="img" aria-label="Уровень сленга: арго, 3 из 4" style="display: inline-flex; align-items: center; gap: 2px"><span style="width: 10px; height: 3px; background: #111111"></span><span style="width: 10px; height: 3px; background: #111111"></span><span style="width: 10px; height: 3px; background: #111111"></span><span style="width: 10px; height: 3px; background: #d6d6d1"></span></span>
+          <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; line-height: 20px; color: #5a5a57; white-space: nowrap">arg.</span>
+        </span>
+      </div>
+      <div style="position: absolute; left: 24px; right: 24px; top: 70px; display: flex; flex-direction: column;  animation: mrr-head 3000ms linear infinite">
+        <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 40px; line-height: 44px; letter-spacing: -0.015em; color: #111111; white-space: nowrap">se casser</span>
+        <span lang="fr" style="margin-top: 8px; font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; line-height: 20px; color: #5a5a57">v. pron.</span>
+      </div>
+      <div style="position: absolute; left: 24px; right: 24px; top: 166px; animation: mrr-ans 3000ms linear infinite">
+        <p style="margin: 0; font-size: 22px; font-weight: 500; line-height: 28px; color: #111111">свалить, сбежать</p>
+        <p style="margin: 8px 0 0; max-width: 32ch; font-size: 14px; line-height: 20px; color: #5a5a57"><span lang="fr" style="font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; color: #111111">Casse-toi</span> — грубое «свали». Ещё значит «сломаться».</p>
+        <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #d6d6d1; display: flex; flex-direction: column; gap: 4px">
+          <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 17px; line-height: 24px; color: #111111">Allez, on se casse d'ici.</span>
+          <span style="font-size: 13px; line-height: 20px; color: #5a5a57">Ладно, сваливаем отсюда.</span>
+        </div>
+      </div>
+      <div aria-hidden="true" style="position: absolute; left: 20px; right: 20px; bottom: 47px; height: 1px; background: #d6d6d1"></div>
+      <div style="position: absolute; left: 20px; right: 20px; bottom: 0; height: 47px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #5a5a57; animation: mrr-qout 3000ms linear infinite"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path d="M3 3v5h5"></path></svg><span>тапни, чтобы перевернуть</span></div>
+      <div style="position: absolute; left: 20px; right: 20px; bottom: 0; height: 47px; display: flex; align-items: center; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57; animation: mrr-ansfade 3000ms linear infinite"><span>тема: <span style="color: #111111">Повседневное</span></span></div>
+    </article>
+    <p aria-hidden="true" style="position: absolute; left: 16px; right: 16px; top: 652px; height: 16px; margin: 0; display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57; ">
+      <span>← Не знаю</span><span style="display: inline-grid; justify-items: center"><span style="grid-area: 1 / 1; animation: mrr-qout 3000ms linear infinite">тап — ответ</span><span style="grid-area: 1 / 1; animation: mrr-grade 3000ms linear infinite">тап — вопрос</span></span><span>Знаю →</span>
+    </p>
+    <div role="group" aria-label="Оценка" style="position: absolute; left: 16px; right: 16px; top: 684px; height: 56px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr) minmax(0, 1.15fr); gap: 8px;  animation: mrr-grade 3000ms linear infinite">
+      <button type="button" style="height: 56px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 6px; background: #ffffff; border: 1px solid #b3261e; color: #b3261e; padding: 0; cursor: pointer; font-family: 'IBM Plex Sans', system-ui, sans-serif;  ">
+        <span style="font-size: 15px; font-weight: 500; line-height: 20px">Не знаю</span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .04em; color: #b3261e; ">&lt;1 мин</span>
+      </button>
+      <button type="button" style="height: 56px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 6px; background: #ffffff; border: 1px solid #d6d6d1; color: #111111; padding: 0; cursor: pointer; font-family: 'IBM Plex Sans', system-ui, sans-serif;  ">
+        <span style="font-size: 15px; font-weight: 500; line-height: 20px">Сложно</span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .04em; color: #5a5a57; ">6 мин</span>
+      </button>
+      <button type="button" style="height: 56px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 6px; background: #ffffff; border: 1px solid #1d6b45; color: #1d6b45; padding: 0; cursor: pointer; font-family: 'IBM Plex Sans', system-ui, sans-serif;  ">
+        <span style="font-size: 15px; font-weight: 500; line-height: 20px">Знаю</span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .04em; color: #1d6b45; ">1 д</span>
+      </button>
+    </div>
+    <nav aria-label="Основная навигация" style="position: absolute; left: 0; right: 0; top: 756px; height: 88px; box-sizing: border-box; padding-bottom: 28px; background: #ffffff; border-top: 1px solid #d6d6d1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))">
+      <a href="Main.dc.html" aria-current="page" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #111111; text-decoration: none; font-size: 12px; font-weight: 600">
+        <span aria-hidden="true" style="position: absolute; top: -1px; left: 0; right: 0; height: 2px; background: #c8331f"></span>
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="14" height="13" rx="1"></rect><path d="M3.5 11h14"></path><path d="M7 4.5h12.5a1 1 0 0 1 1 1V17"></path></svg>
+        <span>Повторение</span>
+      </a>
+      <a href="Add-Empty.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; text-decoration: none; font-size: 12px; font-weight: 500">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+        <span>Добавить</span>
+      </a>
+      <a href="Library.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; text-decoration: none; font-size: 12px; font-weight: 500">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="1"></rect><path d="M3.5 12h17"></path><path d="M10 8h4"></path><path d="M10 16h4"></path></svg>
+        <span>Библиотека</span>
+      </a>
+    </nav>
+    <span aria-hidden="true" style="position: absolute; left: 358px; top: 470px; transform: translateX(-100%); white-space: nowrap; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 13px; letter-spacing: .02em; color: #c8331f; background: #ffffff; padding: 1px 3px; ">слово едет, карточка не поворачивается</span>
+    <span aria-hidden="true" style="position: absolute; left: 358px; top: 486px; transform: translateX(-100%); white-space: nowrap; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 13px; letter-spacing: .02em; color: #c8331f; background: #ffffff; padding: 1px 3px; ">ответ пишется, когда слово прошло 80 % пути</span>
+  </section>
+  <section aria-label="Кадр 4" style="position: absolute; left: 1330px; top: 40px; width: 390px; height: 844px; box-sizing: border-box; overflow: hidden; background: #f1f1ee; outline: 1px solid #d6d6d1; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif">
+    <div style="position: absolute; left: 16px; right: 16px; top: 16px; height: 44px; display: flex; align-items: center; gap: 8px">
+      <button type="button" aria-label="Направление FR → RU, сменить" style="height: 30px; padding: 0 10px; display: inline-flex; align-items: center; gap: 8px; box-sizing: border-box; border-radius: 4px; background: #ffffff; border: 1px solid #d6d6d1; color: #111111; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 500; letter-spacing: .06em; white-space: nowrap; cursor: pointer">
+        <span>FR → RU</span><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5a5a57" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4 3 8l4 4"></path><path d="M3 8h14"></path><path d="m17 12 4 4-4 4"></path><path d="M21 16H7"></path></svg>
+      </button>
+      <button type="button" aria-haspopup="dialog" style="height: 30px; padding: 0 8px 0 10px; display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; border-radius: 4px; background: #ffffff; border: 1px solid #d6d6d1; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 13px; white-space: nowrap; cursor: pointer">
+        <span>Все темы</span><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5a5a57" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+      </button>
+      <div style="flex: 1"></div>
+      <div style="display: flex; align-items: center; margin-right: -12px">
+        <button type="button" aria-label="Отменить последний ответ" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 4px; background: transparent; color: #111111; padding: 0; cursor: pointer; "><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"></path></svg></button>
+        <a href="Settings.dc.html" aria-label="Настройки" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #111111; text-decoration: none"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg></a>
+      </div>
+    </div>
+    <div style="position: absolute; left: 16px; right: 16px; top: 76px; height: 16px; display: flex; align-items: baseline; justify-content: space-between; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase">
+      <span style="color: #5a5a57; ">23 к повторению · 4 новых</span>
+      <span style="color: #111111; font-weight: 500; font-variant-numeric: tabular-nums; ">07 / 30</span>
+    </div>
+    <div aria-hidden="true" style="position: absolute; left: 16px; width: 358px; top: 100px; height: 5px">
+      <div style="position: absolute; left: 0; right: 0; top: 2px; height: 1px; background: #d6d6d1"></div>
+      <div style="position: absolute; left: 0; right: 0; top: 2px; height: 1px; background: #111111; transform-origin: left; transform: scaleX(0.2330); "></div>
+      <div style="position: absolute; left: calc(23.3% - 1px); top: 0; width: 1px; height: 5px; background: #111111; "></div>
+    </div>
+    <article aria-label="Карточка se casser" style="position: absolute; left: 16px; top: 121px; width: 358px; height: 515px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; ">
+      <div style="position: absolute; left: 0; right: 0; top: 0; height: 46px; box-sizing: border-box; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #c8331f">
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; color: #5a5a57; font-variant-numeric: tabular-nums; ">FR · № 042</span><span style="display: inline-flex; align-items: center; gap: 8px; ">
+          <span role="img" aria-label="Уровень сленга: арго, 3 из 4" style="display: inline-flex; align-items: center; gap: 2px"><span style="width: 10px; height: 3px; background: #111111"></span><span style="width: 10px; height: 3px; background: #111111"></span><span style="width: 10px; height: 3px; background: #111111"></span><span style="width: 10px; height: 3px; background: #d6d6d1"></span></span>
+          <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; line-height: 20px; color: #5a5a57; white-space: nowrap">arg.</span>
+        </span>
+      </div>
+      <div style="position: absolute; left: 24px; right: 24px; top: 70px; display: flex; flex-direction: column;  ">
+        <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 40px; line-height: 44px; letter-spacing: -0.015em; color: #111111; white-space: nowrap">se casser</span>
+        <span lang="fr" style="margin-top: 8px; font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; line-height: 20px; color: #5a5a57">v. pron.</span>
+      </div>
+      <div style="position: absolute; left: 24px; right: 24px; top: 166px; ">
+        <p style="margin: 0; font-size: 22px; font-weight: 500; line-height: 28px; color: #111111">свалить, сбежать</p>
+        <p style="margin: 8px 0 0; max-width: 32ch; font-size: 14px; line-height: 20px; color: #5a5a57"><span lang="fr" style="font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; color: #111111">Casse-toi</span> — грубое «свали». Ещё значит «сломаться».</p>
+        <div style="margin-top: 24px; padding-top: 16px; border-top: 1px solid #d6d6d1; display: flex; flex-direction: column; gap: 4px">
+          <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 17px; line-height: 24px; color: #111111">Allez, on se casse d'ici.</span>
+          <span style="font-size: 13px; line-height: 20px; color: #5a5a57">Ладно, сваливаем отсюда.</span>
+        </div>
+      </div>
+      <div aria-hidden="true" style="position: absolute; left: 20px; right: 20px; bottom: 47px; height: 1px; background: #d6d6d1"></div>
+      <div style="position: absolute; left: 20px; right: 20px; bottom: 0; height: 47px; display: flex; align-items: center; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57; "><span>тема: <span style="color: #111111">Повседневное</span></span></div>
+    </article>
+    <p aria-hidden="true" style="position: absolute; left: 16px; right: 16px; top: 652px; height: 16px; margin: 0; display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57; ">
+      <span>← Не знаю</span><span>тап — вопрос</span><span>Знаю →</span>
+    </p>
+    <div role="group" aria-label="Оценка" style="position: absolute; left: 16px; right: 16px; top: 684px; height: 56px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr) minmax(0, 1.15fr); gap: 8px;  ">
+      <button type="button" style="height: 56px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 6px; background: #ffffff; border: 1px solid #b3261e; color: #b3261e; padding: 0; cursor: pointer; font-family: 'IBM Plex Sans', system-ui, sans-serif;  ">
+        <span style="font-size: 15px; font-weight: 500; line-height: 20px">Не знаю</span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .04em; color: #b3261e; ">&lt;1 мин</span>
+      </button>
+      <button type="button" style="height: 56px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 6px; background: #ffffff; border: 1px solid #d6d6d1; color: #111111; padding: 0; cursor: pointer; font-family: 'IBM Plex Sans', system-ui, sans-serif;  ">
+        <span style="font-size: 15px; font-weight: 500; line-height: 20px">Сложно</span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .04em; color: #5a5a57; ">6 мин</span>
+      </button>
+      <button type="button" style="height: 56px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 6px; background: #ffffff; border: 1px solid #1d6b45; color: #1d6b45; padding: 0; cursor: pointer; font-family: 'IBM Plex Sans', system-ui, sans-serif;  ">
+        <span style="font-size: 15px; font-weight: 500; line-height: 20px">Знаю</span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .04em; color: #1d6b45; ">1 д</span>
+      </button>
+    </div>
+    <nav aria-label="Основная навигация" style="position: absolute; left: 0; right: 0; top: 756px; height: 88px; box-sizing: border-box; padding-bottom: 28px; background: #ffffff; border-top: 1px solid #d6d6d1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr))">
+      <a href="Main.dc.html" aria-current="page" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #111111; text-decoration: none; font-size: 12px; font-weight: 600">
+        <span aria-hidden="true" style="position: absolute; top: -1px; left: 0; right: 0; height: 2px; background: #c8331f"></span>
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="14" height="13" rx="1"></rect><path d="M3.5 11h14"></path><path d="M7 4.5h12.5a1 1 0 0 1 1 1V17"></path></svg>
+        <span>Повторение</span>
+      </a>
+      <a href="Add-Empty.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; text-decoration: none; font-size: 12px; font-weight: 500">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+        <span>Добавить</span>
+      </a>
+      <a href="Library.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; text-decoration: none; font-size: 12px; font-weight: 500">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="1"></rect><path d="M3.5 12h17"></path><path d="M10 8h4"></path><path d="M10 16h4"></path></svg>
+        <span>Библиотека</span>
+      </a>
+    </nav>
+    <span aria-hidden="true" style="position: absolute; left: 358px; top: 470px; transform: translateX(-100%); white-space: nowrap; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 13px; letter-spacing: .02em; color: #c8331f; background: #ffffff; padding: 1px 3px; ">кнопки — в своём слоте, ничего не сдвинулось</span>
+  </section>
+  <span aria-hidden="true" style="position: absolute; left: 430px; top: 454px; width: 40px; text-align: center; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; line-height: 16px; color: #5a5a57">→</span>
+  <span aria-hidden="true" style="position: absolute; left: 860px; top: 454px; width: 40px; text-align: center; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; line-height: 16px; color: #5a5a57">→</span>
+  <span aria-hidden="true" style="position: absolute; left: 1290px; top: 454px; width: 40px; text-align: center; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; line-height: 16px; color: #5a5a57">→</span>
+  <div style="position: absolute; left: 40px; top: 900px; width: 390px; height: 128px; box-sizing: border-box; padding-top: 8px; border-top: 1px solid transparent;">
+    <div style="display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57"><span>01 · 0 мс</span></div>
+    <div style="margin-top: 4px; font-size: 15px; font-weight: 500; line-height: 20px; color: #111111">Вопрос, покой</div>
+    <div style="margin-top: 4px; font-size: 12px; line-height: 16px; color: #5a5a57"><span style="display: block">Слово по центру карточки, под ним <i>v. pron.</i> Подсказка «тап — ответ».</span><span style="display: block">Кнопок нет, но их 56 px уже заняты: карточка не меняет высоту.</span></div>
+    <div style="margin-top: 6px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #111111">—</div>
+  </div>
+  <div style="position: absolute; left: 470px; top: 900px; width: 390px; height: 128px; box-sizing: border-box; padding-top: 8px; border-top: 1px solid transparent;">
+    <div style="display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57"><span>02 · 0 → 70 мс</span></div>
+    <div style="margin-top: 4px; font-size: 15px; font-weight: 500; line-height: 20px; color: #111111">Нажатие</div>
+    <div style="margin-top: 4px; font-size: 12px; line-height: 16px; color: #5a5a57"><span style="display: block">На pointerdown карточка сжимается до .98 от центра, за 70 мс.</span><span style="display: block">Отпускание — 110 мс. Без тени и без 3D.</span></div>
+    <div style="margin-top: 6px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #111111">--dur-instant 70 · --ease-press</div>
+  </div>
+  <div style="position: absolute; left: 900px; top: 900px; width: 390px; height: 128px; box-sizing: border-box; padding-top: 8px; border-top: 1px solid #c8331f;">
+    <div style="display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57"><span>03 · 70 → 430 мс</span><span style="color: #c8331f; font-weight: 500">LIVE</span></div>
+    <div style="margin-top: 4px; font-size: 15px; font-weight: 500; line-height: 20px; color: #111111">Ответ пишется</div>
+    <div style="margin-top: 4px; font-size: 12px; line-height: 16px; color: #5a5a57"><span style="display: block">Слово едет вверх 200 мс; через 120 мс ответ проявляется</span><span style="display: block">(+4 px, 240 мс), слово уже прошло; кнопки — 110 мс.</span></div>
+    <div style="margin-top: 6px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #111111">--dur-move 200 · --dur-enter 240 (+120) · --ease-enter</div>
+  </div>
+  <div style="position: absolute; left: 1330px; top: 900px; width: 390px; height: 128px; box-sizing: border-box; padding-top: 8px; border-top: 1px solid transparent;">
+    <div style="display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57"><span>04 · 430 мс</span></div>
+    <div style="margin-top: 4px; font-size: 15px; font-weight: 500; line-height: 20px; color: #111111">Ответ, покой</div>
+    <div style="margin-top: 4px; font-size: 12px; line-height: 16px; color: #5a5a57"><span style="display: block">обратно: ответ гаснет за 140 мс, слово скользит на место</span><span style="display: block">reduced motion: только проявление 110 мс, без сдвига</span></div>
+    <div style="margin-top: 6px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #111111">--dur-exit 140 · --ease-exit · --ease-standard</div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1760,"height":1044}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

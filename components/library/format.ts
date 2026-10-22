@@ -59,17 +59,19 @@ export interface WordSchedule {
   tone: DueTone;
   /** At least one non-new card due today. */
   due: boolean;
+  /** Earliest next review (ms) of the cards already seen; null when every card is new. */
+  nextDue: number | null;
 }
 
 /** Row status for a word from its live review cards. Call inside a live query, not in render. */
 export function wordSchedule(states: readonly ReviewState[], now: Date): WordSchedule {
   const status = wordStatus(states);
   const due = states.some((s) => isDueToday(s, now));
-  if (due) return { status, dueLabel: "к повт.", tone: "due", due };
   const seen = states.filter((s) => s.state !== 0);
-  if (seen.length === 0) return { status, dueLabel: "новое", tone: "new", due };
-  const next = Math.min(...seen.map((s) => Date.parse(s.due)));
-  return { status, dueLabel: `через ${formatInterval(Math.max(0, next - now.getTime()))}`, tone: "later", due };
+  const nextDue = seen.length ? Math.min(...seen.map((s) => Date.parse(s.due))) : null;
+  if (due) return { status, dueLabel: "к повт.", tone: "due", due, nextDue };
+  if (nextDue === null) return { status, dueLabel: "новое", tone: "new", due, nextDue };
+  return { status, dueLabel: `через ${formatInterval(Math.max(0, nextDue - now.getTime()))}`, tone: "later", due, nextDue };
 }
 
 export const SOURCE_LABELS: Record<WordSource, string> = {
@@ -89,6 +91,8 @@ export function formatDate(iso: string): string {
 
 /** Path of the review screen filtered to a folder (null = «Входящие»). */
 export const reviewHref = (folderId: string | null) => `/?folder=${encodeURIComponent(folderId ?? "inbox")}`;
+/** «Тренировка всей темы»: review opens straight into a practice round over every card of the theme. */
+export const practiceHref = (folderId: string | null) => `${reviewHref(folderId)}&practice=1`;
 
 /** Path of a folder screen (null = «Входящие»). */
 export const folderHref = (folderId: string | null) => `/library/${encodeURIComponent(folderId ?? "inbox")}`;

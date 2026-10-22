@@ -6,12 +6,37 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
+import { Collapse } from "@/components/ui/Collapse";
+import { cx } from "@/components/ui/cx";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { isSupabaseConfigured, normalizeEmail, publicAllowedEmail } from "@/lib/supabase/config";
-import { authErrorMessage, EMAIL_RE, EXISTING_ACCOUNT, MIN_PASSWORD_LENGTH, NOT_ALLOWED, newPasswordProblem } from "./messages";
+import { isSupabaseConfigured, normalizeEmail, prefillEmail, publicAllowedEmail } from "@/lib/supabase/config";
+import {
+  authErrorField,
+  authErrorMessage,
+  EMAIL_RE,
+  EXISTING_ACCOUNT,
+  MIN_PASSWORD_LENGTH,
+  NOT_ALLOWED,
+  newPasswordProblem,
+  type AuthField,
+} from "./messages";
 import { PasswordField } from "./PasswordField";
 import { checkSession, passesEmailHint, rememberSignedIn } from "./session";
-import { APP_NAME } from "@/lib/brand";
+import {
+  AUTH_CARD,
+  AUTH_FOOTNOTE,
+  AUTH_LABEL,
+  AUTH_LINKS,
+  AUTH_MAIN,
+  AUTH_PANEL,
+  AUTH_PANEL_BODY,
+  AUTH_PANEL_HEAD,
+  AUTH_PANEL_TEXT,
+  AUTH_PRIMARY,
+  AuthMark,
+} from "./AuthFrame";
+
+export { CardGlyph } from "./AuthFrame";
 
 type Mode = "signin" | "signup" | "reset";
 
@@ -25,28 +50,45 @@ const NOTICES: Record<string, string> = {
   expired: "Ссылка не сработала или устарела. Запросите сброс пароля ещё раз.",
 };
 
-export function CardGlyph() {
-  return (
-    <svg aria-hidden="true" width="20" height="28" viewBox="0 0 20 28" fill="none" className="mt-2 shrink-0">
-      <rect x="0.75" y="0.75" width="18.5" height="26.5" rx="1.5" className="stroke-ink" strokeWidth="1.5" />
-      <path d="M0.75 7.5h18.5" className="stroke-red" strokeWidth="2" />
-    </svg>
-  );
+const online = () => typeof navigator === "undefined" || navigator.onLine !== false;
+
+interface FieldErrorState {
+  text: string;
+  field: AuthField;
 }
 
-const online = () => typeof navigator === "undefined" || navigator.onLine !== false;
+const FIELD_IDS: Record<AuthField, string> = { email: "login-email", password: "login-password", repeat: "login-repeat" };
+const errorId = (field: AuthField) => `login-error-${field}`;
+
+/**
+ * The error under its field (MOTION-SPEC U2): opens with Collapse (height --dur-move, fade
+ * --dur-enter) and keeps its words while it closes. No shake, no red flood.
+ */
+function FieldError({ field, error, last }: { field: AuthField; error: FieldErrorState | null; last: FieldErrorState | null }) {
+  return (
+    <Collapse open={error?.field === field}>
+      <p id={errorId(field)} role="alert" className="m-0 pt-2 text-[13px] leading-[18px] text-again">
+        {last?.field === field ? last.text : ""}
+      </p>
+    </Collapse>
+  );
+}
 
 export function LoginScreen() {
   const router = useRouter();
   const configured = isSupabaseConfigured();
 
   const [mode, setMode] = useState<Mode>("signin");
-  const [email, setEmail] = useState(() => publicAllowedEmail().split(",")[0]?.trim() ?? "");
+  const [email, setEmail] = useState(() => prefillEmail(publicAllowedEmail()));
   const [password, setPassword] = useState("");
   const [repeat, setRepeat] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setFieldError] = useState<FieldErrorState | null>(null);
+  // The last error, so a closing one keeps its words.
+  const [lastError, setLastError] = useState<FieldErrorState | null>(null);
+  if (error && error !== lastError) setLastError(error);
   const [notice, setNotice] = useState<string | null>(null);
+  const setError = (text: string | null, field: AuthField = "email") => setFieldError(text === null ? null : { text, field });
 
   // Why /auth/confirm sent us back, if it did. Read after mount (the page is prerendered), but
   // without waiting for the session check, which can be slow while the service worker installs.
@@ -74,6 +116,11 @@ export function LoginScreen() {
     // Focus once per mode switch; typing must not move focus.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
+
+  // An error sends focus back to its field (U2); after the mode focus, so it wins.
+  useEffect(() => {
+    if (error) document.getElementById(FIELD_IDS[error.field])?.focus();
+  }, [error]);
 
   function switchMode(next: Mode) {
     setMode(next);
@@ -116,13 +163,13 @@ export function LoginScreen() {
     if (!address) return;
 
     if (mode === "signin" && !password) {
-      setError("Введите пароль.");
+      setError("Введите пароль.", "password");
       return;
     }
     if (mode === "signup") {
       const problem = newPasswordProblem(password, repeat);
       if (problem) {
-        setError(problem);
+        setError(problem, password.length < MIN_PASSWORD_LENGTH ? "password" : "repeat");
         return;
       }
     }
@@ -141,7 +188,7 @@ export function LoginScreen() {
         } else if (data.user && (data.user.identities?.length ?? 0) === 0) {
           // Supabase answers a sign-up for an existing email with a user without identities.
           switchMode("signin");
-          setError(EXISTING_ACCOUNT);
+          setError(EXISTING_ACCOUNT, "email");
         } else {
           switchMode("signin");
           setNotice("Аккаунт создан. Подтвердите почту по ссылке из письма, затем войдите.");
@@ -154,7 +201,9 @@ export function LoginScreen() {
         setNotice(`Письмо со ссылкой для сброса отправлено на ${address}. Откройте его на этом устройстве.`);
       }
     } catch (err) {
-      setError(authErrorMessage(err, mode === "reset" ? "reset" : mode, online()));
+      const phase = mode === "reset" ? "reset" : mode;
+      const text = authErrorMessage(err, phase, online());
+      setError(text, authErrorField(text, phase));
     } finally {
       setBusy(false);
     }
@@ -180,37 +229,29 @@ export function LoginScreen() {
   };
 
   return (
-    <main className="flex min-h-dvh flex-col bg-paper px-4 pt-28 pb-[max(28px,env(safe-area-inset-bottom))] text-ink">
-      <div className="flex items-start gap-3">
-        <CardGlyph />
-        <h1 className="m-0 font-serif text-[40px] leading-[44px] font-medium tracking-[-0.015em] text-balance">{APP_NAME}</h1>
-      </div>
+    <main className={AUTH_MAIN}>
+      <AuthMark />
 
       {!configured ? (
-        <>
-          <section className="mt-12 overflow-hidden rounded-[6px] border border-rule bg-surface">
-            <div className="flex h-[46px] items-center border-b-2 border-red px-4 font-mono text-[11px] leading-4 tracking-[.06em] text-muted">
-              ВХОД НЕ НУЖЕН
-            </div>
-            <p className="px-4 py-6 text-[15px] leading-[22px] text-muted">
+        <div className={AUTH_CARD}>
+          <section className={AUTH_PANEL}>
+            <div className={AUTH_PANEL_HEAD}>ВХОД НЕ НУЖЕН</div>
+            <p className={`${AUTH_PANEL_TEXT} text-muted`}>
               Синхронизация выключена: все слова и прогресс хранятся только на этом устройстве.
             </p>
           </section>
-          <Link
-            href="/"
-            className="mt-4 flex h-[52px] shrink-0 items-center justify-center rounded-[6px] bg-ink text-[15px] font-medium tracking-[.01em] text-on-ink"
-          >
+          <Link href="/" className={`${AUTH_PRIMARY} md:mb-6`}>
             Открыть карточки
           </Link>
-        </>
+        </div>
       ) : (
-        <form onSubmit={onSubmit} noValidate className="contents">
-          <section aria-labelledby="login-title" className="mt-12 overflow-hidden rounded-[6px] border border-rule bg-surface">
-            <div className="flex h-[46px] items-center border-b-2 border-red px-4 font-mono text-[11px] leading-4 tracking-[.06em] text-muted">
+        <form onSubmit={onSubmit} noValidate className={AUTH_CARD}>
+          <section aria-labelledby="login-title" className={AUTH_PANEL}>
+            <div className={AUTH_PANEL_HEAD}>
               <span id="login-title">{TITLES[mode]}</span>
             </div>
 
-            <div className="flex flex-col gap-4 px-4 pt-6 pb-5">
+            <div className={AUTH_PANEL_BODY}>
               {notice && (
                 <p role="status" className="m-0 rounded-[4px] border border-rule bg-surface-2 px-3 py-2 text-[13px] leading-[18px] text-ink">
                   {notice}
@@ -218,7 +259,7 @@ export function LoginScreen() {
               )}
 
               <div>
-                <label htmlFor="login-email" className="block text-[13px] leading-[18px] text-muted">
+                <label htmlFor="login-email" className={AUTH_LABEL}>
                   Почта
                 </label>
                 <input
@@ -238,10 +279,16 @@ export function LoginScreen() {
                     clearError();
                   }}
                   disabled={busy}
-                  aria-invalid={error ? true : undefined}
-                  aria-describedby={error ? "login-error" : undefined}
-                  className="mt-2 h-12 w-full rounded-[4px] border border-rule bg-surface px-3 text-[17px] text-ink caret-ink outline-none placeholder:text-muted/70 focus:border-ink focus:shadow-[inset_0_0_0_1px_var(--ink)] focus-visible:outline-none disabled:opacity-60"
+                  aria-invalid={error?.field === "email" || undefined}
+                  aria-describedby={error?.field === "email" ? errorId("email") : undefined}
+                  className={cx(
+                    "mt-2 h-12 w-full rounded-[4px] border bg-surface px-3 text-[17px] text-ink caret-ink outline-none placeholder:text-muted/70 focus-visible:outline-none disabled:opacity-60 md:h-11 md:px-[11px] md:text-[15px] md:placeholder:text-muted",
+                    error?.field === "email"
+                      ? "border-again focus:shadow-[inset_0_0_0_1px_var(--again)]"
+                      : "border-rule focus:border-ink focus:shadow-[inset_0_0_0_1px_var(--ink)] md:border-boundary",
+                  )}
                 />
+                <FieldError field="email" error={error} last={lastError} />
               </div>
 
               {mode !== "reset" && (
@@ -256,8 +303,11 @@ export function LoginScreen() {
                   autoComplete={mode === "signup" ? "new-password" : "current-password"}
                   enterKeyHint={mode === "signup" ? "next" : "go"}
                   disabled={busy}
-                  describedBy={error ? "login-error" : undefined}
-                />
+                  invalid={error?.field === "password"}
+                  describedBy={error?.field === "password" ? errorId("password") : undefined}
+                >
+                  <FieldError field="password" error={error} last={lastError} />
+                </PasswordField>
               )}
 
               {mode === "signup" && (
@@ -272,8 +322,11 @@ export function LoginScreen() {
                   autoComplete="new-password"
                   enterKeyHint="go"
                   disabled={busy}
-                  describedBy={error ? "login-error" : undefined}
-                />
+                  invalid={error?.field === "repeat"}
+                  describedBy={error?.field === "repeat" ? errorId("repeat") : undefined}
+                >
+                  <FieldError field="repeat" error={error} last={lastError} />
+                </PasswordField>
               )}
 
               {mode === "reset" && (
@@ -281,24 +334,14 @@ export function LoginScreen() {
                   Пришлём ссылку для нового пароля. Откройте её в этом же браузере.
                 </p>
               )}
-
-              {error && (
-                <p id="login-error" role="alert" className="m-0 text-[13px] leading-[18px] text-again">
-                  {error}
-                </p>
-              )}
             </div>
           </section>
 
-          <button
-            type="submit"
-            disabled={busy}
-            className="mt-4 flex h-[52px] w-full shrink-0 cursor-pointer items-center justify-center rounded-[6px] bg-ink text-[15px] font-medium tracking-[.01em] text-on-ink disabled:cursor-default disabled:opacity-40"
-          >
+          <button type="submit" disabled={busy} aria-busy={busy || undefined} className={AUTH_PRIMARY}>
             {primaryLabel}
           </button>
 
-          <div className="mt-2 flex items-center justify-between gap-3">
+          <div className={AUTH_LINKS}>
             {mode === "signin" ? (
               <>
                 <TextButton onClick={() => switchMode("reset")} disabled={busy}>
@@ -317,9 +360,7 @@ export function LoginScreen() {
         </form>
       )}
 
-      <p className="mt-auto max-w-[300px] pt-8 text-xs leading-4 text-muted">
-        Вход по паролю работает и в приложении на главном экране iPhone.
-      </p>
+      <p className={AUTH_FOOTNOTE}>Вход по паролю работает и в приложении на главном экране iPhone.</p>
     </main>
   );
 }
@@ -330,7 +371,7 @@ function TextButton({ children, onClick, disabled }: { children: React.ReactNode
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="h-11 cursor-pointer text-[13px] font-medium whitespace-nowrap text-ink underline decoration-rule underline-offset-4 disabled:opacity-60"
+      className="h-11 cursor-pointer text-[13px] font-medium whitespace-nowrap text-ink underline decoration-rule underline-offset-4 disabled:opacity-60 md:h-8 md:rounded-[4px] md:px-2 md:text-[14px] md:no-underline md:hoverable:bg-hover-surface"
     >
       {children}
     </button>

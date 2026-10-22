@@ -17,7 +17,7 @@ An optional skill (`claude/skills/kartochki/`) teaches Claude the card conventio
   - The `kartochki_stamp_row` trigger still runs: it stamps `synced_at`, so devices pull Claude's changes on their next sync (on open, on focus, or within about 5 minutes while the app is visible).
   - Writes follow the app's rules (`lib/mcp/tools.ts`): new words get both review cards (written before the word) and `source = "chat"` («из чата» in the word sheet); rewrites stamp `updated_at` past the stored value; nothing is hard-deleted.
   - Rewrites of a word are compare-and-set: the row is written only if its `updated_at` is still the one read just before. If the phone synced a change, or another call changed the word, in between, Claude gets a `conflict` instead of overwriting it.
-  - Migration `0003_connector_grants.sql` grants `service_role` the table rights the connector needs, so it does not depend on the project's default privileges.
+  - Migration `0005_connector_grants.sql` grants `service_role` the table rights the connector needs, so it does not depend on the project's default privileges.
 - **No subscriptions:** the server's tool list never changes, so it refuses `subscriptions/listen` streams (`maxSubscriptions: 0`) instead of holding a function open.
 - **Rate limit:** write tools take a token from the in-memory `mcp` bucket (`lib/ai/rate-limit.ts`, 20 in a burst, then one per 3 s). An exhausted bucket gives an `isError` tool result; `initialize` and `tools/list` are never limited.
 - **«Сегодня»:** `study_summary` computes the 04:00-to-04:00 study day in `MCP_TIMEZONE` (`lib/mcp/study-day.ts`). The device's «Новых в день» setting is not synced, so Claude assumes 15 unless told otherwise.
@@ -52,7 +52,7 @@ Themes can be named by id, slug, Russian name, or `inbox`.
    - `MCP_TIMEZONE` (optional): your IANA time zone, for example `Europe/Moscow`. The default is `Europe/Paris`.
 
    Then redeploy.
-   Apply `supabase/migrations/0003_connector_grants.sql` if you haven't (README, step 1).
+   Apply `supabase/migrations/0005_connector_grants.sql` if you haven't (README, step 1).
 3. Check the endpoint. A wrong key must give `404`, with no redirect:
    ```sh
    curl -s -o /dev/null -w "%{http_code}\n" -X POST https://frenchcards.vercel.app/api/mcp/wrong

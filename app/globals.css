@@ -18,6 +18,8 @@
   --card-lines: #dfe6f3;
   --scrim: rgba(17, 17, 17, 0.4);
   --on-ink: #ffffff;
+  /* An ink surface while pressed (MOTION-SPEC §5.1). */
+  --ink-press: #2a2a2a;
   /* Desktop tokens (mockups/DESKTOP-SPEC.md §3). */
   --hover: #e8e8e4;
   --hover-surface: #f4f4f1;
@@ -44,6 +46,7 @@
     --card-lines: #22252c;
     --scrim: rgba(0, 0, 0, 0.55);
     --on-ink: #121212;
+    --ink-press: #d6d6d1;
     --hover: #222220;
     --hover-surface: #242422;
     --boundary: #6e6e69;
@@ -69,6 +72,7 @@
   --card-lines: #22252c;
   --scrim: rgba(0, 0, 0, 0.55);
   --on-ink: #121212;
+  --ink-press: #d6d6d1;
   --hover: #222220;
   --hover-surface: #242422;
   --boundary: #6e6e69;
@@ -105,6 +109,7 @@
   --color-warn-bg: var(--warn-bg);
   --color-warn-edge: var(--warn-edge);
   --color-on-ink: var(--on-ink);
+  --color-ink-press: var(--ink-press);
   --color-hover: var(--hover);
   --color-hover-surface: var(--hover-surface);
   --color-boundary: var(--boundary);
@@ -187,35 +192,344 @@ body {
   }
 }
 
-/* Card flip (tap): the side that appears turns in over the horizontal axis, up to the answer
-   and down back to the question. Disabled by prefers-reduced-motion below. */
-@keyframes card-turn-up {
-  from {
-    transform: perspective(1000px) rotateX(-45deg);
-    opacity: 0.4;
-  }
-  to {
-    transform: perspective(1000px) rotateX(0deg);
-    opacity: 1;
+/* Motion tokens (mockups/MOTION-SPEC.md §2). Durations live in :root, not @theme, because they
+   shrink under reduced motion; every transition names one of these and one --ease-* curve. */
+:root {
+  --dur-instant: 70ms;
+  --dur-quick: 110ms;
+  --dur-exit: 140ms;
+  --dur-flash: 120ms;
+  --dur-move: 200ms;
+  --dur-enter: 240ms;
+  --dur-turn: 320ms;
+  --dur-sheet: 380ms;
+  --dur-spotlight: 1200ms;
+  --dur-done-hold: 400ms;
+  --dur-long-press: 500ms;
+  --dur-rule-draw: 400ms;
+  --loading-delay: 300ms;
+  --loading-delay-fast: 150ms;
+  --loading-min: 500ms;
+  --link-pending-delay: 100ms;
+  --dist-row: 4px;
+  --dist-pop: 8px;
+  --dist-exit-card: 56px;
+  --dist-sink: 24px;
+  --motion-scale: 1;
+  --press-scale: 0.98;
+  --press-scale-sm: 0.96;
+  --spring-settle: cubic-bezier(0, 0, 0.3, 1);
+  --spring-lift: cubic-bezier(0, 0, 0.3, 1);
+  --spring-stamp: cubic-bezier(0, 0, 0.3, 1);
+}
+
+@supports (transition-timing-function: linear(0, 1)) {
+  :root {
+    --spring-settle: linear(
+      0, 0.006 1.1%, 0.024 2.4%, 0.05 3.7%, 0.092 5.3%, 0.176 7.9%, 0.495 16.9%, 0.591 20.1%, 0.675 23.2%,
+      0.746 26.4%, 0.804 29.5%, 0.856 33%, 0.897 36.5%, 0.931 40.5%, 0.957 45%, 0.977 50%, 0.99 55.7%, 1 69.8%, 1
+    );
+    --spring-lift: linear(
+      0, 0.006 1.1%, 0.024 2.4%, 0.055 3.8%, 0.096 5.2%, 0.187 7.8%, 0.516 16.5%, 0.616 19.5%, 0.702 22.6%,
+      0.774 25.6%, 0.833 28.6%, 0.883 31.9%, 0.922 35.2%, 0.953 38.9%, 0.975 42.8%, 0.991 47.3%, 1.001 52.5%,
+      1.006 63.1%, 1
+    );
+    --spring-stamp: linear(
+      0, 0.008 1.3%, 0.027 2.6%, 0.061 4.1%, 0.109 5.7%, 0.208 8.5%, 0.556 17.3%, 0.657 20.3%, 0.744 23.2%,
+      0.818 26.2%, 0.878 29.1%, 0.927 32.2%, 0.964 35.4%, 0.99 38.5%, 1.009 41.9%, 1.027 49.8%, 1.004 80%, 1
+    );
   }
 }
 
-@keyframes card-turn-down {
+@theme {
+  --ease-standard: cubic-bezier(0.2, 0, 0.38, 0.9);
+  --ease-enter: cubic-bezier(0, 0, 0.3, 1);
+  --ease-exit: cubic-bezier(0.4, 0.14, 1, 1);
+  --ease-press: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Something arriving: 4px rise + fade (fade only under reduced motion via --motion-scale). */
+@keyframes enter-rise {
   from {
-    transform: perspective(1000px) rotateX(45deg);
-    opacity: 0.4;
-  }
-  to {
-    transform: perspective(1000px) rotateX(0deg);
-    opacity: 1;
+    opacity: 0;
+    translate: 0 calc(var(--dist-row) * var(--motion-scale));
   }
 }
 
+@keyframes enter-pop {
+  from {
+    opacity: 0;
+    translate: 0 calc(var(--dist-pop) * var(--motion-scale));
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* The status line's ink run: a 32px segment crosses the hairline in 1400ms, then rests 600ms. */
+@keyframes ink-run {
+  from {
+    left: -32px;
+  }
+  70%,
+  to {
+    left: 100%;
+  }
+}
+
+/* The import scan line (with its veil) travels over the thumbnail top↔bottom; use with .motion-loop
+   (reduced motion: it stays where its inline translate puts it, at the bar's %). */
+@keyframes scan-travel {
+  from {
+    translate: 0 0;
+  }
+  to {
+    translate: 0 calc(100% - 1px);
+  }
+}
+
+/* A rubber stamp landing (swipe lock R4, the «Готово на сегодня» date stamp §5.12): 1.04 → 1 on
+   --spring-stamp over 300ms; under reduced motion it is simply there. */
+@keyframes stamp-land {
+  from {
+    scale: calc(1 + 0.04 * var(--motion-scale));
+  }
+}
+
+/* A rule drawn left → right (§5.12): scaleX 0 → 1 over --dur-rule-draw, linear; set
+   transform-origin left. */
+@keyframes rule-draw {
+  from {
+    scale: 0 1;
+  }
+}
+
+/* A headline settling into place (§5.12): 6px rise, on --spring-lift over 480ms. */
+@keyframes settle-rise {
+  from {
+    translate: 0 calc(6px * var(--motion-scale));
+  }
+}
+
+/* Something pushed down in the layout slides from its old place: set --slide-from (e.g. -56px). */
+@keyframes slide-from {
+  from {
+    translate: 0 calc(var(--slide-from, 0px) * var(--motion-scale));
+  }
+}
+
+/* An indicator that is always mounted but should only paint when the wait is slow (§3.1). */
+.delayed-in {
+  animation: fade-in var(--dur-quick) var(--ease-enter) var(--loading-delay) both;
+}
+
+/* Press feedback (§5.1, K7): in --dur-instant --ease-press, release --dur-quick, never below .95.
+   `press` (.98): cards, grade and primary/secondary buttons. `press-sm` (.96): icon buttons, chips,
+   checkboxes, toggles, stepper. `press-tint`: full-width rows, --surface-2 tint only, no scale.
+   With `press`/`press-sm` the tint is the element's own `active:` / `data-pressed:` class. Gesture
+   surfaces (iOS :active is unreliable) set data-pressed="" from pointer events and drop it once a
+   drag passes the 10px slop. These own transition-*: don't add another transition class. */
+@utility press {
+  touch-action: manipulation;
+  transition-property: scale, color, background-color, border-color, text-decoration-color, opacity;
+  transition-duration: var(--dur-quick);
+  transition-timing-function: var(--ease-press);
+
+  &:active:not(:disabled, [aria-disabled="true"], [data-blocked]),
+  &[data-pressed] {
+    scale: var(--press-scale);
+    transition-duration: var(--dur-instant);
+  }
+}
+
+@utility press-sm {
+  touch-action: manipulation;
+  transition-property: scale, color, background-color, border-color, text-decoration-color, opacity;
+  transition-duration: var(--dur-quick);
+  transition-timing-function: var(--ease-press);
+
+  &:active:not(:disabled, [aria-disabled="true"], [data-blocked]),
+  &[data-pressed] {
+    scale: var(--press-scale-sm);
+    transition-duration: var(--dur-instant);
+  }
+}
+
+@utility press-tint {
+  touch-action: manipulation;
+  transition-property: color, background-color;
+  transition-duration: var(--dur-quick);
+  transition-timing-function: var(--ease-press);
+
+  &:active:not(:disabled, [aria-disabled="true"], [data-blocked]),
+  &[data-pressed] {
+    background-color: var(--surface-2);
+    transition-duration: var(--dur-instant);
+  }
+}
+
+/* Spotlight, the paper fade (§5.14, K6): lit with --surface-2 at once, back to the element's own
+   background over --dur-spotlight, linear. Kept under reduced motion (colour only). Restart it with
+   spotlight(el) from lib/motion.ts; it replaces other animations on the same element. */
+@keyframes spotlight {
+  from {
+    background-color: var(--surface-2);
+  }
+}
+
+.spotlight {
+  animation: spotlight var(--dur-spotlight) linear;
+}
+
+/* Snackbar (§5.6, N2): rises 8px in --dur-enter, leaves the way it came (fade + 8px down) in --dur-exit. */
+@keyframes snackbar-in {
+  from {
+    opacity: 0;
+    translate: 0 calc(var(--dist-pop) * var(--motion-scale));
+  }
+}
+
+@keyframes snackbar-out {
+  to {
+    opacity: 0;
+    translate: 0 calc(var(--dist-pop) * var(--motion-scale));
+  }
+}
+
+.snackbar-in {
+  animation: snackbar-in var(--dur-enter) var(--ease-enter);
+}
+
+.snackbar-out {
+  animation: snackbar-out var(--dur-exit) var(--ease-exit) forwards;
+  pointer-events: none;
+}
+
+/* Menus and popovers (D6): placed before paint, then fade + 4px from the trigger side in --dur-quick
+   (data-side="bottom": opened under its trigger, the default; "top": above it); out opacity only in
+   --dur-exit. No scale. */
+@keyframes popover-in {
+  from {
+    opacity: 0;
+    translate: 0 calc(var(--popover-from) * var(--motion-scale));
+  }
+}
+
+.popover-in {
+  --popover-from: calc(var(--dist-row) * -1);
+  animation: popover-in var(--dur-quick) var(--ease-enter);
+}
+
+.popover-in[data-side="top"] {
+  --popover-from: var(--dist-row);
+}
+
+.popover-out {
+  animation: fade-out var(--dur-exit) var(--ease-exit) forwards;
+  pointer-events: none;
+}
+
+/* Desktop dialogs (D5, Radix data-state): in opacity + 8px rise --dur-enter, out opacity + 4px down
+   --dur-exit; the scrim fades the same. `transform`, so a centring `translate` stays untouched. */
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(var(--dist-pop) * var(--motion-scale)));
+  }
+}
+
+@keyframes dialog-out {
+  to {
+    opacity: 0;
+    transform: translateY(calc(var(--dist-row) * var(--motion-scale)));
+  }
+}
+
+.dialog-panel[data-state="open"] {
+  animation: dialog-in var(--dur-enter) var(--ease-enter);
+}
+
+.dialog-panel[data-state="closed"] {
+  animation: dialog-out var(--dur-exit) var(--ease-exit) forwards;
+}
+
+.dialog-scrim[data-state="open"] {
+  animation: fade-in var(--dur-enter) var(--ease-enter);
+}
+
+.dialog-scrim[data-state="closed"] {
+  animation: fade-out var(--dur-exit) var(--ease-exit) forwards;
+}
+
+/* Phone sheets (vaul, A1 / N3): open --dur-sheet on --spring-settle, close --dur-enter --ease-exit;
+   scrim in --dur-enter, out --dur-exit. Replaces vaul's 500ms; the snap back after a short drag uses
+   the open timing (vaul sets that transition inline, hence !important). Sheet.tsx times onClosed
+   with sheetCloseMs() instead of vaul's fixed 500ms timer (N4). */
+[data-vaul-drawer][data-state="open"] {
+  animation-duration: var(--dur-sheet);
+  animation-timing-function: var(--spring-settle);
+}
+
+[data-vaul-drawer][data-state="closed"] {
+  animation-duration: var(--dur-enter);
+  animation-timing-function: var(--ease-exit);
+}
+
+[data-vaul-drawer] {
+  transition-duration: var(--dur-sheet) !important;
+  transition-timing-function: var(--spring-settle) !important;
+}
+
+[data-vaul-overlay][data-state="open"] {
+  animation-duration: var(--dur-enter);
+  animation-timing-function: var(--ease-enter);
+}
+
+[data-vaul-overlay][data-state="closed"] {
+  animation-duration: var(--dur-exit);
+  animation-timing-function: var(--ease-exit);
+}
+
+/* Reduced motion: movement becomes opacity, fades stay short, loops stop (§2.7). Durations shrink
+   rather than vanish, so transitionend still fires. */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    transition: none !important;
+  :root {
+    --motion-scale: 0;
+    --press-scale: 1;
+    --press-scale-sm: 1;
+    --dur-move: var(--dur-quick);
+    --dur-enter: var(--dur-quick);
+    --dur-turn: var(--dur-quick);
+    --dur-sheet: var(--dur-quick);
+    --dur-rule-draw: 1ms;
+    --spring-settle: var(--ease-standard);
+    --spring-lift: var(--ease-standard);
+    --spring-stamp: var(--ease-standard);
+  }
+
+  .motion-loop {
     animation: none !important;
+  }
+
+  /* Sheets appear and leave in place; --dur-sheet and --dur-enter are --dur-quick here. */
+  [data-vaul-drawer][data-state="open"] {
+    animation-name: fade-in !important;
+  }
+
+  [data-vaul-drawer][data-state="closed"] {
+    animation-name: fade-out !important;
+  }
+
+  ::view-transition-group(*) {
+    animation-duration: 0s;
   }
 }

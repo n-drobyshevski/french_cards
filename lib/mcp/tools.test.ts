@@ -240,6 +240,17 @@ describe("update_word", () => {
     expect(fake.tables.words.get("w1")).toMatchObject({ pos: "expression", gender: "none", note: "арго", updated_at: "2027-03-01T00:00:00.001Z" });
   });
 
+  it("keeps the word's further examples («+ Ещё пример»), which it does not edit", async () => {
+    const extra = [{ fr: "j'ai pas une thune", ru: "у меня ни гроша" }];
+    const fake = createFakeRepo({ folders: FOLDERS, words: [word("w1", "la thune", "деньги", { example_fr: "file-moi de la thune", extra_examples: extra })] });
+    await ok(updateWord, fake, { id: "w1", patch: { ru: "бабки", example_fr: null } });
+    expect(fake.tables.words.get("w1")).toMatchObject({ ru: "бабки", example_fr: null, extra_examples: extra });
+    await ok(moveWords, fake, { ids: ["w1"], folder: "Деньги" });
+    expect(fake.tables.words.get("w1")).toMatchObject({ folder_id: "f-dengi", extra_examples: extra });
+    const found = await ok(searchWords, fake, { query: "thune" });
+    expect(found.words[0].extra_examples).toEqual(extra);
+  });
+
   it("toggles the RU→FR card with both_directions, keeping its progress", async () => {
     const progressed = { ...cards("w1")[1], state: 2 as const, reps: 4, stability: 9 };
     const fake = createFakeRepo({ words: [word("w1", "pote", "друг")], review_state: [cards("w1")[0], progressed] });

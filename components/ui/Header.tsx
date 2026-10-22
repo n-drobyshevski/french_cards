@@ -27,7 +27,7 @@ export interface HeaderProps {
 }
 
 const backClass =
-  "inline-flex size-11 shrink-0 items-center justify-center rounded-chip bg-transparent text-ink active:bg-surface-2";
+  "press-sm inline-flex size-11 shrink-0 items-center justify-center rounded-chip bg-transparent text-ink active:bg-surface-2";
 
 /** Screen header: 44px row 16px below the safe area, back arrow + title + optional actions. */
 export function Header({

@@ -6,7 +6,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { readNdjson } from "./ai/ndjson";
 import { dedupeKey, detectDirection } from "./ai/normalize";
-import { SUGGEST_MAX, type FolderInput, type SuggestLine, type Suggestion } from "./ai/schemas";
+import { SUGGEST_MAX, type FolderInput, type ModelTierInput, type SuggestLine, type SuggestRegister, type Suggestion } from "./ai/schemas";
 import { foldKey } from "./lexique";
 import type { Folder } from "./types";
 
@@ -20,6 +20,17 @@ export const SUGGEST_MAX_FOLDERS = 60;
 const CACHE_SIZE = 24;
 
 export type SuggestDirection = "fr" | "ru";
+
+/** Settings «ИИ» that shape «Варианты». */
+export interface SuggestPreferences {
+  model: ModelTierInput;
+  /** 1–3. */
+  max: number;
+  register: SuggestRegister;
+  notes: boolean;
+}
+
+export const DEFAULT_SUGGEST_PREFERENCES: SuggestPreferences = { model: "fast", max: SUGGEST_MAX, register: "any", notes: true };
 /** idle: nothing to ask (short query or switched off). loading: debouncing or streaming. */
 export type SuggestStatus = "idle" | "loading" | "done" | "error";
 /**
@@ -36,6 +47,11 @@ export interface SuggestSnapshot {
   results: readonly Suggestion[];
   status: SuggestStatus;
   error: SuggestErrorKind | null;
+  /**
+   * The debounce is over and a request is in flight (status "loading"). The UI waits on this,
+   * not on `status`, for its delayed indicator (MOTION-SPEC §3.1: 150 ms after the debounce).
+   */
+  requesting: boolean;
 }
 
 /** The last response received, which later queries are narrowed from. */
@@ -143,7 +159,7 @@ class HttpError extends Error {
   }
 }
 
-const IDLE: SuggestSnapshot = { query: "", direction: "fr", results: [], status: "idle", error: null };
+const IDLE: SuggestSnapshot = { query: "", direction: "fr", results: [], status: "idle", error: null, requesting: false };
 
 const defaultOnline = () => (typeof navigator === "undefined" ? true : navigator.onLine !== false);
 
@@ -155,6 +171,7 @@ export class SuggestController {
   private basis: SuggestBasis | null = null;
   private readonly cache = new Map<string, readonly Suggestion[]>();
   private folders: FolderInput[] = [];
+  private preferences: SuggestPreferences = DEFAULT_SUGGEST_PREFERENCES;
   private enabled = true;
   private readonly fetchImpl: typeof fetch;
   private readonly url: string;
@@ -183,6 +200,16 @@ export class SuggestController {
     this.folders = folders;
   };
 
+  /** New preferences make earlier answers stale: forget them and ask again for the current query. */
+  setPreferences = (preferences: SuggestPreferences): void => {
+    const p = this.preferences;
+    if (p.model === preferences.model && p.max === preferences.max && p.register === preferences.register && p.notes === preferences.notes) return;
+    this.preferences = preferences;
+    this.cache.clear();
+    this.basis = null;
+    if (this.snapshot.query) this.setQuery(this.snapshot.query, { force: true });
+  };
+
   setEnabled = (enabled: boolean): void => {
     if (this.enabled === enabled) return;
     this.enabled = enabled;
@@ -198,28 +225,28 @@ export class SuggestController {
     const direction = detectDirection(query);
 
     if (!this.enabled || query.length < this.minChars) {
-      this.set({ query, direction, results: [], status: "idle", error: null });
+      this.set({ query, direction, results: [], status: "idle", error: null, requesting: false });
       return;
     }
 
     const cached = opts.force ? undefined : this.cache.get(cacheKey(query));
     if (cached) {
       this.basis = { query, direction, results: cached, complete: true };
-      this.set({ query, direction, results: cached, status: "done", error: null });
+      this.set({ query, direction, results: cached, status: "done", error: null, requesting: false });
       return;
     }
 
     const plan = planSuggest(this.basis, query);
     if (!plan.fetch && !opts.force) {
-      this.set({ query, direction, results: plan.results, status: "done", error: null });
+      this.set({ query, direction, results: plan.results, status: "done", error: null, requesting: false });
       return;
     }
     if (!this.isOnline()) {
-      this.set({ query, direction, results: plan.results, status: "error", error: "offline" });
+      this.set({ query, direction, results: plan.results, status: "error", error: "offline", requesting: false });
       return;
     }
 
-    this.set({ query, direction, results: plan.results, status: "loading", error: null });
+    this.set({ query, direction, results: plan.results, status: "loading", error: null, requesting: false });
     if (opts.immediate || opts.force) {
       void this.run(query, direction, plan.results);
     } else {
@@ -242,10 +269,20 @@ export class SuggestController {
     this.setQuery(this.snapshot.query, { immediate: true });
   };
 
+  /**
+   * The network went away (MOTION-SPEC B4): a wait that has not answered yet becomes the offline
+   * notice at once instead of running into a timeout; rows already shown stay.
+   */
+  goOffline = (): void => {
+    if (this.snapshot.status !== "loading") return;
+    this.abortPending();
+    this.set({ ...this.snapshot, status: "error", error: "offline", requesting: false });
+  };
+
   /** Stops the pending timer and the request in flight. */
   cancel = (): void => {
     this.abortPending();
-    if (this.snapshot.status === "loading") this.set({ ...this.snapshot, status: "idle" });
+    if (this.snapshot.status === "loading") this.set({ ...this.snapshot, status: "idle", requesting: false });
   };
 
   private abortPending(): void {
@@ -268,18 +305,25 @@ export class SuggestController {
   }
 
   private async run(query: string, direction: SuggestDirection, kept: readonly Suggestion[]): Promise<void> {
+    // Offline is decided before the wait, also when the network went away during the debounce.
+    if (!this.isOnline()) {
+      this.set({ query, direction, results: [...kept], status: "error", error: "offline", requesting: false });
+      return;
+    }
     const controller = new AbortController();
     this.inflight = controller;
     const { signal } = controller;
     const fresh: Suggestion[] = [];
+    const { max } = this.preferences;
     let ended: "done" | "error" | null = null;
     let errorKind: SuggestErrorKind = "failed";
+    this.set({ ...this.snapshot, requesting: true });
 
     try {
       const res = await this.fetchImpl(this.url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ q: query, direction: "auto", folders: this.folders }),
+        body: JSON.stringify({ q: query, direction: "auto", folders: this.folders, ...this.preferences }),
         signal,
       });
       if (!res.ok) {
@@ -289,9 +333,9 @@ export class SuggestController {
       for await (const line of readNdjson<SuggestLine>(res, signal)) {
         if (signal.aborted) return;
         if (line.type === "suggestion") {
-          if (fresh.length >= SUGGEST_MAX) continue;
+          if (fresh.length >= max) continue;
           fresh.push(line.suggestion);
-          this.set({ query, direction, results: mergeStreaming(fresh, kept), status: "loading", error: null });
+          this.set({ query, direction, results: mergeStreaming(fresh, kept, max), status: "loading", error: null, requesting: true });
         } else if (line.type === "done" || line.type === "error") {
           ended = line.type;
           break;
@@ -309,12 +353,12 @@ export class SuggestController {
     if (ended === "done") {
       this.basis = { query, direction, results: fresh, complete: true };
       this.remember(query, fresh);
-      this.set({ query, direction, results: fresh, status: "done", error: null });
+      this.set({ query, direction, results: fresh, status: "done", error: null, requesting: false });
       return;
     }
     // An error line, an HTTP error, or a stream that broke off: keep whatever arrived.
     if (fresh.length > 0) this.basis = { query, direction, results: fresh, complete: false };
-    this.set({ query, direction, results: fresh.length > 0 ? fresh : [...kept], status: "error", error: errorKind });
+    this.set({ query, direction, results: fresh.length > 0 ? fresh : [...kept], status: "error", error: errorKind, requesting: false });
   }
 }
 
@@ -326,30 +370,41 @@ export interface UseSuggestOptions {
   folders: FolderInput[];
   /** settings.suggestions_enabled; when false nothing is requested. */
   enabled: boolean;
+  /** From Settings «ИИ»; defaults when not loaded yet. */
+  preferences?: SuggestPreferences;
 }
 
 export interface SuggestApi extends SuggestSnapshot {
+  /** Settings «Вариантов» (1–3): how many row slots «Варианты» reserves. */
+  max: number;
   setQuery: SuggestController["setQuery"];
   retry: () => void;
   flush: () => void;
   cancel: () => void;
 }
 
-/** Binds a SuggestController to the component. Retries automatically when the network comes back. */
-export function useSuggest({ folders, enabled }: UseSuggestOptions): SuggestApi {
+/**
+ * Binds a SuggestController to the component. Shows the offline notice as soon as the network goes
+ * and retries automatically when it comes back.
+ */
+export function useSuggest({ folders, enabled, preferences = DEFAULT_SUGGEST_PREFERENCES }: UseSuggestOptions): SuggestApi {
   const [controller] = useState(() => new SuggestController());
   const snapshot = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
 
   useEffect(() => controller.setFolders(folders), [controller, folders]);
   useEffect(() => controller.setEnabled(enabled), [controller, enabled]);
+  useEffect(() => controller.setPreferences(preferences), [controller, preferences]);
   useEffect(() => {
     const online = () => controller.retry();
+    const offline = () => controller.goOffline();
     window.addEventListener("online", online);
+    window.addEventListener("offline", offline);
     return () => {
       window.removeEventListener("online", online);
+      window.removeEventListener("offline", offline);
       controller.cancel();
     };
   }, [controller]);
 
-  return { ...snapshot, setQuery: controller.setQuery, retry: controller.retry, flush: controller.flush, cancel: controller.cancel };
+  return { ...snapshot, max: preferences.max, setQuery: controller.setQuery, retry: controller.retry, flush: controller.flush, cancel: controller.cancel };
 }

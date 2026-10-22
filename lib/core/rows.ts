@@ -8,7 +8,7 @@ export type Row = Record<string, unknown> & { id: string; updated_at: string };
 export const REMOTE_COLUMNS: Record<SyncTable, readonly string[]> = {
   folders: ["id", "slug", "name", "description", "color", "created_by", "locked", "sort", "updated_at", "deleted_at"],
   words: [
-    "id", "fr", "ru", "note", "example_fr", "example_ru", "pos", "gender", "slang_level", "verlan", "tags",
+    "id", "fr", "ru", "note", "example_fr", "example_ru", "extra_examples", "pos", "gender", "slang_level", "verlan", "tags",
     "folder_id", "folder_source", "folder_confidence", "source", "both_directions", "created_at", "updated_at", "deleted_at",
   ],
   review_state: [
@@ -20,6 +20,7 @@ export const REMOTE_COLUMNS: Record<SyncTable, readonly string[]> = {
     "scheduled_days", "review", "prev", "updated_at", "deleted_at",
   ],
   reorg_runs: ["id", "created_at", "applied_at", "moves", "created_folders", "updated_at", "deleted_at"],
+  review_sets: ["id", "name", "folders", "statuses", "slang", "added", "mode", "created_at", "updated_at", "deleted_at"],
 };
 
 /** Postgres returns `2026-10-21T08:00:00.123+00:00`; locally every timestamp is `toISOString()`. */
@@ -29,6 +30,7 @@ const TIMESTAMP_COLUMNS: Record<SyncTable, readonly string[]> = {
   review_state: ["due", "last_review", "updated_at", "deleted_at"],
   review_log: ["due", "review", "updated_at", "deleted_at"],
   reorg_runs: ["created_at", "applied_at", "updated_at", "deleted_at"],
+  review_sets: ["created_at", "updated_at", "deleted_at"],
 };
 
 export function toRemoteRow(table: SyncTable, row: object): Record<string, unknown> {

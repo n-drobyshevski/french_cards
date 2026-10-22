@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decideAiAccess, isAllowedEmail } from "./config";
+import { decideAiAccess, isAllowedEmail, prefillEmail } from "./config";
 
 describe("isAllowedEmail", () => {
   it("matches case- and space-insensitively, and supports a comma list", () => {
@@ -28,5 +28,13 @@ describe("decideAiAccess", () => {
     expect(decideAiAccess({ ...base, configured: true, email: "z@x.io" })).toMatchObject({ ok: false, status: 401 });
     expect(decideAiAccess({ ...base, configured: true, email: "A@x.io" })).toEqual({ ok: true });
     expect(decideAiAccess({ ...base, configured: true, email: "a@x.io", allowedEmail: undefined })).toMatchObject({ ok: false });
+  });
+});
+
+describe("prefillEmail", () => {
+  it("prefills the only allowed address, none when there are several", () => {
+    expect(prefillEmail(" a@x.io ")).toBe("a@x.io");
+    expect(prefillEmail("a@x.io, b@x.io")).toBe("");
+    expect(prefillEmail("")).toBe("");
   });
 });

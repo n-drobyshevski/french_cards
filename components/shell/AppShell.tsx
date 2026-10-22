@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { GlobalImportDrop } from "@/components/import/GlobalImportDrop";
 import { Icon } from "@/components/ui/Icons";
 import { GlobalKeys } from "./GlobalKeys";
 import { useShellData } from "./NavParts";
@@ -51,6 +52,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </div>
       <GlobalKeys />
+      <GlobalImportDrop />
       <ShortcutsDialog />
     </ShellProvider>
   );

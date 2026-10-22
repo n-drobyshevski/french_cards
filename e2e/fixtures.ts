@@ -151,6 +151,10 @@ export interface EnrichResultWire {
   example_fr: string | null;
   example_ru: string | null;
   confidence: "high" | "med" | "low";
+  /** Theme slug, "NEW" or "INBOX" when the request carried themes; otherwise null. */
+  folder: string | null;
+  folder_alternatives: string[];
+  new_folder: { slug: string; name: string; description: string } | null;
 }
 
 export interface EnrichWordWire {
@@ -164,16 +168,50 @@ export interface EnrichWordWire {
 export async function mockEnrich(
   page: Page,
   make: (word: EnrichWordWire) => Omit<EnrichResultWire, "id"> | null,
-  onRequest?: (words: EnrichWordWire[]) => void,
+  onRequest?: (words: EnrichWordWire[], folders: { slug: string }[] | undefined) => void,
 ) {
   await page.route("**/api/ai/enrich", async (route: Route) => {
-    const { words } = route.request().postDataJSON() as { words: EnrichWordWire[] };
-    onRequest?.(words);
+    const { words, folders } = route.request().postDataJSON() as { words: EnrichWordWire[]; folders?: { slug: string }[] };
+    onRequest?.(words, folders);
     const results = words.flatMap((w) => {
       const r = make(w);
       return r ? [{ id: w.id, ...r }] : [];
     });
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ results }) });
+  });
+}
+
+/**
+ * Answers the assign pass of POST /api/ai/classify («Разложить по темам», «Расформировать»):
+ * `pick` returns a theme slug (or "INBOX") per word. `status` ≠ 200 fails every call.
+ */
+export async function mockClassifyAssign(
+  page: Page,
+  pick: (word: { fr: string; ru: string }, folders: readonly { slug: string; name: string }[]) => string,
+  opts: { status?: number; onRequest?: (body: { words: { fr: string }[]; folders: { slug: string; name: string }[] }) => void } = {},
+) {
+  await page.route("**/api/ai/classify", async (route: Route) => {
+    if (opts.status && opts.status !== 200) {
+      await route.fulfill({ status: opts.status, contentType: "application/json", body: JSON.stringify({ error: "not_configured" }) });
+      return;
+    }
+    const body = route.request().postDataJSON() as { words: { id: string; fr: string; ru: string }[]; folders: { slug: string; name: string }[] };
+    opts.onRequest?.(body);
+    const assignments = body.words.map((w) => ({ id: w.id, folder: pick(w, body.folders), confidence: "high" }));
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ assignments }) });
+  });
+}
+
+/** Answers POST /api/ai/example: `make` gets the request (card + examples to avoid). */
+export async function mockExample(
+  page: Page,
+  make: (body: { fr: string; ru: string; avoid: string[] }) => { fr: string; ru: string | null } | null,
+  onRequest?: (body: { fr: string; ru: string; avoid: string[] }) => void,
+) {
+  await page.route("**/api/ai/example", async (route: Route) => {
+    const body = route.request().postDataJSON() as { fr: string; ru: string; avoid: string[] };
+    onRequest?.(body);
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ example: make(body) }) });
   });
 }
 
@@ -186,6 +224,9 @@ export const enriched = (word: EnrichWordWire, fields: Partial<Omit<EnrichResult
   example_fr: `Exemple avec ${word.fr}.`,
   example_ru: `Пример: ${word.ru}.`,
   confidence: "high",
+  folder: null,
+  folder_alternatives: [],
+  new_folder: null,
   ...fields,
 });
 
@@ -225,3 +266,100 @@ export async function openReview(page: Page) {
 export const tabBar = (page: Page) => page.getByRole("navigation", { name: "Основная навигация" });
 
 export const addSheet = (page: Page) => page.getByRole("dialog", { name: /Новое слово/ });
+
+/** Waits for the page's finite animations (a dialog's rise, a snackbar's entry) before measuring geometry. */
+export async function motionSettled(page: Page) {
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => a.effect?.getComputedTiming().iterations !== Infinity)
+        .map((a) => a.finished.catch(() => undefined)),
+    ),
+  );
+}
+
+/** Ratings in the local review log, oldest first (1 = Не знаю … 3 = Знаю). Undone answers are gone. */
+export async function loggedRatings(page: Page): Promise<number[]> {
+  return page.evaluate(
+    () =>
+      new Promise<number[]>((resolve, reject) => {
+        const open = indexedDB.open("kartochki");
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const all = open.result.transaction("review_log").objectStore("review_log").getAll();
+          all.onerror = () => reject(all.error);
+          all.onsuccess = () => {
+            const rows = all.result as { rating: number; review: string; deleted_at: string | null }[];
+            resolve(rows.filter((r) => !r.deleted_at).sort((a, b) => a.review.localeCompare(b.review)).map((r) => r.rating));
+            open.result.close();
+          };
+        };
+      }),
+  );
+}
+
+/**
+ * Holds POST /api/ai/suggest until `release()`; each held request then gets `answer()` (rows, or
+ * an HTTP error status). Lets a test look at «Варианты» while they wait.
+ */
+export async function gateSuggest(page: Page, answer: () => readonly SuggestionWire[] | number) {
+  let open!: () => void;
+  let gate = new Promise<void>((resolve) => (open = resolve));
+  await page.route("**/api/ai/suggest", async (route: Route) => {
+    await gate;
+    const a = answer();
+    if (typeof a === "number") {
+      await route.fulfill({ status: a, contentType: "application/json", body: JSON.stringify({ error: "failed" }) });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: NDJSON,
+      body: ndjson([
+        { type: "meta", direction: "fr" },
+        ...a.map((suggestion, index) => ({ type: "suggestion", index, suggestion })),
+        { type: "done", count: a.length },
+      ]),
+    });
+  });
+  return {
+    release: () => open(),
+    /** Holds the next requests again. */
+    hold: () => {
+      gate = new Promise<void>((resolve) => (open = resolve));
+    },
+  };
+}
+
+/**
+ * Keeps a read-write transaction open on the app database, so the app's own saves queue behind it
+ * (IndexedDB runs overlapping read-write transactions one at a time). Returns `release`.
+ */
+export async function holdDatabase(page: Page): Promise<() => Promise<void>> {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const open = indexedDB.open("kartochki");
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const db = open.result;
+          const tx = db.transaction(Array.from(db.objectStoreNames), "readwrite");
+          const w = window as unknown as { __holdDb: boolean };
+          w.__holdDb = true;
+          const store = tx.objectStore("settings");
+          const spin = () => {
+            if (w.__holdDb) store.get("__hold").onsuccess = spin;
+          };
+          spin();
+          tx.oncomplete = () => db.close();
+          resolve();
+        };
+      }),
+  );
+  return async () => {
+    await page.evaluate(() => {
+      (window as unknown as { __holdDb: boolean }).__holdDb = false;
+    });
+  };
+}

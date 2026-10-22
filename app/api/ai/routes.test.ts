@@ -9,6 +9,7 @@ vi.mock("ai", async (importOriginal) => ({ ...(await importOriginal<typeof impor
 import { resetRateLimits } from "@/lib/ai/rate-limit";
 import { POST as classify } from "./classify/route";
 import { POST as enrich } from "./enrich/route";
+import { POST as example } from "./example/route";
 import { POST as extract } from "./extract/route";
 import { POST as suggest } from "./suggest/route";
 
@@ -117,6 +118,19 @@ describe("POST /api/ai/suggest", () => {
     expect(call.abortSignal).toBeInstanceOf(AbortSignal);
   });
 
+  it("follows the settings: model, how many suggestions, notes", async () => {
+    ai.streamText.mockImplementation(fakeStream([suggestion("se casser", { note: "груб." }), suggestion("se casser la tête")]));
+    const out = await lines(await suggest(json({ q: "se cass", model: "accurate", max: 1, notes: false, register: "slang" })));
+    const rows = out.filter((l) => l.type === "suggestion");
+    expect(rows).toHaveLength(1);
+    expect(rows[0].suggestion.note).toBeNull();
+    expect(out.at(-1)).toEqual({ type: "done", count: 1 });
+    const call = ai.streamText.mock.calls[0][0];
+    expect(call.model.modelId).toBe("claude-sonnet-5-5");
+    expect(call.prompt).toContain("Return at most 1 suggestion.");
+    expect((await suggest(json({ q: "ok", model: "claude-opus-5-5" }))).status).toBe(400);
+  });
+
   it("detects Russian input and reports upstream errors", async () => {
     ai.streamText.mockImplementation(fakeStream([suggestion("la thune")], new Error("boom")));
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -193,6 +207,43 @@ describe("POST /api/ai/extract", () => {
       "image/webp",
     ]);
   });
+
+  it("follows the settings: model and notes", async () => {
+    ai.streamText.mockImplementation(
+      fakeStream([
+        {
+          fr: "le keuf",
+          fr_as_seen: null,
+          ru: "мент",
+          ru_suggested: false,
+          note: "верлан от flic",
+          example_fr: null,
+          example_ru: null,
+          pos: "noun",
+          gender: "m",
+          slang_level: "arg",
+          verlan: true,
+          provenance: "pair",
+          confidence: "high",
+          issue: null,
+          folder: "INBOX",
+          new_folder: null,
+        },
+      ]),
+    );
+    const form = new FormData();
+    form.append("images", new Blob([PNG], { type: "image/png" }), "a.png");
+    form.append("model", "accurate");
+    form.append("notes", "false");
+    const out = await lines(await extract(new Request("http://localhost/api/ai/extract", { method: "POST", body: form })));
+    expect(out[1].item.note).toBeNull();
+    const call = ai.streamText.mock.calls[0][0];
+    expect(call.model.modelId).toBe("claude-sonnet-5-5");
+    const wrong = new FormData();
+    wrong.append("images", new Blob([PNG], { type: "image/png" }), "a.png");
+    wrong.append("model", "opus");
+    expect((await extract(new Request("http://localhost/api/ai/extract", { method: "POST", body: wrong }))).status).toBe(400);
+  });
 });
 
 describe("POST /api/ai/classify", () => {
@@ -268,18 +319,84 @@ describe("POST /api/ai/enrich", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       results: [
-        { id: "a", pos: "noun", gender: "f", slang_level: 1, verlan: false, example_fr: null, example_ru: null, confidence: "high" },
-        { id: "b", pos: "adj", gender: "none", slang_level: 2, verlan: true, example_fr: "Il est chelou.", example_ru: "Он стрёмный.", confidence: "high" },
+        { id: "a", pos: "noun", gender: "f", slang_level: 1, verlan: false, example_fr: null, example_ru: null, confidence: "high", folder: null, folder_alternatives: [], new_folder: null },
+        { id: "b", pos: "adj", gender: "none", slang_level: 2, verlan: true, example_fr: "Il est chelou.", example_ru: "Он стрёмный.", confidence: "high", folder: null, folder_alternatives: [], new_folder: null },
       ],
     });
     const call = ai.generateText.mock.calls[0][0] as { prompt: string };
     expect(call.prompt).toContain("w1\tla caisse\tтачка");
+    expect(call.prompt).not.toContain("Themes:");
+  });
+
+  it("with themes: picks one per word, kept inside the learner's slugs", async () => {
+    const item = { pos: "noun", gender: "f", slang_level: "fam", verlan: false, example_fr: null, example_ru: null, confidence: "high" };
+    ai.generateText.mockResolvedValue({
+      output: {
+        items: [
+          { ...item, ref: "w1", folder: "dengi", folder_alternatives: ["dengi", "eda", "unknown"], new_folder: null },
+          { ...item, ref: "w2", folder: "NEW", folder_alternatives: [], new_folder: { slug: "transport", name: "транспорт", description: "Машины." } },
+          { ...item, ref: "w3", folder: "unknown", folder_alternatives: [], new_folder: null },
+        ],
+      },
+    });
+    const folders = [
+      { slug: "dengi", name: "Деньги", description: null },
+      { slug: "eda", name: "Еда", description: null },
+    ];
+    const words = [
+      { id: "a", fr: "la thune", ru: "бабки" },
+      { id: "b", fr: "la caisse", ru: "тачка" },
+      { id: "c", fr: "truc", ru: "штука" },
+    ];
+    const body = await (await enrich(json({ words, folders }))).json();
+    expect(body.results.map((r: { folder: string; folder_alternatives: string[] }) => [r.folder, r.folder_alternatives])).toEqual([
+      ["dengi", ["eda"]],
+      ["NEW", []],
+      ["INBOX", []],
+    ]);
+    expect(body.results[1].new_folder).toMatchObject({ slug: "transport", name: "Транспорт" });
+    const call = ai.generateText.mock.calls[0][0] as { prompt: string };
+    expect(call.prompt).toContain("Themes:\n- dengi: Деньги");
   });
 
   it("502 when the model call fails", async () => {
     ai.generateText.mockRejectedValue(new Error("down"));
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const res = await enrich(json({ words: [{ id: "a", fr: "chelou", ru: "стрёмный" }] }));
+    spy.mockRestore();
+    expect(res.status).toBe(502);
+  });
+});
+
+describe("POST /api/ai/example", () => {
+  it("400 on invalid input", async () => {
+    expect((await example(json({ fr: "chelou", ru: "" }))).status).toBe(400);
+    expect((await example(json({ fr: "chelou", ru: "стрёмный", avoid: Array(7).fill("x") }))).status).toBe(400);
+    expect(ai.generateText).not.toHaveBeenCalled();
+  });
+
+  it("returns a new example and lists the existing ones in the prompt", async () => {
+    ai.generateText.mockResolvedValue({ output: { example_fr: "  J'ai reçu un message chelou. ", example_ru: "Мне пришло стрёмное сообщение." } });
+    const res = await example(json({ fr: "chelou", ru: "стрёмный", note: "верлан от louche", avoid: ["Il est chelou, ton pote."] }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ example: { fr: "J'ai reçu un message chelou.", ru: "Мне пришло стрёмное сообщение." } });
+    const call = ai.generateText.mock.calls[0][0] as { prompt: string; temperature?: number };
+    expect(call.prompt).toContain("French: chelou\nRussian: стрёмный\nNote: верлан от louche");
+    expect(call.prompt).toContain("- Il est chelou, ton pote.");
+    expect(call.temperature).toBeUndefined();
+  });
+
+  it("null when the model repeats an existing example or gives none", async () => {
+    ai.generateText.mockResolvedValue({ output: { example_fr: "il est CHELOU ton pote !", example_ru: "x" } });
+    expect(await (await example(json({ fr: "chelou", ru: "стрёмный", avoid: ["Il est chelou, ton pote."] }))).json()).toEqual({ example: null });
+    ai.generateText.mockResolvedValue({ output: { example_fr: null, example_ru: null } });
+    expect(await (await example(json({ fr: "chelou", ru: "стрёмный" }))).json()).toEqual({ example: null });
+  });
+
+  it("502 when the model call fails", async () => {
+    ai.generateText.mockRejectedValue(new Error("down"));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await example(json({ fr: "chelou", ru: "стрёмный" }));
     spy.mockRestore();
     expect(res.status).toBe(502);
   });

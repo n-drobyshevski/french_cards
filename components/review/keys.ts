@@ -1,7 +1,16 @@
-// Keyboard shortcuts for the review screen: Space/Enter flip (both ways), 1/2/3 grade, ←/→ = Не знаю/Знаю, Z undo.
+// Keyboard shortcuts for the review screen: Space/Enter flip (both ways), 1/2/3 grade, ←/→ = Не знаю/Знаю, Z undo,
+// E «Изменить карточку» on the answer side.
+// Desktop adds P «Ещё практика» on «Готово на сегодня» and Esc «Закончить практику» (DESKTOP-SPEC §4).
 import type { Rating } from "@/lib/scheduler";
 
-export type ReviewKeyAction = { type: "flip" } | { type: "unflip" } | { type: "grade"; rating: Rating } | { type: "undo" };
+export type ReviewKeyAction =
+  | { type: "flip" }
+  | { type: "unflip" }
+  | { type: "grade"; rating: Rating }
+  | { type: "undo" }
+  | { type: "edit" }
+  | { type: "practice" }
+  | { type: "end-practice" };
 
 export interface KeyLike {
   key: string;
@@ -9,13 +18,24 @@ export interface KeyLike {
   altKey?: boolean;
   ctrlKey?: boolean;
   metaKey?: boolean;
+  shiftKey?: boolean;
   repeat?: boolean;
+  isComposing?: boolean;
+  keyCode?: number;
 }
 
 export interface ReviewKeyContext {
   /** Answer side is showing. */
   revealed: boolean;
   gradeButtons: 2 | 3;
+  /** Single-letter keys (Z, P) are on (settings.shortcuts on desktop; always on phones). Default true. */
+  letters?: boolean;
+  /** Desktop keys: P on the done screen, Esc in practice. Default false (phones). */
+  desktop?: boolean;
+  /** «Готово на сегодня» is showing. */
+  done?: boolean;
+  /** A practice round is running. */
+  practice?: boolean;
 }
 
 const DIGIT = /^(?:Digit|Numpad)([1-4])$/;
@@ -23,8 +43,17 @@ const DIGIT = /^(?:Digit|Numpad)([1-4])$/;
 /** Maps a key press to a review action, or null when the screen should ignore it. */
 export function reviewKeyAction(ev: KeyLike, ctx: ReviewKeyContext): ReviewKeyAction | null {
   if (ev.altKey || ev.ctrlKey || ev.metaKey || ev.repeat) return null;
+  // Dead keys (^ ¨), compose and IME input.
+  if (ev.isComposing || ev.keyCode === 229) return null;
+  const letters = ctx.letters ?? true;
   // `code` keeps shortcuts working on the Russian layout (Z is «я» there).
-  if (ev.code === "KeyZ") return { type: "undo" };
+  if (ev.code === "KeyZ") return letters ? { type: "undo" } : null;
+  if (ctx.desktop) {
+    if (ev.code === "KeyP") return letters && ctx.done && !ev.shiftKey ? { type: "practice" } : null;
+    if (ev.key === "Escape") return ctx.practice ? { type: "end-practice" } : null;
+  }
+  if (ctx.done) return null;
+  if (ev.code === "KeyE") return letters && ctx.revealed && !ev.shiftKey ? { type: "edit" } : null;
   if (ev.key === " " || ev.code === "Space" || ev.key === "Enter" || ev.code === "NumpadEnter") {
     return ctx.revealed ? { type: "unflip" } : { type: "flip" };
   }

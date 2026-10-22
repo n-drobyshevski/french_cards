@@ -1,47 +1,67 @@
 "use client";
 
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { haptic, thresholdNotifier } from "@/lib/haptics";
 import {
   IDLE_SWIPE,
+  SWIPE_SLOP,
   swipeDecision,
   swipeReducer,
+  swipeVelocity,
   type SwipeAction,
   type SwipeOutcome,
   type SwipeState,
 } from "./swipe";
 
-/** Fly-out time after a decided swipe, before the grade is applied. */
-export const FLY_OUT_MS = 180;
-
 export interface SwipeView {
   dx: number;
   width: number;
-  /** dragging: follows the finger. settling: animates back. flying: leaves the screen. */
-  mode: "idle" | "dragging" | "settling" | "flying";
+  /** dragging: follows the finger. settling: springs back to rest, then idle. */
+  mode: "idle" | "dragging" | "settling";
+  /** Pointer down on the card and not (yet) a drag: the press state (data-pressed). */
+  pressed: boolean;
 }
 
-const reducedMotion = () =>
-  typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
+/** Where a decided swipe was let go, for the fly-out that carries on from there. */
+export interface SwipeRelease {
+  dx: number;
+  width: number;
+  /** px/ms over the last part of the gesture. */
+  velocity: number;
+}
+
+const REST: SwipeView = { dx: 0, width: 0, mode: "idle", pressed: false };
 
 /**
- * Pointer handlers for swipe-to-grade. The element should have `touch-action: pan-y` so vertical
- * scrolling stays native. Calls `onDecide` once the card has flown out.
+ * Pointer handlers for swipe-to-grade, and the card's press state (MOTION-SPEC §5.1: a gesture
+ * surface sets data-pressed from pointer events and drops it once a drag passes the slop). The
+ * element should have `touch-action: pan-y` so vertical scrolling stays native.
+ *
+ * A decided release calls `onDecide` at once with the release pose (the screen flies a snapshot of
+ * the card on from there); it returns false when the grade was not taken, and the card springs back.
+ * A cancelled swipe springs back over `settleMs()`, then the view returns to idle.
  */
 export function useSwipe({
   enabled,
   haptics = false,
+  settleMs,
   onDecide,
 }: {
   enabled: boolean;
   haptics?: boolean;
-  onDecide: (outcome: SwipeOutcome) => void;
+  settleMs: () => number;
+  onDecide: (outcome: SwipeOutcome, release: SwipeRelease) => boolean;
 }) {
   const state = useRef<SwipeState>(IDLE_SWIPE);
-  const [view, setView] = useState<SwipeView>({ dx: 0, width: 0, mode: "idle" });
+  const [view, setView] = useState<SwipeView>(REST);
   /** Set when a pointer-up ends a drag, so the click that follows is not taken as a tap. */
   const dragged = useRef(false);
   const [threshold] = useState(thresholdNotifier);
+  const settleTimer = useRef<number | undefined>(undefined);
+  /** Where the press began, until the pointer has moved past the slop. */
+  const pressOrigin = useRef<{ x: number; y: number } | null>(null);
+
+  useEffect(() => () => window.clearTimeout(settleTimer.current), []);
 
   const dispatch = (action: SwipeAction) => {
     const prev = state.current;
@@ -52,19 +72,40 @@ export function useSwipe({
 
   const settle = () => {
     state.current = IDLE_SWIPE;
-    setView((v) =>
-      v.mode === "flying" || (v.dx === 0 && v.mode !== "dragging") ? v : { dx: 0, width: v.width, mode: "settling" },
-    );
+    window.clearTimeout(settleTimer.current);
+    setView((v) => (v.dx === 0 && v.mode !== "dragging" ? { ...REST, width: v.width } : { dx: 0, width: v.width, mode: "settling", pressed: false }));
+    // Back at rest: idle again, so nothing stays layered for the spring (was a stuck `settling`).
+    settleTimer.current = window.setTimeout(() => setView((v) => (v.mode === "settling" ? { ...v, mode: "idle" } : v)), settleMs());
+  };
+
+  const release = () => {
+    pressOrigin.current = null;
+    setView((v) => (v.pressed ? { ...v, pressed: false } : v));
   };
 
   const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
-    if (!enabled || view.mode === "flying" || event.button !== 0 || !event.isPrimary) return;
+    if (event.button !== 0 || !event.isPrimary) return;
+    window.clearTimeout(settleTimer.current);
+    dragged.current = false;
+    // A control inside the card (an abbreviation hint) presses itself, not the card.
+    const control = (event.target as Element).closest("button, a[href], [role=button]");
+    if (!control || control === event.currentTarget) {
+      pressOrigin.current = { x: event.clientX, y: event.clientY };
+      setView((v) => ({ ...v, pressed: true }));
+    }
+    if (!enabled) return;
     threshold.reset();
     const width = event.currentTarget.getBoundingClientRect().width;
     dispatch({ type: "down", pointerId: event.pointerId, x: event.clientX, y: event.clientY, t: event.timeStamp, width });
   };
 
   const onPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
+    // Without swipes (a mouse): a drag, e.g. selecting text, drops the press after the slop too.
+    const origin = pressOrigin.current;
+    if (origin && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) >= SWIPE_SLOP) {
+      pressOrigin.current = null;
+      release();
+    }
     if (state.current.phase !== "pending" && state.current.phase !== "dragging") return;
     const { prev, next } = dispatch({
       type: "move",
@@ -73,6 +114,10 @@ export function useSwipe({
       y: event.clientY,
       t: event.timeStamp,
     });
+    if (next.phase === "ignored") {
+      release();
+      return;
+    }
     if (next.phase !== "dragging") return;
     if (prev.phase === "pending") {
       try {
@@ -82,26 +127,33 @@ export function useSwipe({
       }
     }
     threshold.update(swipeDecision(next.dx, next.width, 0) !== null, haptics);
-    setView({ dx: next.dx, width: next.width, mode: "dragging" });
+    setView({ dx: next.dx, width: next.width, mode: "dragging", pressed: false });
   };
 
   const onPointerUp = (event: ReactPointerEvent<HTMLElement>) => {
-    if (state.current.phase !== "pending" && state.current.phase !== "dragging") return;
+    if (state.current.phase !== "pending" && state.current.phase !== "dragging") {
+      release();
+      return;
+    }
     const { prev, next } = dispatch({ type: "up", pointerId: event.pointerId, x: event.clientX, y: event.clientY, t: event.timeStamp });
     dragged.current = prev.phase === "dragging";
     if (next.phase === "released" && next.outcome) {
       const outcome = next.outcome;
-      if (haptics) haptic(outcome);
-      const off = Math.sign(next.dx) * next.width * 1.4;
-      setView({ dx: off, width: next.width, mode: "flying" });
-      window.setTimeout(() => onDecide(outcome), reducedMotion() ? 0 : FLY_OUT_MS);
-      return;
+      if (onDecide(outcome, { dx: next.dx, width: next.width, velocity: swipeVelocity(next.samples) })) {
+        if (haptics) haptic(outcome);
+        // The screen has taken over the card (it flies on as a snapshot); this one is replaced.
+        state.current = IDLE_SWIPE;
+        return;
+      }
     }
     settle();
   };
 
   const onPointerCancel = () => {
-    if (state.current.phase !== "pending" && state.current.phase !== "dragging") return;
+    if (state.current.phase !== "pending" && state.current.phase !== "dragging") {
+      release();
+      return;
+    }
     settle();
   };
 
@@ -121,14 +173,13 @@ export function useSwipe({
       dragged.current = false;
       return was || state.current.phase === "released";
     },
-    handlers: enabled
-      ? {
-          onPointerDown,
-          onPointerMove,
-          onPointerUp,
-          onPointerCancel,
-          onLostPointerCapture,
-        }
-      : {},
+    handlers: {
+      onPointerDown,
+      onPointerUp,
+      onPointerCancel,
+      onPointerMove,
+      onPointerLeave: release,
+      ...(enabled ? { onLostPointerCapture } : {}),
+    },
   };
 }

@@ -17,6 +17,7 @@ export const RATE_LIMITS = {
   classify: { capacity: 20, refillPerSec: 1 / 3 },
   // Manual cards one by one, pasted lists and the library backfill in parallel chunks.
   enrich: { capacity: 30, refillPerSec: 1 / 2 },
+  example: { capacity: 20, refillPerSec: 1 / 3 },
   // Claude connector write tools (lib/mcp/tools.ts), taken inside tools/call only.
   mcp: { capacity: 20, refillPerSec: 1 / 3 },
 } satisfies Record<string, BucketConfig>;

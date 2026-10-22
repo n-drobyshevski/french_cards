@@ -14,10 +14,12 @@ import {
   type AssignmentResult,
   type TaxonomyRequest,
   type TaxonomyResponse,
+  type ModelTierInput,
 } from "./ai/schemas";
 import { isMovable } from "./core/words";
 import { db, newId } from "./db";
-import { createFolder, FOLDER_COLORS, listFolders } from "./folders";
+import { createFolder, disbandFolder, FOLDER_COLORS, listFolders } from "./folders";
+import { getSettings } from "./settings";
 import type { Confidence, Folder, ReorgRun, Word } from "./types";
 import { moveWords, type MoveRecord } from "./words";
 
@@ -145,9 +147,20 @@ export function buildAssignRequests(snap: ReorgSnapshot, targets: readonly Assig
   if (targets.length === 0) return [];
   const { movable } = partition(snap);
   const folders = targets.map((t) => ({ slug: t.slug, name: t.name, description: t.description }));
-  const slugByFolder = new Map(targets.filter((t) => t.folderId).map((t) => [t.folderId!, t.slug]));
+  const examples = assignExamples(snap, targets);
 
-  // Examples: user-placed words, taken round-robin across folders so every theme is represented.
+  const requests: AssignRequest[] = [];
+  for (let i = 0; i < movable.length; i += ASSIGN_CHUNK_MAX) {
+    requests.push({ mode: "assign", words: movable.slice(i, i + ASSIGN_CHUNK_MAX).map(assignWord), folders, examples });
+  }
+  return requests;
+}
+
+const assignWord = (w: Word) => ({ id: w.id, fr: clip(w.fr, 120), ru: clip(w.ru, 160), note: clipOrNull(w.note, 300) });
+
+/** Few-shot examples: user-placed words, taken round-robin across folders so every theme is represented. */
+function assignExamples(snap: ReorgSnapshot, targets: readonly AssignTarget[]): AssignRequest["examples"] {
+  const slugByFolder = new Map(targets.filter((t) => t.folderId).map((t) => [t.folderId!, t.slug]));
   const byFolder = new Map<string, Word[]>();
   for (const w of snap.words) {
     if (w.folder_source !== "user" || w.folder_id === null) continue;
@@ -166,22 +179,7 @@ export function buildAssignRequests(snap: ReorgSnapshot, targets: readonly Assig
       }
     }
   }
-
-  const requests: AssignRequest[] = [];
-  for (let i = 0; i < movable.length; i += ASSIGN_CHUNK_MAX) {
-    requests.push({
-      mode: "assign",
-      words: movable.slice(i, i + ASSIGN_CHUNK_MAX).map((w) => ({
-        id: w.id,
-        fr: clip(w.fr, 120),
-        ru: clip(w.ru, 160),
-        note: clipOrNull(w.note, 300),
-      })),
-      folders,
-      examples,
-    });
-  }
-  return requests;
+  return examples;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -322,6 +320,21 @@ export function planGroups(plan: ReorgPlan): PlanGroup[] {
     const stay = Number(a.target.kind === "stay") - Number(b.target.kind === "stay");
     return stay || b.moves.length - a.moves.length || (order.get(a.target.key) ?? 0) - (order.get(b.target.key) ?? 0);
   });
+}
+
+/**
+ * Groups in the order they first appeared (`seen`, new keys after it), so a plan that is written in
+ * batch by batch, or a group that grows, never reshuffles what is already on screen. Returns the
+ * groups to show and the updated order.
+ */
+export function keepGroupOrder(groups: readonly PlanGroup[], seen: readonly string[]): { groups: PlanGroup[]; seen: string[] } {
+  const known = new Set(seen);
+  const order = [...seen, ...groups.filter((g) => !known.has(g.target.key)).map((g) => g.target.key)];
+  const rank = new Map(order.map((key, i) => [key, i]));
+  return {
+    groups: [...groups].sort((a, b) => (rank.get(a.target.key) ?? 0) - (rank.get(b.target.key) ?? 0)),
+    seen: order.length === seen.length ? (seen as string[]) : order,
+  };
 }
 
 /** Moves that «Применить» would write. */
@@ -561,11 +574,19 @@ export class ReorgError extends Error {
 export interface ClassifyOptions {
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
-  /** Retries after a 429, waiting for Retry-After (capped). */
+  /**
+   * Retries after a 429, waiting for Retry-After (capped at RATE_LIMIT_WAIT_MAX s). One by
+   * default: the wait is shown (MOTION-SPEC §3.8 — no silent retries), then one automatic retry.
+   */
   retries?: number;
+  /** A 429 is being waited out: the screen counts down `seconds` to the automatic retry. */
+  onRateLimit?: (seconds: number) => void;
   /** Injected for tests. */
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
 }
+
+/** Longest Retry-After the automatic retry waits for (seconds). */
+export const RATE_LIMIT_WAIT_MAX = 60;
 
 const defaultSleep = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
@@ -583,7 +604,7 @@ const defaultSleep = (ms: number, signal?: AbortSignal) =>
 export async function postClassify<T>(body: TaxonomyRequest | AssignRequest, opts: ClassifyOptions = {}): Promise<T> {
   const fetchImpl = opts.fetchImpl ?? fetch;
   const sleep = opts.sleep ?? defaultSleep;
-  let retries = opts.retries ?? 3;
+  let retries = opts.retries ?? 1;
   for (;;) {
     if (opts.signal?.aborted) throw new ReorgError("aborted");
     let res: Response;
@@ -602,7 +623,9 @@ export async function postClassify<T>(body: TaxonomyRequest | AssignRequest, opt
     if (res.status === 429 && retries > 0) {
       retries--;
       const after = Number(res.headers.get("Retry-After"));
-      await sleep(Math.min(20, Number.isFinite(after) && after > 0 ? after : 3) * 1000, opts.signal);
+      const seconds = Math.min(RATE_LIMIT_WAIT_MAX, Number.isFinite(after) && after > 0 ? Math.ceil(after) : 3);
+      opts.onRateLimit?.(seconds);
+      await sleep(seconds * 1000, opts.signal);
       continue;
     }
     let error = "";
@@ -633,9 +656,43 @@ async function pool<T, R>(items: readonly T[], limit: number, fn: (item: T) => P
   return out;
 }
 
+/**
+ * Where a re-sort is (MOTION-SPEC S1): pass A «01 Темы» has no total; pass B «02 Слова · 24 / 48»
+ * counts the words whose assign batch has come back.
+ */
+export interface ReorgProgress {
+  stage: "taxonomy" | "assign";
+  /** Words the plan may move (the «/ 48»). */
+  words: number;
+  /** Words whose assign batch has finished. */
+  wordsDone: number;
+  /** Assign batches finished / in total (0 / 0 during the taxonomy pass). */
+  done: number;
+  total: number;
+}
+
+/** Share of the taxonomy pass on the determinate bar: it fills 0 → 20 % only when the pass ends. */
+export const TAXONOMY_SHARE = 0.2;
+
+/** 0–1 for the 1px bar: 0 during the taxonomy pass, then 20 % plus the finished assign batches. */
+export function reorgFraction(p: ReorgProgress): number {
+  if (p.stage === "taxonomy") return 0;
+  if (p.total === 0) return 1;
+  return TAXONOMY_SHARE + (1 - TAXONOMY_SHARE) * Math.min(1, p.done / p.total);
+}
+
 export interface RunReorgOptions extends ClassifyOptions {
+  /** Settings «Модель для подсказок»; read from Settings when omitted. */
+  model?: ModelTierInput;
   /** Called as assign chunks finish: (done, total). */
   onProgress?: (done: number, total: number) => void;
+  /** Called when the taxonomy pass starts, when it ends (assign 0 / n) and as each assign chunk finishes. */
+  onStage?: (progress: ReorgProgress) => void;
+  /**
+   * Called as each assign chunk finishes with the plan so far (the words answered until now), so
+   * groups can be shown as they arrive (MOTION-SPEC S2). The returned plan is the final one.
+   */
+  onGroups?: (partial: ReorgPlan) => void;
   /** Injected for tests. */
   snapshot?: ReorgSnapshot;
   now?: Date;
@@ -648,20 +705,155 @@ export async function runReorg(opts: RunReorgOptions = {}): Promise<ReorgPlan> {
   const { movable } = partition(snap);
   if (movable.length === 0) return buildPlan(snap, [], [], now);
 
-  const taxonomy = await postClassify<TaxonomyResponse>(buildTaxonomyRequest(snap), opts);
+  // Offline is decided before the wait (MOTION-SPEC B4): no request that would only time out.
+  if (typeof navigator !== "undefined" && navigator.onLine === false) throw new ReorgError("offline");
+  const words = movable.length;
+  opts.onStage?.({ stage: "taxonomy", words, wordsDone: 0, done: 0, total: 0 });
+  const model = opts.model ?? (await getSettings()).ai_model;
+  const taxonomy = await postClassify<TaxonomyResponse>({ ...buildTaxonomyRequest(snap), model }, opts);
   const targets = assignTargets(snap, taxonomy);
   const requests = buildAssignRequests(snap, targets);
+  let done = 0;
+  let wordsDone = 0;
+  opts.onProgress?.(0, requests.length);
+  opts.onStage?.({ stage: "assign", words, wordsDone, done, total: requests.length });
+  const answered: AssignmentResult[] = [];
+  const results = await pool(
+    requests,
+    ASSIGN_CONCURRENCY,
+    async (req) => {
+      const res = await postClassify<AssignResponse>({ ...req, model }, opts);
+      done++;
+      wordsDone += req.words.length;
+      opts.onProgress?.(done, requests.length);
+      opts.onStage?.({ stage: "assign", words, wordsDone, done, total: requests.length });
+      if (opts.onGroups) {
+        answered.push(...res.assignments);
+        opts.onGroups(buildPlan(snap, targets, answered, now));
+      }
+      return res.assignments;
+    },
+    opts.signal,
+  );
+  return buildPlan(snap, targets, results.flat(), now);
+}
+
+// ---------------------------------------------------------------------------------------------
+// «Расформировать»: one theme's words spread over the other themes (pass B only, no new
+// themes), reviewed as a plan; applying it deletes the theme. Unlike the re-sort, every word of
+// the theme moves — hand-placed ones too, since their theme goes away. Low confidence → «Входящие».
+
+export interface DisbandMove {
+  word: { id: string; fr: string; ru: string };
+  /** Target folder id; null = «Входящие». */
+  to: string | null;
+  confidence: Confidence | null;
+  /** Picked by hand in the plan. */
+  edited: boolean;
+}
+
+export interface DisbandPlan {
+  folderId: string;
+  name: string;
+  /** Themes the words may go to (the theme itself excluded), in their order. */
+  targets: Folder[];
+  moves: DisbandMove[];
+}
+
+const wordsOf = (snap: ReorgSnapshot, folderId: string) => snap.words.filter((w) => w.deleted_at === null && w.folder_id === folderId);
+
+/** The other themes as assign targets. */
+export function disbandTargets(snap: ReorgSnapshot, folderId: string): AssignTarget[] {
+  return requestFolders(snap.folders.filter((f) => f.id !== folderId))
+    .slice(0, ASSIGN_FOLDERS_MAX)
+    .map((f) => ({ slug: f.slug, name: f.name, description: clipOrNull(f.description, 300), folderId: f.id }));
+}
+
+/** Pass B bodies for the theme's words; examples come from the other themes. */
+export function buildDisbandRequests(snap: ReorgSnapshot, folderId: string, targets: readonly AssignTarget[]): AssignRequest[] {
+  if (targets.length === 0) return [];
+  const words = wordsOf(snap, folderId);
+  const folders = targets.map((t) => ({ slug: t.slug, name: t.name, description: t.description }));
+  const examples = assignExamples(snap, targets);
+  const requests: AssignRequest[] = [];
+  for (let i = 0; i < words.length; i += ASSIGN_CHUNK_MAX) {
+    requests.push({ mode: "assign", words: words.slice(i, i + ASSIGN_CHUNK_MAX).map(assignWord), folders, examples });
+  }
+  return requests;
+}
+
+/** Every word of the theme with its target: the model's theme, or «Входящие» for INBOX, low confidence or no answer. */
+export function buildDisbandPlan(
+  snap: ReorgSnapshot,
+  folderId: string,
+  targets: readonly AssignTarget[],
+  assignments: readonly AssignmentResult[],
+): DisbandPlan {
+  const idBySlug = new Map(targets.map((t) => [t.slug, t.folderId]));
+  const byWord = new Map<string, AssignmentResult>();
+  for (const a of assignments) if (!byWord.has(a.id)) byWord.set(a.id, a);
+  const moves = wordsOf(snap, folderId).map((w): DisbandMove => {
+    const a = byWord.get(w.id);
+    const to = a && a.folder !== FOLDER_INBOX && a.confidence !== "low" ? (idBySlug.get(a.folder) ?? null) : null;
+    return { word: { id: w.id, fr: w.fr, ru: w.ru }, to, confidence: to === null ? null : a!.confidence, edited: false };
+  });
+  return {
+    folderId,
+    name: snap.folders.find((f) => f.id === folderId)?.name ?? "",
+    targets: snap.folders.filter((f) => f.id !== folderId),
+    moves,
+  };
+}
+
+/** The word goes where the user picked (null = «Входящие»). */
+export function retargetDisband(plan: DisbandPlan, wordId: string, to: string | null): DisbandPlan {
+  return {
+    ...plan,
+    moves: plan.moves.map((m) => (m.word.id === wordId ? { ...m, to, confidence: null, edited: true } : m)),
+  };
+}
+
+export interface DisbandGroup {
+  /** null = «Входящие». */
+  folder: Folder | null;
+  moves: DisbandMove[];
+}
+
+/** Non-empty groups in theme order, «Входящие» last. */
+export function disbandGroups(plan: DisbandPlan): DisbandGroup[] {
+  const groups: DisbandGroup[] = plan.targets.map((folder) => ({ folder, moves: plan.moves.filter((m) => m.to === folder.id) }));
+  groups.push({ folder: null, moves: plan.moves.filter((m) => m.to === null) });
+  return groups.filter((g) => g.moves.length > 0);
+}
+
+/** Builds the plan for «Расформировать». Nothing is written. */
+export async function runDisband(folderId: string, opts: RunReorgOptions = {}): Promise<DisbandPlan> {
+  const snap = opts.snapshot ?? (await loadReorgSnapshot());
+  const targets = disbandTargets(snap, folderId);
+  const requests = buildDisbandRequests(snap, folderId, targets);
+  if (requests.length === 0) return buildDisbandPlan(snap, folderId, targets, []);
+
+  const model = opts.model ?? (await getSettings()).ai_model;
   let done = 0;
   opts.onProgress?.(0, requests.length);
   const results = await pool(
     requests,
     ASSIGN_CONCURRENCY,
     async (req) => {
-      const res = await postClassify<AssignResponse>(req, opts);
+      const res = await postClassify<AssignResponse>({ ...req, model }, opts);
       opts.onProgress?.(++done, requests.length);
       return res.assignments;
     },
     opts.signal,
   );
-  return buildPlan(snap, targets, results.flat(), now);
+  return buildDisbandPlan(snap, folderId, targets, results.flat());
+}
+
+/** Applies the plan: the words move, the theme is deleted. Returns the moves for `restoreFolder`. */
+export function applyDisband(plan: DisbandPlan, now: Date = new Date()): Promise<MoveRecord[] | null> {
+  return disbandFolder(
+    plan.folderId,
+    plan.moves.map((m) => ({ wordId: m.word.id, to: m.to, source: m.edited ? "user" : "auto", confidence: m.confidence })),
+    now,
+  );
 }

@@ -51,6 +51,7 @@ export const SHORTCUT_COLUMNS: ShortcutGroup[][] = [
         { label: "Не знаю / Сложно / Знаю", keys: ["1", "2", "3"] },
         { label: "Не знаю / Знаю", keys: ["Left", "Right"] },
         { label: "Отменить ответ", keys: ["Z"] },
+        { label: "Изменить карточку", keys: ["E"] },
         { label: "Ещё практика", keys: ["P"] },
         { label: "Закончить практику", keys: ["Escape"] },
       ],
@@ -139,7 +140,7 @@ export function ShortcutsDialog() {
         <p className="m-0 text-[13px] leading-5 text-muted">
           Однобуквенные клавиши можно выключить в{" "}
           <Link
-            href="/settings"
+            href="/settings#set-keys"
             onClick={() => setShortcutsOpen(false)}
             className="font-medium text-ink underline decoration-1 underline-offset-[3px]"
           >

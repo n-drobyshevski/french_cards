@@ -67,6 +67,49 @@ const PATHS = {
       <path d="m20 20-3.5-3.5" />
     </>
   ),
+  /** AI actions (Claude): a big and a small four-point star, drawn in ink. */
+  spark: (
+    <>
+      <path d="M11 3c.5 4.4 2.6 6.5 7 7-4.4.5-6.5 2.6-7 7-.5-4.4-2.6-6.5-7-7 4.4-.5 6.5-2.6 7-7Z" />
+      <path d="M19 16c.2 1.6.9 2.3 2.5 2.5-1.6.2-2.3.9-2.5 2.5-.2-1.6-.9-2.3-2.5-2.5 1.6-.2 2.3-.9 2.5-2.5Z" />
+    </>
+  ),
+  /** «Другой пример»: the refresh arrow with a star inside. */
+  "spark-refresh": (
+    <>
+      <path d="M20 12a8 8 0 1 1-2.34-5.66" />
+      <path d="M20 4v5h-5" />
+      <path d="M12 7.5c.3 2.6 1.4 3.7 4 4-2.6.3-3.7 1.4-4 4-.3-2.6-1.4-3.7-4-4 2.6-.3 3.7-1.4 4-4Z" />
+    </>
+  ),
+  /** «+ Ещё пример»: a star with a plus. */
+  "spark-plus": (
+    <>
+      <path d="M9 2c.5 4.6 2.4 6.5 7 7-4.6.5-6.5 2.4-7 7-.5-4.6-2.4-6.5-7-7 4.6-.5 6.5-2.4 7-7Z" />
+      <path d="M19 14v8" />
+      <path d="M15 18h8" />
+    </>
+  ),
+  /** Order: a down arrow beside lines of falling length. */
+  sort: (
+    <>
+      <path d="M7 4v16" />
+      <path d="m3 16 4 4 4-4" />
+      <path d="M13 6h8" />
+      <path d="M13 12h6" />
+      <path d="M13 18h4" />
+    </>
+  ),
+  sliders: (
+    <>
+      <path d="M4 7h10" />
+      <path d="M18 7h2" />
+      <circle cx="16" cy="7" r="2" />
+      <path d="M4 17h4" />
+      <path d="M12 17h8" />
+      <circle cx="10" cy="17" r="2" />
+    </>
+  ),
   camera: (
     <>
       <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z" />

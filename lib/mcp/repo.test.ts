@@ -48,6 +48,23 @@ describe("createSupabaseRepo", () => {
     expect(calls[1].ops).toContainEqual(["gt", "id", `id-${String(PAGE - 1).padStart(4, "0")}`]);
   });
 
+  it("reads and writes back every synced word column, extra_examples included", async () => {
+    const extra = [{ fr: "c'est relou", ru: "это напрягает" }];
+    const stored = { ...ids(1)[0], fr: "relou", ru: "напряжный", extra_examples: extra, user_id: "user-1", synced_at: "2026-10-22T10:00:01+00:00" };
+    let reads = 0;
+    const { client, calls } = fakeClient((call) => {
+      const write = call.ops.some(([op]) => op === "upsert");
+      return { data: write || reads++ === 0 ? [stored] : [], error: null };
+    });
+    const repo = createSupabaseRepo(client, "user-1");
+    const [row] = await repo.wordsByIds(["id-0000"]);
+    expect(row).toMatchObject({ extra_examples: extra });
+    expect(row).not.toHaveProperty("synced_at");
+    await repo.upsert("words", [row]);
+    const body = (calls.at(-1)!.ops.find(([op]) => op === "upsert") as unknown[])[1] as Record<string, unknown>[];
+    expect(body[0]).toMatchObject({ extra_examples: extra, user_id: "user-1" });
+  });
+
   it("scopes filtered reads too, and chunks long id lists", async () => {
     const { client, calls } = fakeClient(() => ({ data: [], error: null }));
     const repo = createSupabaseRepo(client, "user-1");

@@ -1,8 +1,9 @@
 // The filled form's state: built from a picked suggestion or empty for manual entry, then
 // turned into a save request. Pure (no Dexie), so it is unit-tested.
 import type { EnrichResult, Suggestion } from "@/lib/ai/schemas";
+import { cleanExamples } from "@/lib/examples";
 import type { Confidence, Folder, Gender, PartOfSpeech, SlangLevel, WordSource } from "@/lib/types";
-import { folderSource, foldersForSuggestion, INBOX_CHOICE, type FolderChoice, type SuggestionFolders } from "./folder-choice";
+import { choiceKey, folderSource, foldersForSuggestion, INBOX_CHOICE, type FolderChoice, type SuggestionFolders } from "./folder-choice";
 import type { SaveRequest } from "./save";
 
 export interface WordDraft {
@@ -11,6 +12,8 @@ export interface WordDraft {
   note: string;
   example_fr: string;
   example_ru: string;
+  /** Examples after the first («+ Ещё пример»). */
+  extra_examples: { fr: string; ru: string }[];
   pos: PartOfSpeech;
   gender: Gender;
   slang_level: SlangLevel;
@@ -40,23 +43,25 @@ export interface WordDraft {
 export function draftFromSuggestion(
   s: Suggestion,
   folders: readonly Pick<Folder, "id" | "slug" | "name">[],
-  { autoSort = true }: { autoSort?: boolean } = {},
+  { autoSort = true, slang = true, examples = true }: { autoSort?: boolean; slang?: boolean; examples?: boolean } = {},
 ): WordDraft {
   const picks = foldersForSuggestion(s, folders);
   return {
     fr: s.fr,
     ru: s.ru,
     note: s.note ?? "",
-    example_fr: s.example_fr ?? "",
-    example_ru: s.example_ru ?? "",
+    // Settings «Подбирать примеры» / «Определять уровень сленга» off: the user fills these in.
+    example_fr: examples ? (s.example_fr ?? "") : "",
+    example_ru: examples ? (s.example_ru ?? "") : "",
     pos: s.pos,
     gender: s.gender,
-    slang_level: s.slang_level,
-    verlan: s.verlan,
-    slang_auto: true,
+    slang_level: slang ? s.slang_level : 0,
+    verlan: slang ? s.verlan : false,
+    slang_auto: slang,
     slang_touched: false,
     example_auto: false,
     example_touched: false,
+    extra_examples: [],
     both_directions: true,
     folder: autoSort ? picks.auto : INBOX_CHOICE,
     folder_touched: false,
@@ -80,6 +85,7 @@ export function manualDraft(init: { fr?: string; ru?: string; folder?: FolderCho
     slang_touched: false,
     example_auto: false,
     example_touched: false,
+    extra_examples: [],
     both_directions: true,
     folder: init.folder ?? INBOX_CHOICE,
     folder_touched: init.folder !== undefined && init.folder.kind !== "inbox",
@@ -96,19 +102,42 @@ export function enrichKey(d: Pick<WordDraft, "fr" | "ru" | "source">): string | 
   return fr && ru ? `${fr}\u0001${ru}` : null;
 }
 
+/** What Settings «ИИ» let detection fill in (themes are governed by sending the themes at all). */
+export interface DraftEnrichPreferences {
+  slang: boolean;
+  examples: boolean;
+}
+
 /** Fields detection may still fill: what the user has not set by hand. */
 export function enrichScope(d: WordDraft) {
   return {
     slang: !d.slang_touched,
     example: !d.example_touched && (!d.example_fr.trim() || d.example_auto),
     pos: true,
+    // Saved before any theme was picked: file it afterwards (existing themes only).
+    folder: !d.folder_touched && d.auto === null,
   };
 }
 
-/** Applies a detection result to the untouched fields of a manual draft. */
-export function applyEnrichment(d: WordDraft, r: EnrichResult): WordDraft {
-  const scope = enrichScope(d);
+/**
+ * Applies a detection result to the untouched fields of a manual draft. A theme pick (when the
+ * request carried the themes) works like a suggestion's: preselected with its alternatives and
+ * proposal, unless the user already chose a theme.
+ */
+export function applyEnrichment(
+  d: WordDraft,
+  r: EnrichResult,
+  folders: readonly Pick<Folder, "id" | "slug" | "name">[] = [],
+  prefs: DraftEnrichPreferences = { slang: true, examples: true },
+): WordDraft {
+  const own = enrichScope(d);
+  const scope = { ...own, slang: own.slang && prefs.slang, example: own.example && prefs.examples };
   const next: WordDraft = { ...d, pos: r.pos, gender: r.gender };
+  if (r.folder !== null && !d.folder_touched) {
+    const picks = foldersForSuggestion({ folder: r.folder, folder_alternatives: r.folder_alternatives, new_folder: r.new_folder }, folders);
+    next.folder = picks.auto;
+    next.auto = { ...picks, confidence: r.confidence };
+  }
   if (scope.slang) Object.assign(next, { slang_level: r.slang_level, verlan: r.verlan, slang_auto: true });
   if (scope.example) {
     Object.assign(
@@ -121,6 +150,28 @@ export function applyEnrichment(d: WordDraft, r: EnrichResult): WordDraft {
     );
   }
   return next;
+}
+
+/** Form fields that can be lit by the spotlight; elements carry `data-spot="…"`. */
+export type SpotField = "fr" | "ru" | "note" | "example" | "slang" | "theme";
+
+/** What a picked suggestion filled in (A5): lit together when the form opens. */
+export function filledByPick(d: WordDraft): SpotField[] {
+  const fields: SpotField[] = ["fr", "ru"];
+  if (d.note.trim()) fields.push("note");
+  if (d.example_fr.trim()) fields.push("example");
+  if (d.slang_auto) fields.push("slang");
+  if (d.auto !== null) fields.push("theme");
+  return fields;
+}
+
+/** What a detection result changed in the draft (A6): those fields land with the spotlight. */
+export function filledByDetection(before: WordDraft, after: WordDraft): SpotField[] {
+  const fields: SpotField[] = [];
+  if (after.slang_auto && (!before.slang_auto || before.slang_level !== after.slang_level || before.verlan !== after.verlan)) fields.push("slang");
+  if (after.example_fr !== before.example_fr && after.example_fr.trim()) fields.push("example");
+  if (after.auto !== null && (before.auto === null || choiceKey(before.folder) !== choiceKey(after.folder))) fields.push("theme");
+  return fields;
 }
 
 export interface DraftErrors {
@@ -148,6 +199,7 @@ export function draftToSaveRequest(d: WordDraft): SaveRequest {
         note: d.note,
         example_fr: d.example_fr,
         example_ru: d.example_fr.trim() ? d.example_ru : null,
+        extra_examples: cleanExamples(d.extra_examples),
         pos: d.pos,
         gender: d.pos === "noun" ? d.gender : "none",
         slang_level: d.slang_level,

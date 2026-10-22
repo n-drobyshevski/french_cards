@@ -1,6 +1,9 @@
+export { AbbrHint, type AbbrHintProps } from "./AbbrHint";
 export { AppMark, CardGlyph, type AppMarkProps } from "./AppMark";
-export { Button, IconButton, buttonClasses, type ButtonProps, type ButtonSize, type ButtonVariant, type IconButtonProps } from "./Button";
+export { Button, IconButton, type ButtonProps, type IconButtonProps } from "./Button";
+export { buttonClasses, type ButtonSize, type ButtonStyleOptions, type ButtonVariant } from "./button-classes";
 export { Chip, type ChipProps } from "./Chip";
+export { Collapse, type CollapseProps } from "./Collapse";
 export { cx } from "./cx";
 export { Header, type HeaderProps } from "./Header";
 export { ICON_NAMES, Icon, type IconName, type IconProps } from "./Icons";
@@ -18,6 +21,6 @@ export {
   type SheetProps,
 } from "./Sheet";
 export { SLANG_NAMES_RU, SlangMeter, slangAbbr, slangAriaLabel, type SlangMeterProps } from "./SlangMeter";
-export { Snackbar, SnackbarProvider, useSnackbar, type SnackbarApi, type SnackbarOptions } from "./Snackbar";
+export { Snackbar, SnackbarProvider, usePageHidden, useSnackbar, type SnackbarApi, type SnackbarOptions } from "./Snackbar";
 export { TAB_BAR_HEIGHT, TabBar, hidesTabBar, tabForPath, type TabId } from "./TabBar";
 export { Toggle, type ToggleProps } from "./Toggle";

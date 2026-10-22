@@ -1,15 +1,15 @@
 import { expect, test, type Page } from "@playwright/test";
-import { openReview, questionCard } from "./fixtures";
+import { loggedRatings, openReview, questionCard } from "./fixtures";
 
 // Real touch input (CDP), not mouse: on touch the browser captures the pointer implicitly on the
 // child under the finger and may claim horizontal drags for its own back gesture. Both broke
 // swiping on phones while mouse-driven tests passed.
 test.use({ hasTouch: true, isMobile: true });
 
-async function touchSwipe(page: Page, direction: 1 | -1) {
-  const card = page.locator("[data-review-answer]");
+async function touchSwipe(page: Page, direction: 1 | -1, selector = "[data-review-answer]") {
+  const card = page.locator(selector);
   const box = await card.boundingBox();
-  if (!box) throw new Error("answer card not visible");
+  if (!box) throw new Error(`${selector} not visible`);
   const cdp = await page.context().newCDPSession(page);
   const x0 = box.x + box.width / 2;
   const y = box.y + box.height * 0.45; // inside the scrollable body of the card
@@ -54,16 +54,35 @@ test("swiping the answer card with a finger grades it: right = Знаю, left = 
   await openReview(page);
 
   await questionCard(page).click();
-  const first = await page.locator("[data-review-answer] h2").innerText();
   await touchSwipe(page, 1);
-  await expect(page.getByText(`Знаю · ${first}`)).toBeVisible();
+  await expect.poll(() => loggedRatings(page)).toEqual([3]);
+  await expect(page.getByText("01 / 11", { exact: true })).toBeVisible();
   await expect(page).toHaveURL(/\/$/);
+  // No snackbar: undo lives in the header.
+  await expect(page.locator("[data-snackbar]")).toHaveCount(0);
 
   await questionCard(page).click();
-  const second = await page.locator("[data-review-answer] h2").innerText();
   await touchSwipe(page, -1);
-  await expect(page.getByText(`Не знаю · ${second}`)).toBeVisible();
+  await expect.poll(() => loggedRatings(page)).toEqual([3, 1]);
   await expect(page).toHaveURL(/\/$/);
+});
+
+test("the question side swipes too, without flipping first", async ({ page }) => {
+  await openReview(page);
+  const first = await questionCard(page).getAttribute("aria-label");
+  await expect(page.getByText("тап — ответ")).toBeVisible();
+
+  await touchSwipe(page, 1, "[data-review-reveal]");
+  await expect.poll(() => loggedRatings(page)).toEqual([3]);
+  await expect(page.locator("[data-review-answer]")).toHaveCount(0);
+  await expect(questionCard(page)).not.toHaveAttribute("aria-label", first!);
+
+  await touchSwipe(page, -1, "[data-review-reveal]");
+  await expect.poll(() => loggedRatings(page)).toEqual([3, 1]);
+
+  // Undo from the header brings the last card back.
+  await page.getByRole("button", { name: "Отменить последний ответ" }).click();
+  await expect.poll(() => loggedRatings(page)).toEqual([3]);
 });
 
 test("a tap on the answer flips the card back; a swipe that snaps back does not", async ({ page }) => {
@@ -105,19 +124,17 @@ test("grading swipes vibrate: a tick at the threshold, then one pulse for Зна
 
   await questionCard(page).tap();
   await expect(page.locator("[data-review-answer]")).toBeVisible();
-  await expect(page.locator("[data-review-answer]")).toHaveClass(/card-turn-up/);
+  // Turning the card over does not vibrate.
   expect(await vibrations()).toEqual([]);
 
-  const first = await page.locator("[data-review-answer] h2").innerText();
   await touchSwipe(page, 1);
-  await expect(page.getByText(`Знаю · ${first}`)).toBeVisible();
-  expect(await vibrations()).toEqual([8, 14]);
+  await expect.poll(() => loggedRatings(page)).toEqual([3]);
+  expect(await vibrations()).toEqual([20, 40]);
 
   await questionCard(page).tap();
-  const second = await page.locator("[data-review-answer] h2").innerText();
   await touchSwipe(page, -1);
-  await expect(page.getByText(`Не знаю · ${second}`)).toBeVisible();
-  expect(await vibrations()).toEqual([8, 14, 8, [12, 60, 12]]);
+  await expect.poll(() => loggedRatings(page)).toEqual([3, 1]);
+  expect(await vibrations()).toEqual([20, 40, 20, [35, 80, 35]]);
 
   // The flip and fly-out transforms must not widen the page: a mobile browser then widens its
   // layout viewport to fit (zooming out), which pushes the tab bar off screen.
@@ -132,12 +149,11 @@ test("no vibration when it is turned off in settings", async ({ page }) => {
     Object.defineProperty(navigator, "vibrate", { configurable: true, value: (p: unknown) => (calls.push(p), true) });
   });
   await page.goto("/settings");
-  await page.getByRole("switch", { name: "Вибрация при свайпах" }).click();
-  await expect(page.getByRole("switch", { name: "Вибрация при свайпах" })).not.toBeChecked();
+  await page.getByRole("switch", { name: "Вибрация", exact: true }).click();
+  await expect(page.getByRole("switch", { name: "Вибрация", exact: true })).not.toBeChecked();
   await openReview(page);
   await questionCard(page).tap();
-  const first = await page.locator("[data-review-answer] h2").innerText();
   await touchSwipe(page, 1);
-  await expect(page.getByText(`Знаю · ${first}`)).toBeVisible();
+  await expect.poll(() => loggedRatings(page)).toEqual([3]);
   expect(await page.evaluate(() => (window as unknown as { __vibrations: unknown[] }).__vibrations.length)).toBe(0);
 });

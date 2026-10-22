@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Кит движения и ожидания</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#111111}
+button{font:inherit}
+input,textarea{font:inherit}
+::placeholder{color:#5a5a57;opacity:1}
+@keyframes mk-ease0 {
+  0% { transform: translateX(0px); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  66.667% { transform: translateX(80px); animation-timing-function: step-end; }
+  100% { transform: translateX(80px); }
+}
+@keyframes mk-ease1 {
+  0% { transform: translateX(0px); animation-timing-function: cubic-bezier(0, 0, 0.3, 1); }
+  66.667% { transform: translateX(80px); animation-timing-function: step-end; }
+  100% { transform: translateX(80px); }
+}
+@keyframes mk-ease2 {
+  0% { transform: translateX(0px); animation-timing-function: cubic-bezier(0.4, 0.14, 1, 1); }
+  66.667% { transform: translateX(80px); animation-timing-function: step-end; }
+  100% { transform: translateX(80px); }
+}
+@keyframes mk-ease3 {
+  0% { transform: translateX(0px); animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  66.667% { transform: translateX(80px); animation-timing-function: step-end; }
+  100% { transform: translateX(80px); }
+}
+@keyframes mk-spring0 {
+  0% { transform: translateX(0px); animation-timing-function: linear(0, 0.006 1.1%, 0.024 2.4%, 0.05 3.7%, 0.092 5.3%, 0.176 7.9%, 0.495 16.9%, 0.591 20.1%, 0.675 23.2%, 0.746 26.4%, 0.804 29.5%, 0.856 33%, 0.897 36.5%, 0.931 40.5%, 0.957 45%, 0.977 50%, 0.99 55.7%, 1 69.8%, 1); }
+  21.875% { transform: translateX(80px); animation-timing-function: step-end; }
+  100% { transform: translateX(80px); }
+}
+@keyframes mk-spring1 {
+  0% { transform: translateX(0px); animation-timing-function: linear(0, 0.006 1.1%, 0.024 2.4%, 0.055 3.8%, 0.096 5.2%, 0.187 7.8%, 0.516 16.5%, 0.616 19.5%, 0.702 22.6%, 0.774 25.6%, 0.833 28.6%, 0.883 31.9%, 0.922 35.2%, 0.953 38.9%, 0.975 42.8%, 0.991 47.3%, 1.001 52.5%, 1.006 63.1%, 1); }
+  30% { transform: translateX(80px); animation-timing-function: step-end; }
+  100% { transform: translateX(80px); }
+}
+@keyframes mk-spring2 {
+  0% { transform: translateX(0px); animation-timing-function: linear(0, 0.008 1.3%, 0.027 2.6%, 0.061 4.1%, 0.109 5.7%, 0.208 8.5%, 0.556 17.3%, 0.657 20.3%, 0.744 23.2%, 0.818 26.2%, 0.878 29.1%, 0.927 32.2%, 0.964 35.4%, 0.99 38.5%, 1.009 41.9%, 1.027 49.8%, 1.004 80%, 1); }
+  18.75% { transform: translateX(80px); animation-timing-function: step-end; }
+  100% { transform: translateX(80px); }
+}
+@keyframes mk-press-sec {
+  0% { transform: scale(1); background-color: #ffffff; animation-timing-function: step-end; }
+  12.5% { transform: scale(1); background-color: #ffffff; animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  15.417% { transform: scale(0.98); background-color: #e8e8e4; animation-timing-function: step-end; }
+  23.333% { transform: scale(0.98); background-color: #e8e8e4; animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  27.917% { transform: scale(1); background-color: #ffffff; animation-timing-function: step-end; }
+  100% { transform: scale(1); background-color: #ffffff; }
+}
+@keyframes mk-press-pri {
+  0% { transform: scale(1); background-color: #111111; animation-timing-function: step-end; }
+  41.667% { transform: scale(1); background-color: #111111; animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  44.583% { transform: scale(0.98); background-color: #2a2a2a; animation-timing-function: step-end; }
+  52.5% { transform: scale(0.98); background-color: #2a2a2a; animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  57.083% { transform: scale(1); background-color: #111111; animation-timing-function: step-end; }
+  100% { transform: scale(1); background-color: #111111; }
+}
+@keyframes mk-press-icon {
+  0% { transform: scale(1); background-color: rgba(232,232,228,0); animation-timing-function: step-end; }
+  70.833% { transform: scale(1); background-color: rgba(232,232,228,0); animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  73.75% { transform: scale(0.96); background-color: #e8e8e4; animation-timing-function: step-end; }
+  81.667% { transform: scale(0.96); background-color: #e8e8e4; animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  86.25% { transform: scale(1); background-color: rgba(232,232,228,0); animation-timing-function: step-end; }
+  100% { transform: scale(1); background-color: rgba(232,232,228,0); }
+}
+@keyframes mk-pend-press {
+  0% { transform: scale(1); background-color: #111111; animation-timing-function: step-end; }
+  15.625% { transform: scale(1); background-color: #111111; animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  17.812% { transform: scale(.98); background-color: #2a2a2a; animation-timing-function: step-end; }
+  19.375% { transform: scale(.98); background-color: #2a2a2a; animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  22.812% { transform: scale(1); background-color: #111111; animation-timing-function: step-end; }
+  100% { transform: scale(1); background-color: #111111; }
+}
+@keyframes mk-pend-idle {
+  0% { opacity: 1; animation-timing-function: step-end; }
+  20.312% { opacity: 1; animation-timing-function: cubic-bezier(0.4, 0.14, 1, 1); }
+  24.688% { opacity: 0; animation-timing-function: step-end; }
+  75% { opacity: 1; animation-timing-function: step-end; }
+  100% { opacity: 1; }
+}
+@keyframes mk-pend-busy {
+  0% { opacity: 0; animation-timing-function: step-end; }
+  24.688% { opacity: 0; animation-timing-function: cubic-bezier(0, 0, 0.3, 1); }
+  28.125% { opacity: .72; animation-timing-function: step-end; }
+  75% { opacity: 0; animation-timing-function: step-end; }
+  100% { opacity: 0; }
+}
+@keyframes mk-run {
+  0% { transform: translateX(-32px); animation-timing-function: linear; }
+  70% { transform: translateX(284px); animation-timing-function: step-end; }
+  100% { transform: translateX(284px); }
+}
+@keyframes mk-snack {
+  0% { opacity: 0; transform: translateY(8px); animation-timing-function: step-end; }
+  10% { opacity: 0; transform: translateY(8px); animation-timing-function: cubic-bezier(0, 0, 0.3, 1); }
+  18% { opacity: 1; transform: translateY(0); animation-timing-function: step-end; }
+  70% { opacity: 1; transform: translateY(0); animation-timing-function: cubic-bezier(0.4, 0.14, 1, 1); }
+  74.667% { opacity: 0; transform: translateY(8px); animation-timing-function: step-end; }
+  100% { opacity: 0; transform: translateY(8px); }
+}
+@keyframes mk-thumb {
+  0% { transform: translateX(0px); background-color: #5a5a57; animation-timing-function: step-end; }
+  12.5% { transform: translateX(0px); background-color: #5a5a57; animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  18.75% { transform: translateX(20px); background-color: #ffffff; animation-timing-function: step-end; }
+  62.5% { transform: translateX(20px); background-color: #ffffff; animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  68.75% { transform: translateX(0px); background-color: #5a5a57; animation-timing-function: step-end; }
+  100% { transform: translateX(0px); background-color: #5a5a57; }
+}
+@keyframes mk-track {
+  0% { background-color: #ffffff; border-color: #5a5a57; animation-timing-function: step-end; }
+  12.5% { background-color: #ffffff; border-color: #5a5a57; animation-timing-function: linear; }
+  15.937% { background-color: #111111; border-color: #111111; animation-timing-function: step-end; }
+  62.5% { background-color: #111111; border-color: #111111; animation-timing-function: linear; }
+  65.938% { background-color: #ffffff; border-color: #5a5a57; animation-timing-function: step-end; }
+  100% { background-color: #ffffff; border-color: #5a5a57; }
+}
+@keyframes mk-box {
+  0% { background-color: #ffffff; border-color: #5a5a57; transform: scale(1); animation-timing-function: step-end; }
+  12.5% { background-color: #ffffff; border-color: #5a5a57; transform: scale(1); animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  14.688% { background-color: #111111; border-color: #111111; transform: scale(.96); animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  18.125% { background-color: #111111; border-color: #111111; transform: scale(1); animation-timing-function: step-end; }
+  62.5% { background-color: #111111; border-color: #111111; transform: scale(1); animation-timing-function: linear; }
+  65.938% { background-color: #ffffff; border-color: #5a5a57; transform: scale(1); animation-timing-function: step-end; }
+  100% { background-color: #ffffff; border-color: #5a5a57; transform: scale(1); }
+}
+@keyframes mk-tick {
+  0% { stroke-dashoffset: 12; opacity: 1; animation-timing-function: step-end; }
+  14.688% { stroke-dashoffset: 12; opacity: 1; animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  18.125% { stroke-dashoffset: 0; opacity: 1; animation-timing-function: step-end; }
+  62.5% { stroke-dashoffset: 0; opacity: 1; animation-timing-function: linear; }
+  65.938% { stroke-dashoffset: 0; opacity: 0; animation-timing-function: step-end; }
+  100% { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes mk-slab {
+  0% { transform: translateX(44px); animation-timing-function: step-end; }
+  12.5% { transform: translateX(44px); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  18.75% { transform: translateX(0px); animation-timing-function: step-end; }
+  62.5% { transform: translateX(0px); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  68.75% { transform: translateX(44px); animation-timing-function: step-end; }
+  100% { transform: translateX(44px); }
+}
+@keyframes mk-seg2 {
+  0% { color: #111111; animation-timing-function: step-end; }
+  12.5% { color: #111111; animation-timing-function: linear; }
+  15.937% { color: #ffffff; animation-timing-function: step-end; }
+  62.5% { color: #ffffff; animation-timing-function: linear; }
+  65.938% { color: #111111; animation-timing-function: step-end; }
+  100% { color: #111111; }
+}
+@keyframes mk-seg3 {
+  0% { color: #ffffff; animation-timing-function: step-end; }
+  12.5% { color: #ffffff; animation-timing-function: linear; }
+  15.937% { color: #111111; animation-timing-function: step-end; }
+  62.5% { color: #111111; animation-timing-function: linear; }
+  65.938% { color: #ffffff; animation-timing-function: step-end; }
+  100% { color: #ffffff; }
+}
+@keyframes mk-spot {
+  0% { background-color: #e8e8e4; animation-timing-function: linear; }
+  46.154% { background-color: #ffffff; animation-timing-function: step-end; }
+  100% { background-color: #ffffff; }
+}
+@keyframes mk-stamp-op {
+  0% { opacity: 0; animation-timing-function: step-end; }
+  12.5% { opacity: 0; animation-timing-function: linear; }
+  15.417% { opacity: 1; animation-timing-function: step-end; }
+  75% { opacity: 1; animation-timing-function: cubic-bezier(0.4, 0.14, 1, 1); }
+  80.833% { opacity: 0; animation-timing-function: step-end; }
+  100% { opacity: 0; }
+}
+@keyframes mk-stamp-sc {
+  0% { transform: scale(1.04); animation-timing-function: step-end; }
+  12.5% { transform: scale(1.04); animation-timing-function: linear(0, 0.008 1.3%, 0.027 2.6%, 0.061 4.1%, 0.109 5.7%, 0.208 8.5%, 0.556 17.3%, 0.657 20.3%, 0.744 23.2%, 0.818 26.2%, 0.878 29.1%, 0.927 32.2%, 0.964 35.4%, 0.99 38.5%, 1.009 41.9%, 1.027 49.8%, 1.004 80%, 1); }
+  25% { transform: scale(1); animation-timing-function: step-end; }
+  100% { transform: scale(1); }
+}
+</style>
+</helmet>
+<div style="width: 1440px; height: 1000px; box-sizing: border-box; position: relative; overflow: hidden; background: #f1f1ee; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 14px; ">
+<header style="position: absolute; left: 48px; top: 48px; right: 48px; height: 64px">
+  <h1 style="margin: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 34px; line-height: 44px; letter-spacing: -0.015em; color: #111111">Движение и ожидание</h1>
+  <p style="margin: 4px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; color: #5a5a57">ТОКЕНЫ · ПРИМИТИВЫ · REDUCED MOTION</p>
+  <p style="position: absolute; right: 0; top: 14px; margin: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; text-align: right">MOTION-SPEC §2, §3.3–3.5, §5 · без тени, градиента, мерцания</p>
+</header>
+<div style="position: absolute; left: 48px; right: 48px; top: 128px; bottom: 48px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px">
+  <div style="display: flex; flex-direction: column; gap: 16px; min-width: 0">
+    <section aria-label="Длительности" style="flex: none; box-sizing: border-box; padding: 20px; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; display: flex; flex-direction: column; ">
+      <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57">01</span><h2 style="flex: 1; min-width: 0; margin: 0; font-size: 13px; line-height: 20px; font-weight: 500; color: #111111; white-space: nowrap">Длительности</h2></div>
+      <p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">--dur-* · :root · сжимаются при reduce</p>
+      <div style="position: relative; margin-top: 12px"><div style="height: 19px; display: flex; align-items: center"><span style="width: 100px; flex: none; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; color: #111111">--dur-instant</span><span style="position: relative; width: 152px; height: 19px; flex: none"><span style="position: absolute; left: 0; top: 7px; width: 26.6px; height: 6px; background: #111111"></span></span><span style="flex: 1; text-align: right; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; font-variant-numeric: tabular-nums">70</span></div><div style="height: 19px; display: flex; align-items: center"><span style="width: 100px; flex: none; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; color: #111111">--dur-quick</span><span style="position: relative; width: 152px; height: 19px; flex: none"><span style="position: absolute; left: 0; top: 7px; width: 41.8px; height: 6px; background: #111111"></span></span><span style="flex: 1; text-align: right; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; font-variant-numeric: tabular-nums">110</span></div><div style="height: 19px; display: flex; align-items: center"><span style="width: 100px; flex: none; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; color: #111111">--dur-exit</span><span style="position: relative; width: 152px; height: 19px; flex: none"><span style="position: absolute; left: 0; top: 7px; width: 53.2px; height: 6px; background: #111111"></span></span><span style="flex: 1; text-align: right; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; font-variant-numeric: tabular-nums">140</span></div><div style="height: 19px; display: flex; align-items: center"><span style="width: 100px; flex: none; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; color: #111111">--dur-move</span><span style="position: relative; width: 152px; height: 19px; flex: none"><span style="position: absolute; left: 0; top: 7px; width: 76.0px; height: 6px; background: #111111"></span></span><span style="flex: 1; text-align: right; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; font-variant-numeric: tabular-nums">200</span></div><div style="height: 19px; display: flex; align-items: center"><span style="width: 100px; flex: none; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; color: #111111">--dur-enter</span><span style="position: relative; width: 152px; height: 19px; flex: none"><span style="position: absolute; left: 0; top: 7px; width: 91.2px; height: 6px; background: #111111"></span></span><span style="flex: 1; text-align: right; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; font-variant-numeric: tabular-nums">240</span></div><div style="height: 19px; display: flex; align-items: center"><span style="width: 100px; flex: none; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; color: #111111">--dur-turn</span><span style="position: relative; width: 152px; height: 19px; flex: none"><span style="position: absolute; left: 0; top: 7px; width: 121.6px; height: 6px; background: #111111"></span></span><span style="flex: 1; text-align: right; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; font-variant-numeric: tabular-nums">320</span></div><div style="height: 19px; display: flex; align-items: center"><span style="width: 100px; flex: none; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; color: #111111">--dur-sheet</span><span style="position: relative; width: 152px; height: 19px; flex: none"><span style="position: absolute; left: 0; top: 7px; width: 144.4px; height: 6px; background: #111111"></span></span><span style="flex: 1; text-align: right; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; font-variant-numeric: tabular-nums">380</span></div><div aria-hidden="true" style="margin-top: 6px; display: flex"><span style="width: 100px; flex: none; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57">мс</span><span style="position: relative; width: 152px; height: 22px; border-top: 1px solid #5a5a57"><span style="position: absolute; left: 0.0px; top: 0; width: 1px; height: 5px; background: #5a5a57"></span><span style="position: absolute; left: -12.0px; top: 6px; width: 24px; text-align: center; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; font-size: 9px">0</span><span style="position: absolute; left: 38.0px; top: 0; width: 1px; height: 5px; background: #5a5a57"></span><span style="position: absolute; left: 26.0px; top: 6px; width: 24px; text-align: center; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; font-size: 9px">100</span><span style="position: absolute; left: 76.0px; top: 0; width: 1px; height: 5px; background: #5a5a57"></span><span style="position: absolute; left: 64.0px; top: 6px; width: 24px; text-align: center; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; font-size: 9px">200</span><span style="position: absolute; left: 114.0px; top: 0; width: 1px; height: 5px; background: #5a5a57"></span><span style="position: absolute; left: 102.0px; top: 6px; width: 24px; text-align: center; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; font-size: 9px">300</span><span style="position: absolute; left: 152.0px; top: 0; width: 1px; height: 5px; background: #5a5a57"></span><span style="position: absolute; left: 140.0px; top: 6px; width: 24px; text-align: center; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; font-size: 9px">400</span></span></div></div>
+    </section>
+    <section aria-label="Кривые" style="flex: none; box-sizing: border-box; padding: 20px; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; display: flex; flex-direction: column; ">
+      <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57">02</span><h2 style="flex: 1; min-width: 0; margin: 0; font-size: 13px; line-height: 20px; font-weight: 500; color: #111111; white-space: nowrap">Кривые</h2><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: .06em; color: #c8331f">LIVE</span></div>
+      <p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">время → путь · 1200 мс + 600 покоя</p>
+      <div style="position: relative; margin-top: 12px"><div style="display: grid; grid-template-columns: 96px 96px; column-gap: 36px; row-gap: 10px; justify-content: start"><div style="display: flex; flex-direction: column"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; color: #111111; margin-bottom: 4px">--ease-standard</span><svg aria-hidden="true" width="96" height="96" viewBox="0 0 96 96" fill="none" style="display: block"><rect x="0.5" y="0.5" width="95" height="95" rx="2" stroke="#d6d6d1"></rect><path d="M8 88H88M8 88V8" stroke="#d6d6d1"></path><path d="M8 88 C24 88, 38.4 16, 88 8" stroke="#111111" stroke-width="1.5" stroke-linecap="round"></path></svg><div aria-hidden="true" style="position: relative; margin-top: 6px; width: 96px; height: 6px"><span style="position: absolute; left: 8px; right: 8px; top: 3px; height: 1px; background: #d6d6d1"></span><span style="position: absolute; left: 5px; top: 0; width: 6px; height: 6px; border-radius: 3px; background: #111111; animation: mk-ease0 1800ms linear infinite"></span></div></div><div style="display: flex; flex-direction: column"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; color: #111111; margin-bottom: 4px">--ease-enter</span><svg aria-hidden="true" width="96" height="96" viewBox="0 0 96 96" fill="none" style="display: block"><rect x="0.5" y="0.5" width="95" height="95" rx="2" stroke="#d6d6d1"></rect><path d="M8 88H88M8 88V8" stroke="#d6d6d1"></path><path d="M8 88 C8 88, 32 8, 88 8" stroke="#111111" stroke-width="1.5" stroke-linecap="round"></path></svg><div aria-hidden="true" style="position: relative; margin-top: 6px; width: 96px; height: 6px"><span style="position: absolute; left: 8px; right: 8px; top: 3px; height: 1px; background: #d6d6d1"></span><span style="position: absolute; left: 5px; top: 0; width: 6px; height: 6px; border-radius: 3px; background: #111111; animation: mk-ease1 1800ms linear infinite"></span></div></div><div style="display: flex; flex-direction: column"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; color: #111111; margin-bottom: 4px">--ease-exit</span><svg aria-hidden="true" width="96" height="96" viewBox="0 0 96 96" fill="none" style="display: block"><rect x="0.5" y="0.5" width="95" height="95" rx="2" stroke="#d6d6d1"></rect><path d="M8 88H88M8 88V8" stroke="#d6d6d1"></path><path d="M8 88 C40 76.8, 88 8, 88 8" stroke="#111111" stroke-width="1.5" stroke-linecap="round"></path></svg><div aria-hidden="true" style="position: relative; margin-top: 6px; width: 96px; height: 6px"><span style="position: absolute; left: 8px; right: 8px; top: 3px; height: 1px; background: #d6d6d1"></span><span style="position: absolute; left: 5px; top: 0; width: 6px; height: 6px; border-radius: 3px; background: #111111; animation: mk-ease2 1800ms linear infinite"></span></div></div><div style="display: flex; flex-direction: column"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; color: #111111; margin-bottom: 4px">--ease-press</span><svg aria-hidden="true" width="96" height="96" viewBox="0 0 96 96" fill="none" style="display: block"><rect x="0.5" y="0.5" width="95" height="95" rx="2" stroke="#d6d6d1"></rect><path d="M8 88H88M8 88V8" stroke="#d6d6d1"></path><path d="M8 88 C24 88, 8 8, 88 8" stroke="#111111" stroke-width="1.5" stroke-linecap="round"></path></svg><div aria-hidden="true" style="position: relative; margin-top: 6px; width: 96px; height: 6px"><span style="position: absolute; left: 8px; right: 8px; top: 3px; height: 1px; background: #d6d6d1"></span><span style="position: absolute; left: 5px; top: 0; width: 6px; height: 6px; border-radius: 3px; background: #111111; animation: mk-ease3 1800ms linear infinite"></span></div></div></div></div>
+    </section>
+    <section aria-label="Пружины" style="flex: 1 1 auto; box-sizing: border-box; padding: 20px; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; display: flex; flex-direction: column; ">
+      <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57">03</span><h2 style="flex: 1; min-width: 0; margin: 0; font-size: 13px; line-height: 20px; font-weight: 500; color: #111111; white-space: nowrap">Пружины</h2><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: .06em; color: #c8331f">LIVE</span></div>
+      <p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">linear() §2.5 · 80 px · только сдвиг</p>
+      <div style="position: relative; margin-top: 12px"><div style="display: flex; flex-direction: column; gap: 6px"><div style="height: 24px; display: flex; align-items: center; justify-content: space-between">
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; color: #111111">--spring-settle 350<br><span style="color: #5a5a57">перелёт 0,1 %</span></span>
+        <span aria-hidden="true" style="position: relative; flex: none; width: 112px; height: 14px">
+          <span style="position: absolute; left: 0; right: 0; top: 13px; height: 1px; background: #d6d6d1"></span>
+          <span style="position: absolute; left: 92px; top: 0; width: 1px; height: 14px; background: #5a5a57"></span>
+          <span style="position: absolute; left: 0; top: 1px; width: 12px; height: 12px; background: #111111; animation: mk-spring0 1600ms linear infinite"></span>
+        </span></div><div style="height: 24px; display: flex; align-items: center; justify-content: space-between">
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; color: #111111">--spring-lift 480<br><span style="color: #5a5a57">перелёт 0,6 %</span></span>
+        <span aria-hidden="true" style="position: relative; flex: none; width: 112px; height: 14px">
+          <span style="position: absolute; left: 0; right: 0; top: 13px; height: 1px; background: #d6d6d1"></span>
+          <span style="position: absolute; left: 92px; top: 0; width: 1px; height: 14px; background: #5a5a57"></span>
+          <span style="position: absolute; left: 0; top: 1px; width: 12px; height: 12px; background: #111111; animation: mk-spring1 1600ms linear infinite"></span>
+        </span></div><div style="height: 24px; display: flex; align-items: center; justify-content: space-between">
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57; color: #111111">--spring-stamp 300<br><span style="color: #5a5a57">перелёт 2,7 %</span></span>
+        <span aria-hidden="true" style="position: relative; flex: none; width: 112px; height: 14px">
+          <span style="position: absolute; left: 0; right: 0; top: 13px; height: 1px; background: #d6d6d1"></span>
+          <span style="position: absolute; left: 92px; top: 0; width: 1px; height: 14px; background: #5a5a57"></span>
+          <span style="position: absolute; left: 0; top: 1px; width: 12px; height: 12px; background: #111111; animation: mk-spring2 1600ms linear infinite"></span>
+        </span></div></div></div>
+    </section>
+  </div>
+<div style="display: flex; flex-direction: column; gap: 16px; min-width: 0">
+    <section aria-label="Нажатие" style="flex: none; box-sizing: border-box; padding: 20px; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; display: flex; flex-direction: column; ">
+      <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57">04</span><h2 style="flex: 1; min-width: 0; margin: 0; font-size: 13px; line-height: 20px; font-weight: 500; color: #111111; white-space: nowrap">Нажатие</h2><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: .06em; color: #c8331f">LIVE</span></div>
+      <p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">--dur-instant 70 / --dur-quick 110</p>
+      <div style="position: relative; margin-top: 12px"><div style="display: flex; gap: 8px">
+        <button type="button" style="height: 52px; box-sizing: border-box; padding: 0 20px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 15px; font-weight: 500; line-height: 20px; white-space: nowrap; cursor: pointer; flex: 1; border: 1px solid #111111; background: #ffffff; color: #111111; animation: mk-press-sec 2400ms linear infinite">Добавить и ещё</button>
+        <button type="button" style="height: 52px; box-sizing: border-box; padding: 0 20px; display: inline-flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 15px; font-weight: 500; line-height: 20px; white-space: nowrap; cursor: pointer; flex: 1; border: 1px solid #111111; background: #111111; color: #ffffff; animation: mk-press-pri 2400ms linear infinite">Добавить</button>
+      </div>
+      <div style="margin-top: 8px; display: flex; align-items: center; gap: 12px">
+        <button type="button" aria-label="Отменить" style="width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 4px; color: #111111; cursor: pointer; animation: mk-press-icon 2400ms linear infinite"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"></path></svg></button>
+        <p style="margin: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57">крупные .98 · иконки и чипы .96<br>строки — только тон, без масштаба</p>
+      </div></div>
+    </section>
+    <section aria-label="Кнопка в ожидании" style="flex: none; box-sizing: border-box; padding: 20px; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; display: flex; flex-direction: column; ">
+      <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57">05</span><h2 style="flex: 1; min-width: 0; margin: 0; font-size: 13px; line-height: 20px; font-weight: 500; color: #111111; white-space: nowrap">Кнопка в ожидании</h2><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: .06em; color: #c8331f">LIVE</span></div>
+      <p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">--loading-delay-fast 150 · §3.5</p>
+      <div style="position: relative; margin-top: 12px"><button type="button" aria-busy="true" style="height: 52px; width: 100%; box-sizing: border-box; padding: 0 20px; display: flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 15px; font-weight: 500; line-height: 20px; white-space: nowrap; cursor: pointer; border: 1px solid #111111; background: #111111; color: #ffffff; animation: mk-pend-press 3200ms linear infinite"><span style="display: inline-grid; justify-items: center; "><span style="grid-area: 1 / 1; animation: mk-pend-idle 3200ms linear infinite">Применить<span style="margin-left: 8px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; letter-spacing: .04em">10</span></span><span style="grid-area: 1 / 1; animation: mk-pend-busy 3200ms linear infinite">Применяем…</span></span></button>
+      <p style="margin: 4px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57">через 150 мс · ширина та же · текст 72 %</p>
+      <button type="button" aria-disabled="true" style="height: 52px; width: 100%; box-sizing: border-box; padding: 0 20px; display: flex; align-items: center; justify-content: center; border-radius: 6px; font-size: 15px; font-weight: 500; line-height: 20px; white-space: nowrap; cursor: pointer; margin-top: 10px; border: 1px solid #d6d6d1; background: #ffffff; color: #8a8a85; cursor: default">Применить</button>
+      <p style="margin: 4px 0 0; font-size: 12px; line-height: 16px; color: #5a5a57">Можно применить, когда план готов</p>
+</div>
+    </section>
+    <section aria-label="Скелет" style="flex: 1 1 auto; box-sizing: border-box; padding: 20px; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; display: flex; flex-direction: column; ">
+      <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57">06</span><h2 style="flex: 1; min-width: 0; margin: 0; font-size: 13px; line-height: 20px; font-weight: 500; color: #111111; white-space: nowrap">Скелет</h2></div>
+      <p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">--surface-2 · радиус 2 · 8 / 6 / 3 px</p>
+      <div style="position: relative; margin-top: 12px"><div style="border-top: 1px solid #d6d6d1"><div aria-hidden="true" style="position: relative; height: 44px; box-sizing: border-box; border-bottom: 1px solid #d6d6d1"><span style="position: absolute; left: 0px; top: 18px; width: 72px; height: 8px; border-radius: 2px; background: #e8e8e4"></span><span style="position: absolute; left: 80px; top: 19px; width: 88px; height: 6px; border-radius: 2px; background: #e8e8e4"></span><span style="position: absolute; right: 0; top: 14px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57">Словарь 44</span></div><div aria-hidden="true" style="position: relative; height: 56px; box-sizing: border-box; border-bottom: 1px solid #d6d6d1"><span style="position: absolute; left: 0px; top: 14px; width: 96px; height: 8px; border-radius: 2px; background: #e8e8e4"></span><span style="position: absolute; left: 0px; top: 34px; width: 64px; height: 6px; border-radius: 2px; background: #e8e8e4"></span><span style="position: absolute; left: 150px; top: 21px; width: 10px; height: 3px; background: #e8e8e4"></span><span style="position: absolute; left: 162px; top: 21px; width: 10px; height: 3px; background: #e8e8e4"></span><span style="position: absolute; left: 174px; top: 21px; width: 10px; height: 3px; background: #e8e8e4"></span><span style="position: absolute; left: 186px; top: 21px; width: 10px; height: 3px; background: #e8e8e4"></span><span style="position: absolute; right: 0; top: 20px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57">Импорт 56</span></div><div aria-hidden="true" style="position: relative; height: 64px; box-sizing: border-box; border-bottom: 1px solid #d6d6d1"><span style="position: absolute; left: 0px; top: 16px; width: 56px; height: 8px; border-radius: 2px; background: #e8e8e4"></span><span style="position: absolute; left: 0px; top: 38px; width: 104px; height: 6px; border-radius: 2px; background: #e8e8e4"></span><span style="position: absolute; left: 150px; top: 25px; width: 10px; height: 3px; background: #e8e8e4"></span><span style="position: absolute; left: 162px; top: 25px; width: 10px; height: 3px; background: #e8e8e4"></span><span style="position: absolute; left: 174px; top: 25px; width: 10px; height: 3px; background: #e8e8e4"></span><span style="position: absolute; left: 186px; top: 25px; width: 10px; height: 3px; background: #e8e8e4"></span><span style="position: absolute; right: 0; top: 24px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57">Все слова 64</span></div><div aria-hidden="true" style="position: relative; height: 72px; box-sizing: border-box; border-bottom: 1px solid #d6d6d1"><span style="position: absolute; left: 0px; top: 18px; width: 80px; height: 8px; border-radius: 2px; background: #e8e8e4"></span><span style="position: absolute; left: 0px; top: 40px; width: 72px; height: 6px; border-radius: 2px; background: #e8e8e4"></span><span style="position: absolute; left: 150px; top: 21px; width: 10px; height: 3px; background: #e8e8e4"></span><span style="position: absolute; left: 162px; top: 21px; width: 10px; height: 3px; background: #e8e8e4"></span><span style="position: absolute; left: 174px; top: 21px; width: 10px; height: 3px; background: #e8e8e4"></span><span style="position: absolute; left: 186px; top: 21px; width: 10px; height: 3px; background: #e8e8e4"></span><span style="position: absolute; right: 0; top: 28px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57">Варианты 72</span></div></div><p style="margin: 4px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57">не двигаются · появляются через 300 мс</p></div>
+    </section>
+  </div>
+<div style="display: flex; flex-direction: column; gap: 16px; min-width: 0">
+    <section aria-label="Строка статуса" style="flex: none; box-sizing: border-box; padding: 20px; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; display: flex; flex-direction: column; ">
+      <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57">07</span><h2 style="flex: 1; min-width: 0; margin: 0; font-size: 13px; line-height: 20px; font-weight: 500; color: #111111; white-space: nowrap">Строка статуса</h2><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: .06em; color: #c8331f">LIVE</span></div>
+      <p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">mono 11 · 20 px · одна на область</p>
+      <div style="position: relative; margin-top: 12px"><div role="status" aria-live="polite">
+        <p style="margin: 0; height: 20px; display: flex; align-items: center; justify-content: space-between; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57; font-variant-numeric: tabular-nums"><span>Подбираем варианты</span><span>0:04</span></p>
+        <div aria-hidden="true" style="position: relative; height: 1px; background: #d6d6d1; overflow: hidden"><span style="position: absolute; left: 0; top: 0; width: 32px; height: 1px; background: #111111; animation: mk-run 2000ms linear infinite"></span></div>
+      </div>
+      <p style="margin: 4px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57">черта 32 px · 1400 мс + 600 покоя · с 1,5 с</p>
+      <div style="margin-top: 14px">
+        <p style="margin: 0; height: 20px; display: flex; align-items: center; justify-content: space-between; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57; font-variant-numeric: tabular-nums"><span>Определяем · 4 / 12</span><span></span></p>
+        <div aria-hidden="true" style="position: relative; height: 1px; background: #d6d6d1"><span style="position: absolute; left: 0; top: 0; width: 100%; height: 1px; background: #111111; transform-origin: left; transform: scaleX(.333)"></span></div>
+      </div>
+      <p style="margin: 4px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57">только по событиям · --dur-move · назад не идёт</p>
+      <div style="margin-top: 14px">
+        <p style="margin: 0; height: 20px; display: flex; align-items: center; justify-content: space-between; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57; font-variant-numeric: tabular-nums"><span>Не удалось</span><span></span></p>
+        <div aria-hidden="true" style="height: 1px; background: #d6d6d1"></div>
+        <div style="margin-top: 10px; padding-top: 8px; border-top: 1px solid #b3261e; display: flex; align-items: baseline; justify-content: space-between; gap: 8px">
+          <span style="font-size: 13px; line-height: 20px; color: #111111">Не удалось подобрать варианты</span>
+          <button type="button" style="padding: 0; border: 0; background: transparent; font-size: 13px; line-height: 20px; font-weight: 500; color: #111111; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; cursor: pointer">Повторить</button>
+        </div>
+      </div></div>
+    </section>
+    <section aria-label="Снекбар" style="flex: none; box-sizing: border-box; padding: 20px; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; display: flex; flex-direction: column; ">
+      <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57">08</span><h2 style="flex: 1; min-width: 0; margin: 0; font-size: 13px; line-height: 20px; font-weight: 500; color: #111111; white-space: nowrap">Снекбар</h2><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: .06em; color: #c8331f">LIVE</span></div>
+      <p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">вход 240 --ease-enter · выход 140</p>
+      <div style="position: relative; margin-top: 12px"><div style="position: relative; height: 72px; background: #f1f1ee; border-radius: 4px; overflow: hidden">
+        <div role="status" style="position: absolute; left: 8px; right: 8px; bottom: 12px; height: 48px; box-sizing: border-box; padding: 0 4px 0 16px; display: flex; align-items: center; gap: 8px; background: #111111; color: #ffffff; border-radius: 6px; font-size: 14px; white-space: nowrap; animation: mk-snack 3000ms linear infinite">
+          <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis">Удалено · <span lang="fr">le blé</span></span>
+          <button type="button" style="height: 44px; padding: 0 12px; border: 0; border-radius: 4px; background: transparent; color: #ffffff; font-size: 14px; font-weight: 500; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; cursor: pointer">Отменить</button>
+        </div>
+      </div>
+      <p style="margin: 8px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57">+8 px вверх · держится 5–7 с · −8 px вниз<br>таймер стоит, пока приложение в фоне</p></div>
+    </section>
+    <section aria-label="Переключатель · галочка · сегменты" style="flex: 1 1 auto; box-sizing: border-box; padding: 20px; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; display: flex; flex-direction: column; ">
+      <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57">09</span><h2 style="flex: 1; min-width: 0; margin: 0; font-size: 13px; line-height: 20px; font-weight: 500; color: #111111; white-space: nowrap">Переключатель · галочка · сегменты</h2><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: .06em; color: #c8331f">LIVE</span></div>
+      <p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">--dur-move 200 · --dur-quick 110</p>
+      <div style="position: relative; margin-top: 12px"><div style="border-top: 1px solid #d6d6d1">
+        <div style="height: 44px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #d6d6d1; font-size: 14px; line-height: 20px"><span>Свайпы для оценки</span>
+          <button type="button" role="switch" aria-checked="true" aria-label="Свайпы для оценки" style="width: 52px; height: 44px; margin-right: -4px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 0; background: transparent; cursor: pointer">
+            <span aria-hidden="true" style="display: flex; width: 44px; height: 24px; box-sizing: border-box; padding: 2px; border: 1px solid #5a5a57; border-radius: 4px; animation: mk-track 3200ms linear infinite"><span style="width: 18px; height: 18px; border-radius: 2px; background: #5a5a57; animation: mk-thumb 3200ms linear infinite"></span></span>
+          </button></div>
+        <div style="height: 44px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #d6d6d1; font-size: 14px; line-height: 20px"><span lang="fr" style="font-family: Newsreader, Georgia, serif; font-size: 17px">kiffer</span>
+          <span role="checkbox" aria-checked="true" aria-label="kiffer" style="width: 20px; height: 20px; box-sizing: border-box; display: inline-flex; align-items: center; justify-content: center; border: 1px solid #5a5a57; border-radius: 2px; animation: mk-box 3200ms linear infinite"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 12 12" fill="none" stroke="#ffffff" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6.2 5 8.6 9.5 3.6" stroke-dasharray="12" style="animation: mk-tick 3200ms linear infinite"></path></svg></span></div>
+        <div style="height: 44px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #d6d6d1; font-size: 14px; line-height: 20px; border-bottom: 0"><span>Кнопки оценки</span>
+          <span role="radiogroup" aria-label="Кнопки оценки" style="position: relative; display: inline-flex; height: 30px; box-sizing: border-box; border: 1px solid #111111; border-radius: 4px; overflow: hidden">
+            <span aria-hidden="true" style="position: absolute; left: 0; top: 0; width: 44px; height: 28px; background: #111111; animation: mk-slab 3200ms linear infinite"></span>
+            <button type="button" role="radio" aria-checked="true" style="position: relative; width: 44px; height: 30px; padding: 0; border: 0; background: transparent; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; cursor: pointer; height: 28px; animation: mk-seg2 3200ms linear infinite">2</button>
+            <button type="button" role="radio" aria-checked="false" style="position: relative; width: 44px; height: 30px; padding: 0; border: 0; background: transparent; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; cursor: pointer; height: 28px; animation: mk-seg3 3200ms linear infinite">3</button>
+          </span></div>
+      </div>
+      <p style="margin: 8px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57">ручка и плашка едут 200 мс, цвет 110 мс;<br>галочка: заливка 70, штрих рисуется 110</p></div>
+    </section>
+  </div>
+<div style="display: flex; flex-direction: column; gap: 16px; min-width: 0">
+    <section aria-label="Пятно бумаги" style="flex: none; box-sizing: border-box; padding: 20px; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; display: flex; flex-direction: column; ">
+      <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57">10</span><h2 style="flex: 1; min-width: 0; margin: 0; font-size: 13px; line-height: 20px; font-weight: 500; color: #111111; white-space: nowrap">Пятно бумаги</h2><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: .06em; color: #c8331f">LIVE</span></div>
+      <p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">--dur-spotlight 1200 · --ease-linear</p>
+      <div style="position: relative; margin-top: 12px"><div style="height: 56px; box-sizing: border-box; padding: 0 12px; margin: 0 -12px; display: flex; align-items: center; gap: 8px; border-top: 1px solid #d6d6d1; border-bottom: 1px solid #d6d6d1; animation: mk-spot 2600ms linear infinite">
+        <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 18px; line-height: 24px">la thune</span><span style="font-size: 14px; color: #5a5a57">— бабки</span>
+        <span style="flex: 1"></span><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57">Деньги</span></div>
+      <p style="margin: 8px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57">#e8e8e4 сразу → фон строки за 1200 мс<br>одна область за раз · при reduce остаётся</p></div>
+    </section>
+    <section aria-label="Штамп" style="flex: none; box-sizing: border-box; padding: 20px; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; display: flex; flex-direction: column; ">
+      <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57">11</span><h2 style="flex: 1; min-width: 0; margin: 0; font-size: 13px; line-height: 20px; font-weight: 500; color: #111111; white-space: nowrap">Штамп</h2><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; letter-spacing: .06em; color: #c8331f">LIVE</span></div>
+      <p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">--spring-stamp 300 · перелёт 2,7 %</p>
+      <div style="position: relative; margin-top: 12px"><div aria-hidden="true" style="position: relative; height: 76px; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden">
+        <span style="position: absolute; left: 0; right: 0; top: 22px; height: 2px; background: #c8331f"></span>
+        <span style="position: absolute; left: 14px; top: 4px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57">FR · № 017</span>
+        <span style="position: absolute; left: 70px; top: 30px; transform: rotate(-8deg); animation: mk-stamp-op 2400ms linear infinite"><span style="height: 40px; padding: 0 14px; box-sizing: border-box; display: inline-flex; align-items: center; border: 2px solid #1d6b45; border-radius: 4px; background: transparent; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 20px; font-weight: 500; letter-spacing: .16em; color: #1d6b45; white-space: nowrap; animation: mk-stamp-sc 2400ms linear infinite">ЗНАЮ</span></span>
+      </div>
+      <p style="margin: 8px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57">opacity 70 мс · 1,04 → 1 за 300 мс · единственный перелёт</p></div>
+    </section>
+    <section aria-label="Reduced motion" style="flex: 1 1 auto; box-sizing: border-box; padding: 20px; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; display: flex; flex-direction: column; ">
+      <div style="display: flex; align-items: baseline; gap: 8px"><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57">12</span><h2 style="flex: 1; min-width: 0; margin: 0; font-size: 13px; line-height: 20px; font-weight: 500; color: #111111; white-space: nowrap">Reduced motion</h2></div>
+      <p style="margin: 2px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">prefers-reduced-motion: reduce</p>
+      <div style="position: relative; margin-top: 12px"><table style="width: 100%; border-collapse: collapse; table-layout: fixed"><thead><tr><th style="padding: 0 0 6px; text-align: left; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; font-weight: 400; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57; border-bottom: 1px solid #111111">По умолчанию</th><th style="padding: 0 0 6px; text-align: left; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; font-weight: 400; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57; border-bottom: 1px solid #111111">При reduce</th></tr></thead><tbody><tr><td style="padding: 5px 8px 5px 0; vertical-align: top; font-size: 12px; line-height: 16px; border-bottom: 1px solid #d6d6d1"><span style="display: block; font-weight: 500; color: #111111">Нажатие</span><span style="color: #5a5a57">scale .98 / .96</span></td><td style="padding: 5px 8px 5px 0; vertical-align: top; font-size: 12px; line-height: 16px; border-bottom: 1px solid #d6d6d1; padding-right: 0; color: #111111">только тон</td></tr><tr><td style="padding: 5px 8px 5px 0; vertical-align: top; font-size: 12px; line-height: 16px; border-bottom: 1px solid #d6d6d1"><span style="display: block; font-weight: 500; color: #111111">Ответ</span><span style="color: #5a5a57">слово скользит, +4 px</span></td><td style="padding: 5px 8px 5px 0; vertical-align: top; font-size: 12px; line-height: 16px; border-bottom: 1px solid #d6d6d1; padding-right: 0; color: #111111">проявление 110 мс</td></tr><tr><td style="padding: 5px 8px 5px 0; vertical-align: top; font-size: 12px; line-height: 16px; border-bottom: 1px solid #d6d6d1"><span style="display: block; font-weight: 500; color: #111111">Штамп</span><span style="color: #5a5a57">1,04 → 1 пружиной</span></td><td style="padding: 5px 8px 5px 0; vertical-align: top; font-size: 12px; line-height: 16px; border-bottom: 1px solid #d6d6d1; padding-right: 0; color: #111111">сразу непрозрачный</td></tr><tr><td style="padding: 5px 8px 5px 0; vertical-align: top; font-size: 12px; line-height: 16px; border-bottom: 1px solid #d6d6d1"><span style="display: block; font-weight: 500; color: #111111">Снекбар, диалог</span><span style="color: #5a5a57">+8 px и проявление</span></td><td style="padding: 5px 8px 5px 0; vertical-align: top; font-size: 12px; line-height: 16px; border-bottom: 1px solid #d6d6d1; padding-right: 0; color: #111111">только проявление</td></tr><tr><td style="padding: 5px 8px 5px 0; vertical-align: top; font-size: 12px; line-height: 16px; border-bottom: 1px solid #d6d6d1"><span style="display: block; font-weight: 500; color: #111111">Черта, линия скана</span><span style="color: #5a5a57">бегут по кругу</span></td><td style="padding: 5px 8px 5px 0; vertical-align: top; font-size: 12px; line-height: 16px; border-bottom: 1px solid #d6d6d1; padding-right: 0; color: #111111">стоят; время тикает</td></tr><tr><td style="padding: 5px 8px 5px 0; vertical-align: top; font-size: 12px; line-height: 16px; border-bottom: 1px solid #d6d6d1"><span style="display: block; font-weight: 500; color: #111111">Пятно бумаги</span><span style="color: #5a5a57">1200 мс, линейно</span></td><td style="padding: 5px 8px 5px 0; vertical-align: top; font-size: 12px; line-height: 16px; border-bottom: 1px solid #d6d6d1; padding-right: 0; color: #111111">остаётся — это цвет</td></tr></tbody></table><p style="margin: 8px 0 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 10px; line-height: 14px; color: #5a5a57">движение заменяется, а не удаляется</p></div>
+    </section>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1000}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

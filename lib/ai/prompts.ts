@@ -1,7 +1,7 @@
 // Frozen system prompts (prompt-cache prefixes: never interpolate per-request data into them)
 // and the per-request user messages that follow them. The routes pass the system prompt through
 // `cachedInstructions()` so it becomes a cache_control breakpoint.
-import type { FolderInput } from "./schemas";
+import type { FolderInput, SuggestRegister } from "./schemas";
 import { FOLDER_INBOX, FOLDER_NEW } from "./schemas";
 
 const APP_CONTEXT = `You work inside «Карточки для Лизи», a flashcard app for one Russian-speaking learner of French. The learner collects everyday French and, above all, the French people actually speak: familier, argot, verlan and vulgar words heard in films, rap, chats and the street. Every card has a French side, a Russian side, an optional short note and an example, a part of speech, a gender for nouns, a slang level and a verlan flag, and a theme folder («тема»).
@@ -133,7 +133,7 @@ EXAMPLE. Themes: dengi «Деньги» — money, buying, work, debts; politsiy
 /** /api/ai/enrich: slang level, part of speech and an example for cards the learner typed themselves. */
 export const ENRICH_SYSTEM = `${APP_CONTEXT}
 
-TASK. The learner wrote these cards by hand. You receive them as "ref<TAB>French<TAB>Russian<TAB>note". For each card return its part of speech, gender, slang level, verlan flag and one example, as JSON matching the schema, with exactly one entry per card, in input order, using the ref given.
+TASK. The learner wrote these cards by hand. You receive them as "ref<TAB>French<TAB>Russian<TAB>note". For each card return its part of speech, gender, slang level, verlan flag and one example, as JSON matching the schema, with exactly one entry per card, in input order, using the ref given. When the user message also lists the learner's themes, pick a theme for each card as well (see THEMES); otherwise there are no theme fields.
 - The French and Russian sides are the learner's: never correct, replace or comment on them. When the French word has several meanings, the Russian side tells you which one is meant: judge the register and write the example for that sense.
 - A misspelt or unknown French side still gets an entry: judge it as best you can and set confidence low.
 - Never invent refs, never skip a card, never output a card twice.
@@ -142,11 +142,37 @@ ${FORM_RULES}
 
 ${SLANG_RUBRIC}
 
+${FOLDER_RULES}
+
 EXAMPLES.
 w1 la caisse «тачка» → pos noun, gender f, slang_level fam, verlan false, example_fr "Il a garé sa caisse devant chez moi.", example_ru "Он припарковал свою тачку у моего дома.", confidence high
 w2 la caisse «касса» → pos noun, gender f, slang_level neutral, example_fr "Je vous attends à la caisse.", example_ru "Жду вас у кассы.", confidence high
 w3 chelou «стрёмный» → pos adj, gender none, slang_level arg, verlan true, example_fr "Il est chelou, ton pote.", example_ru "Стрёмный у тебя кореш.", confidence high
-w4 ferme ta gueule «заткнись» → pos expression, gender none, slang_level vulg, example_fr "Ferme ta gueule, tu me saoules !", example_ru "Заткнись, ты меня достал!", confidence high`;
+w4 ferme ta gueule «заткнись» → pos expression, gender none, slang_level vulg, example_fr "Ferme ta gueule, tu me saoules !", example_ru "Заткнись, ты меня достал!", confidence high
+With themes dengi «Деньги» and povsednevnoe «Повседневное»: w1 la caisse «тачка» → folder NEW, new_folder {slug "transport", name "Транспорт", description "Машины, метро, поездки и всё, на чём ездят."}; w5 la thune «бабки» → folder dengi, folder_alternatives []; w6 laisse tomber «забей» → folder povsednevnoe.`;
+
+/** /api/ai/example: one more example sentence for a card («другой пример», «+ Ещё пример»). */
+export const EXAMPLE_SYSTEM = `${APP_CONTEXT}
+
+TASK. Write ONE new example sentence for a card the learner already has, and its Russian translation, as JSON matching the schema. The user message gives the French side, the Russian side (it tells you which sense is meant), an optional note, and the examples the card already has.
+- The new example must be clearly different from every existing one: another situation, other words around the card's word, another sentence shape. A paraphrase or a sentence that only swaps a pronoun or a name does not count.
+- Use the word exactly in the sense of the Russian side, in a form a French speaker would really say. Keep the register of the word: an argot word gets an argot sentence, a neutral word a neutral one. Never sanitise a vulgar word into a polite sentence.
+- One sentence, short (usually 4–12 words), everyday and concrete: things people say in chats, at work, with friends, in films and songs. No dictionary-style or textbook sentences, no definitions, no quotes from real people.
+- The Russian translation matches the register: fam → разговорный, arg → жаргон, vulg → грубый мат where needed. It translates the sentence, not the word.
+- If no new natural sentence is possible (the word is too narrow, or every reasonable use is already taken), return null for both fields rather than repeating one.
+
+${SLANG_RUBRIC}
+
+EXAMPLES.
+Card la thune «бабки» with existing "J'ai plus une thune." → example_fr "Il se fait une thune de ouf avec ses vidéos.", example_ru "Он зашибает кучу бабок на своих видео."
+Card se casser «свалить» with existing "Bon, je me casse." → example_fr "On se casse avant que les keufs débarquent.", example_ru "Валим, пока менты не нагрянули."
+Card une blague «шутка» with existing "C'est une blague ?" → example_fr "Il raconte toujours la même blague à chaque dîner.", example_ru "Он на каждом ужине рассказывает одну и ту же шутку."
+Card chelou «стрёмный» with existing "Il est chelou, ton pote." and "C'est chelou, ce bruit." → example_fr "J'ai reçu un message chelou d'un numéro inconnu.", example_ru "Мне пришло стрёмное сообщение с незнакомого номера."`;
+
+export function exampleUserPrompt(input: { fr: string; ru: string; note: string | null; avoid: readonly string[] }): string {
+  const existing = input.avoid.length ? input.avoid.map((e) => `- ${oneLine(e)}`).join("\n") : "(none)";
+  return `French: ${oneLine(input.fr)}\nRussian: ${oneLine(input.ru)}\nNote: ${input.note ? oneLine(input.note) : "-"}\n\nExamples it already has:\n${existing}`;
+}
 
 function folderLines(folders: readonly FolderInput[]): string {
   if (folders.length === 0) return "(no themes yet: use INBOX or NEW)";
@@ -155,15 +181,41 @@ function folderLines(folders: readonly FolderInput[]): string {
 
 const oneLine = (s: string) => s.replace(/[\r\n\t]+/g, " ").trim();
 
-export function suggestUserPrompt(input: { q: string; direction: "fr" | "ru"; folders: readonly FolderInput[] }): string {
-  const lang = input.direction === "ru" ? "Russian (suggest French equivalents)" : "French (complete or correct it)";
-  return `Themes:\n${folderLines(input.folders)}\n\nInput language: ${lang}\nTyped so far: <input>${oneLine(input.q)}</input>`;
+const REGISTER_PREFERENCE: Record<SuggestRegister, string | null> = {
+  any: null,
+  slang:
+    "Register preference: the learner wants spoken French. Put argot and familier words first; give the neutral word only when there is no spoken one.",
+  neutral: "Register preference: the learner wants standard French first. Put the neutral word first; familier or argot words only after it.",
+};
+
+const NO_NOTES = "Notes: the learner switched notes off. note is always null.";
+
+/** Learner preferences from Settings, as extra lines of the user message (the system prompt stays frozen). */
+function preferenceLines(input: { max?: number; register?: SuggestRegister; notes?: boolean }): string {
+  const lines: string[] = [];
+  if (input.max !== undefined && input.max < 3) lines.push(`Return at most ${input.max} suggestion${input.max === 1 ? "" : "s"}.`);
+  const register = input.register ? REGISTER_PREFERENCE[input.register] : null;
+  if (register) lines.push(register);
+  if (input.notes === false) lines.push(NO_NOTES);
+  return lines.length ? `\n\n${lines.join("\n")}` : "";
 }
 
-export function extractUserPrompt(input: { imageCount: number; folders: readonly FolderInput[] }): string {
+export function suggestUserPrompt(input: {
+  q: string;
+  direction: "fr" | "ru";
+  folders: readonly FolderInput[];
+  max?: number;
+  register?: SuggestRegister;
+  notes?: boolean;
+}): string {
+  const lang = input.direction === "ru" ? "Russian (suggest French equivalents)" : "French (complete or correct it)";
+  return `Themes:\n${folderLines(input.folders)}\n\nInput language: ${lang}\nTyped so far: <input>${oneLine(input.q)}</input>${preferenceLines(input)}`;
+}
+
+export function extractUserPrompt(input: { imageCount: number; folders: readonly FolderInput[]; notes?: boolean }): string {
   const images =
     input.imageCount === 1 ? "1 image" : `${input.imageCount} images (they may be consecutive tiles of one screenshot, top to bottom)`;
-  return `Themes:\n${folderLines(input.folders)}\n\nAttached: ${images}. Extract the French vocabulary.`;
+  return `Themes:\n${folderLines(input.folders)}\n\nAttached: ${images}. Extract the French vocabulary.${preferenceLines({ notes: input.notes })}`;
 }
 
 export function taxonomyUserPrompt(input: {
@@ -183,11 +235,16 @@ export function taxonomyUserPrompt(input: {
   return `Current folders:\n${folders}\n\nWords (${input.words.length}):\n${words}`;
 }
 
-export function enrichUserPrompt(input: { words: readonly { ref: string; fr: string; ru: string; note: string | null }[] }): string {
+export function enrichUserPrompt(input: {
+  words: readonly { ref: string; fr: string; ru: string; note: string | null }[];
+  /** The learner's themes when a theme pick is wanted. */
+  folders?: readonly FolderInput[];
+}): string {
   const words = input.words
     .map((w) => `${w.ref}\t${oneLine(w.fr)}\t${oneLine(w.ru)}\t${w.note ? oneLine(w.note) : ""}`)
     .join("\n");
-  return `Cards (${input.words.length}):\n${words}`;
+  const themes = input.folders ? `Themes:\n${folderLines(input.folders)}\n\n` : "";
+  return `${themes}Cards (${input.words.length}):\n${words}`;
 }
 
 export function assignUserPrompt(input: {
@@ -217,4 +274,5 @@ export const SYSTEM_PROMPTS = {
   taxonomy: TAXONOMY_SYSTEM,
   assign: ASSIGN_SYSTEM,
   enrich: ENRICH_SYSTEM,
+  example: EXAMPLE_SYSTEM,
 } as const;

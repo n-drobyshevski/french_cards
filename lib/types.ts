@@ -29,12 +29,21 @@ export interface Folder extends Syncable {
   sort: number;
 }
 
+/** One example sentence and its translation. */
+export interface WordExample {
+  fr: string;
+  ru: string | null;
+}
+
 export interface Word extends Syncable {
   fr: string;
   ru: string;
   note: string | null;
+  /** The first example (also on the review card's answer side). */
   example_fr: string | null;
   example_ru: string | null;
+  /** Further examples after the first («+ Ещё пример»). Missing on rows written before them. */
+  extra_examples?: WordExample[];
   pos: PartOfSpeech;
   gender: Gender;
   slang_level: SlangLevel;
@@ -110,15 +119,56 @@ export interface Settings {
   /** Vibrate on card swipes (Android; system haptic on iOS 18+). */
   haptics: boolean;
   theme: "system" | "light" | "dark";
+  /** «Подсказки при вводе»: the «Варианты» list in the add sheet. */
   suggestions_enabled: boolean;
+  /** Detect the slang level (and verlan) of new words. */
+  slang_detect_enabled: boolean;
+  /** Add an example sentence to new words. */
+  examples_enabled: boolean;
   auto_sort_enabled: boolean;
   /** Single-key shortcuts on desktop (N, /, ?, G…, [, library J/K/X/M…). Off for screen-reader users (WCAG 2.1.4). */
   shortcuts: boolean;
   /** Desktop review: the hint line of keys under the card («Пробел вопрос · Z отменить»). */
   key_hints: boolean;
+  /** How many «Варианты» to show (1–3). */
+  suggest_count: 1 | 2 | 3;
+  /** Which register «Варианты» put first. */
+  suggest_register: "slang" | "any" | "neutral";
+  /** Short usage notes in suggestions and screenshot rows. */
+  notes_enabled: boolean;
+  /** Model for suggestions, slang level, examples and themes: fast = Haiku, accurate = Sonnet. */
+  ai_model: "fast" | "accurate";
+  /** Model for screenshots. */
+  ai_model_extract: "fast" | "accurate";
+  /** Библиотека opens on the theme tiles or on the list of all words. */
+  library_view: "themes" | "words";
+  /**
+   * «Мои наборы» as the first version kept them, device-local. Moved into the synced
+   * `review_sets` table on upgrade (lib/db.ts) and in old backups; not written any more.
+   */
+  review_sets?: unknown[];
   last_sync_at: string | null;
   /** Pull cursors per synced table: the server `synced_at` of the last row received. Owned by lib/sync.ts. */
   sync_cursors?: Partial<Record<SyncTable, string>>;
+}
+
+/** A word's learning status, as lib/scheduler `wordStatus` reports it. */
+export type ReviewSetStatus = "new" | "learning" | "difficult" | "known";
+
+/** «Мои наборы»: a named card set for Повторение, built from filters (lib/review-sets.ts). Synced. */
+export interface ReviewSet extends Syncable {
+  name: string;
+  /** Folder ids, "inbox" for «Входящие». Empty = every theme. */
+  folders: string[];
+  /** Word statuses. Empty = any. */
+  statuses: ReviewSetStatus[];
+  /** Slang levels and "verl" (OR-ed levels; "verl" also requires a verlan word). Empty = any. */
+  slang: (SlangLevel | "verl")[];
+  /** Words added in the last week or month, or any time. */
+  added: "all" | "week" | "month";
+  /** schedule: only cards that are due, graded as usual. practice: every card, the schedule untouched. */
+  mode: "schedule" | "practice";
+  created_at: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -130,11 +180,19 @@ export const DEFAULT_SETTINGS: Settings = {
   haptics: true,
   theme: "system",
   suggestions_enabled: true,
+  slang_detect_enabled: true,
+  examples_enabled: true,
   auto_sort_enabled: true,
   shortcuts: true,
   key_hints: true,
+  suggest_count: 3,
+  suggest_register: "any",
+  notes_enabled: true,
+  ai_model: "fast",
+  ai_model_extract: "fast",
+  library_view: "themes",
   last_sync_at: null,
 };
 
-export const SYNC_TABLES = ["folders", "words", "review_state", "review_log", "reorg_runs"] as const;
+export const SYNC_TABLES = ["folders", "words", "review_state", "review_log", "reorg_runs", "review_sets"] as const;
 export type SyncTable = (typeof SYNC_TABLES)[number];

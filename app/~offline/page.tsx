@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { OfflineRetry } from "@/components/pwa/OfflineRetry";
 import { AppMark } from "@/components/ui/AppMark";
-import { buttonClasses } from "@/components/ui/Button";
+import { buttonClasses } from "@/components/ui/button-classes";
 import { Icon } from "@/components/ui/Icons";
 import { APP_NAME } from "@/lib/brand";
 
@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 // Precached by the service worker and shown when a page that was never opened is requested offline.
 export default function OfflinePage() {
   return (
-    <main className="mx-auto flex w-full max-w-[440px] flex-1 flex-col px-4 pt-[calc(16px+env(safe-area-inset-top))] pb-[calc(16px+env(safe-area-inset-bottom))]">
+    <main className="mx-auto flex w-full max-w-[440px] flex-1 flex-col px-4 md:max-h-[720px] md:max-w-[560px] md:justify-center pt-[calc(16px+env(safe-area-inset-top))] pb-[calc(16px+env(safe-area-inset-bottom))]">
       <header className="flex h-11 shrink-0 items-center">
         <AppMark />
       </header>
@@ -33,7 +33,7 @@ export default function OfflinePage() {
             loc. adj.
           </p>
           <h1 id="offline-title" className="mt-6 mb-0 text-[17px] leading-6 font-medium text-ink">
-            Эта страница ещё не сохранена на телефоне
+            Эта страница ещё не сохранена на устройстве
           </h1>
           <p className="mt-2 mb-0 text-[15px] leading-[22px] text-muted">
             Повторение и библиотека работают без интернета, если уже открывались на этом устройстве. Слова,

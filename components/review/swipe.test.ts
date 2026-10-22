@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   FLICK_MIN_DISTANCE,
+  FLY_MAX_MS,
+  FLY_MIN_MS,
+  flyOut,
   IDLE_SWIPE,
   MAX_ROTATION,
+  STAMP_RAMP,
+  STAMP_START,
   SWIPE_SLOP,
+  stackPose,
   swipeDecision,
   swipeReducer,
   swipeVelocity,
@@ -124,15 +130,38 @@ describe("swipeReducer", () => {
 });
 
 describe("swipeVisual", () => {
-  it("tilts with the drag and clamps", () => {
+  it("tilts with the drag and caps at 8°", () => {
     expect(swipeVisual(70, W).rotate).toBeCloseTo((70 / W) * 30);
+    expect(MAX_ROTATION).toBe(8);
     expect(swipeVisual(10_000, W).rotate).toBe(MAX_ROTATION);
     expect(swipeVisual(-10_000, W).rotate).toBe(-MAX_ROTATION);
   });
 
-  it("fades the stamp in up to the threshold", () => {
-    expect(swipeVisual(W / 6, W)).toMatchObject({ progress: 0.5, side: "good" });
-    expect(swipeVisual(-W, W)).toMatchObject({ progress: 1, side: "again" });
-    expect(swipeVisual(0, W)).toEqual({ rotate: 0, progress: 0, side: null });
+  it("ramps the stamp from 16 px to .6 just before the threshold, then locks it at 1", () => {
+    expect(swipeVisual(STAMP_START, W)).toMatchObject({ stamp: 0, locked: false, side: "good" });
+    expect(swipeVisual(W / 6, W)).toMatchObject({ progress: 0.5, side: "good", locked: false });
+    expect(swipeVisual(W / 3 - 0.5, W).stamp).toBeCloseTo(STAMP_RAMP, 2);
+    expect(swipeVisual(W / 3 - 0.5, W).stamp).toBeLessThanOrEqual(STAMP_RAMP);
+    expect(swipeVisual(-W / 3, W)).toMatchObject({ progress: 1, side: "again", locked: true, stamp: 1 });
+    expect(swipeVisual(0, W)).toEqual({ rotate: 0, progress: 0, side: null, locked: false, stamp: 0 });
+  });
+});
+
+describe("stackPose", () => {
+  it("grows the card behind from .96 / 8 px to .99 / 2 px at the threshold", () => {
+    expect(stackPose(0)).toEqual({ scale: 0.96, y: 8 });
+    expect(stackPose(1).scale).toBeCloseTo(0.99);
+    expect(stackPose(1).y).toBeCloseTo(2);
+    expect(stackPose(5)).toEqual(stackPose(1));
+  });
+});
+
+describe("flyOut", () => {
+  it("leaves to 1.2 × width at the release velocity, within 120–220 ms", () => {
+    expect(flyOut(150, W, 4)).toEqual({ to: W * 1.2, ms: FLY_MIN_MS });
+    expect(flyOut(150, W, 0)).toEqual({ to: W * 1.2, ms: FLY_MAX_MS });
+    expect(flyOut(-150, W, -1.5)).toEqual({ to: -W * 1.2, ms: Math.round((W * 1.2 - 150) / 1.5) });
+    // A flick against the drag counts as no speed.
+    expect(flyOut(-150, W, 3).ms).toBe(FLY_MAX_MS);
   });
 });

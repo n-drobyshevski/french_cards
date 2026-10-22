@@ -118,6 +118,7 @@ function wordView(w: Word, ctx: ViewContext) {
     note: w.note,
     example_fr: w.example_fr,
     example_ru: w.example_ru,
+    extra_examples: w.extra_examples,
     pos: w.pos,
     gender: w.gender,
     slang_level: w.slang_level,

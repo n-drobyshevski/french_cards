@@ -226,9 +226,42 @@ describe("SuggestController", () => {
     expect(calls).toHaveLength(0);
     vi.advanceTimersByTime(1);
     expect(calls).toHaveLength(1);
-    expect(calls[0].body).toEqual({ q: "se cas", direction: "auto", folders: [{ slug: "dengi", name: "Деньги", description: null }] });
+    expect(calls[0].body).toEqual({
+      q: "se cas",
+      direction: "auto",
+      folders: [{ slug: "dengi", name: "Деньги", description: null }],
+      model: "fast",
+      max: 3,
+      register: "any",
+      notes: true,
+    });
     await vi.waitFor(() => expect(c.getSnapshot().status).toBe("done"));
     expect(c.getSnapshot().results).toEqual([CASSER]);
+  });
+
+  it("marks only the request itself as requesting, not the debounce", async () => {
+    const { c } = setup(() => streamed([CASSER]));
+    c.setQuery("se cas");
+    expect(c.getSnapshot()).toMatchObject({ status: "loading", requesting: false });
+    vi.advanceTimersByTime(300);
+    expect(c.getSnapshot()).toMatchObject({ status: "loading", requesting: true });
+    await vi.waitFor(() => expect(c.getSnapshot().status).toBe("done"));
+    expect(c.getSnapshot().requesting).toBe(false);
+  });
+
+  it("new settings preferences ask again and cap the rows shown", async () => {
+    const { c, calls } = setup(() => streamed([CASSER, sug("se casser la tête", "ломать голову")]));
+    c.setQuery("se cas", { immediate: true });
+    await vi.waitFor(() => expect(c.getSnapshot().status).toBe("done"));
+    expect(c.getSnapshot().results).toHaveLength(2);
+    c.setPreferences({ model: "accurate", max: 1, register: "slang", notes: false });
+    expect(calls).toHaveLength(2);
+    expect(calls[1].body).toMatchObject({ model: "accurate", max: 1, register: "slang", notes: false });
+    await vi.waitFor(() => expect(c.getSnapshot().status).toBe("done"));
+    expect(c.getSnapshot().results).toEqual([CASSER]);
+    // Same preferences again: nothing to do.
+    c.setPreferences({ model: "accurate", max: 1, register: "slang", notes: false });
+    expect(calls).toHaveLength(2);
   });
 
   it("aborts the request in flight on the next keystroke", async () => {
@@ -331,6 +364,37 @@ describe("SuggestController", () => {
     c.retry();
     expect(fetchImpl).toHaveBeenCalledTimes(1);
     await vi.waitFor(() => expect(c.getSnapshot().status).toBe("done"));
+  });
+
+  it("decides offline before the wait: going offline during the debounce or the request shows the notice at once", async () => {
+    let online = true;
+    const held: AbortSignal[] = [];
+    const fetchImpl = vi.fn(
+      (_url: string | URL | Request, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          held.push(init!.signal!);
+          init!.signal!.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")));
+        }),
+    );
+    const c = new SuggestController({ fetch: fetchImpl as unknown as typeof fetch, isOnline: () => online });
+    // Lost during the debounce: no request, the notice instead of a wait.
+    c.setQuery("thune");
+    online = false;
+    vi.advanceTimersByTime(300);
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(c.getSnapshot()).toMatchObject({ status: "error", error: "offline", requesting: false });
+
+    // Lost while the request is in flight (the window's `offline` event): aborted, notice at once.
+    online = true;
+    c.retry();
+    expect(c.getSnapshot()).toMatchObject({ status: "loading", requesting: true });
+    online = false;
+    c.goOffline();
+    expect(held[0].aborted).toBe(true);
+    expect(c.getSnapshot()).toMatchObject({ status: "error", error: "offline" });
+    // Not waiting: nothing to turn into a notice.
+    c.goOffline();
+    expect(c.getSnapshot().error).toBe("offline");
   });
 
   it("does nothing while disabled and picks the query up when enabled", async () => {

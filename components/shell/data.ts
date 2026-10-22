@@ -1,7 +1,6 @@
 // Data for the desktop sidebar and rail: counts, themes with guide words, the active item and the
 // sync line. Pure builders are unit-tested; loadShellData runs inside useLiveQuery.
-import type { SyncLineInput } from "@/components/settings/format";
-import { syncLine } from "@/components/settings/format";
+import type { SyncLine, SyncLineInput } from "@/components/settings/format";
 import { db } from "@/lib/db";
 import { getLibraryStats, type LibraryStats } from "@/lib/folders";
 import { compareFr } from "@/lib/text";
@@ -108,19 +107,18 @@ export function resolveNavKey(key: NavKey | null, themes: readonly Pick<ShellThe
 }
 
 export interface SidebarSyncLine {
-  /** «Синхронизация · только что» */
+  /** «Синхронизировано · 14:02», «Не синхронизировано · Повторить» */
   text: string;
-  /** A 6px dot before the text, only for «нет сети» (muted) and «ошибка» (again). */
+  /** A 6px dot before the text, only for «нет сети» (muted) and a failure (again). */
   dot: "muted" | "again" | null;
+  /** Why it failed, «Сервер не ответил · 14:05» (the tooltip). */
+  detail: string | null;
   canSync: boolean;
 }
 
-/** Sidebar sync status (Settings › Синхронизация without the account); null when sync is off. */
-export function sidebarSyncLine(input: SyncLineInput): SidebarSyncLine | null {
-  const { auth, sync } = input;
-  if (auth.status === "local" || auth.status === "loading" || auth.status === "signed_out") return null;
-  if (sync.state === "syncing") return { text: "Синхронизация…", dot: null, canSync: false };
-  const line = syncLine({ ...input, auth: { ...auth, email: null } });
-  const dot = line.text === "нет сети" ? "muted" : line.tone === "again" ? "again" : null;
-  return { text: `Синхронизация · ${line.text}`, dot, canSync: line.canSync };
+/** Sidebar sync status (Settings › Синхронизация, MOTION-SPEC T5 / D9); null when sync is off. */
+export function sidebarSyncLine(auth: SyncLineInput["auth"]["status"], line: SyncLine): SidebarSyncLine | null {
+  if (auth === "local" || auth === "loading" || auth === "signed_out") return null;
+  const dot = line.tone === "again" ? "again" : line.text.startsWith("Нет сети") ? "muted" : null;
+  return { text: line.retry ? `${line.text} · Повторить` : line.text, dot, detail: line.detail, canSync: line.canSync };
 }

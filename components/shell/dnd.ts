@@ -1,8 +1,12 @@
 // Dragging words onto a theme (desktop): rows set the payload with setDraggedWords(); sidebar and
 // rail theme rows (and «Входящие») accept it via useThemeDrop(), move the words and show an undo
 // snackbar. Drop targets light up while a drag is in progress (DESKTOP-SPEC §3 drag tokens).
+// Motion (MOTION-SPEC D8, §5.11): the dragged rows dim to .5 (useIsDragged); on a drop the target row
+// gets the spotlight while its count swaps, and rows that leave a filtered table close (markLeaving).
 import { useCallback, useState, useSyncExternalStore, type DragEvent } from "react";
+import { markLeaving, markReturning } from "@/components/library/leaving";
 import { useSnackbar } from "@/components/ui/Snackbar";
+import { spotlight } from "@/lib/motion";
 import { moveWords, restoreMoves } from "@/lib/words";
 
 /** DataTransfer type for dragged words: a JSON array of word ids. */
@@ -14,6 +18,7 @@ interface DragTransferLike {
 }
 
 let draggedCount = 0;
+let draggedIds: ReadonlySet<string> = new Set();
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach((l) => l());
 
@@ -22,6 +27,7 @@ function endDrag() {
   window.removeEventListener("drop", endDragSoon, true);
   if (draggedCount === 0) return;
   draggedCount = 0;
+  draggedIds = new Set();
   notify();
 }
 
@@ -38,6 +44,7 @@ export function setDraggedWords(dataTransfer: DataTransfer, ids: readonly string
   dataTransfer.setData(WORDS_MIME, JSON.stringify(ids));
   dataTransfer.effectAllowed = "move";
   draggedCount = ids.length;
+  draggedIds = new Set(ids);
   notify();
   window.addEventListener("dragend", endDrag, true);
   window.addEventListener("drop", endDragSoon, true);
@@ -72,6 +79,27 @@ export function useDraggedWordCount(): number {
     subscribe,
     () => draggedCount,
     () => 0,
+  );
+}
+
+/**
+ * Lights the sidebar / rail row of a theme (null = «Входящие») after words were moved there by
+ * other means than a drop (the move menu, L10); nothing when the nav column is not shown.
+ */
+export function spotlightTheme(id: string | null): void {
+  if (typeof document === "undefined") return;
+  const key = id ?? "inbox";
+  for (const el of document.querySelectorAll<HTMLElement>("[data-theme-target]")) {
+    if (el.dataset.themeTarget === key && el.offsetParent !== null) spotlight(el.querySelector("[data-drop-light]"));
+  }
+}
+
+/** True while this word is being dragged in this tab (its row dims to .5). */
+export function useIsDragged(id: string): boolean {
+  return useSyncExternalStore(
+    subscribe,
+    () => draggedIds.has(id),
+    () => false,
   );
 }
 
@@ -117,13 +145,21 @@ export function useThemeDrop(target: ThemeDropTarget): ThemeDrop {
       const ids = readDraggedWords(event.dataTransfer);
       if (!ids) return;
       event.preventDefault();
+      const target = event.currentTarget;
+      markLeaving(ids);
       void moveWords(ids, id)
         .then((records) => {
           if (records.length === 0) return;
+          // The theme acknowledges the drop: a paper fade while its count swaps. On the target's
+          // DropLight (React re-sets the target's own classes as the drag ends).
+          spotlight(target.querySelector("[data-drop-light]") ?? target);
           snackbar.show({
             message: `Перемещено в «${name}»`,
             actionLabel: "Отменить",
-            onAction: () => void restoreMoves(records),
+            onAction: () => {
+              markReturning(records.map((r) => r.word_id));
+              void restoreMoves(records);
+            },
           });
         })
         .catch((error: unknown) => {

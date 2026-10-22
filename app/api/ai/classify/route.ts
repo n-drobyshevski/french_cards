@@ -35,7 +35,7 @@ export async function POST(req: Request): Promise<Response> {
   try {
     if (input.mode === "taxonomy") {
       const { output } = await generateText({
-        model: modelFor("classify"),
+        model: modelFor("classify", input.model),
         instructions: cachedInstructions(TAXONOMY_SYSTEM),
         prompt: taxonomyUserPrompt({
           folders: input.folders,
@@ -53,7 +53,7 @@ export async function POST(req: Request): Promise<Response> {
     const slugs = input.folders.map((f) => f.slug);
     const known = new Set(slugs);
     const { output } = await generateText({
-      model: modelFor("classify"),
+      model: modelFor("classify", input.model),
       instructions: cachedInstructions(ASSIGN_SYSTEM),
       prompt: assignUserPrompt({
         folders: input.folders,

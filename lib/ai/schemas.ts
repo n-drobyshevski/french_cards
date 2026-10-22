@@ -19,6 +19,12 @@ export const PROVENANCE_VALUES = ["pair", "fr_only", "ru_only", "in_text"] as co
 export type Provenance = (typeof PROVENANCE_VALUES)[number];
 
 export const SUGGEST_MAX = 3;
+/** Settings «Модель»: fast = Haiku, accurate = Sonnet. */
+export const MODEL_TIERS = ["fast", "accurate"] as const;
+export type ModelTierInput = (typeof MODEL_TIERS)[number];
+/** Settings «Регистр вариантов»: slang first, a spread (default), or the neutral word first. */
+export const SUGGEST_REGISTERS = ["slang", "any", "neutral"] as const;
+export type SuggestRegister = (typeof SUGGEST_REGISTERS)[number];
 export const EXTRACT_MAX_ITEMS = 60;
 export const FOLDER_ALTERNATIVES_MAX = 2;
 export const TAXONOMY_MIN = 8;
@@ -147,29 +153,53 @@ export function buildAssignmentSchema(slugs: readonly string[]) {
 }
 export type AssignmentModel = z.infer<ReturnType<typeof buildAssignmentSchema>>;
 
-/** Slang level, part of speech and an example for cards the learner wrote themselves. */
-export function buildEnrichmentSchema() {
-  return z.object({
-    items: z
-      .array(
-        z.object({
-          ref: z.string().describe("The word ref from the input, e.g. w3."),
-          pos: posField(),
-          gender: genderField(),
-          slang_level: slangField(),
-          verlan: z.boolean().describe("True if the word is verlan (syllables inverted), e.g. keuf, meuf, relou, chelou, vénère."),
-          example_fr: z
-            .string()
-            .nullable()
-            .describe("One short natural French example sentence using the word in the sense of its Russian side, or null."),
-          example_ru: z.string().nullable().describe("Russian translation of example_fr in the same register, or null when example_fr is null."),
-          confidence: confidenceField(),
-        }),
-      )
-      .describe("Exactly one entry per input word, in input order."),
+/**
+ * Slang level, part of speech and an example for cards the learner wrote themselves; with
+ * `slugs` (the learner's themes) also a theme pick, as for suggestions.
+ */
+export function buildEnrichmentSchema(slugs: readonly string[] | null = null) {
+  const base = z.object({
+    ref: z.string().describe("The word ref from the input, e.g. w3."),
+    pos: posField(),
+    gender: genderField(),
+    slang_level: slangField(),
+    verlan: z.boolean().describe("True if the word is verlan (syllables inverted), e.g. keuf, meuf, relou, chelou, vénère."),
+    example_fr: z
+      .string()
+      .nullable()
+      .describe("One short natural French example sentence using the word in the sense of its Russian side, or null."),
+    example_ru: z.string().nullable().describe("Russian translation of example_fr in the same register, or null when example_fr is null."),
+    confidence: confidenceField(),
   });
+  let item: z.ZodType = base;
+  if (slugs !== null) {
+    const folder = folderEnum(slugs);
+    item = base.extend({
+      folder: folder.describe("Best theme slug from the list; NEW when new_folder fits better than every existing theme; INBOX when unsure."),
+      folder_alternatives: z.array(folder).describe("Up to 2 other plausible theme slugs from the list, best first. Never repeats folder."),
+      new_folder: newFolderShape(),
+    });
+  }
+  return z.object({ items: z.array(item).describe("Exactly one entry per input word, in input order.") });
 }
-export type EnrichmentModel = z.infer<ReturnType<typeof buildEnrichmentSchema>>;
+
+export interface EnrichmentItemModel {
+  ref: string;
+  pos: PartOfSpeech;
+  gender: Gender;
+  slang_level: SlangCode;
+  verlan: boolean;
+  example_fr: string | null;
+  example_ru: string | null;
+  confidence: Confidence;
+  /** Only when themes were sent. */
+  folder?: string;
+  folder_alternatives?: string[];
+  new_folder?: { slug: string; name: string; description: string } | null;
+}
+export interface EnrichmentModel {
+  items: EnrichmentItemModel[];
+}
 
 // ---------------------------------------------------------------------------------------
 // Request schemas (validated on the server only; never sent to the model, so bounds are fine)
@@ -198,6 +228,12 @@ export const SuggestRequestSchema = z.object({
     .pipe(z.string().min(1).max(80)),
   direction: z.enum(["auto", "fr", "ru"]).default("auto"),
   folders: foldersInput(60).default([]),
+  model: z.enum(MODEL_TIERS).default("fast"),
+  /** How many suggestions to return (1–3). */
+  max: z.number().int().min(1).max(SUGGEST_MAX).default(SUGGEST_MAX),
+  register: z.enum(SUGGEST_REGISTERS).default("any"),
+  /** false: no usage notes. */
+  notes: z.boolean().default(true),
 });
 export type SuggestRequest = z.input<typeof SuggestRequestSchema>;
 
@@ -213,6 +249,7 @@ export type TaxonomyFolderInput = z.infer<typeof TaxonomyFolderInputSchema>;
 
 export const TaxonomyRequestSchema = z.object({
   mode: z.literal("taxonomy"),
+  model: z.enum(MODEL_TIERS).default("fast"),
   words: z
     .array(
       z.object({
@@ -233,6 +270,7 @@ export type TaxonomyRequest = z.input<typeof TaxonomyRequestSchema>;
 
 export const AssignRequestSchema = z.object({
   mode: z.literal("assign"),
+  model: z.enum(MODEL_TIERS).default("fast"),
   words: z
     .array(
       z.object({
@@ -254,6 +292,30 @@ export type AssignRequest = z.input<typeof AssignRequestSchema>;
 
 export const ClassifyRequestSchema = z.discriminatedUnion("mode", [TaxonomyRequestSchema, AssignRequestSchema]);
 
+/** How many existing examples the client may list for «другой пример» to avoid. */
+export const EXAMPLE_AVOID_MAX = 6;
+
+/** POST /api/ai/example: one more example for a card, unlike the ones it already has. */
+export const ExampleRequestSchema = z.object({
+  model: z.enum(MODEL_TIERS).default("fast"),
+  fr: shortText(120).min(1),
+  ru: shortText(160).min(1),
+  note: shortText(300).nullable().optional(),
+  avoid: z.array(shortText(300)).max(EXAMPLE_AVOID_MAX).default([]),
+});
+export type ExampleRequest = z.input<typeof ExampleRequestSchema>;
+
+export const ExampleModelSchema = z.object({
+  example_fr: z.string().nullable().describe("One short natural French sentence using the word in the given sense; null if none fits."),
+  example_ru: z.string().nullable().describe("Its Russian translation in the same register; null when example_fr is null."),
+});
+export type ExampleModel = z.infer<typeof ExampleModelSchema>;
+
+export interface ExampleResponse {
+  /** null when the model had nothing new to offer. */
+  example: { fr: string; ru: string | null } | null;
+}
+
 export const EnrichRequestSchema = z.object({
   words: z
     .array(
@@ -267,6 +329,9 @@ export const EnrichRequestSchema = z.object({
     .min(1)
     .max(ENRICH_CHUNK_MAX)
     .refine((list) => new Set(list.map((w) => w.id)).size === list.length, "duplicate word id"),
+  /** The learner's themes: when present, each result also gets a theme pick. */
+  folders: foldersInput(60).optional(),
+  model: z.enum(MODEL_TIERS).default("fast"),
 });
 export type EnrichRequest = z.input<typeof EnrichRequestSchema>;
 
@@ -364,6 +429,10 @@ export interface EnrichResult {
   example_fr: string | null;
   example_ru: string | null;
   confidence: Confidence;
+  /** Theme pick (slug, "NEW" with `new_folder`, or "INBOX"); null when no themes were sent. */
+  folder: string | null;
+  folder_alternatives: string[];
+  new_folder: NewFolderProposal | null;
 }
 
 export interface EnrichResponse {

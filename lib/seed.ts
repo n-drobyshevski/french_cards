@@ -267,12 +267,15 @@ export async function migrateLegacyStorage(
  * the default folders, adds the prototype words, migrates the old localStorage and finally
  * writes the default settings. The settings row is the "seeded" marker, so it is written last:
  * a run that is interrupted or fails part-way is retried on the next start (every step is
- * idempotent). Returns true if it seeded.
+ * idempotent). Returns true if it seeded. A failure is shown in the library with «Повторить» (B1),
+ * which calls this again.
  */
 export async function seedIfNeeded(
   storage?: Pick<Storage, "getItem" | "setItem">,
   now: Date = new Date(),
 ): Promise<boolean> {
+  // After a failed open the database stays closed; «Повторить» has to open it again.
+  if (!db.isOpen()) await db.open();
   if (await db.settings.get("settings")) return false;
   await ensureDefaultFolders(SEED_TIMESTAMP);
   await seedPrototypeWords();

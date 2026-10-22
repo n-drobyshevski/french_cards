@@ -3,18 +3,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { EnrichResult } from "./ai/schemas";
 import { ENRICH_CHUNK_MAX } from "./ai/schemas";
 import { db } from "./db";
+import { createFolder } from "./folders";
 import {
   applyEnrichChanges,
   buildEnrichPlan,
   countEnrichCandidates,
   EnrichError,
+  enrichFraction,
   enrichmentPatch,
   enrichWords,
+  type EnrichProgress,
   fillSavedWords,
+  folderPatch,
   loadEnrichCandidates,
   mergeChanges,
   planChanges,
   postEnrich,
+  runEnrichPlan,
   toEnrichWords,
 } from "./enrich";
 import { updateSettings } from "./settings";
@@ -32,6 +37,9 @@ function result(id: string, over: Partial<EnrichResult> = {}): EnrichResult {
     example_fr: `Exemple ${id}.`,
     example_ru: `Пример ${id}.`,
     confidence: "high",
+    folder: null,
+    folder_alternatives: [],
+    new_folder: null,
     ...over,
   };
 }
@@ -69,6 +77,27 @@ describe("network", () => {
     expect(out.size).toBe(words.length - 1);
     expect(out.has("w3")).toBe(false);
     expect(progress.at(-1)).toBe(words.length);
+  });
+
+  it("reports the opening 0 / n and every batch through onStage, keeping onProgress", async () => {
+    const fetchImpl = fakeFetch();
+    const words = Array.from({ length: ENRICH_CHUNK_MAX * 2 + 3 }, (_, i) => ({ id: `w${i}`, fr: `mot${i}`, ru: `слово${i}` }));
+    const stages: EnrichProgress[] = [];
+    const progress: [number, number][] = [];
+    await enrichWords(words, { fetchImpl, onStage: (p) => stages.push(p), onProgress: (d, t) => progress.push([d, t]) });
+    expect(stages[0]).toEqual({ words: words.length, wordsDone: 0, done: 0, total: 3, batch: [] });
+    expect(stages).toHaveLength(4);
+    expect(stages.slice(1).map((p) => p.done)).toEqual([1, 2, 3]);
+    expect(stages.at(-1)).toMatchObject({ wordsDone: words.length, done: 3, total: 3 });
+    // Each batch carries its own results; together they are every word once.
+    const ids = stages.flatMap((p) => p.batch.map((r) => r.id));
+    expect(new Set(ids).size).toBe(words.length);
+    // The bar only moves forward.
+    const fractions = stages.map(enrichFraction);
+    expect(fractions).toEqual([...fractions].sort((a, b) => a - b));
+    expect(fractions.at(-1)).toBe(1);
+    expect(progress.at(-1)).toEqual([words.length, words.length]);
+    expect(enrichFraction({ done: 0, total: 0 })).toBe(1);
   });
 
   it("retries after 429 and maps errors", async () => {
@@ -121,18 +150,65 @@ describe("fillSavedWords", () => {
     expect(await getWord(edited.id)).toMatchObject({ slang_level: 0, example_fr: null });
   });
 
-  it("does nothing with suggestions switched off", async () => {
-    await updateSettings({ suggestions_enabled: false });
+  it("follows Settings «ИИ»: only what is switched on, with the chosen model", async () => {
+    await updateSettings({ slang_detect_enabled: false, examples_enabled: false, auto_sort_enabled: false });
     const word = await addWord({ fr: "la caisse", ru: "тачка" }, NOW);
     const fetchImpl = fakeFetch();
-    expect(await fillSavedWords([{ word, scope: { slang: true, example: true, pos: true } }], { fetchImpl })).toBe(0);
+    const all = { slang: true, example: true, pos: true, folder: true };
+    expect(await fillSavedWords([{ word, scope: all }], { fetchImpl })).toBe(0);
     expect(fetchImpl).not.toHaveBeenCalled();
+
+    await updateSettings({ slang_detect_enabled: true, ai_model: "accurate" });
+    let body: Record<string, unknown> = {};
+    const spy = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return fakeFetch()(url, init);
+    });
+    expect(await fillSavedWords([{ word, scope: all }], { fetchImpl: spy })).toBe(1);
+    expect(body.model).toBe("accurate");
+    expect(body.folders).toBeUndefined();
+    expect(await getWord(word.id)).toMatchObject({ slang_level: 2, example_fr: null, folder_id: null });
   });
 
   it("keeps a level the user set in the form", async () => {
     const word = await addWord({ fr: "la caisse", ru: "тачка", slang_level: 3 }, NOW);
     await fillSavedWords([{ word, scope: { slang: false, example: true, pos: true } }], { fetchImpl: fakeFetch() });
     expect(await getWord(word.id)).toMatchObject({ slang_level: 3, example_fr: `Exemple ${word.id}.` });
+  });
+});
+
+describe("theme after saving", () => {
+  it("files an Inbox word into an existing theme, never a new or low-confidence one", () => {
+    const folders = [{ id: "f-den", slug: "dengi" }];
+    const inbox = { folder_id: null };
+    expect(folderPatch(inbox, result("a", { folder: "dengi", confidence: "med" }), folders)).toEqual({
+      folder_id: "f-den",
+      folder_source: "auto",
+      folder_confidence: "med",
+    });
+    expect(folderPatch(inbox, result("a", { folder: "dengi", confidence: "low" }), folders)).toEqual({});
+    expect(folderPatch(inbox, result("a", { folder: "NEW" }), folders)).toEqual({});
+    expect(folderPatch({ folder_id: "f-x" }, result("a", { folder: "dengi" }), folders)).toEqual({});
+  });
+
+  it("quick save: sends the themes and files the word when automatic sorting is on", async () => {
+    const dengi = await createFolder({ name: "Деньги" }, NOW);
+    const word = await addWord({ fr: "la thune", ru: "бабки" }, NOW);
+    let sentFolders: unknown;
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { words: { id: string }[]; folders?: { slug: string }[] };
+      sentFolders = body.folders;
+      return Response.json({ results: body.words.map((w) => result(w.id, { folder: dengi.slug })) });
+    });
+    await fillSavedWords([{ word, scope: { slang: true, example: true, pos: true, folder: true } }], { fetchImpl });
+    expect(sentFolders).toEqual([{ slug: dengi.slug, name: "Деньги", description: null }]);
+    expect(await getWord(word.id)).toMatchObject({ folder_id: dengi.id, folder_source: "auto", folder_confidence: "high", slang_level: 2 });
+
+    await updateSettings({ auto_sort_enabled: false });
+    const other = await addWord({ fr: "le fric", ru: "деньги" }, NOW);
+    await fillSavedWords([{ word: other, scope: { slang: true, example: true, pos: true, folder: true } }], { fetchImpl });
+    expect(sentFolders).toBeUndefined();
+    expect(await getWord(other.id)).toMatchObject({ folder_id: null, slang_level: 2 });
   });
 });
 
@@ -145,6 +221,41 @@ describe("«Дополнить карточки»", () => {
     expect(candidates.map((w) => w.id)).toEqual([noExample.id, manual.id]);
     expect(await countEnrichCandidates()).toEqual({ total: 2, noExample: 2 });
     expect(candidates.some((w) => w.id === suggested.id)).toBe(false);
+  });
+
+  it("proposes only what Settings «ИИ» allow", async () => {
+    const manual = await addWord({ fr: "la caisse", ru: "тачка", source: "manual" }, NOW);
+    const suggested = await addWord({ fr: "le keuf", ru: "мент", source: "suggest", slang_level: 2 }, NOW);
+    const onlySlang = { slang: true, examples: false };
+    expect((await loadEnrichCandidates(onlySlang)).map((w) => w.id)).toEqual([manual.id]);
+    expect(await countEnrichCandidates(onlySlang)).toEqual({ total: 1, noExample: 0 });
+    const results = new Map([[manual.id, result(manual.id)], [suggested.id, result(suggested.id)]]);
+    const plan = buildEnrichPlan([manual, suggested], results, onlySlang);
+    expect(plan.examples).toEqual([]);
+    expect(plan.slang.map((c) => c.word.id)).toEqual([manual.id]);
+    expect(await countEnrichCandidates({ slang: false, examples: false })).toEqual({ total: 0, noExample: 0 });
+  });
+
+  it("runEnrichPlan: candidates, batches through onStage, then the plan", async () => {
+    const manual = await addWord({ fr: "la caisse", ru: "тачка", source: "manual" }, NOW);
+    await addWord({ fr: "chelou", ru: "стрёмный", source: "suggest", slang_level: 2, example_fr: "Il est chelou." }, NOW);
+    const fetchImpl = fakeFetch((id) => result(id, { slang_level: 1 }));
+    const stages: EnrichProgress[] = [];
+    const run = await runEnrichPlan({ fetchImpl, model: "fast", prefs: { slang: true, examples: true }, onStage: (p) => stages.push(p) });
+    expect(stages.map((p) => [p.wordsDone, p.words, p.done, p.total])).toEqual([
+      [0, 1, 0, 1],
+      [1, 1, 1, 1],
+    ]);
+    expect(run.more).toBe(0);
+    expect(run.plan.examples.map((c) => c.word.id)).toEqual([manual.id]);
+    expect(run.plan.slang.map((c) => c.word.id)).toEqual([manual.id]);
+    expect(JSON.parse(String(fetchImpl.mock.calls[0][1]?.body))).toMatchObject({ model: "fast" });
+
+    // Nothing to look at: no request, an empty plan.
+    const none = vi.fn();
+    const empty = await runEnrichPlan({ fetchImpl: none, prefs: { slang: false, examples: false }, model: "fast" });
+    expect(none).not.toHaveBeenCalled();
+    expect(planChanges(empty.plan)).toEqual([]);
   });
 
   it("plans examples and levels, applies the picked ones and undoes them", async () => {

@@ -30,6 +30,12 @@ export function isAllowedEmail(email: string | null | undefined, allowList: stri
 /** Client-side hint only; the real check is ALLOWED_EMAIL on the server. Empty = no hint. */
 export const publicAllowedEmail = (): string => process.env.NEXT_PUBLIC_ALLOWED_EMAIL?.trim() ?? "";
 
+/** The login screen's starting address: the allow-list's only entry; none when it names several people. */
+export function prefillEmail(allowList: string): string {
+  const entries = allowList.split(",").map((e) => e.trim()).filter(Boolean);
+  return entries.length === 1 ? entries[0] : "";
+}
+
 export type AiAccess = { ok: true } | { ok: false; status: 401 | 403; error: string };
 
 /**

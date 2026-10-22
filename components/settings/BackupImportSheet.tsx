@@ -45,7 +45,7 @@ export function BackupImportSheet({ open, onOpenChange, preview, busy, onConfirm
             <Button variant="secondary" block disabled={busy} onClick={() => onOpenChange(false)}>
               Отмена
             </Button>
-            <Button block loading={busy} disabled={!preview} onClick={onConfirm}>
+            <Button block pending={busy} pendingLabel="Импортируем…" disabled={!preview} onClick={onConfirm}>
               Импортировать
             </Button>
           </div>

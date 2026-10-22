@@ -18,7 +18,7 @@ export interface ChipProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   children?: ReactNode;
 }
 
-/** 30px filter/choice chip, radius 4, with a 44px tall hit area. */
+/** 30px filter/choice chip, radius 4, with a 44px tall hit area. Press .96; the ink fill crossfades over --dur-quick. */
 export function Chip({
   selected,
   count,
@@ -47,7 +47,7 @@ export function Chip({
       role={role}
       {...state}
       className={cx(
-        "relative inline-flex h-[30px] shrink-0 items-center gap-1 whitespace-nowrap rounded-chip border px-2.5 text-[13px] leading-4",
+        "press-sm relative inline-flex h-[30px] shrink-0 items-center gap-1 whitespace-nowrap rounded-chip border px-2.5 text-[13px] leading-4",
         "before:absolute before:-inset-y-[8px] before:inset-x-0 before:content-['']",
         "disabled:opacity-40",
         selected ? "border-ink bg-ink font-medium text-on-ink" : "bg-surface text-ink active:bg-surface-2",

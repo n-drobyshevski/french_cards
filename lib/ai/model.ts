@@ -1,14 +1,20 @@
-// Model selection for /api/ai/*. Haiku 5.5 with thinking disabled everywhere; screenshots can
+// Model selection for /api/ai/*. Haiku 5.5 with thinking disabled by default; the learner can pick
+// «Точнее» (Sonnet 5.5) in Settings, sent as `model: "accurate"`. Screenshots on «Быстрее» can still
 // be switched to a stronger model with AI_MODEL_EXTRACT (e.g. claude-sonnet-5-5) without a deploy.
 // Never set temperature/top_p/top_k here and never prefill: the model rejects both.
 import { anthropic, createAnthropic, type AnthropicLanguageModelOptions, type AnthropicProvider } from "@ai-sdk/anthropic";
 import type { SystemModelMessage } from "ai";
 
 export const DEFAULT_MODEL_ID = "claude-haiku-5-5";
+/** Settings «Модель» → «Точнее». */
+export const ACCURATE_MODEL_ID = "claude-sonnet-5-5";
 
-export type AiTask = "suggest" | "extract" | "classify" | "enrich";
+export type AiTask = "suggest" | "extract" | "classify" | "enrich" | "example";
+/** What the client may ask for; never a raw model id. */
+export type ModelTier = "fast" | "accurate";
 
-export function modelIdFor(task: AiTask): string {
+export function modelIdFor(task: AiTask, tier: ModelTier = "fast"): string {
+  if (tier === "accurate") return ACCURATE_MODEL_ID;
   if (task === "extract") return process.env.AI_MODEL_EXTRACT?.trim() || DEFAULT_MODEL_ID;
   return DEFAULT_MODEL_ID;
 }
@@ -30,8 +36,8 @@ export function providerFor(env: AiEnv = process.env): AnthropicProvider {
   return tokenProvider.provider;
 }
 
-export function modelFor(task: AiTask) {
-  return providerFor()(modelIdFor(task));
+export function modelFor(task: AiTask, tier: ModelTier = "fast") {
+  return providerFor()(modelIdFor(task, tier));
 }
 
 /** Provider options for every call. Models that cannot disable thinking get it adjusted by the provider (with a warning). */

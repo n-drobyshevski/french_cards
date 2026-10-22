@@ -266,15 +266,33 @@ export interface SyncStatus {
   lastSyncAt: string | null;
   /** Short technical reason for `error` (not user copy). */
   error: string | null;
+  /** What failed last, for the line's second row («Сервер не ответил · 14:05»); null after a good cycle. */
+  errorKind: "server" | "auth" | "rejected" | null;
+  /** Client time of that failure. */
+  errorAt: string | null;
 }
 
-const SERVER_STATUS: SyncStatus = { state: "disabled", lastSyncAt: null, error: null };
-let status: SyncStatus = { state: isSupabaseConfigured() ? "idle" : "disabled", lastSyncAt: null, error: null };
+const SERVER_STATUS: SyncStatus = { state: "disabled", lastSyncAt: null, error: null, errorKind: null, errorAt: null };
+let status: SyncStatus = {
+  state: isSupabaseConfigured() ? "idle" : "disabled",
+  lastSyncAt: null,
+  error: null,
+  errorKind: null,
+  errorAt: null,
+};
 const listeners = new Set<() => void>();
 
 function setStatus(patch: Partial<SyncStatus>): void {
   const next = { ...status, ...patch };
-  if (next.state === status.state && next.lastSyncAt === status.lastSyncAt && next.error === status.error) return;
+  if (
+    next.state === status.state &&
+    next.lastSyncAt === status.lastSyncAt &&
+    next.error === status.error &&
+    next.errorKind === status.errorKind &&
+    next.errorAt === status.errorAt
+  ) {
+    return;
+  }
   status = next;
   for (const listener of listeners) listener();
 }
@@ -342,12 +360,22 @@ async function cycle(): Promise<SyncResult> {
     const result = await runSyncCycle(client);
     failures = 0;
     const state: SyncState = result.rejected > 0 ? "error" : "idle";
-    setStatus({ state, lastSyncAt: result.lastSyncAt, error: result.lastRejection });
+    setStatus({
+      state,
+      lastSyncAt: result.lastSyncAt,
+      error: result.lastRejection,
+      errorKind: state === "error" ? "rejected" : null,
+      errorAt: state === "error" ? nowIso() : null,
+    });
     return { ok: result.rejected === 0, state, pushed: result.pushed, pulled: result.pulled, rejected: result.rejected };
   } catch (err) {
     const offline = isOffline() || (err instanceof SyncAbort && err.kind === "offline");
     const state: SyncState = offline ? "offline" : "error";
-    setStatus({ state, error: err instanceof Error ? err.message : String(err) });
+    setStatus({
+      state,
+      error: err instanceof Error ? err.message : String(err),
+      ...(offline ? {} : { errorKind: err instanceof SyncAbort && err.kind === "auth" ? "auth" : "server", errorAt: nowIso() }),
+    });
     scheduleRetry();
     return { ok: false, state, ...empty };
   }

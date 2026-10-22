@@ -14,7 +14,8 @@ export interface SegmentedOption<T extends string | number> {
 
 export interface SegmentedProps<T extends string | number> {
   options: readonly SegmentedOption<T>[];
-  value: T;
+  /** null: nothing selected yet (e.g. a slang level still being detected); the first segment takes focus. */
+  value: T | null;
   onChange: (value: T) => void;
   /** Accessible group name (or use ariaLabelledby). */
   ariaLabel?: string;
@@ -44,10 +45,13 @@ export function Segmented<T extends string | number>({
   className,
 }: SegmentedProps<T>) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
-  const selectedIndex = Math.max(
-    0,
-    options.findIndex((o) => o.value === value),
-  );
+  const selectedIndex =
+    value === null
+      ? -1
+      : Math.max(
+          0,
+          options.findIndex((o) => o.value === value),
+        );
 
   const onKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 : event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
@@ -81,20 +85,24 @@ export function Segmented<T extends string | number>({
     >
       {options.map((option, i) => {
         const selected = i === selectedIndex;
+        // Press (§5.9): the visible box tints while its button is down; compact segments also scale .96.
+        const tint = "transition-colors duration-(--dur-quick) ease-press group-active:duration-(--dur-instant)";
         const box = block
           ? cx(
               "flex h-full w-full items-center justify-center px-1 text-[13px] leading-4",
+              tint,
               i < last && "border-r border-rule",
-              selected ? "bg-ink font-medium text-on-ink" : "bg-surface text-muted",
+              selected ? "bg-ink font-medium text-on-ink" : "bg-surface text-muted group-active:bg-surface-2",
               mono && "font-mono text-[12px]",
             )
           : cx(
               "flex h-[30px] items-center justify-center border border-ink text-[13px] leading-4 whitespace-nowrap",
+              tint,
               i < last && "border-r-0",
               i === 0 && "rounded-l-chip",
               i === last && "rounded-r-chip",
               mono ? "w-full font-mono text-[12px]" : "px-3",
-              selected ? "bg-ink font-medium text-on-ink" : "bg-surface text-ink",
+              selected ? "bg-ink font-medium text-on-ink" : "bg-surface text-ink group-active:bg-surface-2",
             );
         return (
           <button
@@ -108,12 +116,12 @@ export function Segmented<T extends string | number>({
             aria-label={option.ariaLabel}
             lang={option.lang}
             disabled={option.disabled}
-            tabIndex={selected ? 0 : -1}
+            tabIndex={selected || (selectedIndex === -1 && i === 0) ? 0 : -1}
             onClick={() => onChange(option.value)}
             onKeyDown={(e) => onKeyDown(e, i)}
             className={cx(
-              "flex items-center bg-transparent p-0 disabled:opacity-40",
-              block ? "h-full min-w-0" : "h-11",
+              "group flex items-center bg-transparent p-0 disabled:opacity-40",
+              block ? "h-full min-w-0 touch-manipulation" : "press-sm h-11",
               !block && mono && "w-11",
             )}
           >
