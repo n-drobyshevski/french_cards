@@ -19,3 +19,15 @@ test("the origin is edited in the detail pane and shows in the table", async ({ 
   await expect(pane(page).getByText("от flicaille, арго XIX века")).toBeVisible();
   await expect(row(page, "les flics")).toContainText("· от flicaille, арго XIX века");
 });
+
+test("the conjugation is edited in the detail pane", async ({ page }) => {
+  await page.goto("/library");
+  await row(page, "se casser").click();
+  await expect(pane(page).getByText("из словаря · être")).toBeVisible();
+  await pane(page).getByRole("button", { name: "Изменить спряжение" }).click();
+  const futur = pane(page).getByRole("textbox", { name: "Futur, ils" });
+  await expect(futur).toHaveValue("ils se casseront");
+  await futur.fill("ils vont se casser");
+  await futur.press("Control+Enter");
+  await expect(pane(page).getByText("своё · être")).toBeVisible();
+});

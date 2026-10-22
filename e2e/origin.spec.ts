@@ -80,3 +80,29 @@ test("the origin is edited by hand in the word card and shows on the answer side
   await questionCard(page).click();
   await expect(page.getByText(ORIGIN)).toBeVisible();
 });
+
+test("the conjugation is edited by hand in the word card and goes back to the dictionary's", async ({ page }) => {
+  await openReview(page);
+  await page.goto("/library");
+  await page.getByRole("searchbox", { name: "Поиск по FR и RU" }).fill("casser");
+  await page.getByText("se casser", { exact: true }).click();
+  const card = page.getByRole("dialog", { name: "Карточка слова" });
+  await expect(card.getByText("je me casse · tu te casses · il se casse…")).toBeVisible();
+  await expect(card.getByText("из словаря · être")).toBeVisible();
+
+  await card.getByRole("button", { name: "Изменить спряжение" }).click();
+  const first = card.getByRole("textbox", { name: "Présent, je" });
+  await expect(first).toHaveValue("je me casse");
+  await first.fill("");
+  await card.getByRole("button", { name: "Сохранить" }).click();
+  await expect(card.getByRole("alert")).toHaveText("Заполните все формы — не хватает 1");
+  await first.fill("je me tire");
+  await card.getByRole("button", { name: "Сохранить" }).click();
+  await expect(card.getByText("je me tire · tu te casses · il se casse…")).toBeVisible();
+  await expect(card.getByText("своё · être")).toBeVisible();
+
+  await card.getByRole("button", { name: "Изменить спряжение" }).click();
+  await card.getByRole("button", { name: "Вернуть из словаря" }).click();
+  await expect(card.getByText("из словаря · être")).toBeVisible();
+  await expect(card.getByText("je me casse · tu te casses · il se casse…")).toBeVisible();
+});

@@ -64,7 +64,9 @@ import { useUndoSnackbar } from "./undo";
 import { LifeExamplesLink } from "@/components/context/ContextLink";
 import { ExampleList, toDrafts, type ExampleDraft } from "@/components/examples/ExampleList";
 import { examplesPatch, wordExamples } from "@/lib/examples";
-import { draftOf, isDirty, patchFor, undoFor, type Draft, type Editing } from "./word-editor";
+import { conjDraftError, draftOf, isDirty, patchFor, undoFor, withConjugationDraft, type Draft, type Editing } from "./word-editor";
+import { ConjugationForm, ConjugationPreview, hasConjugationField, useBuiltinConjugation } from "./WordConjugation";
+import { cleanConjugation } from "@/lib/core/conjugate";
 import { canAddField, fieldRows, fieldRowsError, newFieldRow, type FieldRow } from "./word-fields";
 
 // A word's entry, editable fields, schedule, history and actions. One body, two layouts: the
@@ -187,9 +189,15 @@ function useWordEditor(word: Word | null, folders: readonly Folder[], defs: read
   const save = async (): Promise<WordPatch | null> => {
     if (!draft || !editing || !word) return null;
     const patch = patchFor(editing, draft);
-    const problem = editing === "fields" ? fieldRowsError(draft.fields, defs) : null;
+    const problem =
+      editing === "fields" ? fieldRowsError(draft.fields, defs) : editing === "conjugation" ? conjDraftError(draft.conjugation) : null;
     if (problem) {
       setFormError(problem);
+      return null;
+    }
+    // Opened on the dictionary's forms and left as they are: nothing to save.
+    if (editing === "conjugation" && !isDirty(word, editing, draft)) {
+      cancel();
       return null;
     }
     setSaving(true);
@@ -343,6 +351,8 @@ function useCloseWhenGone(data: { word: Word | null } | undefined, onClose: () =
 // ---------------------------------------------------------------------------------------------
 // Phone sheet layout
 
+const NO_WORD = { fr: "", pos: "other" } as const;
+
 function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void }) {
   const id = useId();
   const data = useWordDetail(wordId);
@@ -350,6 +360,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
   const folders = data && "folders" in data ? data.folders : [];
   const defs = useFieldDefs();
   const editor = useWordEditor(word, folders, defs);
+  const builtin = useBuiltinConjugation(word ?? NO_WORD);
   const actions = useWordActions(word, folders, onClose);
   const saveExamples = useExampleSaver(word);
   const proposal = useTranslationProposal(editor.draft?.fr ?? "", editor.draft?.ru ?? "", editor.editing === "entry");
@@ -542,6 +553,25 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             <span className="text-[15px] leading-[22px] text-muted">Не указано</span>
           )}
         </SheetField>
+        {hasConjugationField(w, builtin) && (
+          <SheetField
+            label="Спряжение"
+            editLabel="Изменить спряжение"
+            editing={editing === "conjugation"}
+            onEdit={() => editor.start("conjugation", withConjugationDraft(draftOf(w, defs), cleanConjugation(w.conjugation) ?? builtin))}
+            form={
+              draft && (
+                <form onSubmit={save} className="flex flex-col" aria-label="Изменить спряжение">
+                  <ConjugationForm draft={draft.conjugation} onChange={(next) => set("conjugation", next)} word={w} onReset={editor.cancel} size="sheet" />
+                  {errorLine}
+                  {editActions}
+                </form>
+              )
+            }
+          >
+            <ConjugationPreview saved={cleanConjugation(w.conjugation)} builtin={builtin} size="sheet" />
+          </SheetField>
+        )}
         <SheetField
           label="Пример"
           refresh="example"
@@ -800,6 +830,7 @@ function PaneContent({
   const folders = data.folders;
   const defs = useFieldDefs();
   const editor = useWordEditor(word, folders, defs);
+  const builtin = useBuiltinConjugation(word);
   const [fieldFocus, setFieldFocus] = useState<string | null>(null);
   const actions = useWordActions(word, folders, onClose);
   const refreshAnchor = useRef<HTMLButtonElement>(null);
@@ -834,6 +865,8 @@ function PaneContent({
     () => () => {
       const { word: w, editing, draft, dirty, showUndo: show } = latest.current;
       if (!w || !editing || !draft || !dirty) return;
+      // A half-filled conjugation is not saved on leaving (saving it would clear the word's own).
+      if (editing === "conjugation" && conjDraftError(draft.conjugation)) return;
       const patch = patchFor(editing, draft);
       const undo = undoFor(w, patch);
       void updateWord(w.id, patch).then(
@@ -1161,6 +1194,21 @@ function PaneContent({
               ) : (
                 origin
               )}
+              {hasConjugationField(w, builtin) &&
+                (editing === "conjugation" && draft ? (
+                  <form onSubmit={(e) => void submit(e)} onKeyDown={formKeys} aria-label="Изменить спряжение" className="flex flex-col">
+                    <ConjugationForm draft={draft.conjugation} onChange={(next) => set("conjugation", next)} word={w} onReset={editor.cancel} size="pane" />
+                    {formActions}
+                  </form>
+                ) : (
+                  <div data-edited="conjugation" className="flex items-start gap-2">
+                    <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
+                      <span className="meta shrink-0">Спряжение</span>
+                      <ConjugationPreview saved={cleanConjugation(w.conjugation)} builtin={builtin} size="pane" />
+                    </div>
+                    {!editing && pencil("Изменить спряжение", () => editor.start("conjugation", withConjugationDraft(draftOf(w, defs), cleanConjugation(w.conjugation) ?? builtin)))}
+                  </div>
+                ))}
               {editing === "example" && draft ? (
                 <form onSubmit={(e) => void submit(e)} onKeyDown={formKeys} aria-label="Изменить пример" className="flex flex-col">
                   <ExampleList
