@@ -3,9 +3,10 @@
 import dynamic from "next/dynamic";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SnackbarProvider } from "@/components/ui/Snackbar";
+import { loadChunk } from "@/lib/chunk-load";
 import { seedIfNeeded } from "@/lib/seed";
 import { startSyncLoop } from "@/lib/sync";
-import { AddSheetProvider, useAddSheetState } from "./AddSheetContext";
+import { AddSheetProvider } from "./AddSheetContext";
 import { ThemeSync } from "./theme";
 
 export {
@@ -19,7 +20,9 @@ export {
 } from "./AddSheetContext";
 
 // The whole add flow is its own chunk, kept out of the shell that every route parses before hydrating.
-const QuickAddSheet = dynamic(() => import("@/components/add/QuickAddSheet").then((m) => m.QuickAddSheet), { ssr: false });
+const QuickAddSheet = dynamic(() => loadChunk(() => import("@/components/add/QuickAddSheet")).then((m) => m.QuickAddSheet), {
+  ssr: false,
+});
 
 interface Boot {
   /** First-run setup has finished (or failed) on this device. */
@@ -83,7 +86,7 @@ function useBootstrap(): Boot {
 /** Runs `run` when the browser is next idle (a timer where requestIdleCallback is missing, as on Safari). */
 function whenIdle(run: () => void): () => void {
   if (typeof window.requestIdleCallback === "function") {
-    const id = window.requestIdleCallback(run, { timeout: 3000 });
+    const id = window.requestIdleCallback(run);
     return () => window.cancelIdleCallback(id);
   }
   const id = window.setTimeout(run, 1000);
@@ -91,28 +94,16 @@ function whenIdle(run: () => void): () => void {
 }
 
 /**
- * Mounts the quick-add sheet once the browser is idle, or at the first open if that comes sooner, so
- * its chunk is in place before «+» is pressed and the open stays instant. The dictionary is warmed in
- * the next idle slot, so its parse never lands in the sheet's slide. Until the first open the sheet
- * runs no queries (QuickAddSheet mounts its session then).
+ * The quick-add sheet's chunk stays out of the shell every route parses before hydrating, but the
+ * closed sheet mounts right after hydration, so it is in place before «+» can be pressed and the
+ * open (and its focus, which iOS only honours inside the tap) stays synchronous. Until the first
+ * open the sheet runs no queries (QuickAddSheet mounts its session then). The dictionary is
+ * warmed when the browser is idle, so its parse never lands in the sheet's slide.
  */
 function LazyQuickAddSheet() {
-  const { session } = useAddSheetState();
-  const [warm, setWarm] = useState(false);
-
-  useEffect(() => {
-    let cancelNext: (() => void) | null = null;
-    const cancel = whenIdle(() => {
-      setWarm(true);
-      cancelNext = whenIdle(() => void import("@/lib/lexique").then((m) => m.loadLexique()).catch(() => {}));
-    });
-    return () => {
-      cancel();
-      cancelNext?.();
-    };
-  }, []);
-
-  return warm || session > 0 ? <QuickAddSheet /> : null;
+  useEffect(() => whenIdle(() => void import("@/lib/lexique").then((m) => m.loadLexique()).catch(() => {})), []);
+  // ssr: false, so the chunk is requested at hydration and the sheet mounts as soon as it is in.
+  return <QuickAddSheet />;
 }
 
 /**

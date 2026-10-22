@@ -1,7 +1,7 @@
 // Desktop library table (mockups/DESKTOP-SPEC.md §2 «Library table columns», §4 «Library / Theme»):
 // sorting, fluid column rules, selection ranges, the cursor after a removal, alphabetical
 // neighbours and the list-region key map. Pure, unit-tested; the components wire them up.
-import { frSortKey } from "@/lib/text";
+import { compareFrKeyed, frSortKey } from "@/lib/text";
 import type { LibraryWord } from "./useLibraryWords";
 
 /** Column heads, plus the phone's two orders that have no column: «Сначала новые», «Сначала трудные». */
@@ -41,12 +41,8 @@ export function orderLabel(sort: SortState): string {
 }
 
 const ruCollator = new Intl.Collator("ru", { sensitivity: "base", numeric: true });
-/** compareFr's collator: the sorts below run it on frSortKey keys computed once per word. */
-const frCollator = new Intl.Collator("fr", { sensitivity: "base", numeric: true });
-
-/** compareFr(a.fr, b.fr) with the keys precomputed. */
 function compareKeyed(a: { fr: string; key: string }, b: { fr: string; key: string }): number {
-  return frCollator.compare(a.key, b.key) || frCollator.compare(a.fr, b.fr);
+  return compareFrKeyed(a.key, a.fr, b.key, b.fr);
 }
 
 /** «к повт.» first, then «новое», then by the next review. */

@@ -159,8 +159,9 @@ export async function liveWords(filter: SessionFilter, pre?: SessionData): Promi
 /** Matching words plus every live card, reading each table once. */
 async function wordsWithStates(
   filter: SessionFilter,
-  pre?: SessionData,
+  pending?: SessionData | Promise<SessionData>,
 ): Promise<{ words: Map<string, Word>; states: readonly ReviewState[] }> {
+  const pre = await pending;
   if (pre) return { words: matchWords(pre.words, pre.states, pre.liveFolderIds, filter), states: pre.states };
   const [words, states, live] = await Promise.all([
     candidateWords(filter),
@@ -190,7 +191,12 @@ function newIntroduced(logs: readonly ReviewLog[]): Set<string> {
  * A new ru_fr card is held back until the word's fr_ru card has been learned on an earlier day,
  * unless the session is filtered to ru_fr only.
  */
-export async function loadSession(filter: SessionFilter = {}, now: Date = new Date(), pre?: SessionData): Promise<Session> {
+/** `pre` may still be loading: the settings and today's log are read meanwhile. */
+export async function loadSession(
+  filter: SessionFilter = {},
+  now: Date = new Date(),
+  pre?: SessionData | Promise<SessionData>,
+): Promise<Session> {
   const dayStart = startOfStudyDay(now);
   const dayEnd = endOfStudyDay(now);
   const t = now.getTime();
@@ -275,7 +281,11 @@ export interface DaySummary {
 }
 
 /** Numbers for the «Готово на сегодня» screen. */
-export async function getDaySummary(filter: SessionFilter = {}, now: Date = new Date(), pre?: SessionData): Promise<DaySummary> {
+export async function getDaySummary(
+  filter: SessionFilter = {},
+  now: Date = new Date(),
+  pre?: SessionData | Promise<SessionData>,
+): Promise<DaySummary> {
   const dayEnd = endOfStudyDay(now);
   const nextEnd = new Date(dayEnd);
   nextEnd.setDate(nextEnd.getDate() + 1);

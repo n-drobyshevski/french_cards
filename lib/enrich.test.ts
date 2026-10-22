@@ -123,6 +123,27 @@ describe("network", () => {
     expect(out.size).toBe(words.length);
   });
 
+  it("stops sending requests once one has failed", async () => {
+    const answer = fakeFetch();
+    let calls = 0;
+    const fetchImpl = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+      if (++calls === 1) return new Response("{}", { status: 500 });
+      await new Promise((r) => setTimeout(r, 5));
+      return answer(url, init);
+    });
+    const words = Array.from({ length: ENRICH_REQUEST_SIZE * (ENRICH_CONCURRENCY * 3) }, (_, i) => ({ id: `w${i}`, fr: `mot${i}`, ru: `слово${i}` }));
+    await expect(enrichWords(words, { fetchImpl, retries: 0 })).rejects.toBeInstanceOf(EnrichError);
+    // Only the first wave went out; nothing after the failure.
+    expect(fetchImpl.mock.calls.length).toBeLessThanOrEqual(ENRICH_CONCURRENCY);
+  });
+
+  it("sends larger requests when asked to", async () => {
+    const fetchImpl = vi.fn(fakeFetch());
+    const words = Array.from({ length: 50 }, (_, i) => ({ id: `w${i}`, fr: `mot${i}`, ru: `слово${i}` }));
+    await enrichWords(words, { fetchImpl, requestSize: 50 });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it("retries after 429 and maps errors", async () => {
     const sleep = vi.fn(async () => {});
     const once = vi

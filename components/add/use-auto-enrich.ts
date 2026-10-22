@@ -2,6 +2,7 @@
 // (the manual form) or has pasted («Список»). Results come back through `onResults`; nothing is saved here.
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import type { EnrichResult, FolderInput, ModelTierInput } from "@/lib/ai/schemas";
+import { ENRICH_CHUNK_MAX } from "@/lib/ai/constants";
 import { enrichWords, type EnrichInput } from "@/lib/enrich";
 
 export const FORM_ENRICH_DEBOUNCE_MS = 700;
@@ -61,6 +62,9 @@ export function useAutoEnrich<T extends EnrichInput>(
         enrichWords(sent, {
           signal: controller.signal,
           retries: 1,
+          // Results land only once every request is back, and an edit sends them all again: fewer,
+          // larger requests here keep the per-user rate limit for the library run.
+          requestSize: ENRICH_CHUNK_MAX,
           folders: request.folders,
           model: request.model,
           onProgress: (done, total) => {

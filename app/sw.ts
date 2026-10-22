@@ -63,7 +63,8 @@ const runtimeCaching: RuntimeCaching[] = DEV
         matcher: ({ request, url, sameOrigin }) => sameOrigin && isRsc(request) && !isApi(url.pathname),
         handler: new NetworkFirst({
           cacheName: "pages-rsc",
-          networkTimeoutSeconds: 1,
+          // Longer than pages: a payload from an older deploy turns the navigation into a hard one.
+          networkTimeoutSeconds: 2,
           plugins: [ok(), new ExpirationPlugin({ maxEntries: 64, maxAgeSeconds: 7 * DAY })],
         }),
       },

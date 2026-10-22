@@ -301,6 +301,11 @@ async function pullTable(client: SupabaseClient, table: SyncTable, start: string
   const since = cursor ? new Date(toMs(cursor) - PULL_OVERLAP_MS).toISOString() : null;
   let after: { at: string; id: string } | null = null;
 
+  const saveCursor = async () => {
+    if (cursor === start) return;
+    const saved = cursor;
+    await patchSyncMeta(database, (m) => ({ sync_cursors: { ...m.sync_cursors, [table]: saved } }));
+  };
   try {
     for (;;) {
       let query = client.from(table).select("*");
@@ -320,13 +325,12 @@ async function pullTable(client: SupabaseClient, table: SyncTable, start: string
       if (rows.length < PULL_PAGE || !last) break;
       after = { at: String(last.synced_at), id: String(last.id) };
     }
-  } finally {
-    // Pages merged before a failure keep their progress.
-    if (cursor !== start) {
-      const saved = cursor;
-      await patchSyncMeta(database, (m) => ({ sync_cursors: { ...m.sync_cursors, [table]: saved } }));
-    }
+  } catch (error: unknown) {
+    // Pages merged before a failure keep their progress; the failure (and its kind) goes on.
+    await saveCursor().catch(() => {});
+    throw error;
   }
+  await saveCursor();
   return merged;
 }
 
@@ -413,18 +417,26 @@ export interface SyncOptions {
   pull?: boolean;
 }
 
-/** Push then pull with an explicit client and database. Used by syncNow() and by tests. */
+/**
+ * Push then pull with an explicit client and database. Used by syncNow() and by tests. Only a
+ * full cycle counts as a sync for «last synced» (`lastSyncAt` stays null when pushing only).
+ */
 export async function runSyncCycle(client: SupabaseClient, database: KartochkiDB = defaultDb, { pull = true }: SyncOptions = {}) {
   const push = await pushOutbox(client, database);
-  const pulled = pull ? await pullChanges(client, database) : 0;
+  if (!pull) return { ...push, pulled: 0, lastSyncAt: null };
+  const pulled = await pullChanges(client, database);
   const lastSyncAt = nowIso();
   await patchSyncMeta(database, () => ({ last_sync_at: lastSyncAt }));
   return { ...push, pulled, lastSyncAt };
 }
 
 let inflight: Promise<SyncResult> | null = null;
+/** Whether the running cycle pulls. */
+let inflightPulls = false;
 let rerun = false;
 let rerunPull = false;
+/** Settles with the follow-up cycle, for a pull asked for while a push-only cycle runs. */
+let followUp: { promise: Promise<SyncResult>; resolve: (r: Promise<SyncResult>) => void } | null = null;
 let failures = 0;
 
 async function cycle(opts: SyncOptions): Promise<SyncResult> {
@@ -449,13 +461,20 @@ async function cycle(opts: SyncOptions): Promise<SyncResult> {
       return { ok: false, state, ...empty };
     }
 
+    // A push-only cycle says nothing about pulling: it keeps an earlier failure on show (and its
+    // retry backoff) until a full cycle gets through.
+    const pullFailure = opts.pull === false && status.state === "error" && status.errorKind !== "rejected" ? status : null;
     setStatus({ state: "syncing", error: null });
     const result = await runSyncCycle(client, defaultDb, opts);
+    if (pullFailure && result.rejected === 0) {
+      setStatus(pullFailure);
+      return { ok: true, state: "idle", pushed: result.pushed, pulled: 0, rejected: 0 };
+    }
     failures = 0;
     const state: SyncState = result.rejected > 0 ? "error" : "idle";
     setStatus({
       state,
-      lastSyncAt: result.lastSyncAt,
+      ...(result.lastSyncAt ? { lastSyncAt: result.lastSyncAt } : {}),
       error: result.lastRejection,
       errorKind: state === "error" ? "rejected" : null,
       errorAt: state === "error" ? nowIso() : null,
@@ -483,15 +502,26 @@ export function syncNow({ pull = true }: SyncOptions = {}): Promise<SyncResult> 
   if (inflight) {
     rerun = true;
     rerunPull ||= pull;
-    return inflight;
+    if (!pull || inflightPulls) return inflight;
+    // The running cycle doesn't pull: answer with the follow-up that does (manual sync waits on it).
+    if (!followUp) {
+      let resolve!: (r: Promise<SyncResult>) => void;
+      const promise = new Promise<SyncResult>((r) => (resolve = r));
+      followUp = { promise, resolve };
+    }
+    return followUp.promise;
   }
+  inflightPulls = pull;
   inflight = cycle({ pull }).finally(() => {
     inflight = null;
     if (rerun) {
       const next = rerunPull;
+      const waiting = followUp;
       rerun = false;
       rerunPull = false;
-      void syncNow({ pull: next });
+      followUp = null;
+      const again = syncNow({ pull: next });
+      waiting?.resolve(again);
     }
   });
   return inflight;

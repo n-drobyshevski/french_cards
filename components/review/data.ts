@@ -48,8 +48,8 @@ function wordsMatching(filter: SessionFilter, pre: SessionData): readonly Word[]
 
 // The library is read once per run (grades re-run this), and the session and counts derive from it.
 export async function loadReviewScreen(filter: SessionFilter, now: Date = new Date()): Promise<ReviewScreenData> {
-  const pre = await loadSessionData();
-  const session = await loadSession(filter, now, pre);
+  const loading = loadSessionData();
+  const [pre, session] = await Promise.all([loading, loadSession(filter, now, loading)]);
   return {
     session,
     libraryWords: pre.words.length,
@@ -68,8 +68,8 @@ export interface DoneScreenData {
 
 export async function loadDoneScreen(filter: SessionFilter, now: Date = new Date()): Promise<DoneScreenData> {
   const dayEnd = endOfStudyDay(now).toISOString();
-  const pre = await loadSessionData();
-  const summary = await getDaySummary(filter, now, pre);
+  const loading = loadSessionData();
+  const [pre, summary] = await Promise.all([loading, getDaySummary(filter, now, loading)]);
   const ids = new Set(wordsMatching(filter, pre).map((w) => w.id));
   let nextDue: string | null = null;
   for (const s of pre.states) {

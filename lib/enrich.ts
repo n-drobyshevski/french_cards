@@ -59,6 +59,8 @@ export interface EnrichOptions {
   folders?: readonly FolderInput[];
   /** Settings «Модель для подсказок». */
   model?: ModelTierInput;
+  /** Words per request (default ENRICH_REQUEST_SIZE, at most ENRICH_CHUNK_MAX). */
+  requestSize?: number;
 }
 
 const defaultSleep = (ms: number, signal?: AbortSignal) =>
@@ -159,7 +161,7 @@ export function chunk<T>(items: readonly T[], size: number): T[][] {
 
 /** All words in chunks, a few requests at a time. Results by word id (skipped words are missing). */
 export async function enrichWords(words: readonly EnrichInput[], opts: EnrichOptions = {}): Promise<Map<string, EnrichResult>> {
-  const chunks = chunk(toEnrichWords(words), ENRICH_REQUEST_SIZE);
+  const chunks = chunk(toEnrichWords(words), Math.min(opts.requestSize ?? ENRICH_REQUEST_SIZE, ENRICH_CHUNK_MAX));
   const total = chunks.reduce((n, c) => n + c.length, 0);
   const out = new Map<string, EnrichResult>();
   let next = 0;
@@ -167,11 +169,20 @@ export async function enrichWords(words: readonly EnrichInput[], opts: EnrichOpt
   let batches = 0;
   opts.onProgress?.(0, total);
   opts.onStage?.({ words: total, wordsDone: 0, done: 0, total: chunks.length, batch: [] });
+  // One failed request stops the others (and cancels those in flight): the run has failed anyway.
+  const stop = new AbortController();
+  const onAbort = () => stop.abort();
+  opts.signal?.addEventListener("abort", onAbort, { once: true });
+  if (opts.signal?.aborted) stop.abort();
+  const reqOpts = { ...opts, signal: stop.signal };
   const worker = async () => {
     while (next < chunks.length) {
-      if (opts.signal?.aborted) throw new EnrichError("aborted");
+      if (stop.signal.aborted) throw new EnrichError("aborted");
       const part = chunks[next++];
-      const batch = await postEnrich(part, opts);
+      const batch = await postEnrich(part, reqOpts).catch((error: unknown) => {
+        stop.abort();
+        throw error;
+      });
       for (const r of batch) out.set(r.id, r);
       done += part.length;
       batches++;
@@ -179,7 +190,11 @@ export async function enrichWords(words: readonly EnrichInput[], opts: EnrichOpt
       opts.onStage?.({ words: total, wordsDone: done, done: batches, total: chunks.length, batch });
     }
   };
-  await Promise.all(Array.from({ length: Math.min(ENRICH_CONCURRENCY, chunks.length) }, worker));
+  try {
+    await Promise.all(Array.from({ length: Math.min(ENRICH_CONCURRENCY, chunks.length) }, worker));
+  } finally {
+    opts.signal?.removeEventListener("abort", onAbort);
+  }
   return out;
 }
 

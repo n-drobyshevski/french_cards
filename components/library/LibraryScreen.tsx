@@ -3,7 +3,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
 import { createElement, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useAddSheet } from "@/components/providers/AddSheetContext";
+import { useAddSheetActions } from "@/components/providers/AddSheetContext";
 import { useAppReady, useBootFailure } from "@/components/providers/AppProviders";
 import { Button, IconButton } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
@@ -87,7 +87,7 @@ function PhoneLibrary() {
   const ready = useAppReady();
   const bootFailed = useBootFailure().failed;
   const snackbar = useSnackbar();
-  const addSheet = useAddSheet();
+  const addSheet = useAddSheetActions();
   const overview = useLiveQuery(getLibraryOverview, []);
   // Counts wait for the first-run seed, so a new device never flashes «0 слов» (L3).
   const loaded = ready && overview !== undefined ? overview : undefined;

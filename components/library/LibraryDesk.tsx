@@ -15,9 +15,9 @@ import {
   type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
-  type UIEvent,
+  type RefObject,
 } from "react";
-import { useAddSheet } from "@/components/providers/AddSheetContext";
+import { useAddSheetActions } from "@/components/providers/AddSheetContext";
 import { setDraggedWords, spotlightTheme } from "@/components/shell/dnd";
 import { blocksGlobalKeys, FOCUS_SEARCH_EVENT, OPEN_LAYER_SELECTOR } from "@/components/shell/keys";
 import { useShortcutsEnabled } from "@/components/shell/ShellContext";
@@ -128,7 +128,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
   const showUndo = useUndoSnackbar();
   const undoLast = useUndoLast();
   const snackbar = useSnackbar();
-  const addSheet = useAddSheet();
+  const addSheet = useAddSheetActions();
 
   const words = useLibraryWords(folderId);
   const stats = useLiveQuery(() => getLibraryStats(), []);
@@ -254,44 +254,21 @@ function Desk({ scope }: { scope: LibraryScope }) {
   // Right after DeskPlaceholder: its skeleton timer carries on (no blink at the hand-over).
   const [skeletonStyle] = useState(takeSkeletonHandoff);
   const rowH = coarse ? 48 : 40;
-  // Guide words show only in the whole library sorted by «Слово»; only then is the scroll tracked,
-  // and only a change of the first or last visible row re-renders the desk.
+  // Guide words show only in the whole library sorted by «Слово». GuideWords follows the scroll
+  // itself, so scrolling never re-renders the desk.
   const guideShown = scope.kind === "all" && sort.key === "fr";
-  const [visible, setVisible] = useState(() => visibleRows(0, 600, rowH));
   useLayoutEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const measure = () => {
-      setInner(el.clientWidth - 48);
-      if (guideShown) {
-        const next = visibleRows(el.scrollTop, el.clientHeight, rowH);
-        setVisible((v) => (v.first === next.first && v.last === next.last ? v : next));
-      }
-    };
+    const measure = () => setInner(el.clientWidth - 48);
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [theme?.folder, loaded, guideShown, rowH]);
-  const scrollFrame = useRef(0);
-  const onScroll = (e: UIEvent<HTMLDivElement>) => {
-    if (!guideShown) return;
-    const el = e.currentTarget;
-    cancelAnimationFrame(scrollFrame.current);
-    scrollFrame.current = requestAnimationFrame(() => {
-      const next = visibleRows(el.scrollTop, el.clientHeight, rowH);
-      setVisible((v) => (v.first === next.first && v.last === next.last ? v : next));
-    });
-  };
+  }, [theme?.folder, loaded]);
   const tableLayout = layout === "expanded" ? "expanded" : "medium";
   // Stable between renders, so the memoised rows hold.
   const columns = useMemo(() => tableColumns({ inner, layout: tableLayout, coarse, themeColumn: scope.kind === "all" }), [inner, tableLayout, coarse, scope.kind]);
-  const guide = useMemo(() => {
-    if (!guideShown || rows.length === 0) return null;
-    const first = Math.min(rows.length - 1, visible.first);
-    const last = Math.min(rows.length - 1, Math.max(first, visible.last));
-    return guideRange(rows[first].word.fr, rows[last].word.fr);
-  }, [guideShown, rows, visible]);
 
   // ----- Actions with undo
   const moveIds = async (list: readonly string[], key: string) => {
@@ -750,11 +727,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
             <h1 className="m-0 min-w-0 truncate font-serif text-[28px] leading-9 font-medium tracking-[-0.015em]">{title}</h1>
             {folder?.locked && <span className="shrink-0 rounded-[4px] border border-rule px-1.5 font-mono text-[11px] leading-5 text-muted">закреплена</span>}
             <span className="flex-1" />
-            {guide && (
-              <span lang="fr" aria-hidden="true" className="shrink-0 truncate font-serif text-[16px] text-muted italic">
-                {guide}
-              </span>
-            )}
+            {guideShown && <GuideWords rows={rows} rowH={rowH} scrollRef={scrollRef} loaded={loaded} />}
             {/* Nothing due: a practice round over the whole theme instead, as on phones. */}
             {scope.kind !== "all" && hasWords && theme && theme.cards === 0 && (
               <Link
@@ -918,7 +891,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
                 anchor.current = null;
               }}
               onKeyDown={onListKey}
-              onScroll={onScroll}
+              onScroll={noop}
               gridRef={gridRef}
               scrollRef={scrollRef}
               empty={
@@ -1134,6 +1107,55 @@ function Desk({ scope }: { scope: LibraryScope }) {
 }
 
 function noop() {}
+
+/**
+ * «arrête — vas-y»: the first and last word on screen, kept by its own scroll listener so that only
+ * this span re-renders as the table scrolls (and only when the first or last visible row changes).
+ */
+function GuideWords({
+  rows,
+  rowH,
+  scrollRef,
+  loaded,
+}: {
+  rows: readonly LibraryWord[];
+  rowH: number;
+  scrollRef: RefObject<HTMLDivElement | null>;
+  /** The table (and so the scroll element) is mounted. */
+  loaded: boolean;
+}) {
+  const [visible, setVisible] = useState(() => visibleRows(0, 600, rowH));
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    let frame = 0;
+    const measure = () => {
+      const next = visibleRows(el.scrollTop, el.clientHeight, rowH);
+      setVisible((v) => (v.first === next.first && v.last === next.last ? v : next));
+    };
+    const onScroll = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+    measure();
+    el.addEventListener("scroll", onScroll, { passive: true });
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => {
+      cancelAnimationFrame(frame);
+      el.removeEventListener("scroll", onScroll);
+      ro.disconnect();
+    };
+  }, [scrollRef, loaded, rowH]);
+  if (rows.length === 0) return null;
+  const first = Math.min(rows.length - 1, visible.first);
+  const last = Math.min(rows.length - 1, Math.max(first, visible.last));
+  return (
+    <span lang="fr" aria-hidden="true" className="shrink-0 truncate font-serif text-[16px] text-muted italic">
+      {guideRange(rows[first].word.fr, rows[last].word.fr)}
+    </span>
+  );
+}
 
 /** First and last row under the table head (unclamped) at this scroll offset. */
 function visibleRows(top: number, height: number, rowH: number): { first: number; last: number } {

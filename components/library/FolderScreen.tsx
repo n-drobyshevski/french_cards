@@ -3,8 +3,8 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { useAddSheet } from "@/components/providers/AddSheetContext";
+import { createElement, useEffect, useState } from "react";
+import { useAddSheetActions } from "@/components/providers/AddSheetContext";
 import { bottomBarRef } from "@/components/ui/bottom-clearance";
 import { Button, IconButton, buttonClasses } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
@@ -20,7 +20,7 @@ import { cachedFolder, rememberLibrary, useRevealClass } from "./first-paint";
 import { FolderFormSheet } from "./FolderFormSheet";
 import { DisbandSheet, disbandMessage } from "./DisbandSheet";
 import { FolderMenuSheet } from "./FolderMenuSheet";
-import { LibraryDesk } from "./LibraryDesk";
+import { useLibraryDesk } from "./lazy-desk";
 import { nWords, practiceHref, reviewHref } from "./format";
 import { useLibraryWords } from "./useLibraryWords";
 import { WordList } from "./WordList";
@@ -45,14 +45,13 @@ export function FolderRoute() {
  */
 export function FolderScreen({ id }: { id: string | null }) {
   const layout = useLayoutClass();
-  if (layout !== "compact" && id !== null) {
-    return <LibraryDesk scope={id === INBOX_SEGMENT ? { kind: "inbox" } : { kind: "folder", id }} />;
-  }
+  const wantsDesk = layout !== "compact" && id !== null;
+  const desk = useLibraryDesk(wantsDesk);
+  if (desk && id !== null) return createElement(desk, { scope: id === INBOX_SEGMENT ? { kind: "inbox" } : { kind: "folder", id } });
+  // Until the desk's chunk is in, the placeholder stays where it is (same element, no restart).
   return (
     <>
-      <div className="contents md:hidden">
-        <PhoneFolder id={id} />
-      </div>
+      <div className="contents md:hidden">{!wantsDesk && <PhoneFolder id={id} />}</div>
       <DeskPlaceholder
         title={id === INBOX_SEGMENT ? "Входящие" : id !== null ? (cachedFolder(id)?.name ?? "") : ""}
         scope={id === null ? "unknown" : id === INBOX_SEGMENT ? "inbox" : "folder"}
@@ -66,7 +65,7 @@ function PhoneFolder({ id }: { id: string | null }) {
   const folderId = id === INBOX_SEGMENT ? null : id;
   const router = useRouter();
   const snackbar = useSnackbar();
-  const addSheet = useAddSheet();
+  const addSheet = useAddSheetActions();
   const [menuOpen, setMenuOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [disbandOpen, setDisbandOpen] = useState(false);

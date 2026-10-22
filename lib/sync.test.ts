@@ -626,15 +626,17 @@ describe("runSyncCycle", () => {
     expect(remote.calls.map((c) => c.op)).toEqual(["upsert"]);
     expect(await testDb.words.get("remote")).toBeUndefined();
     expect(await testDb.outbox.count()).toBe(0);
-    expect((await syncRow(testDb))?.last_sync_at).toBe(result.lastSyncAt);
+    // Only a full cycle counts as «last synced».
+    expect(result.lastSyncAt).toBeNull();
+    expect((await syncRow(testDb))?.last_sync_at ?? null).toBeNull();
   });
 });
 
 describe("syncNow", () => {
   let getSession: ReturnType<typeof vi.fn>;
 
-  function connect() {
-    const remote = createMockSupabase();
+  function connect(options: MockOptions = {}) {
+    const remote = createMockSupabase(options);
     getSession = vi.fn(async () => ({ data: { session: { user: { id: "u1" } } }, error: null }));
     browser.client = { ...remote.client, auth: { getSession } };
     return remote;
@@ -672,6 +674,25 @@ describe("syncNow", () => {
     expect(getSession).toHaveBeenCalledTimes(2);
     // Only the second cycle pulled: one select per table.
     expect(remote.calls.filter((c) => c.op === "select")).toHaveLength(6);
+  });
+
+  it("answers a pull asked for during a push-only cycle once that pull has run", async () => {
+    const remote = connect();
+    void syncNow({ pull: false });
+    const full = await syncNow();
+
+    expect(full.ok).toBe(true);
+    expect(remote.calls.filter((c) => c.op === "select")).toHaveLength(6);
+  });
+
+  it("keeps a pull failure on show through a push-only cycle", async () => {
+    connect({ failSelects: { words: 500 } });
+    await syncNow();
+    expect(getSyncStatus()).toMatchObject({ state: "error", errorKind: "server" });
+
+    const push = await syncNow({ pull: false });
+    expect(push.ok).toBe(true);
+    expect(getSyncStatus()).toMatchObject({ state: "error", errorKind: "server" });
   });
 
   it("keeps the follow-up cycle push-only when no call asked for a pull", async () => {
