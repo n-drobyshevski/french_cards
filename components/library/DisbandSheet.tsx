@@ -129,7 +129,7 @@ export function DisbandSheet({ open, onOpenChange, folder, onDisbanded }: Disban
         <Button variant="tertiary" onClick={close}>
           Отмена
         </Button>
-        <Button disabled={!plan} loading={applying} onClick={() => plan && void apply(plan)}>
+        <Button disabled={!plan} pending={applying} pendingLabel="Расформировываем…" onClick={() => plan && void apply(plan)}>
           Расформировать
         </Button>
       </div>
@@ -184,7 +184,7 @@ export function DisbandSheet({ open, onOpenChange, folder, onDisbanded }: Disban
             {phase.message}
           </p>
           <p className="m-0 mt-3 text-[13px] leading-5 text-muted">Можно расформировать и без подсказок: все слова попадут во «Входящие».</p>
-          <Button variant="secondary" size="md" className="mt-3" loading={applying} onClick={applyToInbox}>
+          <Button variant="secondary" size="md" className="mt-3" pending={applying} pendingLabel="Переносим…" onClick={applyToInbox}>
             Всё во «Входящие»
           </Button>
         </div>

@@ -332,7 +332,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
 
   const editActions = (
     <div className="mt-3 flex items-center gap-2">
-      <Button type="submit" size="md" loading={editor.saving}>
+      <Button type="submit" size="md" pending={editor.saving} pendingLabel="Сохраняем…">
         {editor.dupConfirm ? "Сохранить всё равно" : "Сохранить"}
       </Button>
       <Button variant="tertiary" size="md" onClick={editor.cancel}>
@@ -1314,8 +1314,16 @@ function SheetRefresh({ word }: { word: Word }) {
 
   return (
     <div className="mt-6 flex flex-col">
-      <Button variant="secondary" block icon="spark" loading={state.status === "loading"} onClick={() => void refresh.run()}>
-        {state.status === "loading" ? "Подбираем…" : "Обновить перевод и заметку"}
+      <Button
+        variant="secondary"
+        block
+        icon="spark"
+        pending={state.status === "loading"}
+        pendingLabel="Подбираем…"
+        pendingDelay={0}
+        onClick={() => void refresh.run()}
+      >
+        Обновить перевод и заметку
       </Button>
       {state.status === "error" && (
         <p role="alert" className="m-0 mt-2 text-[13px] leading-5 text-again">

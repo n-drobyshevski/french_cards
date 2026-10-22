@@ -211,11 +211,143 @@ body {
   }
 }
 
+/* Motion tokens (mockups/MOTION-SPEC.md §2). Durations live in :root, not @theme, because they
+   shrink under reduced motion; every transition names one of these and one --ease-* curve. */
+:root {
+  --dur-instant: 70ms;
+  --dur-quick: 110ms;
+  --dur-exit: 140ms;
+  --dur-flash: 120ms;
+  --dur-move: 200ms;
+  --dur-enter: 240ms;
+  --dur-turn: 320ms;
+  --dur-sheet: 380ms;
+  --dur-spotlight: 1200ms;
+  --dur-done-hold: 400ms;
+  --dur-long-press: 500ms;
+  --dur-rule-draw: 400ms;
+  --loading-delay: 300ms;
+  --loading-delay-fast: 150ms;
+  --loading-min: 500ms;
+  --link-pending-delay: 100ms;
+  --dist-row: 4px;
+  --dist-pop: 8px;
+  --motion-scale: 1;
+  --press-scale: 0.98;
+  --press-scale-sm: 0.96;
+  --spring-settle: cubic-bezier(0, 0, 0.3, 1);
+  --spring-lift: cubic-bezier(0, 0, 0.3, 1);
+  --spring-stamp: cubic-bezier(0, 0, 0.3, 1);
+}
+
+@supports (transition-timing-function: linear(0, 1)) {
+  :root {
+    --spring-settle: linear(
+      0, 0.006 1.1%, 0.024 2.4%, 0.05 3.7%, 0.092 5.3%, 0.176 7.9%, 0.495 16.9%, 0.591 20.1%, 0.675 23.2%,
+      0.746 26.4%, 0.804 29.5%, 0.856 33%, 0.897 36.5%, 0.931 40.5%, 0.957 45%, 0.977 50%, 0.99 55.7%, 1 69.8%, 1
+    );
+    --spring-lift: linear(
+      0, 0.006 1.1%, 0.024 2.4%, 0.055 3.8%, 0.096 5.2%, 0.187 7.8%, 0.516 16.5%, 0.616 19.5%, 0.702 22.6%,
+      0.774 25.6%, 0.833 28.6%, 0.883 31.9%, 0.922 35.2%, 0.953 38.9%, 0.975 42.8%, 0.991 47.3%, 1.001 52.5%,
+      1.006 63.1%, 1
+    );
+    --spring-stamp: linear(
+      0, 0.008 1.3%, 0.027 2.6%, 0.061 4.1%, 0.109 5.7%, 0.208 8.5%, 0.556 17.3%, 0.657 20.3%, 0.744 23.2%,
+      0.818 26.2%, 0.878 29.1%, 0.927 32.2%, 0.964 35.4%, 0.99 38.5%, 1.009 41.9%, 1.027 49.8%, 1.004 80%, 1
+    );
+  }
+}
+
+@theme {
+  --ease-standard: cubic-bezier(0.2, 0, 0.38, 0.9);
+  --ease-enter: cubic-bezier(0, 0, 0.3, 1);
+  --ease-exit: cubic-bezier(0.4, 0.14, 1, 1);
+  --ease-press: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Something arriving: 4px rise + fade (fade only under reduced motion via --motion-scale). */
+@keyframes enter-rise {
+  from {
+    opacity: 0;
+    translate: 0 calc(var(--dist-row) * var(--motion-scale));
+  }
+}
+
+@keyframes enter-pop {
+  from {
+    opacity: 0;
+    translate: 0 calc(var(--dist-pop) * var(--motion-scale));
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+/* The status line's ink run: a 32px segment crosses the hairline in 1400ms, then rests 600ms. */
+@keyframes ink-run {
+  from {
+    left: -32px;
+  }
+  70%,
+  to {
+    left: 100%;
+  }
+}
+
+/* An indicator that is always mounted but should only paint when the wait is slow (§3.1). */
+.delayed-in {
+  animation: fade-in var(--dur-quick) var(--ease-enter) var(--loading-delay) both;
+}
+
+/* Reduced motion: movement becomes opacity, fades stay short, loops stop (§2.7). Durations shrink
+   rather than vanish, so transitionend still fires. */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    transition: none !important;
+  :root {
+    --motion-scale: 0;
+    --press-scale: 1;
+    --press-scale-sm: 1;
+    --dur-move: var(--dur-quick);
+    --dur-enter: var(--dur-quick);
+    --dur-turn: var(--dur-quick);
+    --dur-sheet: var(--dur-quick);
+    --dur-rule-draw: 1ms;
+    --spring-settle: var(--ease-standard);
+    --spring-lift: var(--ease-standard);
+    --spring-stamp: var(--ease-standard);
+  }
+
+  .motion-loop {
     animation: none !important;
+  }
+
+  /* Card turn: the side that appears fades instead of turning. */
+  [data-review-reveal],
+  [data-review-answer] {
+    animation-name: fade-in !important;
+    animation-duration: var(--dur-quick) !important;
+  }
+
+  /* Sheets appear and leave in place. */
+  [data-vaul-drawer][data-state="open"] {
+    animation-name: fade-in !important;
+    animation-duration: var(--dur-quick) !important;
+  }
+
+  [data-vaul-drawer][data-state="closed"] {
+    animation-name: fade-out !important;
+    animation-duration: var(--dur-quick) !important;
+  }
+
+  ::view-transition-group(*) {
+    animation-duration: 0s;
   }
 }

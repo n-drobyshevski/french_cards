@@ -295,7 +295,7 @@ function FolderForm(props: FormProps) {
         </p>
       )}
 
-      <Button type="submit" block loading={saving} className="mt-5">
+      <Button type="submit" block pending={saving} pendingLabel="Сохраняем…" className="mt-5">
         {folder ? "Сохранить" : "Создать тему"}
       </Button>
     </form>

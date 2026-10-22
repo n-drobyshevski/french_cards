@@ -565,7 +565,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
           <Button variant="secondary" block disabled={saving} onClick={() => saveForm(true)}>
             Добавить и ещё
           </Button>
-          <Button block loading={saving} onClick={() => saveForm(false)}>
+          <Button block pending={saving} pendingLabel="Добавляем…" onClick={() => saveForm(false)}>
             Добавить
           </Button>
         </div>
@@ -576,7 +576,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
       <>
         {undoLine}
         {errorLine}
-        <Button block loading={saving} disabled={listSelected.length === 0} onClick={saveList}>
+        <Button block pending={saving} pendingLabel="Добавляем…" disabled={listSelected.length === 0} onClick={saveList}>
           {listSelected.length > 0 ? `Добавить ${nWords(listSelected.length)}` : "Добавить"}
         </Button>
       </>
@@ -586,7 +586,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
       <>
         {undoLine}
         {errorLine}
-        <Button block loading={saving} onClick={saveQuick}>
+        <Button block pending={saving} pendingLabel="Добавляем…" onClick={saveQuick}>
           Добавить
         </Button>
       </>

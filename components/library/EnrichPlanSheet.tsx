@@ -162,7 +162,7 @@ export function EnrichPlanSheet({ open, onOpenChange }: EnrichPlanSheetProps) {
         <Button variant="tertiary" onClick={close}>
           Отмена
         </Button>
-        <Button disabled={!plan || picked.length === 0} loading={applying} trailing={plan ? picked.length : undefined} onClick={() => void apply()}>
+        <Button disabled={!plan || picked.length === 0} pending={applying} pendingLabel="Применяем…" trailing={plan ? picked.length : undefined} onClick={() => void apply()}>
           Применить
         </Button>
       </div>

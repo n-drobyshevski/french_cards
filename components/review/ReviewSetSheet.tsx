@@ -126,7 +126,7 @@ export function ReviewSetSheet({ open, onOpenChange, set, folders, direction, on
       <Button variant="tertiary" onClick={() => onOpenChange(false)}>
         Отмена
       </Button>
-      <Button disabled={!name} loading={saving} trailing={count ?? undefined} onClick={() => void save()}>
+      <Button disabled={!name} pending={saving} pendingLabel="Сохраняем…" trailing={count ?? undefined} onClick={() => void save()}>
         Сохранить
       </Button>
     </div>

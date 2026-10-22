@@ -50,10 +50,14 @@ describe("Button", () => {
     expect(html).toContain("h-[52px]");
   });
 
-  it("disables and marks busy while loading", () => {
-    const html = renderToStaticMarkup(h(Button, { loading: true }, "Добавить"));
-    expect(html).toContain("disabled");
+  it("blocks taps and marks busy while pending, keeping full contrast and both labels in one cell", () => {
+    const html = renderToStaticMarkup(h(Button, { pending: true, pendingLabel: "Добавляем…" }, "Добавить"));
+    expect(html).not.toContain(`disabled=""`);
+    expect(html).toContain('aria-disabled="true"');
     expect(html).toContain('aria-busy="true"');
+    expect(html).toContain("data-blocked");
+    expect(html).toContain("Добавить<");
+    expect(html).toContain("Добавляем…");
   });
 
   it("exposes classes for links", () => {

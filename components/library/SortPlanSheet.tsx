@@ -148,7 +148,8 @@ export function SortPlanSheet({ open, onOpenChange }: SortPlanSheetProps) {
           </Button>
           <Button
             disabled={!plan || !summary || summary.apply === 0}
-            loading={applying}
+            pending={applying}
+            pendingLabel="Применяем…"
             trailing={summary ? summary.apply : undefined}
             onClick={() => plan && void apply(plan)}
           >

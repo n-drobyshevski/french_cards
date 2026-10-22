@@ -227,7 +227,7 @@ export function ReviewView({
             <Icon name="chevron" size={14} className="text-muted" />
           </span>
         </button>
-        <Button className="min-w-0 flex-1" disabled={selected === 0} loading={saving} onClick={onAdd}>
+        <Button className="min-w-0 flex-1" disabled={selected === 0} pending={saving} pendingLabel="Добавляем…" onClick={onAdd}>
           {selected === 0 ? "Ничего не отмечено" : `Добавить ${wordsRu(selected)}`}
         </Button>
       </div>
