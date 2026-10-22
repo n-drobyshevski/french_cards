@@ -41,5 +41,8 @@ export const CONTEXT_EXAMPLES_MAX = 8;
 export const CONTEXT_MEANINGS_MAX = LOOKUP_TRANSLATIONS_MAX;
 export const CONJ_TENSES = ["present", "passe_compose", "imparfait", "futur"] as const;
 export type ConjTense = (typeof CONJ_TENSES)[number];
+/** /api/ai/fill: the built-in word fields «Заполнить автоматически» can ask for. */
+export const FILL_FIELDS = ["origin", "conjugation"] as const;
+export type FillField = (typeof FILL_FIELDS)[number];
 export const EXAMPLE_KINDS = ["forum", "song", "article", "subtitles", "social", "book", "other"] as const;
 export type ExampleKind = (typeof EXAMPLE_KINDS)[number];

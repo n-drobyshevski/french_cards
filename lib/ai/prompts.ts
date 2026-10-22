@@ -206,6 +206,8 @@ skip false, fr_field "Front", used_fields ["Front", "Back", "Notes"], fr "chelou
 n5 · Front: Subjonctif après «bien que» · Back: Bien que + subjonctif : bien qu'il soit tard… →
 skip true, issue "правило грамматики, не слово", fr "", ru "", folder INBOX, used_fields []`;
 
+const ORIGIN_RULE = "one short Russian line that helps remember the word: what it is built on and what that means («от volonté „воля“ + -aire „относящийся к“»), the verlan source («верлан от lourd „тяжёлый, нудный“»), the language it came from («из арабского kif „кайф, гашиш“»), the image behind an idiom («букв. „иметь ненависть“»). Only what you are sure of; null otherwise. Never a long etymology, never Latin roots nobody can use.";
+
 /** /api/ai/example: one more example sentence for a card («другой пример», «+ Ещё пример»). */
 export const EXAMPLE_SYSTEM = `${APP_CONTEXT}
 
@@ -231,7 +233,7 @@ TASK. The learner looks a word or phrase up, the way people use Reverso Context.
 - fr: the French headword in dictionary form (see FORMS). Fix accents and obvious typos (chelou, not "chelous"; être vénère, not "etre venere"). For a Russian query give the most common SPOKEN French equivalent; prefer a familier or argot word when one is widely used, otherwise the neutral one.
 - translations: the distinct senses of the headword as Russian equivalents, most frequent first, each with a rough share of real usage in whole percent (adding up to about 100). One sense → one translation with share 100. Never list mere synonyms of the same sense as separate senses: «тащиться, кайфовать» are one sense; «тащиться» and «нравиться (о человеке)» are two. Same register as the French word.
 - synonyms: French words a speaker could use instead, across registers from neutral to vulg, each with its own slang level and a short Russian equivalent. Include the neutral standard word when the headword is slang (la thune → l'argent), and the slangier ones when it is neutral (l'argent → le fric, la thune, le blé). Never the headword itself, never an invented word.
-- origin: one short Russian line that helps remember the word: what it is built on and what that means («от volonté „воля“ + -aire „относящийся к“»), the verlan source («верлан от lourd „тяжёлый, нудный“»), the language it came from («из арабского kif „кайф, гашиш“»), the image behind an idiom («букв. „иметь ненависть“»). Only what you are sure of; null otherwise. Never a long etymology, never Latin roots nobody can use.
+- origin: ${ORIGIN_RULE}
 - note: a neutral gloss for slang or a typical construction; Russian, short; never repeat origin (here the verlan source goes into origin, not note); null when nothing is worth saying.
 - found false only for things that are not language (a URL, random letters, a person's name); then leave text fields empty and lists empty.
 
@@ -246,6 +248,35 @@ q «бабки» → fr "la thune", pos noun, gender f, slang_level arg, origin 
 q «volontaire» → fr "volontaire", pos adj, slang_level neutral, origin "от volonté „воля“ + -aire", translations [добровольный 55; волевой, решительный 30; доброволец 15]
 q «se casser» → fr "se casser", pos verb, slang_level fam, origin "букв. „сломаться“ → „сорваться с места“", translations [свалить, смыться 60; сломаться 40]
 q «putain» → fr "putain", pos expression, slang_level vulg, translations [блин, чёрт (междометие) 85; шлюха 15], synonyms [zut «блин» neutral; merde «чёрт» vulg; bordel «чёрт возьми» vulg]`;
+
+/** /api/ai/fill, field origin: «Заполнить автоматически» in the word card's «Происхождение». */
+export const FILL_ORIGIN_SYSTEM = `${APP_CONTEXT}
+
+TASK. Fill the «Происхождение» line of a card the learner already has, as JSON matching the schema. The user message gives the French side, the Russian side (it tells you which sense is meant) and the part of speech.
+- origin: ${ORIGIN_RULE}
+- Russian, one line, at most about 120 characters. Quote French words as they are and give their meaning in „…“.
+
+EXAMPLES.
+kiffer «тащиться» → "от арабского kif „кайф“"
+chelou «стрёмный» → "верлан от louche „мутный, подозрительный“"
+volontaire «добровольный» → "от volonté „воля“ + -aire"
+se casser «свалить» → "букв. „сломаться“ → „сорваться с места“"
+avoir la haine «быть в бешенстве» → "букв. „иметь ненависть“"
+la table «стол» → null (nothing that helps remember it)`;
+
+/** /api/ai/fill, field conjugation: «Заполнить автоматически» in the word card's «Спряжение» (only for verbs the device's dictionary does not know). */
+export const FILL_CONJUGATION_SYSTEM = `${APP_CONTEXT}
+
+TASK. Conjugate a verb from the learner's cards, as JSON matching the schema: présent, passé composé, imparfait and futur simple, six forms each (je, tu, il, nous, vous, ils). The user message gives the French side, the Russian side and the part of speech. The app asks only for verbs its own dictionary does not know: slang and verlan verbs, rare or new verbs, expressions built on a verb.
+- Every form with its subject pronoun, elided where French elides it (j'aime, j'ai kiffé), the reflexive pronoun included for a pronominal verb (je me casse, je me suis cassé). Use il and ils for the third person.
+- An expression built on a verb conjugates its verb and keeps the rest (avoir la flemme → j'ai la flemme, tu as la flemme…; se faire chier → je me fais chier…).
+- Passé composé: the right auxiliary; with être the participle agrees in the plural (nous sommes partis).
+- Slang and verlan verbs are almost always regular -er verbs (kiffer, galérer, s'enjailler): conjugate them on that pattern, spelling changes included (je galère).
+- Only the forms people actually write; never invent an irregular form. If the headword is not a verb and not built on one, set conjugates false.
+- remark: a short Russian remark only when a form needs one («безличный глагол», «во множественном почти не употребляется»); null otherwise.
+
+EXAMPLE.
+kiffer «тащиться» → conjugates true, auxiliary avoir, present [je kiffe, tu kiffes, il kiffe, nous kiffons, vous kiffez, ils kiffent], passe_compose [j'ai kiffé, tu as kiffé, il a kiffé, nous avons kiffé, vous avez kiffé, ils ont kiffé], imparfait [je kiffais, tu kiffais, il kiffait, nous kiffions, vous kiffiez, ils kiffaient], futur [je kifferai, tu kifferas, il kiffera, nous kifferons, vous kifferez, ils kifferont], remark null`;
 
 /** /api/ai/context, call 1 (with web search): find real sentences that use the headword. */
 export const CONTEXT_SEARCH_SYSTEM = `${APP_CONTEXT}
@@ -303,6 +334,10 @@ export function contextPickPrompt(input: { fr: string; meanings: readonly string
 export function exampleUserPrompt(input: { fr: string; ru: string; note: string | null; avoid: readonly string[] }): string {
   const existing = input.avoid.length ? input.avoid.map((e) => `- ${oneLine(e)}`).join("\n") : "(none)";
   return `French: ${oneLine(input.fr)}\nRussian: ${oneLine(input.ru)}\nNote: ${input.note ? oneLine(input.note) : "-"}\n\nExamples it already has:\n${existing}`;
+}
+
+export function fillUserPrompt(input: { fr: string; ru: string | null; pos: string | null }): string {
+  return `French: ${oneLine(input.fr)}\nRussian: ${input.ru ? oneLine(input.ru) : "-"}\nPart of speech: ${input.pos ?? "-"}`;
 }
 
 function folderLines(folders: readonly FolderInput[]): string {

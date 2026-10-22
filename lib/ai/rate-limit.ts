@@ -24,6 +24,8 @@ export const RATE_LIMITS = {
   lookup: { capacity: 20, refillPerSec: 1 / 3 },
   // «Контекст» web examples: each run makes up to 3 billed web searches.
   context: { capacity: 6, refillPerSec: 1 / 30 },
+  // «Заполнить автоматически» in the word card (origin, a conjugation the dictionary lacks): one tap each.
+  fill: { capacity: 20, refillPerSec: 1 / 3 },
   // Claude connector write tools (lib/mcp/tools.ts), taken inside tools/call only.
   mcp: { capacity: 20, refillPerSec: 1 / 3 },
 } satisfies Record<string, BucketConfig>;

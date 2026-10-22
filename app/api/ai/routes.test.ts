@@ -13,6 +13,7 @@ import { POST as context } from "./context/route";
 import { POST as enrich } from "./enrich/route";
 import { POST as example } from "./example/route";
 import { POST as extract } from "./extract/route";
+import { POST as fill } from "./fill/route";
 import { POST as lookup } from "./lookup/route";
 import { POST as suggest } from "./suggest/route";
 
@@ -603,6 +604,45 @@ describe("POST /api/ai/lookup", () => {
     ai.generateText.mockRejectedValue(new Error("down"));
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const res = await lookup(json({ q: "kiffer" }));
+    spy.mockRestore();
+    expect(res.status).toBe(502);
+  });
+});
+
+describe("POST /api/ai/fill", () => {
+  const forms = (stem: string) => [`je ${stem}e`, `tu ${stem}es`, `il ${stem}e`, `nous ${stem}ons`, `vous ${stem}ez`, `ils ${stem}ent`];
+  const conj = { conjugates: true, auxiliary: "avoir", remark: null, present: forms("kiff"), passe_compose: forms("x"), imparfait: forms("y"), futur: forms("z") };
+
+  it("400 without a known field or a word", async () => {
+    expect((await fill(json({ field: "note", fr: "kiffer" }))).status).toBe(400);
+    expect((await fill(json({ field: "origin", fr: " " }))).status).toBe(400);
+    expect(ai.generateText).not.toHaveBeenCalled();
+  });
+
+  it("origin: one cleaned line, the card's sides in the prompt", async () => {
+    ai.generateText.mockResolvedValue({ output: { origin: "  от арабского kif  „кайф“ " } });
+    const res = await fill(json({ field: "origin", fr: "kiffer", ru: "тащиться", pos: "verb" }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ field: "origin", value: "от арабского kif „кайф“" });
+    expect((ai.generateText.mock.calls[0][0] as { prompt: string }).prompt).toBe("French: kiffer\nRussian: тащиться\nPart of speech: verb");
+  });
+
+  it("conjugation: six forms per tense, or null for a half answer or a word that does not conjugate", async () => {
+    ai.generateText.mockResolvedValueOnce({ output: conj });
+    expect(await (await fill(json({ field: "conjugation", fr: "kiffer" }))).json()).toMatchObject({
+      field: "conjugation",
+      value: { auxiliary: "avoir", tenses: { present: forms("kiff") } },
+    });
+    ai.generateText.mockResolvedValueOnce({ output: { ...conj, futur: forms("z").slice(0, 5) } });
+    expect(await (await fill(json({ field: "conjugation", fr: "kiffer" }))).json()).toEqual({ field: "conjugation", value: null });
+    ai.generateText.mockResolvedValueOnce({ output: { ...conj, conjugates: false } });
+    expect(await (await fill(json({ field: "conjugation", fr: "la thune" }))).json()).toEqual({ field: "conjugation", value: null });
+  });
+
+  it("502 when the model call fails", async () => {
+    ai.generateText.mockRejectedValue(new Error("down"));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await fill(json({ field: "origin", fr: "kiffer" }));
     spy.mockRestore();
     expect(res.status).toBe(502);
   });

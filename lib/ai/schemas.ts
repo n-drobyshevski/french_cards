@@ -24,9 +24,11 @@ import {
   CONTEXT_EXAMPLES_MAX,
   CONTEXT_MEANINGS_MAX,
   EXAMPLE_KINDS,
+  FILL_FIELDS,
   LOOKUP_SYNONYMS_MAX,
   LOOKUP_TRANSLATIONS_MAX,
   type ExampleKind,
+  type FillField,
   type Provenance,
   type SlangCode,
 } from "./constants";
@@ -707,4 +709,45 @@ export interface ContextResponse {
   sources: number;
   /** On the device: true once the paid web search ran for this query (its examples follow Tatoeba's). */
   web?: boolean;
+}
+
+/** POST /api/ai/fill: one built-in field of a saved word, filled on request («Заполнить автоматически»). */
+export const FillRequestSchema = z.object({
+  model: z.enum(MODEL_TIERS).default("fast"),
+  field: z.enum(FILL_FIELDS),
+  fr: shortText(120).min(1),
+  /** The card's Russian side: which sense is meant. */
+  ru: shortText(160).nullable().optional(),
+  pos: z.enum(POS_VALUES).optional(),
+});
+export type FillRequest = z.input<typeof FillRequestSchema>;
+
+export const FillOriginModelSchema = z.object({
+  origin: z
+    .string()
+    .nullable()
+    .describe(
+      "One short Russian line on where the word comes from, to help remember it: the word it is built on with its meaning, the verlan source, the language it was borrowed from, the image behind an idiom. Null when you are not sure.",
+    ),
+});
+export type FillOriginModel = z.infer<typeof FillOriginModelSchema>;
+
+const formsField = (tense: string) =>
+  z.array(z.string()).describe(`${tense}: exactly six forms, in the order je, tu, il, nous, vous, ils, each with its subject pronoun (j'aime, je me casse, il se casse).`);
+
+export const FillConjugationModelSchema = z.object({
+  conjugates: z.boolean().describe("false when the headword is not a verb or an expression built on one; the other fields are then ignored."),
+  auxiliary: z.enum(["avoir", "être"]).describe("The auxiliary of the passé composé (être for pronominal verbs)."),
+  remark: z.string().nullable().describe("Optional short Russian remark on the conjugation (a defective or impersonal verb, a spelling change); null when nothing is worth saying."),
+  present: formsField("Présent"),
+  passe_compose: formsField("Passé composé"),
+  imparfait: formsField("Imparfait"),
+  futur: formsField("Futur simple"),
+});
+export type FillConjugationModel = z.infer<typeof FillConjugationModelSchema>;
+
+export interface FillResponse {
+  field: FillField;
+  /** null: the model had nothing it was sure of (or the word does not conjugate). */
+  value: string | Conjugation | null;
 }

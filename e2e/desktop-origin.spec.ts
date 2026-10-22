@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { mockFill } from "./fixtures";
 
 // «Происхождение» on desktop: edited in the library's detail pane, shown in the table's RU column.
 
@@ -31,4 +32,17 @@ test("the conjugation is edited in the detail pane", async ({ page }) => {
   await futur.fill("ils vont se casser");
   await futur.press("Control+Enter");
   await expect(pane(page).getByText("своё · être")).toBeVisible();
+});
+
+test("«Заполнить автоматически» fills the origin in the detail pane", async ({ page }) => {
+  await mockFill(page, () => "от flic „муха“ (арго)");
+  await page.goto("/library");
+  await row(page, "les flics").click();
+  await pane(page).getByRole("button", { name: "Поле", exact: true }).click();
+  await page.getByRole("menu", { name: "Какое поле" }).getByRole("menuitem", { name: /^Происхождение/ }).click();
+  await pane(page).getByRole("button", { name: "Заполнить автоматически" }).click();
+  const input = pane(page).getByRole("textbox", { name: "Происхождение" });
+  await expect(input).toHaveValue("от flic „муха“ (арго)");
+  await input.press("Enter");
+  await expect(row(page, "les flics")).toContainText("· от flic „муха“ (арго)");
 });

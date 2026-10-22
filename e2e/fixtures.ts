@@ -251,6 +251,19 @@ export async function mockExample(
   });
 }
 
+/** Answers POST /api/ai/fill («Заполнить автоматически»): `make` gets the request. */
+export async function mockFill(
+  page: Page,
+  make: (body: { field: "origin" | "conjugation"; fr: string; ru: string | null; pos?: string }) => unknown,
+  onRequest?: (body: { field: string; fr: string }) => void,
+) {
+  await page.route("**/api/ai/fill", async (route: Route) => {
+    const body = route.request().postDataJSON() as { field: "origin" | "conjugation"; fr: string; ru: string | null; pos?: string };
+    onRequest?.(body);
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ field: body.field, value: make(body) }) });
+  });
+}
+
 // «Контекст»: LookupResponse and ContextResponse (lib/ai/schemas.ts).
 
 export interface LookupWire {

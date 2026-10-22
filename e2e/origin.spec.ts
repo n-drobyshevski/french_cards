@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { openReview, questionCard } from "./fixtures";
+import { mockFill, openReview, questionCard } from "./fixtures";
 
 // «Происхождение» (word.origin, written from the chat): in library rows and on the card's answer
 // side, hidden with Settings → «Оформление» → «Происхождение слов».
@@ -8,8 +8,13 @@ const ORIGIN = "от blaguer „шутить“";
 
 /** Writes an origin on the seeded word straight into IndexedDB, as a sync from the chat would. */
 async function setOrigin(page: Page, fr: string, origin: string) {
+  await patchWord(page, fr, { origin });
+}
+
+/** Changes the seeded word straight in IndexedDB. */
+async function patchWord(page: Page, fr: string, patch: Record<string, unknown>) {
   await page.evaluate(
-    ([word, text]) =>
+    ([word, changes]) =>
       new Promise<void>((resolve, reject) => {
         const open = indexedDB.open("kartochki");
         open.onerror = () => reject(open.error);
@@ -19,7 +24,7 @@ async function setOrigin(page: Page, fr: string, origin: string) {
           const all = store.getAll();
           all.onsuccess = () => {
             const w = (all.result as { fr: string; deleted_at: string | null }[]).find((x) => x.fr === word && !x.deleted_at);
-            if (w) store.put({ ...w, origin: text });
+            if (w) store.put({ ...w, ...changes });
           };
           tx.oncomplete = () => {
             open.result.close();
@@ -28,7 +33,7 @@ async function setOrigin(page: Page, fr: string, origin: string) {
           tx.onerror = () => reject(tx.error);
         };
       }),
-    [fr, origin] as const,
+    [fr, patch] as const,
   );
 }
 
@@ -115,4 +120,52 @@ test("the conjugation is edited by hand in the word card and goes back to the di
   await card.getByRole("button", { name: "Вернуть из словаря" }).click();
   await expect(card.getByText("из словаря · être")).toBeVisible();
   await expect(card.getByText("je me casse · tu te casses · il se casse…")).toBeVisible();
+});
+
+test("«Заполнить автоматически» fills the origin and a conjugation the dictionary lacks", async ({ page }) => {
+  const asked: string[] = [];
+  const forms = (stem: string) => ["je", "tu", "il", "nous", "vous", "ils"].map((p) => `${p} ${stem}`);
+  await mockFill(
+    page,
+    (body) =>
+      body.field === "origin"
+        ? "верлан от choper „поймать“"
+        : { auxiliary: "avoir", remark: null, tenses: { present: forms("pécho"), passe_compose: forms("a pécho"), imparfait: forms("péchait"), futur: forms("va pécho") } },
+    (body) => asked.push(`${body.field}:${body.fr}`),
+  );
+  await openReview(page);
+  // A verb the dictionary does not know: «+ Поле» offers «Спряжение».
+  await patchWord(page, "une blague", { fr: "pécho", ru: "склеить, снять", pos: "verb", gender: "none" });
+  await page.goto("/library");
+  await page.getByRole("searchbox", { name: "Поиск по FR и RU" }).fill("pécho");
+  await page.getByText("pécho", { exact: true }).click();
+  const card = page.getByRole("dialog", { name: "Карточка слова" });
+
+  await card.getByRole("button", { name: "Поле", exact: true }).click();
+  await page.getByRole("menu", { name: "Какое поле" }).getByRole("menuitem", { name: /^Происхождение/ }).click();
+  await card.getByRole("button", { name: "Заполнить автоматически" }).click();
+  await expect(card.getByRole("textbox", { name: "Происхождение" })).toHaveValue("верлан от choper „поймать“");
+  await card.getByRole("button", { name: "Сохранить" }).click();
+  await expect(card.getByText("верлан от choper „поймать“")).toBeVisible();
+
+  await card.getByRole("button", { name: "Поле", exact: true }).click();
+  await page.getByRole("menu", { name: "Какое поле" }).getByRole("menuitem", { name: /^Спряжение/ }).click();
+  await expect(card.getByRole("textbox", { name: "Présent, je" })).toHaveValue("");
+  await card.getByRole("button", { name: "Заполнить автоматически" }).click();
+  await expect(card.getByRole("textbox", { name: "Présent, je" })).toHaveValue("je pécho");
+  await expect(card.getByRole("textbox", { name: "Futur, ils" })).toHaveValue("ils va pécho");
+  await card.getByRole("button", { name: "Сохранить" }).click();
+  await expect(card.getByText("своё · avoir")).toBeVisible();
+  expect(asked).toEqual(["origin:pécho", "conjugation:pécho"]);
+});
+
+test("a verb the dictionary knows has no «Заполнить автоматически» in its conjugation form", async ({ page }) => {
+  await openReview(page);
+  await page.goto("/library");
+  await page.getByRole("searchbox", { name: "Поиск по FR и RU" }).fill("casser");
+  await page.getByText("se casser", { exact: true }).click();
+  const card = page.getByRole("dialog", { name: "Карточка слова" });
+  await card.getByRole("button", { name: "Изменить спряжение" }).click();
+  await expect(card.getByRole("textbox", { name: "Présent, je" })).toHaveValue("je me casse");
+  await expect(card.getByRole("button", { name: "Заполнить автоматически" })).toHaveCount(0);
 });

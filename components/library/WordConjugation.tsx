@@ -8,11 +8,13 @@ import { TENSE_NAMES } from "@/components/context/data";
 import { useUndoSnackbar } from "@/components/library/undo";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
+import { autofillConjugation } from "@/lib/autofill";
 import { loadConjData } from "@/lib/conjugation";
 import { cleanConjugation, conjugate } from "@/lib/core/conjugate";
 import type { Conjugation, Word } from "@/lib/types";
 import { updateWord } from "@/lib/words";
-import { CONJ_TENSE_KEYS, type ConjDraft } from "./word-editor";
+import { AutoFillButton } from "./AutoFill";
+import { CONJ_TENSE_KEYS, conjDraftOf, type ConjDraft } from "./word-editor";
 
 const PERSONS = ["je", "tu", "il", "nous", "vous", "ils"] as const;
 
@@ -60,12 +62,16 @@ export function ConjugationPreview({ saved, builtin, size }: { saved: Conjugatio
   );
 }
 
-/** Four tenses × six forms and the auxiliary; «Вернуть из словаря» when the word has its own. */
+/**
+ * Four tenses × six forms and the auxiliary; «Вернуть из словаря» when the word has its own, and
+ * «Заполнить автоматически» when the dictionary does not know the verb.
+ */
 export function ConjugationForm({
   draft,
   onChange,
   word,
   onReset,
+  autofill = false,
   size,
 }: {
   draft: ConjDraft;
@@ -73,6 +79,8 @@ export function ConjugationForm({
   word: Word;
   /** After «Вернуть из словаря» (the form closes). */
   onReset: () => void;
+  /** Offer «Заполнить автоматически» (/api/ai/fill): the dictionary has no conjugation for the verb. */
+  autofill?: boolean;
   size: "sheet" | "pane";
 }) {
   const showUndo = useUndoSnackbar();
@@ -93,6 +101,7 @@ export function ConjugationForm({
 
   return (
     <div className="mt-1 flex flex-col gap-3">
+      {autofill && <AutoFillButton fill={(o) => autofillConjugation(word, o)} onFill={(c) => onChange(conjDraftOf(c))} />}
       <div role="radiogroup" aria-label="Вспомогательный глагол" className="flex items-center gap-1.5">
         <span className="meta mr-1">Вспом. глагол</span>
         {(["avoir", "être"] as const).map((aux) => (

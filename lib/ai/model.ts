@@ -9,7 +9,7 @@ export const DEFAULT_MODEL_ID = "claude-haiku-5-5";
 /** Settings «Модель» → «Точнее». */
 export const ACCURATE_MODEL_ID = "claude-sonnet-5-5";
 
-export type AiTask = "suggest" | "extract" | "classify" | "enrich" | "example" | "anki" | "lookup" | "context";
+export type AiTask = "suggest" | "extract" | "classify" | "enrich" | "example" | "anki" | "lookup" | "context" | "fill";
 /** What the client may ask for; never a raw model id. */
 export type ModelTier = "fast" | "accurate";
 

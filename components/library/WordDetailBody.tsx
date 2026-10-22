@@ -25,6 +25,7 @@ import { AbbrHint } from "@/components/ui/AbbrHint";
 import { SlangMeter } from "@/components/ui/SlangMeter";
 import { Toggle } from "@/components/ui/Toggle";
 import { cx } from "@/components/ui/cx";
+import { autofillOrigin } from "@/lib/autofill";
 import { ORIGIN_MAX } from "@/lib/core/conjugate";
 import { readNdjson } from "@/lib/ai/ndjson";
 import type { AiErrorBody, SuggestLine, Suggestion } from "@/lib/ai/schemas";
@@ -66,6 +67,7 @@ import { ExampleList, toDrafts, type ExampleDraft } from "@/components/examples/
 import { examplesPatch, wordExamples } from "@/lib/examples";
 import { conjDraftError, draftOf, isDirty, patchFor, undoFor, withConjugationDraft, type Draft, type Editing } from "./word-editor";
 import { Menu, MenuItem } from "./Menu";
+import { AutoFillButton } from "./AutoFill";
 import { conjugationShown, ConjugationForm, ConjugationPreview, offersConjugation, useBuiltinConjugation } from "./WordConjugation";
 import { cleanConjugation, cleanOrigin } from "@/lib/core/conjugate";
 import { canAddField, fieldRows, fieldRowsError, newFieldRow, type FieldRow } from "./word-fields";
@@ -545,6 +547,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
                   autoFocus
                   className="mt-1 h-11 rounded-chip border border-rule bg-surface px-3 text-[15px] text-ink outline-none placeholder:text-muted focus:border-ink pointer-coarse:text-[16px]"
                 />
+                <AutoFillButton className="mt-1" fill={(o) => autofillOrigin(w, o)} onFill={(v) => set("origin", v)} />
                 {errorLine}
                 {editActions}
               </form>
@@ -563,7 +566,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             form={
               draft && (
                 <form onSubmit={save} className="flex flex-col" aria-label="Изменить спряжение">
-                  <ConjugationForm draft={draft.conjugation} onChange={(next) => set("conjugation", next)} word={w} onReset={editor.cancel} size="sheet" />
+                  <ConjugationForm draft={draft.conjugation} onChange={(next) => set("conjugation", next)} word={w} onReset={editor.cancel} autofill={builtin === null} size="sheet" />
                   {errorLine}
                   {editActions}
                 </form>
@@ -1195,6 +1198,7 @@ function PaneContent({
                     autoFocus
                     className={cx(fieldInput, "text-[14px]")}
                   />
+                  <AutoFillButton className="mt-1" fill={(o) => autofillOrigin(w, o)} onFill={(v) => set("origin", v)} />
                   {formActions}
                 </form>
               ) : (
@@ -1203,7 +1207,7 @@ function PaneContent({
               {conjugationShown(w, builtin, editing) &&
                 (editing === "conjugation" && draft ? (
                   <form onSubmit={(e) => void submit(e)} onKeyDown={formKeys} aria-label="Изменить спряжение" className="flex flex-col">
-                    <ConjugationForm draft={draft.conjugation} onChange={(next) => set("conjugation", next)} word={w} onReset={editor.cancel} size="pane" />
+                    <ConjugationForm draft={draft.conjugation} onChange={(next) => set("conjugation", next)} word={w} onReset={editor.cancel} autofill={builtin === null} size="pane" />
                     {formActions}
                   </form>
                 ) : (
