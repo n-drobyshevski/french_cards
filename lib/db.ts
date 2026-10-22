@@ -2,7 +2,20 @@
 // lib/sync.ts mirrors these tables to Supabase.
 import Dexie, { type EntityTable } from "dexie";
 import { installOutboxTracking } from "./outbox";
+import type { ContextResponse, LookupResponse } from "./ai/schemas";
 import type { FieldDef, Folder, ReorgRun, ReviewLog, ReviewSet, ReviewState, Settings, Word } from "./types";
+
+/** «Контекст»: one looked-up query (lib/context.ts). Device-local, not synced or backed up. */
+export interface LookupEntry {
+  /** searchKey(q). */
+  key: string;
+  q: string;
+  /** Last opened, ISO: the history order. */
+  at: string;
+  lookup: LookupResponse;
+  /** null until the web search finished once. */
+  context: ContextResponse | null;
+}
 
 /** Local bookkeeping for sync: rows changed since the last successful push. */
 export interface Outbox {
@@ -20,6 +33,7 @@ export class KartochkiDB extends Dexie {
   reorg_runs!: EntityTable<ReorgRun, "id">;
   review_sets!: EntityTable<ReviewSet, "id">;
   field_defs!: EntityTable<FieldDef, "id">;
+  lookups!: EntityTable<LookupEntry, "key">;
   settings!: EntityTable<Settings, "id">;
   outbox!: EntityTable<Outbox, "key">;
 
@@ -49,6 +63,8 @@ export class KartochkiDB extends Dexie {
       });
     // «Свои поля»: shared custom field definitions (synced).
     this.version(3).stores({ field_defs: "id, sort, updated_at" });
+    // «Контекст»: looked-up words and their web examples, kept on this device only (never synced).
+    this.version(4).stores({ lookups: "key, at" });
     // Every write to a synced table queues `${table}:${id}` in outbox, in the same transaction.
     installOutboxTracking(this);
   }
