@@ -480,6 +480,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
           <p data-refresh="ru" data-edited="entry" className="m-0 mt-1 text-[18px] leading-6">
             {w.ru}
           </p>
+          {w.origin && <p className="m-0 mt-1.5 text-[14px] leading-5 text-muted">{w.origin}</p>}
         </>
       )}
 
@@ -1072,6 +1073,7 @@ function PaneContent({
               <p data-refresh="ru" data-edited="entry" className="m-0 mt-2 text-[18px] leading-6 font-medium">
                 {w.ru}
               </p>
+              {w.origin && <p className="m-0 mt-1.5 text-[14px] leading-5 text-muted">{w.origin}</p>}
               <RefreshResult refresh={refresh} />
             </>
           )}

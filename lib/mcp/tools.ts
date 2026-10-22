@@ -27,9 +27,11 @@ import {
 import { DEFAULT_FOLDERS, defaultFolderId, nextFolderSort, pickFolderColor, uniqueSlug } from "@/lib/core/folders";
 import { matchesSearch, normalizeLemma } from "@/lib/core/text";
 import { buildWord, cleanText, directionsOf, isMovable } from "@/lib/core/words";
+import { cleanConjugation, cleanOrigin, conjugate, ORIGIN_MAX, type ConjData } from "@/lib/core/conjugate";
+import conjTable from "@/public/lexique/fr-conj.json";
 import { newId } from "@/lib/id";
 import { newReviewState, reviewStateId, wordStatus, type CardStatus } from "@/lib/scheduler";
-import type { Confidence, CustomFieldValue, Direction, FieldDef, Folder, ReviewState, Word } from "@/lib/types";
+import type { Confidence, Conjugation, CustomFieldValue, Direction, FieldDef, Folder, ReviewState, Word } from "@/lib/types";
 import { PartialWriteError, RepoError, type McpRepo, type Replacement } from "./repo";
 import { studyDay } from "./study-day";
 
@@ -133,6 +135,20 @@ function customFieldsView(w: Word, defs: readonly FieldDef[]): Record<string, st
   return out;
 }
 
+const CONJ_DATA = conjTable as unknown as ConjData;
+
+/**
+ * Verbs only: the conjugation saved on the word (flat, as conjugation input takes it), or whether
+ * the app builds one on the device from Lexique (`conjugation_builtin`), so a missing one is easy to spot.
+ */
+function conjugationView(w: Word): Record<string, unknown> {
+  const saved = cleanConjugation(w.conjugation);
+  if (saved) return { conjugation: { auxiliary: saved.auxiliary, remark: saved.remark, ...saved.tenses } };
+  if (w.pos !== "verb" && w.pos !== "expression") return {};
+  const builtin = conjugate(w.fr, CONJ_DATA) !== null;
+  return w.pos === "verb" || builtin ? { conjugation_builtin: builtin } : {};
+}
+
 function wordView(w: Word, ctx: ViewContext) {
   const states = ctx.statesByWord.get(w.id) ?? [];
   const fields = customFieldsView(w, ctx.defs);
@@ -146,6 +162,8 @@ function wordView(w: Word, ctx: ViewContext) {
     extra_examples: w.extra_examples,
     // Only when the word has any, to keep results small.
     ...(Object.keys(fields).length > 0 ? { custom_fields: fields } : {}),
+    ...(w.origin ? { origin: w.origin } : {}),
+    ...conjugationView(w),
     pos: w.pos,
     gender: w.gender,
     slang_level: w.slang_level,
@@ -292,6 +310,43 @@ const slangLevel = z
   .max(3)
   .describe("0 neutral (нейтр.), 1 familier (fam.), 2 argot (arg.), 3 vulgaire (vulg.).");
 
+const conjForms = (tense: string) =>
+  z
+    .array(z.string().trim().min(1).max(80))
+    .length(6)
+    .describe(`${tense}: six forms je, tu, il, nous, vous, ils, each with its pronoun («je kiffe», «j'ai kiffé», «je me suis cassé»).`);
+
+const conjugationInput = z
+  .object({
+    auxiliary: z.enum(["avoir", "être"]).describe("Auxiliary of the passé composé (pronominal verbs: être)."),
+    remark: z.string().trim().max(120).nullable().optional().describe("Optional short Russian remark («неправильный глагол», «как venir»)."),
+    present: conjForms("Présent"),
+    passe_compose: conjForms("Passé composé"),
+    imparfait: conjForms("Imparfait"),
+    futur: conjForms("Futur simple"),
+  })
+  .nullable()
+  .optional()
+  .describe(
+    "Verbs only: the conjugation the app shows in «Контекст», instead of the one it builds on the device from Lexique. Set it when the word has conjugation_builtin false, or when the user asks; null clears it (back to the built-in one).",
+  );
+
+const originInput = optionalText(
+  ORIGIN_MAX,
+  "«Происхождение»: one short Russian line that helps remember the word: what it is built on and what that means («от volonté „воля“ + -aire»), the verlan source («верлан от lourd»), the language it came from («из арабского kif „кайф“»), the image behind an idiom. Only what you are sure of; null clears it.",
+);
+
+/** The input's flat conjugation as stored on a word; undefined = not given, null = clear. */
+function conjugationOf(input: z.infer<typeof conjugationInput>): Conjugation | null | undefined {
+  if (input === undefined) return undefined;
+  if (input === null) return null;
+  return cleanConjugation({
+    auxiliary: input.auxiliary,
+    remark: input.remark ?? null,
+    tenses: { present: input.present, passe_compose: input.passe_compose, imparfait: input.imparfait, futur: input.futur },
+  });
+}
+
 const newWordSchema = z.object({
   fr: z
     .string()
@@ -309,6 +364,8 @@ const newWordSchema = z.object({
   verlan: z.boolean().optional().describe("True for verlan forms (meuf, relou, chelou, vénère)."),
   tags: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
   custom_fields: customFieldsInput("Fill a shared field as its hint says; null or an empty value leaves it out."),
+  origin: originInput,
+  conjugation: conjugationInput,
   both_directions: z.boolean().optional().describe("Also make a RU→FR card (default true)."),
   folder: folderSelector.optional().describe(`Theme for this word only (id, slug, name or "${INBOX_SELECTOR}"); overrides the call's \`folder\`.`),
   folder_chosen_by_user: z
@@ -357,7 +414,7 @@ export const searchWords = tool({
   name: "search_words",
   title: "Search words",
   description:
-    "Search the user's saved French words. Every term of `query` must match the French, the Russian, the note, a tag or a custom field's value, ignoring accents and case; an empty query lists words. Filter by theme and learning status. Newest first; `total` counts all matches, and `next_offset` (when not null) fetches the next page. A word's custom fields («Свои поля») come as `custom_fields` (name → value), only when it has any. Use it before add_words to avoid duplicates, and to find ids for update_word, move_words and delete_words.",
+    "Search the user's saved French words. Every term of `query` must match the French, the Russian, the note, a tag or a custom field's value, ignoring accents and case; an empty query lists words. Filter by theme and learning status. Newest first; `total` counts all matches, and `next_offset` (when not null) fetches the next page. A word's custom fields («Свои поля») come as `custom_fields` (name → value), only when it has any; `origin` when it has one; for verbs, the saved `conjugation`, or `conjugation_builtin` (true when the app builds it on the device, false when it has none). Use it before add_words to avoid duplicates, and to find ids for update_word, move_words and delete_words.",
   input: z.object({
     query: z.string().max(200).optional().describe("Words to look for (French or Russian). Empty = all."),
     folder: folderSelector.optional(),
@@ -719,6 +776,8 @@ export const addWords = tool({
           verlan: input.verlan ?? false,
           tags: input.tags,
           custom_fields: fields.values,
+          origin: cleanOrigin(input.origin),
+          conjugation: pos === "verb" ? (conjugationOf(input.conjugation) ?? null) : null,
           both_directions: input.both_directions ?? true,
           folder_id: folder?.id ?? null,
           folder_source: chosen ? "user" : "auto",
@@ -772,7 +831,7 @@ export const updateWord = tool({
   name: "update_word",
   title: "Edit a word",
   description:
-    "Edit one word: French, Russian, note, example, tags, part of speech, gender, slang level, verlan, both_directions, or custom fields. Only the fields in `patch` change; null clears note or example. `custom_fields` changes only the fields it names (null clears one) and keeps the others. both_directions false removes the RU→FR card, true brings it back with its progress. Use move_words to change the theme.",
+    "Edit one word: French, Russian, note, example, tags, part of speech, gender, slang level, verlan, both_directions, custom fields, origin («Происхождение») or a verb's conjugation. Only the fields in `patch` change; null clears note or example. `custom_fields` changes only the fields it names (null clears one) and keeps the others. both_directions false removes the RU→FR card, true brings it back with its progress. Use move_words to change the theme.",
   input: z.object({
     id: z.string().trim().min(1).max(64).describe("Word id from search_words."),
     patch: z
@@ -788,6 +847,8 @@ export const updateWord = tool({
         verlan: z.boolean().optional(),
         tags: z.array(z.string().trim().min(1).max(40)).max(10).optional().describe("Replaces all tags."),
         custom_fields: customFieldsInput("Only the named fields change; null or an empty value clears one."),
+        origin: originInput,
+        conjugation: conjugationInput,
         both_directions: z.boolean().optional(),
       })
       .describe("Fields to change."),
@@ -809,6 +870,9 @@ export const updateWord = tool({
     if (p.verlan !== undefined) next.verlan = p.verlan;
     if (p.tags !== undefined) next.tags = [...new Set(p.tags.map((t) => t.trim()).filter(Boolean))];
     if (p.both_directions !== undefined) next.both_directions = p.both_directions;
+    if (p.origin !== undefined) next.origin = cleanOrigin(p.origin);
+    const conjugation = conjugationOf(p.conjugation);
+    if (conjugation !== undefined) next.conjugation = conjugation;
     let newOneOff: string[] = [];
     if (p.custom_fields !== undefined) {
       const fields = applyCustomFields(current.custom_fields, p.custom_fields, defs);
@@ -818,6 +882,12 @@ export const updateWord = tool({
     }
     if (next.pos !== "noun") next.gender = "none";
     if (!next.example_fr) next.example_ru = null;
+    if (p.conjugation && next.pos !== "verb" && next.pos !== "expression") {
+      throw new ToolError("conjugation is for verbs (pos verb or expression); set pos first or leave conjugation out.");
+    }
+    // Columns missing on older rows read as no value, so «not set» never counts as a change.
+    if ((next.origin ?? null) === (current.origin ?? null)) next.origin = current.origin;
+    if (JSON.stringify(next.conjugation ?? null) === JSON.stringify(current.conjugation ?? null)) next.conjugation = current.conjugation;
 
     const changed = JSON.stringify(next) !== JSON.stringify(current);
     let conflict = false;
@@ -1311,6 +1381,7 @@ export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard
 - Before adding, search_words for the word; add_words also skips French forms that are already saved.
 - For each new word give the dictionary form, one to three Russian equivalents in the same register, slang_level (0 neutral, 1 familier, 2 argot, 3 vulgaire), verlan (true for verlan forms such as meuf, relou, chelou), pos, gender for nouns, and a short everyday example_fr with its example_ru. Vulgar words are legitimate vocabulary: translate them with the same strength and mark them 3.
 - Set folder_chosen_by_user to true only when the user named the theme; otherwise pick a fitting theme yourself, or leave the word in the inbox.
+- A word can carry origin («Происхождение»: one Russian line, e.g. «верлан от lourd», «от volonté „воля“ + -aire») and, for verbs, a conjugation (présent, passé composé, imparfait, futur; six forms each with pronouns). The app builds most conjugations itself from Lexique: search_words shows conjugation_builtin false where it cannot. Fill them with update_word when the user asks (e.g. «заполни происхождение для слов из темы X»), checking forms you are not sure of; never overwrite an existing origin or conjugation unless asked.
 - Cards can carry the user's custom fields («Свои поля»): list_fields shows the shared ones and what to write in each. Set them by name with custom_fields in add_words or update_word (null clears one); search_words shows them. Use a name not in list_fields only when the user asks for a field on that one word. create_field, update_field and delete_field manage the shared fields; ask the user before creating or deleting one.
 - Before adding more than 5 words, and before any move, delete, or renaming or deleting a theme (update_folder, delete_folder), list what will change and wait for the user's OK.
 - After a change, say what changed and how to undo it with the result's \`undo\` (delete_words, restore_words, restore_moves, restore_folder, delete_field or restore_field).

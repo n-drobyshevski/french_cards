@@ -35,7 +35,7 @@ An optional skill (`claude/skills/kartochki/`) teaches Claude the card conventio
 | `restore_field` | write | Brings a deleted field back by id. |
 | `study_summary` | read | Cards due today, new cards left, reviews done, words by status, words due soonest. |
 | `add_words` | write | 1–50 words with every field, custom fields included; skips duplicates by lemma (`on_duplicate: "add"` overrides); `folder_chosen_by_user` (per call, or per word) decides `folder_source`. Returns the ids for undo. |
-| `update_word` | write | Patches one word's text, example, note, tags, part of speech, level, verlan or custom fields; `both_directions` adds or removes the RU→FR card. |
+| `update_word` | write | Patches one word's text, example, note, tags, part of speech, level, verlan, custom fields, `origin` or a verb's `conjugation`; `both_directions` adds or removes the RU→FR card. |
 | `move_words` | write | Moves words to a theme or `inbox`. `mode: "auto"` skips words placed by hand and words in locked themes. Returns an `undo` list for `restore_moves`. |
 | `restore_moves` | write | Undoes `move_words` exactly: theme, and whether automatic sorting may move the word again. |
 | `delete_words` | write | Soft-deletes words and their cards. |
@@ -54,6 +54,11 @@ The shared definitions are edited in the app (Settings → «Свои поля»
 - **Input** (`add_words` per word, `update_word` in `patch`): `custom_fields: { "<name>": "<value>" | null }`. A name that matches a live shared field (any case) sets that field (`field_id` = the definition's id, label = its current name); any other name creates a one-off field on that word (`field_id: null`). `null` or an empty value clears a field. `update_word` changes only the named fields and keeps the rest; clears are applied first. Names are at most 40 characters and values at most 300 (longer input is refused, like other fields); whitespace is collapsed. A word holds at most 12 fields; a call that would go past that is refused before anything is written.
 - **Output:** words in `search_words`, `update_word` and `add_words` results carry `custom_fields: { "<name>": "<value>" }` only when they have any. Shared fields come first under the definition's current name; one-off fields and values of deleted definitions follow under their stored label. When a call created one-off fields, the result lists them in `new_one_off_fields` (per added word in `add_words`) with a `fields_note`, so Claude can tell a misspelt shared name.
 
+### Origin and conjugation («Контекст»)
+- **Input** (`add_words` per word, `update_word` in `patch`): `origin` — one Russian line, at most 200 characters («верлан от lourd», «от volonté „воля“ + -aire»); `null` clears it. `conjugation` — verbs only (`pos` verb, or expression in `update_word`): `{ auxiliary: "avoir"|"être", remark?, present, passe_compose, imparfait, futur }`, each tense exactly six forms je → ils with pronouns; `null` clears it, and the app goes back to the one it builds from Lexique. A conjugation on another part of speech is refused by `update_word` and dropped by `add_words`.
+- **Output:** words carry `origin` when they have one; verbs carry the saved `conjugation` (same flat shape) or `conjugation_builtin` (true when the app conjugates the verb itself from Lexique, false when it cannot, so Claude knows which ones to fill).
+- **Storage:** `words.origin` (text) and `words.conjugation` (jsonb, `{auxiliary, remark, tenses: {present…}}`), migration `0008_word_origin_conjugation.sql`, synced like the other word columns. The app shows them in «Контекст» (they win over the lookup's origin line and the built-in conjugation) and the origin under the translation in the word card.
+
 ## Setup
 
 1. Generate a secret:
@@ -67,7 +72,7 @@ The shared definitions are edited in the app (Settings → «Свои поля»
    - `MCP_TIMEZONE` (optional): your IANA time zone, for example `Europe/Moscow`. The default is `Europe/Paris`.
 
    Then redeploy.
-   Apply `supabase/migrations/0005_connector_grants.sql`, `0006_custom_fields.sql` and `0007_connector_field_writes.sql` if you haven't (README, step 1).
+   Apply `supabase/migrations/0005_connector_grants.sql`, `0006_custom_fields.sql`, `0007_connector_field_writes.sql` and `0008_word_origin_conjugation.sql` if you haven't (README, step 1).
 3. Check the endpoint. A wrong key must give `404`, with no redirect:
    ```sh
    curl -s -o /dev/null -w "%{http_code}\n" -X POST https://frenchcards.vercel.app/api/mcp/wrong

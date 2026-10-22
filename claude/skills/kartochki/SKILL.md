@@ -26,6 +26,10 @@ Each card the connector saves has these fields. Fill all of them for every new w
 
 Vulgar and offensive words are legitimate vocabulary here. Translate them with a Russian word of the same strength, mark them 3, and do not soften, censor or moralise.
 
+### Origin and conjugation
+
+A word can carry `origin` («Происхождение»: one short Russian line that helps remember it — «верлан от lourd», «от volonté „воля“ + -aire», «из арабского kif „кайф“») and, for verbs, a `conjugation` (présent, passé composé, imparfait, futur; six forms je → ils with pronouns, plus `auxiliary`). The app builds most conjugations itself; `search_words` shows `conjugation_builtin: false` for verbs it cannot conjugate — fill those when asked. Set both with `update_word` (or `add_words`); write only what you are sure of (check unusual forms on the web), and never overwrite an existing value unless the user asks. When asked to fill origins for many words, list them first and wait for the OK, as for other bulk changes.
+
 ### Custom fields («Свои поля»)
 
 The user can add their own fields to every card (e.g. «Синонимы»). `list_fields` shows them in order, each with a hint on what to write. Set them by name in `custom_fields` (`add_words` per word, `update_word` in `patch`), following the hint; `null` clears one, and `update_word` leaves the fields you don't name alone. A name that is not in `list_fields` creates a field on that one word only: use one only when the user asks for it, and if a result lists `new_one_off_fields` you didn't intend, fix the name. `search_words` shows a word's fields as `custom_fields`. The shared fields themselves are managed with `create_field`, `update_field` (rename, hint, auto_fill, position) and `delete_field` (cards keep their values; undo with `restore_field`): ask before creating or deleting one.

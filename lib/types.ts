@@ -56,6 +56,13 @@ export interface FieldDef extends Syncable {
   sort: number;
 }
 
+/** A verb's four tenses (six forms each, je → ils, with pronouns) as «Контекст» shows them. */
+export interface Conjugation {
+  auxiliary: "avoir" | "être";
+  remark: string | null;
+  tenses: { present: string[]; passe_compose: string[]; imparfait: string[]; futur: string[] };
+}
+
 export interface Word extends Syncable {
   fr: string;
   ru: string;
@@ -67,6 +74,10 @@ export interface Word extends Syncable {
   extra_examples?: WordExample[];
   /** «Свои поля». Missing on rows written before them. */
   custom_fields?: CustomFieldValue[];
+  /** «Происхождение»: one Russian line («верлан от lourd»), written from the chat or by hand. Missing on older rows. */
+  origin?: string | null;
+  /** «Спряжение» saved on the word (from the chat); wins over the one built on the device. Missing on older rows. */
+  conjugation?: Conjugation | null;
   pos: PartOfSpeech;
   gender: Gender;
   slang_level: SlangLevel;

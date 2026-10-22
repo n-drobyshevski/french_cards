@@ -1,5 +1,6 @@
 // Word CRUD and review persistence. Every write stamps updated_at; the outbox middleware
 // (lib/outbox.ts, installed in lib/db.ts) queues each written row for sync.
+import { cleanConjugation, cleanOrigin } from "./core/conjugate";
 import { cleanCustomFields } from "./core/custom-fields";
 import { buildWord, cleanText, directionsOf, type NewWordInput, type WordPatch } from "./core/words";
 import { db, liveRows } from "./db";
@@ -112,6 +113,8 @@ export function applyWordPatch(current: Word, patch: WordPatch, now: Date): Word
   }
   if ("extra_examples" in patch) next.extra_examples = cleanExamples(patch.extra_examples);
   if ("custom_fields" in patch) next.custom_fields = cleanCustomFields(patch.custom_fields);
+  if ("origin" in patch) next.origin = cleanOrigin(patch.origin);
+  if ("conjugation" in patch) next.conjugation = cleanConjugation(patch.conjugation);
   if (patch.tags) next.tags = [...new Set(patch.tags.map((t) => t.trim()).filter(Boolean))];
   if ("folder_id" in patch && patch.folder_id !== current.folder_id) {
     if (patch.folder_source === undefined) next.folder_source = "user";

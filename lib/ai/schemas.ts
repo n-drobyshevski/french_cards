@@ -6,7 +6,7 @@
 import { z } from "zod";
 import { ANKI_CHUNK_MAX, ANKI_FIELD_CHARS, ANKI_FIELDS_MAX, ANKI_TAGS_MAX, type AnkiItem } from "@/lib/anki/types";
 import { FIELD_HINT_MAX, FIELD_LABEL_MAX, MAX_FIELD_DEFS } from "@/lib/core/custom-fields";
-import type { Confidence, Gender, PartOfSpeech, SlangLevel } from "@/lib/types";
+import type { Confidence, Conjugation, Gender, PartOfSpeech, SlangLevel } from "@/lib/types";
 import {
   ASSIGN_CHUNK_MAX,
   CONFIDENCE_VALUES,
@@ -26,7 +26,6 @@ import {
   EXAMPLE_KINDS,
   LOOKUP_SYNONYMS_MAX,
   LOOKUP_TRANSLATIONS_MAX,
-  type ConjTense,
   type ExampleKind,
   type Provenance,
   type SlangCode,
@@ -639,13 +638,8 @@ export interface LookupSynonym {
   slang_level: SlangLevel;
 }
 
-/** Built on the device (lib/conjugation.ts), never by the model. */
-export interface Conjugation {
-  auxiliary: "avoir" | "être";
-  remark: string | null;
-  /** Six forms each, with their pronouns (je, tu, il/elle, nous, vous, ils/elles). */
-  tenses: Record<ConjTense, string[]>;
-}
+/** Built on the device (lib/conjugation.ts) or saved on the word from the chat; never by the app's model. */
+export type { Conjugation };
 
 export interface LookupResponse {
   /** false: not a word we can look up (the screen says so; nothing else is filled). */

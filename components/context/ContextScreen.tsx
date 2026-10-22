@@ -16,6 +16,7 @@ import { cleanQuery, clearHistory, deleteLookup, useContextSearch, useLookupHist
 import { db, type LookupEntry } from "@/lib/db";
 import { ExampleError, requestExample } from "@/lib/examples";
 import { loadWordMorpho, type Morpho } from "@/lib/morpho";
+import { cleanConjugation } from "@/lib/core/conjugate";
 import { getSettings } from "@/lib/settings";
 import { useLayoutClass } from "@/lib/use-media";
 import { useOnline } from "@/lib/use-online";
@@ -373,7 +374,9 @@ function Results(props: ResultsProps) {
       <MeaningChips chips={chips} total={all.length} value={props.meaning} onChange={props.onMeaning} loading={phase !== "done" || all.length === 0} keepEmpty={wide} className={className} />
     );
 
-  const conj = lookup.conjugation;
+  // What the chat saved on the word (connector) wins over what the device and the lookup give.
+  const conj = cleanConjugation(saved?.word.conjugation) ?? lookup.conjugation;
+  const origin = saved?.word.origin || lookup.origin;
 
   if (wide) {
     return (
@@ -394,7 +397,7 @@ function Results(props: ResultsProps) {
             {body}
           </section>
           <aside aria-label="Синонимы и спряжение" className="max-w-[360px] min-w-0 flex-[1_1_280px]">
-            <WordMakeup origin={lookup.origin} morpho={props.morpho} onOpen={props.onGo} wide />
+            <WordMakeup origin={origin} morpho={props.morpho} onOpen={props.onGo} wide />
             {hasSynonyms && <SynonymList columns={columns} onOpen={props.onGo} onAdd={props.onAddSynonym} />}
             {conj && <ConjugationAside conj={conj} />}
           </aside>
@@ -412,7 +415,7 @@ function Results(props: ResultsProps) {
         </h1>
         <MetaLine lookup={lookup} />
         <Translations lookup={lookup} />
-        <WordMakeup origin={lookup.origin} morpho={props.morpho} onOpen={props.onGo} />
+        <WordMakeup origin={origin} morpho={props.morpho} onOpen={props.onGo} />
         <WordStatus saved={savedWord} onOpen={props.onOpenSaved} onAdd={props.onAddWord} />
       </article>
 

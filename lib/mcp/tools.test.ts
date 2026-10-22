@@ -802,3 +802,51 @@ describe("rate limit", () => {
     expect((await callTool(listFolders, deps(fake), {})).isError).toBeFalsy();
   });
 });
+
+describe("origin and conjugation", () => {
+  const six = (verb: string) => [`je ${verb}`, `tu ${verb}`, `il ${verb}`, `nous ${verb}`, `vous ${verb}`, `ils ${verb}`];
+  const conj = { auxiliary: "avoir", remark: "неправильный", present: six("bédave"), passe_compose: six("a bédavé"), imparfait: six("bédavait"), futur: six("bédavera") };
+
+  it("update_word saves an origin and a verb's conjugation; null clears them", async () => {
+    const fake = createFakeRepo({ words: [word("w1", "bédave", "курить", { pos: "verb" })] });
+    await ok(updateWord, fake, { id: "w1", patch: { origin: "  из цыганского  ", conjugation: conj } });
+    expect(fake.tables.words.get("w1")).toMatchObject({
+      origin: "из цыганского",
+      conjugation: { auxiliary: "avoir", remark: "неправильный", tenses: { present: six("bédave") } },
+    });
+    const found = await ok(searchWords, fake, { query: "bédave" });
+    expect(found.words[0]).toMatchObject({ origin: "из цыганского", conjugation: { auxiliary: "avoir", present: six("bédave") } });
+
+    await ok(updateWord, fake, { id: "w1", patch: { origin: null, conjugation: null } });
+    expect(fake.tables.words.get("w1")).toMatchObject({ origin: null, conjugation: null });
+  });
+
+  it("refuses a conjugation of five forms or on a noun", async () => {
+    const fake = createFakeRepo({ words: [word("w1", "la thune", "бабки", { pos: "noun", gender: "f" })] });
+    expect((await callTool(updateWord, deps(fake), { id: "w1", patch: { conjugation: { ...conj, present: six("x").slice(0, 5) } } })).isError).toBe(true);
+    expect((await callTool(updateWord, deps(fake), { id: "w1", patch: { conjugation: conj } })).isError).toBe(true);
+  });
+
+  it("search_words tells which verbs the app conjugates by itself", async () => {
+    const fake = createFakeRepo({ words: [word("w1", "kiffer", "тащиться", { pos: "verb" }), word("w2", "falloir", "надо", { pos: "verb" }), word("w3", "chelou", "стрёмный", { pos: "adj" })] });
+    const out = await ok(searchWords, fake, { query: "" });
+    const byFr = Object.fromEntries(out.words.map((w: Record<string, unknown>) => [w.fr, w]));
+    expect(byFr.kiffer).toMatchObject({ conjugation_builtin: true });
+    expect(byFr.falloir).toMatchObject({ conjugation_builtin: false });
+    expect(byFr.chelou).not.toHaveProperty("conjugation_builtin");
+  });
+
+  it("add_words takes origin and conjugation (a verb's only)", async () => {
+    const fake = createFakeRepo();
+    const out = await ok(addWords, fake, {
+      words: [
+        { fr: "bédave", ru: "курить", pos: "verb", origin: "из цыганского", conjugation: conj },
+        { fr: "relou", ru: "занудный", pos: "adj", origin: "верлан от lourd", conjugation: conj },
+      ],
+      folder_chosen_by_user: false,
+    });
+    const [a, b] = out.added.map((w: { id: string }) => fake.tables.words.get(w.id)!);
+    expect(a).toMatchObject({ origin: "из цыганского", conjugation: { auxiliary: "avoir" } });
+    expect(b).toMatchObject({ origin: "верлан от lourd", conjugation: null });
+  });
+});

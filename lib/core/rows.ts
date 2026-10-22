@@ -8,7 +8,7 @@ export type Row = Record<string, unknown> & { id: string; updated_at: string };
 export const REMOTE_COLUMNS: Record<SyncTable, readonly string[]> = {
   folders: ["id", "slug", "name", "description", "color", "created_by", "locked", "sort", "updated_at", "deleted_at"],
   words: [
-    "id", "fr", "ru", "note", "example_fr", "example_ru", "extra_examples", "custom_fields", "pos", "gender", "slang_level", "verlan", "tags",
+    "id", "fr", "ru", "note", "example_fr", "example_ru", "extra_examples", "custom_fields", "origin", "conjugation", "pos", "gender", "slang_level", "verlan", "tags",
     "folder_id", "folder_source", "folder_confidence", "source", "both_directions", "created_at", "updated_at", "deleted_at",
   ],
   review_state: [

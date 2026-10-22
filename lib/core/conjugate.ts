@@ -2,7 +2,7 @@
 // second-group -ir verbs by rule, everything else from a table built out of Lexique 3.83
 // (scripts/build-conjugation.mjs → public/lexique/fr-conj.json). Pure and Dexie-free: the build
 // script imports it too, so the table only holds verbs the rules get wrong.
-import type { Conjugation } from "../ai/schemas";
+import type { Conjugation } from "../types";
 
 /** Six forms each, je → ils, without pronouns. */
 export interface VerbForms {
@@ -158,4 +158,30 @@ export function conjugate(headword: string, data: ConjData | null): Conjugation 
       futur: forms.futur.map(withPronouns),
     },
   };
+}
+
+export const ORIGIN_MAX = 200;
+const FORM_MAX = 80;
+const TENSES = ["present", "passe_compose", "imparfait", "futur"] as const;
+
+/** «Происхождение» as saved on a word: one line, trimmed, at most ORIGIN_MAX; empty → null. */
+export function cleanOrigin(s: string | null | undefined): string | null {
+  const t = (s ?? "").replace(/\s+/g, " ").trim().slice(0, ORIGIN_MAX).trim();
+  return t || null;
+}
+
+/** A conjugation saved on a word: every tense six non-empty forms, or null when it does not hold. */
+export function cleanConjugation(raw: unknown): Conjugation | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as { auxiliary?: unknown; remark?: unknown; tenses?: Record<string, unknown> };
+  const tenses = {} as Conjugation["tenses"];
+  for (const t of TENSES) {
+    const list = r.tenses?.[t];
+    if (!Array.isArray(list) || list.length !== 6) return null;
+    const forms = list.map((f) => (typeof f === "string" ? f.replace(/\s+/g, " ").trim().slice(0, FORM_MAX) : ""));
+    if (forms.some((f) => !f)) return null;
+    tenses[t] = forms;
+  }
+  const remark = typeof r.remark === "string" ? r.remark.replace(/\s+/g, " ").trim().slice(0, 120) || null : null;
+  return { auxiliary: r.auxiliary === "être" ? "être" : "avoir", remark, tenses };
 }
