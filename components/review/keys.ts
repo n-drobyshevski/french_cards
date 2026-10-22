@@ -1,7 +1,7 @@
-// Keyboard shortcuts for the review screen: Space/Enter flip, 1/2/3 grade, ←/→ = Не знаю/Знаю, Z undo.
+// Keyboard shortcuts for the review screen: Space/Enter flip (both ways), 1/2/3 grade, ←/→ = Не знаю/Знаю, Z undo.
 import type { Rating } from "@/lib/scheduler";
 
-export type ReviewKeyAction = { type: "flip" } | { type: "grade"; rating: Rating } | { type: "undo" };
+export type ReviewKeyAction = { type: "flip" } | { type: "unflip" } | { type: "grade"; rating: Rating } | { type: "undo" };
 
 export interface KeyLike {
   key: string;
@@ -26,7 +26,7 @@ export function reviewKeyAction(ev: KeyLike, ctx: ReviewKeyContext): ReviewKeyAc
   // `code` keeps shortcuts working on the Russian layout (Z is «я» there).
   if (ev.code === "KeyZ") return { type: "undo" };
   if (ev.key === " " || ev.code === "Space" || ev.key === "Enter" || ev.code === "NumpadEnter") {
-    return ctx.revealed ? null : { type: "flip" };
+    return ctx.revealed ? { type: "unflip" } : { type: "flip" };
   }
   if (!ctx.revealed) return null;
   if (ev.key === "ArrowLeft") return { type: "grade", rating: 1 };

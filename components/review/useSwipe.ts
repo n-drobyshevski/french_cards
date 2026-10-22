@@ -35,6 +35,8 @@ const reducedMotion = () =>
 export function useSwipe({ enabled, onDecide }: { enabled: boolean; onDecide: (outcome: SwipeOutcome) => void }) {
   const state = useRef<SwipeState>(IDLE_SWIPE);
   const [view, setView] = useState<SwipeView>({ dx: 0, width: 0, mode: "idle" });
+  /** Set when a pointer-up ends a drag, so the click that follows is not taken as a tap. */
+  const dragged = useRef(false);
 
   const dispatch = (action: SwipeAction) => {
     const prev = state.current;
@@ -78,7 +80,8 @@ export function useSwipe({ enabled, onDecide }: { enabled: boolean; onDecide: (o
 
   const onPointerUp = (event: ReactPointerEvent<HTMLElement>) => {
     if (state.current.phase !== "pending" && state.current.phase !== "dragging") return;
-    const { next } = dispatch({ type: "up", pointerId: event.pointerId, x: event.clientX, y: event.clientY, t: event.timeStamp });
+    const { prev, next } = dispatch({ type: "up", pointerId: event.pointerId, x: event.clientX, y: event.clientY, t: event.timeStamp });
+    dragged.current = prev.phase === "dragging";
     if (next.phase === "released" && next.outcome) {
       const outcome = next.outcome;
       const off = Math.sign(next.dx) * next.width * 1.4;
@@ -104,6 +107,12 @@ export function useSwipe({ enabled, onDecide }: { enabled: boolean; onDecide: (o
 
   return {
     view,
+    /** True once if the click being handled ends a drag (not a tap). */
+    consumeClick: () => {
+      const was = dragged.current;
+      dragged.current = false;
+      return was || state.current.phase === "released";
+    },
     handlers: enabled
       ? {
           onPointerDown,

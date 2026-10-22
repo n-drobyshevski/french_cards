@@ -72,3 +72,31 @@ test("swiping the answer card with a finger grades it: right = Знаю, left = 
   await expect(page.getByText(`Не знаю · ${second}`)).toBeVisible();
   await expect(page).toHaveURL(/\/$/);
 });
+
+test("a tap on the answer flips the card back; a swipe that snaps back does not", async ({ page }) => {
+  await openReview(page);
+  await questionCard(page).tap();
+  await expect(page.locator("[data-review-answer]")).toBeVisible();
+
+  // Too short to grade: the card snaps back and stays on the answer side.
+  await touchDrag(page, "[data-review-answer]", 60, 0);
+  await page.waitForTimeout(400);
+  await expect(page.locator("[data-review-answer]")).toBeVisible();
+
+  await page.locator("[data-review-answer]").tap();
+  await expect(questionCard(page)).toBeVisible();
+  await expect(page.locator("[data-review-answer]")).toHaveCount(0);
+  await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
+
+  // And it can be flipped again.
+  await questionCard(page).tap();
+  await expect(page.locator("[data-review-answer]")).toBeVisible();
+});
+
+test("Space flips the card both ways", async ({ page }) => {
+  await openReview(page);
+  await page.keyboard.press("Space");
+  await expect(page.locator("[data-review-answer]")).toBeVisible();
+  await page.keyboard.press("Space");
+  await expect(questionCard(page)).toBeVisible();
+});

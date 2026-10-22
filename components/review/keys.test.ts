@@ -7,10 +7,11 @@ const back = { revealed: true, gradeButtons: 3 as const };
 const back2 = { revealed: true, gradeButtons: 2 as const };
 
 describe("reviewKeyAction", () => {
-  it("flips with Space or Enter on the question side only", () => {
+  it("flips with Space or Enter, and flips back on the answer side", () => {
     expect(reviewKeyAction(key(" ", "Space"), front)).toEqual({ type: "flip" });
     expect(reviewKeyAction(key("Enter", "Enter"), front)).toEqual({ type: "flip" });
-    expect(reviewKeyAction(key(" ", "Space"), back)).toBeNull();
+    expect(reviewKeyAction(key(" ", "Space"), back)).toEqual({ type: "unflip" });
+    expect(reviewKeyAction(key("Enter", "Enter"), back)).toEqual({ type: "unflip" });
   });
 
   it("grades 1/2/3 on the answer side", () => {

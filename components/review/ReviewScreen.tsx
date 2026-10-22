@@ -174,6 +174,13 @@ export function ReviewScreen() {
     setPinned({ key: current.key, revealed: true, revealedAt: Date.now() });
   };
 
+  /** Back to the question side; the answer can be flipped again with fresh intervals. */
+  const hide = () => {
+    if (!current) return;
+    if (focusInCard()) refocus.current = "reveal";
+    setPinned({ key: current.key, revealed: false, revealedAt: 0 });
+  };
+
   const undo = async (target?: { wordId: string; direction: Direction }) => {
     if (busy.current) return;
     if (practice) {
@@ -298,6 +305,7 @@ export function ReviewScreen() {
     if ((event.key === " " || event.key === "Enter") && keepsActivationKeys(event.target, focusByPointer.current)) return;
     event.preventDefault();
     if (action.type === "flip") reveal();
+    else if (action.type === "unflip") hide();
     else void grade(action.rating);
   });
 
@@ -419,6 +427,7 @@ export function ReviewScreen() {
               direction={current.direction}
               revealed={revealed}
               onReveal={reveal}
+              onHide={hide}
               folderName={(current.word.folder_id && folderNames.get(current.word.folder_id)) || "Входящие"}
               swipeEnabled={swipeEnabled}
               onSwipe={(outcome) => void grade(outcome === "good" ? 3 : 1)}
@@ -430,6 +439,7 @@ export function ReviewScreen() {
           {revealed && swipeEnabled && (
             <p aria-hidden="true" className="meta mt-4 mb-0 flex h-4 shrink-0 justify-between leading-4">
               <span>← {GRADE_LABELS[1]}</span>
+              <span>тап — вопрос</span>
               <span>{GRADE_LABELS[3]} →</span>
             </p>
           )}

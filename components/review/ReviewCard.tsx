@@ -38,12 +38,14 @@ export interface ReviewCardProps {
   folderName: string;
   swipeEnabled: boolean;
   onSwipe: (outcome: SwipeOutcome) => void;
+  /** Flip back to the question (tap on the answer side). */
+  onHide: () => void;
   /** Show the next card peeking behind while dragging. */
   hasNext: boolean;
 }
 
-/** The review card: question side (tap to flip) or answer side (swipe to grade). */
-export function ReviewCard({ word, direction, revealed, onReveal, folderName, swipeEnabled, onSwipe, hasNext }: ReviewCardProps) {
+/** The review card: question side (tap or swipe up to flip) or answer side (swipe to grade, tap to flip back). */
+export function ReviewCard({ word, direction, revealed, onReveal, onHide, folderName, swipeEnabled, onSwipe, hasNext }: ReviewCardProps) {
   const swipe = useSwipe({ enabled: revealed && swipeEnabled, onDecide: onSwipe });
   const swipeUp = useSwipeUp({ enabled: !revealed && swipeEnabled, onFlip: onReveal });
   const { dx, width, mode } = swipe.view;
@@ -112,6 +114,9 @@ export function ReviewCard({ word, direction, revealed, onReveal, folderName, sw
       ) : (
         <article
           {...swipe.handlers}
+          onClick={() => {
+            if (!swipe.consumeClick()) onHide();
+          }}
           data-review-answer=""
           tabIndex={-1}
           aria-label={`${word.fr} — ${word.ru}`}
