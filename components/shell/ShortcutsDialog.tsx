@@ -139,7 +139,7 @@ export function ShortcutsDialog() {
         <p className="m-0 text-[13px] leading-5 text-muted">
           Однобуквенные клавиши можно выключить в{" "}
           <Link
-            href="/settings"
+            href="/settings#set-keys"
             onClick={() => setShortcutsOpen(false)}
             className="font-medium text-ink underline decoration-1 underline-offset-[3px]"
           >

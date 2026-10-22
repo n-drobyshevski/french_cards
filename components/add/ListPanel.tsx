@@ -6,6 +6,7 @@ import { SlangMeter } from "@/components/ui/SlangMeter";
 import { cx } from "@/components/ui/cx";
 import type { EnrichResult } from "@/lib/ai/schemas";
 import type { Folder } from "@/lib/types";
+import type { DuplicateInfo } from "./data";
 import type { FolderChoice } from "./folder-choice";
 import type { ParsedLine } from "./parse-list";
 import { FieldRow, FolderSelect, SectionHeader } from "./parts";
@@ -18,6 +19,8 @@ export interface ListRow extends ParsedLine {
   checked: boolean;
   /** Detected slang level and example, once they have arrived. */
   enrich: EnrichResult | null;
+  /** The word already in the library (status "duplicate"). */
+  existing: DuplicateInfo | null;
 }
 
 const TAGS: Record<Exclude<ListRowStatus, "ok">, string> = {

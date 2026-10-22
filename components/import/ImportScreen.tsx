@@ -12,6 +12,11 @@ import { findDuplicates } from "@/lib/text";
 import type { Folder } from "@/lib/types";
 import { foldersForExtract, useExtract, type ExtractError } from "@/lib/use-extract";
 import { commitImport, undoImport } from "./commit";
+import { useDeskLayout } from "./desk";
+import { DeskPickView } from "./DeskPickView";
+import { DeskProcessingView } from "./DeskProcessingView";
+import { DeskReviewView } from "./DeskReviewView";
+import { DeskStatusView } from "./DeskStatusView";
 import { PickView } from "./PickView";
 import { ProcessingView } from "./ProcessingView";
 import { ReviewView } from "./ReviewView";
@@ -48,6 +53,21 @@ function usePickedFiles() {
 }
 
 /**
+ * Phone or desktop variant of a view. Before hydration the layout is unknown, so both render and
+ * CSS shows one (no phone-screen flash on a desktop reload).
+ */
+function byLayout(desk: boolean | null, phone: ReactNode, wide: ReactNode): ReactNode {
+  if (desk === true) return wide;
+  if (desk === false) return phone;
+  return (
+    <>
+      <div className="contents md:hidden">{phone}</div>
+      <div className="contents max-md:hidden">{wide}</div>
+    </>
+  );
+}
+
+/**
  * Screenshot import: pick/paste/drop/share → processing (rows stream in, «Стоп») → review
  * («Найдено N слов», edit, themes) → «Добавить N слов» with an undo snackbar.
  * Nothing is saved before the user confirms.
@@ -55,6 +75,7 @@ function usePickedFiles() {
 export function ImportScreen() {
   const router = useRouter();
   const snackbar = useSnackbar();
+  const desk = useDeskLayout();
   const { state, start, stop, reset } = useExtract();
   const liveFolders = useLiveQuery(() => listFolders(), []);
   const folders = liveFolders ?? NO_FOLDERS;
@@ -175,54 +196,54 @@ export function ImportScreen() {
 
   let view: ReactNode;
   if (rows) {
-    view = (
-      <ReviewView
-        rows={rows}
-        onRowsChange={(update) => setRows((rs) => (rs ? update(rs) : rs))}
-        folders={folders}
-        proposals={proposals}
-        thumbs={picked.urls}
-        tiles={state.tiles}
-        incomplete={state.phase === "stopped" ? "stopped" : state.incomplete ? "cut" : null}
-        saving={saving}
-        onAdd={add}
-        onRestart={() => void begin(picked.files)}
-      />
-    );
+    const props = {
+      rows,
+      onRowsChange: (update: (rows: ImportRow[]) => ImportRow[]) => setRows((rs) => (rs ? update(rs) : rs)),
+      folders,
+      proposals,
+      thumbs: picked.urls,
+      tiles: state.tiles,
+      incomplete: state.phase === "stopped" ? ("stopped" as const) : state.incomplete ? ("cut" as const) : null,
+      saving,
+      onAdd: add,
+      onRestart: () => void begin(picked.files),
+    };
+    view = byLayout(desk, <ReviewView {...props} />, <DeskReviewView {...props} onPickOther={restart} />);
   } else if (state.phase === "idle") {
-    view = <PickView onChoose={choose} onFiles={onFiles} error={pickError} />;
+    view = byLayout(
+      desk,
+      <PickView onChoose={choose} onFiles={onFiles} error={pickError} />,
+      <DeskPickView onChoose={choose} onFiles={onFiles} error={pickError} />,
+    );
   } else if (state.phase === "error" && state.error) {
     const error = state.error;
-    view = (
-      <StatusView
-        icon={error.code === "offline" ? "cloud-off" : "alert"}
-        title={errorTitle(error)}
-        message={error.message}
-        onRetry={error.retryable && picked.files.length > 0 ? () => void begin(picked.files) : undefined}
-        onPickOther={choose}
-      />
-    );
+    const props = {
+      icon: error.code === "offline" ? ("cloud-off" as const) : ("alert" as const),
+      title: errorTitle(error),
+      message: error.message,
+      onRetry: error.retryable && picked.files.length > 0 ? () => void begin(picked.files) : undefined,
+      onPickOther: choose,
+    };
+    view = byLayout(desk, <StatusView {...props} />, <DeskStatusView {...props} />);
   } else if (state.phase === "done" && state.items.length === 0) {
-    view = (
-      <StatusView
-        icon="search"
-        title="Слов не найдено"
-        message="На скриншоте не нашлось французских слов. Попробуйте другой скриншот или обрежьте лишнее."
-        onPickOther={choose}
-      />
-    );
+    const props = {
+      icon: "search" as const,
+      title: "Слов не найдено",
+      message: "На скриншоте не нашлось французских слов. Попробуйте другой скриншот или обрежьте лишнее.",
+      onPickOther: choose,
+    };
+    view = byLayout(desk, <StatusView {...props} />, <DeskStatusView {...props} />);
   } else {
-    view = (
-      <ProcessingView
-        phase={state.phase}
-        items={state.items}
-        images={state.images}
-        tiles={state.tiles}
-        thumbs={picked.urls}
-        checking={finished}
-        onStop={stop}
-      />
-    );
+    const props = {
+      phase: state.phase,
+      items: state.items,
+      images: state.images,
+      tiles: state.tiles,
+      thumbs: picked.urls,
+      checking: finished,
+      onStop: stop,
+    };
+    view = byLayout(desk, <ProcessingView {...props} />, <DeskProcessingView {...props} />);
   }
 
   return (

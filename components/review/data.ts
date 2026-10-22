@@ -9,6 +9,27 @@ export interface ReviewScreenData {
   libraryWords: number;
   /** Live words matching the theme filter (0 → «В этой теме пока нет слов»). */
   filterWords: number;
+  /** Catalog number per live word id (creation order, as the add sheet's «Карточка № 159»). */
+  ordinals: ReadonlyMap<string, number>;
+}
+
+/**
+ * Catalog numbers: position by `created_at` among live words, 1-based. The add sheet counts the
+ * same way (components/add/data.ts: words created before + 1), so «FR · № 001» on the review card
+ * matches «Карточка № 001» and the duplicate notice.
+ */
+export function wordOrdinals(words: readonly Pick<Word, "id" | "created_at">[]): Map<string, number> {
+  const sorted = [...words].sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0));
+  const map = new Map<string, number>();
+  let rank = 0;
+  let previous: string | null = null;
+  sorted.forEach((w, i) => {
+    // Same timestamp → same number (the add sheet counts words created strictly before).
+    if (w.created_at !== previous) rank = i + 1;
+    previous = w.created_at;
+    map.set(w.id, rank);
+  });
+  return map;
 }
 
 async function wordsMatching(filter: SessionFilter): Promise<{ all: Word[]; matching: Word[] }> {
@@ -23,7 +44,12 @@ async function wordsMatching(filter: SessionFilter): Promise<{ all: Word[]; matc
 
 export async function loadReviewScreen(filter: SessionFilter, now: Date = new Date()): Promise<ReviewScreenData> {
   const [session, words] = await Promise.all([loadSession(filter, now), wordsMatching(filter)]);
-  return { session, libraryWords: words.all.length, filterWords: words.matching.length };
+  return {
+    session,
+    libraryWords: words.all.length,
+    filterWords: words.matching.length,
+    ordinals: wordOrdinals(words.all),
+  };
 }
 
 export interface DoneScreenData {
