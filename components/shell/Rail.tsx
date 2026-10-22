@@ -159,6 +159,7 @@ function RailView({ data, active }: { data: ShellData | undefined; active: NavKe
           ariaLabel={data?.due ? `Повторение, ${data.due} к повторению` : undefined}
         />
         <RailLink href="/library" icon="library" label="Библиотека" active={library} />
+        <RailLink href="/context" icon="search" label="Контекст" active={active === "context"} />
         <RailLink href="/import" icon="image" label="Импорт" active={active === "import"} />
         <InboxLink count={data?.inbox.count ?? null} active={active === "inbox"} />
       </div>
@@ -175,7 +176,7 @@ function RoutedRail({ data }: { data: ShellData | undefined }) {
   return <RailView data={data} active={navKeyForPath(pathname)} />;
 }
 
-/** Rail 72px for 768–1199: «Добавить», Повторение / Библиотека / Импорт / Входящие, «Настройки». */
+/** Rail 72px for 768–1199: «Добавить», Повторение / Библиотека / Контекст / Импорт / Входящие, «Настройки». */
 export function Rail({ data }: { data: ShellData | undefined }) {
   return (
     <Suspense fallback={<RailView data={data} active={null} />}>

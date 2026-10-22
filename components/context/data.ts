@@ -1,6 +1,7 @@
 // «Контекст»: pure helpers for the screen (no Dexie, no React), unit-tested in data.test.ts.
 import type { DraftPrefill } from "@/components/add/draft";
-import type { ConjTense, ContextExample, ExampleKind, LookupResponse, LookupSynonym, LookupTranslation } from "@/lib/ai/schemas";
+import type { ConjTense, ExampleKind } from "@/lib/ai/constants";
+import type { ContextExample, LookupResponse, LookupSynonym, LookupTranslation } from "@/lib/ai/schemas";
 import { examplesPatch, MAX_EXAMPLES, wordExamples } from "@/lib/examples";
 import type { SlangLevel, Word, WordExample } from "@/lib/types";
 

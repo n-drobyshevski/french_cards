@@ -779,6 +779,7 @@ function AddSession({ open, onOpenChange, initialFr, initialDraft, onOpenWord }:
             onAddAnyway={() => setAckDuplicate(dupKey)}
             quick={quickVisible ? quick : null}
             onQuickChange={(patch) => setQuick((q) => ({ ...q, ...patch }))}
+            onLeave={() => handleOpenChange(false)}
             onQuickSave={saveQuick}
             preferredKey={draft && draftOrigin && draftOrigin.query === query ? draftOrigin.key : null}
             freshId={freshId}
@@ -879,6 +880,7 @@ function AddSession({ open, onOpenChange, initialFr, initialDraft, onOpenWord }:
           onAddAnyway={() => setAckDuplicate(dupKey)}
           quick={quickVisible ? quick : null}
           onQuickChange={(patch) => setQuick((q) => ({ ...q, ...patch }))}
+          onLeave={() => handleOpenChange(false)}
           freshId={freshId}
         />
       )}

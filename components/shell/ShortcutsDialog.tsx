@@ -36,6 +36,7 @@ export const SHORTCUT_COLUMNS: ShortcutGroup[][] = [
         { label: "Все клавиши", keys: ["?"] },
         { label: "Повторение", keys: ["G", THEN, "R"] },
         { label: "Библиотека", keys: ["G", THEN, "L"] },
+        { label: "Контекст", keys: ["G", THEN, "C"] },
         { label: "Импорт", keys: ["G", THEN, "I"] },
         { label: "Скрыть боковую панель", keys: ["["] },
         { label: "Следующая область", keys: ["F6"] },

@@ -2,6 +2,7 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
+import { ContextRow } from "@/components/context/ContextLink";
 import { createElement, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAddSheetActions } from "@/components/providers/AddSheetContext";
 import { useAppReady, useBootFailure } from "@/components/providers/AppProviders";
@@ -346,9 +347,12 @@ function PhoneLibrary() {
               <div className="mt-4 flex flex-col items-start gap-3">
                 <p className="m-0 text-[15px] leading-[22px] text-muted">{emptyMessage}</p>
                 {searching && (
-                  <Button variant="secondary" size="md" icon="plus" onClick={() => addSheet.open({ fr: query.trim() })}>
-                    Добавить «{query.trim()}»
-                  </Button>
+                  <>
+                    <ContextRow q={query.trim()} variant="library" className="self-stretch border-t border-t-ink" />
+                    <Button variant="secondary" size="md" icon="plus" onClick={() => addSheet.open({ fr: query.trim() })}>
+                      Добавить «{query.trim()}»
+                    </Button>
+                  </>
                 )}
               </div>
             )}

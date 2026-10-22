@@ -3,6 +3,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { ContextRow } from "@/components/context/ContextLink";
 import {
   Suspense,
   useCallback,
@@ -919,9 +920,12 @@ function Desk({ scope }: { scope: LibraryScope }) {
                             : "С таким уровнем сленга слов нет."}
                     </p>
                     {query.trim() && (
-                      <Button variant="secondary" size="sm" className="h-9 px-4 text-[14px]" icon="plus" onClick={() => addSheet.open({ fr: query.trim() })}>
-                        Добавить «{query.trim()}»
-                      </Button>
+                      <>
+                        <ContextRow q={query.trim()} variant="library" className="w-full max-w-[480px] border-t border-t-ink" />
+                        <Button variant="secondary" size="sm" className="h-9 px-4 text-[14px]" icon="plus" onClick={() => addSheet.open({ fr: query.trim() })}>
+                          Добавить «{query.trim()}»
+                        </Button>
+                      </>
                     )}
                   </div>
                 ) : null

@@ -7,13 +7,14 @@ import { useAddSheet } from "@/components/providers/AddSheetContext";
 import { cx } from "./cx";
 import { Icon, type IconName } from "./Icons";
 
-export type TabId = "review" | "library";
+export type TabId = "review" | "context" | "library";
 
 /** Which tab a path belongs to. Settings sits under «Библиотека» like in the mockups. */
 export function tabForPath(pathname: string | null): TabId | null {
   if (!pathname) return null;
   if (pathname.startsWith("/library") || pathname.startsWith("/settings")) return "library";
   if (pathname === "/" || pathname.startsWith("/done")) return "review";
+  if (pathname.startsWith("/context")) return "context";
   return null;
 }
 
@@ -29,8 +30,8 @@ export const TAB_BAR_HEIGHT = "calc(61px + env(safe-area-inset-bottom))";
 const itemClass =
   "relative flex h-[60px] touch-manipulation flex-col items-center justify-center gap-1 bg-transparent text-[12px] leading-4 no-underline transition-colors duration-(--dur-quick) ease-press active:duration-(--dur-instant)";
 
-/** Grid column of each tab (Повторение · Добавить · Библиотека). */
-const COLUMN: Record<TabId, number> = { review: 0, library: 2 };
+/** Grid column of each tab (Повторение · Добавить · Контекст · Библиотека). */
+const COLUMN: Record<TabId, number> = { review: 0, context: 2, library: 3 };
 
 /**
  * One shared 2px red marker over the bar's top rule (N1). Between tabs it moves with translateX
@@ -42,7 +43,7 @@ function TabMarker({ tab }: { tab: TabId }) {
     <span
       aria-hidden="true"
       data-tab-marker=""
-      className="pointer-events-none absolute -top-px left-0 h-0.5 w-1/3 bg-red motion-safe:[transition:transform_var(--dur-move)_var(--ease-standard)]"
+      className="pointer-events-none absolute -top-px left-0 h-0.5 w-1/4 bg-red motion-safe:[transition:transform_var(--dur-move)_var(--ease-standard)]"
       style={{ transform: `translateX(${COLUMN[tab] * 100}%)` }}
     />
   );
@@ -90,7 +91,7 @@ function Bar({ active, pathname = null }: { active: TabId | null; pathname?: str
     <nav
       data-tabbar=""
       aria-label="Основная навигация"
-      className="fixed inset-x-0 bottom-0 z-30 mx-auto grid w-full max-w-[440px] grid-cols-3 border-t border-rule bg-surface pb-[env(safe-area-inset-bottom)] [view-transition-name:tab-bar] md:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 mx-auto grid w-full max-w-[440px] grid-cols-4 border-t border-rule bg-surface pb-[env(safe-area-inset-bottom)] [view-transition-name:tab-bar] md:hidden"
     >
       {shown && <TabMarker tab={shown} />}
       <TabLink href="/" icon="cards" label="Повторение" active={shown === "review"} current={active === "review"} onTap={tap("review")} />
@@ -104,6 +105,14 @@ function Bar({ active, pathname = null }: { active: TabId | null; pathname?: str
         <Icon name="plus" size={20} strokeWidth={1.5} />
         <span>Добавить</span>
       </button>
+      <TabLink
+        href="/context"
+        icon="search"
+        label="Контекст"
+        active={shown === "context"}
+        current={active === "context"}
+        onTap={tap("context")}
+      />
       <TabLink
         href="/library"
         icon="library"
@@ -123,7 +132,7 @@ function RoutedBar() {
 }
 
 /**
- * Bottom tab bar: Повторение / Добавить / Библиотека. «Добавить» opens the quick-add sheet.
+ * Bottom tab bar: Повторение / Добавить / Контекст / Библиотека. «Добавить» opens the quick-add sheet.
  * Phones only: from 768 up the rail/sidebar (components/shell) replaces it.
  * usePathname can suspend while prerendering dynamic routes, so the bar renders without an
  * active tab until the path is known.

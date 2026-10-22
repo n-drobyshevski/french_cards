@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, type ClipboardEvent, type KeyboardEvent, type Ref } from "react";
+import { ContextRow } from "@/components/context/ContextLink";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
@@ -75,7 +76,12 @@ export interface SearchPanelProps {
   /** The compact manual form shown when suggestions are unavailable (null hides it). */
   quick: QuickFields | null;
   onQuickChange: (patch: Partial<QuickFields>) => void;
+  /** Closes the sheet when a link leaves it («Как «…» говорят в жизни» → «Контекст»). */
+  onLeave?: () => void;
 }
+
+/** The «Контекст» row shows from this many typed characters. */
+export const CONTEXT_MIN_CHARS = 3;
 
 /** Add-Empty / Add-Suggest / Add-Duplicate: headword input with «Словарь» and «Варианты». */
 export function SearchPanel(props: SearchPanelProps) {
@@ -126,6 +132,11 @@ export function SearchPanel(props: SearchPanelProps) {
           <Dictionary {...props} query={value} hidden={direction === "ru"} />
           {props.suggestionsEnabled && <Variants {...props} direction={direction} />}
           {quick ? <QuickForm {...props} quick={quick} direction={direction} /> : <ManualRow onManual={props.onManual} />}
+          {trimmed.length >= CONTEXT_MIN_CHARS && (
+            <div className="mx-4">
+              <ContextRow q={trimmed} onNavigate={props.onLeave} />
+            </div>
+          )}
         </>
       )}
     </div>

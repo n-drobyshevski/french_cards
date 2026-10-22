@@ -26,7 +26,8 @@ import {
   VariantSlotFrame,
   VariantsStatusSlot,
 } from "./parts";
-import type { SearchPanelProps } from "./SearchPanel";
+import { CONTEXT_MIN_CHARS, type SearchPanelProps } from "./SearchPanel";
+import { ContextRow } from "@/components/context/ContextLink";
 
 export interface DeskSearchPanelProps extends Omit<SearchPanelProps, "onClear"> {
   /** The kept draft's option: ↵ reopens it while the headword is unchanged. */
@@ -244,6 +245,7 @@ export function DeskSearchPanel({ inputRef, ...props }: DeskSearchPanelProps) {
           )}
           {/* Below «Варианты», so an error never moves what is above it (A3). */}
           {quick && <QuickForm {...props} quick={quick} direction={direction} />}
+          {trimmed.length >= CONTEXT_MIN_CHARS && <ContextRow q={trimmed} variant="desk" onNavigate={props.onLeave} className="mt-2" />}
         </>
       )}
     </DeskFrame>
