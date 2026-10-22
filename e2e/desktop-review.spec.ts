@@ -100,10 +100,39 @@ test("a click flips both ways without moving the card; keys 1/2/3 grade, with ca
   expect(Math.abs(snackBox.x + snackBox.width / 2 - (CONTENT.left + CONTENT.width / 2))).toBeLessThan(1);
 });
 
-test("with a mouse, dragging the answer does not grade it", async ({ page }) => {
+test("with a mouse, click and hold then drag sideways grades; a short drag or a click does not", async ({ page }) => {
   await openReview(page);
+  const drag = async (dx: number) => {
+    const box = (await page.locator("[data-review-card]").boundingBox())!;
+    const y = box.y + box.height * 0.6;
+    await page.mouse.move(box.x + box.width / 2, y);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 + dx, y, { steps: 12 });
+    await page.mouse.up();
+  };
+  // Below the 200 px threshold, slowly: the card springs back and stays unanswered.
+  await drag(120);
+  await page.waitForTimeout(400);
+  await expect(questionCard(page)).toHaveAccessibleName(/une blague/);
+  await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
+  // A drag does not flip the card either; a click does.
+  await expect(answerCard(page)).toHaveCount(0);
   await questionCard(page).click();
-  const box = (await answerCard(page).boundingBox())!;
+  await expect(answerCard(page)).toBeVisible();
+  // Past the threshold to the right: «Знаю», and the next card comes up.
+  await drag(320);
+  await expect(page.getByText("01 / 11", { exact: true })).toBeVisible();
+  await expect(questionCard(page)).not.toHaveAccessibleName(/une blague/);
+});
+
+test("with swipes off in Settings, a mouse drag does not grade", async ({ page }) => {
+  await page.goto("/settings");
+  const swipes = page.getByRole("checkbox", { name: "Свайпы для оценки" });
+  await expect(swipes).toBeChecked();
+  await swipes.click();
+  await expect(swipes).not.toBeChecked();
+  await openReview(page);
+  const box = (await page.locator("[data-review-card]").boundingBox())!;
   const y = box.y + box.height * 0.6;
   await page.mouse.move(box.x + box.width / 2, y);
   await page.mouse.down();
@@ -111,7 +140,6 @@ test("with a mouse, dragging the answer does not grade it", async ({ page }) => 
   await page.mouse.up();
   await page.waitForTimeout(400);
   await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
-  await expect(page.locator("[data-snackbar]")).toHaveCount(0);
 });
 
 test("«Готово на сегодня»: focus on «Повторить ошибки», P starts practice, Esc ends it", async ({ page }) => {
