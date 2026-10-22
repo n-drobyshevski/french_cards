@@ -141,8 +141,11 @@ export interface Settings {
   ai_model_extract: "fast" | "accurate";
   /** Библиотека opens on the theme tiles or on the list of all words. */
   library_view: "themes" | "words";
-  /** «Мои наборы»: saved card sets for Повторение (device-local, like the rest of Settings). */
-  review_sets: ReviewSet[];
+  /**
+   * «Мои наборы» as the first version kept them, device-local. Moved into the synced
+   * `review_sets` table on upgrade (lib/db.ts) and in old backups; not written any more.
+   */
+  review_sets?: unknown[];
   last_sync_at: string | null;
   /** Pull cursors per synced table: the server `synced_at` of the last row received. Owned by lib/sync.ts. */
   sync_cursors?: Partial<Record<SyncTable, string>>;
@@ -151,9 +154,8 @@ export interface Settings {
 /** A word's learning status, as lib/scheduler `wordStatus` reports it. */
 export type ReviewSetStatus = "new" | "learning" | "difficult" | "known";
 
-/** «Мои наборы»: a named card set for Повторение, built from filters (lib/review-sets.ts). */
-export interface ReviewSet {
-  id: string;
+/** «Мои наборы»: a named card set for Повторение, built from filters (lib/review-sets.ts). Synced. */
+export interface ReviewSet extends Syncable {
   name: string;
   /** Folder ids, "inbox" for «Входящие». Empty = every theme. */
   folders: string[];
@@ -188,9 +190,8 @@ export const DEFAULT_SETTINGS: Settings = {
   ai_model: "fast",
   ai_model_extract: "fast",
   library_view: "themes",
-  review_sets: [],
   last_sync_at: null,
 };
 
-export const SYNC_TABLES = ["folders", "words", "review_state", "review_log", "reorg_runs"] as const;
+export const SYNC_TABLES = ["folders", "words", "review_state", "review_log", "reorg_runs", "review_sets"] as const;
 export type SyncTable = (typeof SYNC_TABLES)[number];

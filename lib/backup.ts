@@ -1,6 +1,5 @@
 // JSON export of every table, and import that merges by updated_at (newer row wins).
-import { db } from "./db";
-import { normalizeReviewSets } from "./review-sets";
+import { db, legacyReviewSets } from "./db";
 import { DEFAULT_SETTINGS, SYNC_TABLES, type Settings, type SyncTable, type Syncable } from "./types";
 
 export const BACKUP_FORMAT = "kartochki-backup";
@@ -87,6 +86,7 @@ const REQUIRED: Record<SyncTable, Record<string, "string" | "number" | "boolean"
   review_state: { word_id: "string", direction: "string", due: "string", stability: "number", state: "number", reps: "number" },
   review_log: { word_id: "string", direction: "string", rating: "number", review: "string" },
   reorg_runs: { created_at: "string", moves: "array" },
+  review_sets: { name: "string", created_at: "string", folders: "array", statuses: "array", slang: "array" },
 };
 
 function hasFields(table: SyncTable, row: Record<string, unknown>): boolean {
@@ -112,6 +112,13 @@ export function parseBackup(input: string | unknown): BackupFile {
   const tables = data.tables as Record<string, unknown>;
   for (const t of SYNC_TABLES) {
     if (tables[t] !== undefined && !Array.isArray(tables[t])) throw new BackupError(`Повреждена таблица ${t}`);
+  }
+  // Backups made while «Мои наборы» lived in Settings carry them there: import them as rows.
+  if (tables.review_sets === undefined && Array.isArray(tables.settings)) {
+    const settings = tables.settings.find((s) => isRecord(s)) as Record<string, unknown> | undefined;
+    const at = typeof data.exported_at === "string" && !Number.isNaN(Date.parse(data.exported_at)) ? data.exported_at : new Date(0).toISOString();
+    const legacy = legacyReviewSets(settings?.review_sets, at);
+    if (legacy.length) tables.review_sets = legacy;
   }
   return data as unknown as BackupFile;
 }
@@ -238,10 +245,6 @@ function pickSettings(s: Record<string, unknown>): Partial<Settings> {
   const out: Record<string, unknown> = {};
   for (const [k, def] of Object.entries(DEFAULT_SETTINGS)) {
     if (k === "id" || k === "last_sync_at") continue;
-    if (k === "review_sets") {
-      if (k in s) out[k] = normalizeReviewSets(s[k]);
-      continue;
-    }
     if (k in s && typeof s[k] === typeof def) out[k] = s[k];
   }
   return out as Partial<Settings>;

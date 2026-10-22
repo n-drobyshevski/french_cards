@@ -1,6 +1,7 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { db } from "./db";
+import Dexie from "dexie";
+import { db, KartochkiDB, legacyReviewSets } from "./db";
 import { createFolder } from "./folders";
 import {
   countSetCards,
@@ -9,7 +10,6 @@ import {
   describeSet,
   EMPTY_SET_DRAFT,
   listReviewSets,
-  normalizeReviewSets,
   restoreReviewSet,
   setChoice,
   setIdOf,
@@ -84,16 +84,18 @@ describe("session filters for sets", () => {
 });
 
 describe("stored sets", () => {
-  it("creates, updates, deletes and restores sets in Settings", async () => {
+  it("creates, updates, soft-deletes and restores sets; every write is queued for sync", async () => {
     const a = await createReviewSet({ ...EMPTY_SET_DRAFT, name: "  Арго   для метро ", slang: [2, 3], mode: "practice" }, NOON);
     expect(a.name).toBe("Арго для метро");
-    const b = await createReviewSet({ ...EMPTY_SET_DRAFT, name: "Трудные", statuses: ["difficult"] }, NOON);
-    await updateReviewSet(a.id, { ...a, name: "Арго" });
+    const b = await createReviewSet({ ...EMPTY_SET_DRAFT, name: "Трудные", statuses: ["difficult"] }, new Date(NOON.getTime() + 1000));
+    await updateReviewSet(a.id, { ...a, name: "Арго" }, new Date(NOON.getTime() + 2000));
     expect((await listReviewSets()).map((s) => s.name)).toEqual(["Арго", "Трудные"]);
+    expect((await db.outbox.toArray()).map((o) => o.key).sort()).toEqual([`review_sets:${a.id}`, `review_sets:${b.id}`].sort());
 
-    const removed = await deleteReviewSet(a.id);
+    const removed = await deleteReviewSet(a.id, new Date(NOON.getTime() + 3000));
     expect((await listReviewSets()).map((s) => s.id)).toEqual([b.id]);
-    await restoreReviewSet(removed!);
+    expect((await db.review_sets.get(a.id))!.deleted_at).not.toBeNull();
+    await restoreReviewSet(removed!, new Date(NOON.getTime() + 4000));
     expect((await listReviewSets()).map((s) => s.id)).toEqual([a.id, b.id]);
 
     await expect(createReviewSet({ ...EMPTY_SET_DRAFT, name: "   " })).rejects.toThrow();
@@ -101,18 +103,48 @@ describe("stored sets", () => {
     expect(setIdOf("inbox")).toBeNull();
   });
 
-  it("drops malformed sets and unknown values (backup import)", () => {
+  it("reads sets stored the old way, dropping malformed ones", () => {
+    const at = "2026-10-22T12:00:00.000Z";
     expect(
-      normalizeReviewSets([
-        { id: "a", name: "Ok", folders: ["x", "x", 3], statuses: ["new", "bogus"], slang: [2, "verl", 9], added: "week", mode: "practice" },
-        { id: "a", name: "Duplicate id" },
-        { id: "b", name: "  " },
-        "nope",
-      ]),
+      legacyReviewSets(
+        [
+          { id: "a", name: "Ok", folders: ["x", "x", 3], statuses: ["new", "bogus"], slang: [2, "verl", 9], added: "week", mode: "practice", created_at: "2026-10-01T00:00:00.000Z" },
+          { id: "a", name: "Duplicate id" },
+          { id: "b", name: "  " },
+          "nope",
+        ],
+        at,
+      ),
     ).toEqual([
-      { id: "a", name: "Ok", folders: ["x"], statuses: ["new"], slang: [2, "verl"], added: "week", mode: "practice", created_at: new Date(0).toISOString() },
+      { id: "a", name: "Ok", folders: ["x"], statuses: ["new"], slang: [2, "verl"], added: "week", mode: "practice", created_at: "2026-10-01T00:00:00.000Z", updated_at: at, deleted_at: null },
     ]);
-    expect(normalizeReviewSets(null)).toEqual([]);
+    expect(legacyReviewSets(null, at)).toEqual([]);
+  });
+
+  it("upgrading the database moves the old Settings sets into the synced table", async () => {
+    const name = "kartochki-upgrade-test";
+    const old = new Dexie(name);
+    old.version(1).stores({
+      folders: "id, slug, sort, updated_at",
+      words: "id, fr, ru, folder_id, slang_level, created_at, updated_at",
+      review_state: "id, word_id, direction, due, state, updated_at",
+      review_log: "id, word_id, review, updated_at",
+      reorg_runs: "id, created_at, updated_at",
+      settings: "id",
+      outbox: "key, table, queued_at",
+    });
+    await old.table("settings").put({ id: "settings", new_per_day: 20, review_sets: [{ id: "s1", name: "Арго", folders: [], statuses: [], slang: [2], added: "all", mode: "schedule" }] });
+    old.close();
+
+    const next = new KartochkiDB(name);
+    const rows = await next.review_sets.toArray();
+    expect(rows.map((r) => [r.id, r.name, r.slang])).toEqual([["s1", "Арго", [2]]]);
+    const settings = (await next.settings.get("settings"))!;
+    expect(settings.new_per_day).toBe(20);
+    expect("review_sets" in settings).toBe(false);
+    expect((await next.outbox.toArray()).map((o) => o.key)).toEqual(["review_sets:s1"]);
+    next.close();
+    await Dexie.delete(name);
   });
 
   it("describes a set in one line", () => {

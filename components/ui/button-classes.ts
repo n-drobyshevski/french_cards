@@ -1,3 +1,5 @@
+// Button looks as plain class strings. No "use client": server pages (/~offline) style links with
+// buttonClasses, and a function exported from a client module cannot be called on the server.
 import { cx } from "./cx";
 
 export type ButtonVariant = "primary" | "secondary" | "tertiary" | "danger";

@@ -87,6 +87,7 @@ describe("import summaries", () => {
     review_state: empty,
     review_log: empty,
     reorg_runs: empty,
+    review_sets: empty,
     settings: "kept",
     ...patch,
   });

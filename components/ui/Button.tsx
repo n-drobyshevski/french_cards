@@ -6,7 +6,6 @@ import { buttonClasses, type ButtonStyleOptions } from "./button-classes";
 import { cx } from "./cx";
 import { Icon, type IconName } from "./Icons";
 
-// Class strings live in a server-safe module: server components (app/~offline) call buttonClasses().
 export { buttonClasses, type ButtonSize, type ButtonStyleOptions, type ButtonVariant } from "./button-classes";
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, Omit<ButtonStyleOptions, "className"> {
