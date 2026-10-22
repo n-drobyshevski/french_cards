@@ -11,7 +11,21 @@ import { isSupabaseConfigured, normalizeEmail, publicAllowedEmail } from "@/lib/
 import { authErrorMessage, EMAIL_RE, EXISTING_ACCOUNT, MIN_PASSWORD_LENGTH, NOT_ALLOWED, newPasswordProblem } from "./messages";
 import { PasswordField } from "./PasswordField";
 import { checkSession, passesEmailHint, rememberSignedIn } from "./session";
-import { APP_NAME } from "@/lib/brand";
+import {
+  AUTH_CARD,
+  AUTH_FOOTNOTE,
+  AUTH_LABEL,
+  AUTH_LINKS,
+  AUTH_MAIN,
+  AUTH_PANEL,
+  AUTH_PANEL_BODY,
+  AUTH_PANEL_HEAD,
+  AUTH_PANEL_TEXT,
+  AUTH_PRIMARY,
+  AuthMark,
+} from "./AuthFrame";
+
+export { CardGlyph } from "./AuthFrame";
 
 type Mode = "signin" | "signup" | "reset";
 
@@ -24,15 +38,6 @@ const TITLES: Record<Mode, string> = {
 const NOTICES: Record<string, string> = {
   expired: "Ссылка не сработала или устарела. Запросите сброс пароля ещё раз.",
 };
-
-export function CardGlyph() {
-  return (
-    <svg aria-hidden="true" width="20" height="28" viewBox="0 0 20 28" fill="none" className="mt-2 shrink-0">
-      <rect x="0.75" y="0.75" width="18.5" height="26.5" rx="1.5" className="stroke-ink" strokeWidth="1.5" />
-      <path d="M0.75 7.5h18.5" className="stroke-red" strokeWidth="2" />
-    </svg>
-  );
-}
 
 const online = () => typeof navigator === "undefined" || navigator.onLine !== false;
 
@@ -180,37 +185,29 @@ export function LoginScreen() {
   };
 
   return (
-    <main className="flex min-h-dvh flex-col bg-paper px-4 pt-28 pb-[max(28px,env(safe-area-inset-bottom))] text-ink">
-      <div className="flex items-start gap-3">
-        <CardGlyph />
-        <h1 className="m-0 font-serif text-[40px] leading-[44px] font-medium tracking-[-0.015em] text-balance">{APP_NAME}</h1>
-      </div>
+    <main className={AUTH_MAIN}>
+      <AuthMark />
 
       {!configured ? (
-        <>
-          <section className="mt-12 overflow-hidden rounded-[6px] border border-rule bg-surface">
-            <div className="flex h-[46px] items-center border-b-2 border-red px-4 font-mono text-[11px] leading-4 tracking-[.06em] text-muted">
-              ВХОД НЕ НУЖЕН
-            </div>
-            <p className="px-4 py-6 text-[15px] leading-[22px] text-muted">
+        <div className={AUTH_CARD}>
+          <section className={AUTH_PANEL}>
+            <div className={AUTH_PANEL_HEAD}>ВХОД НЕ НУЖЕН</div>
+            <p className={`${AUTH_PANEL_TEXT} text-muted`}>
               Синхронизация выключена: все слова и прогресс хранятся только на этом устройстве.
             </p>
           </section>
-          <Link
-            href="/"
-            className="mt-4 flex h-[52px] shrink-0 items-center justify-center rounded-[6px] bg-ink text-[15px] font-medium tracking-[.01em] text-on-ink"
-          >
+          <Link href="/" className={`${AUTH_PRIMARY} md:mb-6`}>
             Открыть карточки
           </Link>
-        </>
+        </div>
       ) : (
-        <form onSubmit={onSubmit} noValidate className="contents">
-          <section aria-labelledby="login-title" className="mt-12 overflow-hidden rounded-[6px] border border-rule bg-surface">
-            <div className="flex h-[46px] items-center border-b-2 border-red px-4 font-mono text-[11px] leading-4 tracking-[.06em] text-muted">
+        <form onSubmit={onSubmit} noValidate className={AUTH_CARD}>
+          <section aria-labelledby="login-title" className={AUTH_PANEL}>
+            <div className={AUTH_PANEL_HEAD}>
               <span id="login-title">{TITLES[mode]}</span>
             </div>
 
-            <div className="flex flex-col gap-4 px-4 pt-6 pb-5">
+            <div className={AUTH_PANEL_BODY}>
               {notice && (
                 <p role="status" className="m-0 rounded-[4px] border border-rule bg-surface-2 px-3 py-2 text-[13px] leading-[18px] text-ink">
                   {notice}
@@ -218,7 +215,7 @@ export function LoginScreen() {
               )}
 
               <div>
-                <label htmlFor="login-email" className="block text-[13px] leading-[18px] text-muted">
+                <label htmlFor="login-email" className={AUTH_LABEL}>
                   Почта
                 </label>
                 <input
@@ -240,7 +237,7 @@ export function LoginScreen() {
                   disabled={busy}
                   aria-invalid={error ? true : undefined}
                   aria-describedby={error ? "login-error" : undefined}
-                  className="mt-2 h-12 w-full rounded-[4px] border border-rule bg-surface px-3 text-[17px] text-ink caret-ink outline-none placeholder:text-muted/70 focus:border-ink focus:shadow-[inset_0_0_0_1px_var(--ink)] focus-visible:outline-none disabled:opacity-60"
+                  className="mt-2 h-12 w-full rounded-[4px] border border-rule bg-surface px-3 text-[17px] text-ink caret-ink outline-none placeholder:text-muted/70 focus:border-ink focus:shadow-[inset_0_0_0_1px_var(--ink)] focus-visible:outline-none disabled:opacity-60 md:h-11 md:border-boundary md:px-[11px] md:text-[15px] md:placeholder:text-muted"
                 />
               </div>
 
@@ -290,15 +287,11 @@ export function LoginScreen() {
             </div>
           </section>
 
-          <button
-            type="submit"
-            disabled={busy}
-            className="mt-4 flex h-[52px] w-full shrink-0 cursor-pointer items-center justify-center rounded-[6px] bg-ink text-[15px] font-medium tracking-[.01em] text-on-ink disabled:cursor-default disabled:opacity-40"
-          >
+          <button type="submit" disabled={busy} aria-busy={busy || undefined} className={AUTH_PRIMARY}>
             {primaryLabel}
           </button>
 
-          <div className="mt-2 flex items-center justify-between gap-3">
+          <div className={AUTH_LINKS}>
             {mode === "signin" ? (
               <>
                 <TextButton onClick={() => switchMode("reset")} disabled={busy}>
@@ -317,9 +310,7 @@ export function LoginScreen() {
         </form>
       )}
 
-      <p className="mt-auto max-w-[300px] pt-8 text-xs leading-4 text-muted">
-        Вход по паролю работает и в приложении на главном экране iPhone.
-      </p>
+      <p className={AUTH_FOOTNOTE}>Вход по паролю работает и в приложении на главном экране iPhone.</p>
     </main>
   );
 }
@@ -330,7 +321,7 @@ function TextButton({ children, onClick, disabled }: { children: React.ReactNode
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="h-11 cursor-pointer text-[13px] font-medium whitespace-nowrap text-ink underline decoration-rule underline-offset-4 disabled:opacity-60"
+      className="h-11 cursor-pointer text-[13px] font-medium whitespace-nowrap text-ink underline decoration-rule underline-offset-4 disabled:opacity-60 md:h-8 md:rounded-[4px] md:px-2 md:text-[14px] md:no-underline md:hoverable:bg-hover-surface"
     >
       {children}
     </button>
