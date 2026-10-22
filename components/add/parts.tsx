@@ -10,11 +10,16 @@ import { Segmented } from "@/components/ui/Segmented";
 import { SheetCloseButton, SheetTitle } from "@/components/ui/Sheet";
 import { SLANG_NAMES_RU, SlangMeter } from "@/components/ui/SlangMeter";
 import { cx } from "@/components/ui/cx";
-import type { SuggestErrorKind } from "@/lib/use-suggest";
+import { SkeletonRow } from "@/components/ui/Skeleton";
+import { StatusLine } from "@/components/ui/StatusLine";
+import type { Suggestion } from "@/lib/ai/schemas";
+import { useDelayedFlag } from "@/lib/use-delayed-flag";
+import type { SuggestApi, SuggestErrorKind } from "@/lib/use-suggest";
 import { SLANG_LABELS, type Folder, type SlangLevel } from "@/lib/types";
 import type { DuplicateInfo } from "./data";
 import { choiceKey, choiceName, INBOX_CHOICE, sameChoice, type FolderChoice } from "./folder-choice";
-import { cardNumber } from "./match";
+import { variantKey } from "./combobox";
+import { cardNumber, plural } from "./match";
 
 // ---------------------------------------------------------------------------------------
 // Sheet chrome: «КАРТОЧКА № 159» + close, title + tools, red index-card rule.
@@ -221,31 +226,181 @@ export function FieldError({ id, children }: { id?: string; children?: ReactNode
   );
 }
 
-/** Two hairline placeholder rows while «Варианты» load (no "думает…"). */
-export function SkeletonRows({ count = 2 }: { count?: number }) {
-  const widths = [
-    [136, 104],
-    [96, 152],
-    [120, 88],
-  ];
+// ---------------------------------------------------------------------------------------
+// «Варианты» region (MOTION-SPEC A2, A3, §3.6, §3.8): N × 72px slots reserved as soon as there is a
+// query; status line + skeleton bars 150 ms after the debounce (held at least 500 ms); each streamed
+// row takes the first free slot in place; at the end the status reads «3 варианта» and fades, and the
+// slots left over collapse. Errors take a slot at row height, so nothing above or around them moves.
+
+/** Height of a «Варианты» row and of its reserved slot. */
+export const VARIANT_ROW_HEIGHT = 72;
+const STAGGER_MS = 40;
+const STAGGER_CAP_MS = 200;
+
+export type VariantSlot =
+  | { kind: "row"; key: string; suggestion: Suggestion; delay: number }
+  | { kind: "error"; key: string; error: SuggestErrorKind }
+  | { kind: "empty"; key: string }
+  | { kind: "slot"; key: string; index: number; bars: boolean; collapsed: boolean };
+
+export interface VariantsStatus {
+  text: string;
+  /** Still waiting: elapsed time and the ink run (StatusLine). */
+  active: boolean;
+  /** The finished count: fades out after 1.2 s. */
+  fade: boolean;
+  /** Remount key: a new count fades on its own. */
+  key: string;
+  announce: string;
+}
+
+export interface VariantsRegion {
+  /** null: the 21px status slot stays blank. */
+  status: VariantsStatus | null;
+  slots: VariantSlot[];
+  busy: boolean;
+}
+
+const ERROR_STATUS: Record<SuggestErrorKind, string> = {
+  offline: "Нет сети",
+  unavailable: "Недоступно",
+  rate_limited: "Не удалось",
+  failed: "Не удалось",
+};
+
+export const VARIANT_ERRORS: Record<SuggestErrorKind, { text: string; retry: boolean }> = {
+  offline: { text: "Нет сети — варианты появятся, когда она вернётся", retry: false },
+  unavailable: { text: "Подсказки недоступны — заполните вручную", retry: false },
+  rate_limited: { text: "Слишком много запросов — попробуйте через минуту", retry: true },
+  failed: { text: "Не удалось подобрать варианты", retry: true },
+};
+
+const variantsCount = (n: number) => (n === 0 ? "Нет вариантов" : `${n} ${plural(n, ["вариант", "варианта", "вариантов"])}`);
+
+/** Slot and status-line state for «Варианты»; shared by the phone sheet and the desktop dialog. */
+export function useVariantsRegion(suggest: SuggestApi): VariantsRegion {
+  const { status, results, error, query, requesting } = suggest;
+  const loading = status === "loading";
+  const waiting = useDelayedFlag(loading && requesting, { delay: 150, min: 500 });
+
+  // The query whose wait was visible: only that one echoes its count and fades its bars out.
+  const [waitedFor, setWaitedFor] = useState<string | null>(null);
+  if (waiting && waitedFor !== query) setWaitedFor(query);
+  const waited = waitedFor === query;
+
+  // Rows that arrive together rise one after another (40 ms apart, 200 ms at most); a row keeps
+  // its delay while it stays, so a later row never restarts an earlier one.
+  const keys = results.map(variantKey);
+  const signature = keys.join("\u0002");
+  const [stagger, setStagger] = useState<{ signature: string; delays: ReadonlyMap<string, number> }>({
+    signature: "",
+    delays: new Map(),
+  });
+  let delays = stagger.delays;
+  if (stagger.signature !== signature) {
+    const next = new Map<string, number>();
+    let fresh = 0;
+    for (const key of keys) next.set(key, stagger.delays.get(key) ?? Math.min(fresh++ * STAGGER_MS, STAGGER_CAP_MS));
+    delays = next;
+    setStagger({ signature, delays: next });
+  }
+
+  const slots: VariantSlot[] = results.map((suggestion, i) => ({
+    kind: "row",
+    key: keys[i],
+    suggestion,
+    delay: delays.get(keys[i]) ?? 0,
+  }));
+  if (status === "error" && error) slots.push({ kind: "error", key: "error", error });
+  else if (status === "done" && results.length === 0) slots.push({ kind: "empty", key: "empty" });
+  // Finished and the indicator released: the slots left over leave (fading their bars if shown).
+  const collapsed = (status === "done" || status === "error") && !waiting;
+  for (let i = slots.length; i < Math.max(1, suggest.max); i++) {
+    slots.push({ kind: "slot", key: `slot-${i}`, index: i, bars: waiting || (collapsed && waited), collapsed });
+  }
+
+  let line: VariantsStatus | null = null;
+  if (status === "error" && error) {
+    const text = ERROR_STATUS[error];
+    line = { text, active: false, fade: false, key: "live", announce: VARIANT_ERRORS[error].text };
+  } else if (loading && waiting) {
+    line = { text: "Подбираем варианты", active: true, fade: false, key: "live", announce: "Подбираем варианты" };
+  } else if (status === "done" && waited) {
+    line = {
+      text: variantsCount(results.length),
+      active: false,
+      fade: true,
+      key: `done:${query}`,
+      announce: `Варианты: ${results.length}`,
+    };
+  }
+
+  return { status: line, slots, busy: loading };
+}
+
+/** The 21px status slot above the rows: blank, or the StatusLine on its hairline. */
+export function VariantsStatusSlot({ status, className }: { status: VariantsStatus | null; className?: string }) {
   return (
-    <div role="status" aria-label="Загружаем варианты" className="flex flex-col">
-      {Array.from({ length: count }, (_, i) => (
-        <div key={i} aria-hidden="true" className="flex h-11 items-center justify-between border-b border-rule">
-          <span className="flex flex-col gap-1.5">
-            <span className="block h-2 rounded-[2px] bg-surface-2" style={{ width: widths[i % 3][0] }} />
-            <span className="block h-1.5 rounded-[2px] bg-surface-2" style={{ width: widths[i % 3][1] }} />
-          </span>
-          <span className="mr-7 inline-flex gap-[2px]">
-            {[0, 1, 2, 3].map((s) => (
-              <span key={s} className="h-[3px] w-2.5 bg-surface-2" />
-            ))}
-          </span>
+    <div className={cx("h-[21px]", className)}>
+      {status && (
+        <div
+          key={status.key}
+          className={cx(status.fade && "animate-[fade-out_var(--dur-exit)_var(--ease-exit)_1200ms_both]")}
+        >
+          <StatusLine text={status.text} active={status.active} announce={status.announce} />
         </div>
-      ))}
+      )}
     </div>
   );
 }
+
+const SLOT_EXIT = "opacity var(--dur-exit) var(--ease-exit), grid-template-rows var(--dur-move) var(--ease-standard) var(--dur-exit)";
+
+/**
+ * A reserved slot: blank, or a skeleton row once the wait shows. When the answer is in, it fades
+ * (--dur-exit) and then closes its height (--dur-move). It reopens at once for the next query.
+ */
+export function VariantSlotFrame({ slot, className }: { slot: Extract<VariantSlot, { kind: "slot" }>; className?: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      data-variant-slot={slot.collapsed ? "collapsed" : slot.bars ? "skeleton" : "reserved"}
+      className={cx("grid", slot.collapsed ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr]", className)}
+      style={slot.collapsed ? { transition: SLOT_EXIT } : undefined}
+    >
+      <div className="min-h-0 overflow-hidden">
+        {slot.bars ? (
+          <SkeletonRow height={VARIANT_ROW_HEIGHT} index={slot.index} lines={2} meter fade />
+        ) : (
+          <div style={{ height: VARIANT_ROW_HEIGHT }} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The error in place of the first free slot, at row height: 1px --again rule on top, «Повторить» right. */
+export function VariantError({ kind, onRetry, className }: { kind: SuggestErrorKind; onRetry: () => void; className?: string }) {
+  const e = VARIANT_ERRORS[kind];
+  return (
+    <div
+      data-variant-error={kind}
+      // -mt-px: the --again rule lies on the hairline above it (status line or last row).
+      className={cx("relative -mt-px flex items-center justify-between gap-3 border-t border-again", className)}
+      style={{ height: VARIANT_ROW_HEIGHT }}
+    >
+      <p className="m-0 min-w-0 text-[13px] leading-5 text-ink">{e.text}</p>
+      {e.retry && (
+        <Button variant="tertiary" size="sm" className="-mr-2.5" onClick={onRetry}>
+          Повторить
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** A streamed row rises into its slot: 4px + fade, --dur-enter, staggered when rows land together. */
+export const VARIANT_ENTER = "animate-[enter-rise_var(--dur-enter)_var(--ease-enter)_both]";
 
 // ---------------------------------------------------------------------------------------
 // Notices
@@ -289,37 +444,6 @@ export function DuplicateNotice({
           Всё равно добавить
         </button>
       </div>
-    </div>
-  );
-}
-
-export const NOTICE: Record<SuggestErrorKind, { lead: string; rest: string; retry: boolean }> = {
-  offline: { lead: "Нет сети — подсказки недоступны.", rest: "Заполни вручную, мы синхронизируем позже.", retry: false },
-  unavailable: { lead: "Подсказки недоступны.", rest: "Заполни вручную.", retry: false },
-  rate_limited: { lead: "Слишком много запросов подряд.", rest: "Заполни вручную или попробуй через минуту.", retry: true },
-  failed: { lead: "Подсказки не загрузились.", rest: "Заполни вручную или попробуй ещё раз.", retry: true },
-};
-
-export function SuggestNotice({ kind, onRetry, className }: { kind: SuggestErrorKind; onRetry?: () => void; className?: string }) {
-  const n = NOTICE[kind];
-  return (
-    <div role="status" className={cx("mx-4 mt-4 flex items-start gap-2.5", className)}>
-      <Icon name={kind === "offline" ? "cloud-off" : "alert"} size={18} className="mt-px shrink-0 text-muted" />
-      <p className="m-0 text-[13px] leading-5 text-muted">
-        <span className="font-medium text-ink">{n.lead}</span> {n.rest}
-        {n.retry && onRetry && (
-          <>
-            {" "}
-            <button
-              type="button"
-              onClick={onRetry}
-              className="relative bg-transparent p-0 text-[13px] leading-5 font-medium text-ink underline decoration-1 underline-offset-2 before:absolute before:-inset-3 before:content-['']"
-            >
-              Повторить
-            </button>
-          </>
-        )}
-      </p>
     </div>
   );
 }

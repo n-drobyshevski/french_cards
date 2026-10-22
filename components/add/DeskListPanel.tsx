@@ -58,7 +58,7 @@ export function DeskListPanel({
         ) : (
           <HintLine hints={LIST_HINTS} />
         ))}
-      <KeyButton keys="Mod+Enter" busy={saving} inactive={selected === 0} title={selected === 0 ? "Отметьте хотя бы одно слово" : undefined} onClick={onSave}>
+      <KeyButton keys="Mod+Enter" pending={saving} inactive={selected === 0} title={selected === 0 ? "Отметьте хотя бы одно слово" : undefined} onClick={onSave}>
         {selected > 0 ? `Добавить ${nWords(selected)}` : "Добавить"}
       </KeyButton>
     </>

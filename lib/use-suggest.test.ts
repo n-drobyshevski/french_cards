@@ -239,6 +239,16 @@ describe("SuggestController", () => {
     expect(c.getSnapshot().results).toEqual([CASSER]);
   });
 
+  it("marks only the request itself as requesting, not the debounce", async () => {
+    const { c } = setup(() => streamed([CASSER]));
+    c.setQuery("se cas");
+    expect(c.getSnapshot()).toMatchObject({ status: "loading", requesting: false });
+    vi.advanceTimersByTime(300);
+    expect(c.getSnapshot()).toMatchObject({ status: "loading", requesting: true });
+    await vi.waitFor(() => expect(c.getSnapshot().status).toBe("done"));
+    expect(c.getSnapshot().requesting).toBe(false);
+  });
+
   it("new settings preferences ask again and cap the rows shown", async () => {
     const { c, calls } = setup(() => streamed([CASSER, sug("se casser la tête", "ломать голову")]));
     c.setQuery("se cas", { immediate: true });

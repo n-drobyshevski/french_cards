@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addSheet, LA_THUNE, mockEnrich, mockSuggest, openReview, SE_CASSER_LA_TETE } from "./fixtures";
+import { addSheet, gateSuggest, holdDatabase, LA_THUNE, mockEnrich, mockSuggest, openReview, SE_CASSER_LA_TETE } from "./fixtures";
 
 // Desktop «Новое слово» dialog (mockups/D-Add-*.dc.html, DESKTOP-SPEC §4 «Add dialog»). Runs in the
 // desktop-chromium project (1440×800); /api/ai/* is mocked.
@@ -163,4 +163,53 @@ test("«Список»: the parse table, then Ctrl/⌘+Enter adds the checked ro
   await page.keyboard.press("ControlOrMeta+Enter");
   await expect(dialog).toBeHidden();
   await expect(page.getByText("Добавлено 1 слово")).toBeVisible();
+});
+
+test("a failed «Варианты» request stays in its section; «Словарь» stays put and the quick form opens below", async ({ page }) => {
+  let fail = true;
+  const suggest = await gateSuggest(page, () => (fail ? 500 : [LA_THUNE]));
+  await mockEnrich(page, () => null);
+  await openReview(page);
+  await pressN(page);
+  await headword(page).fill("se cass");
+  const dialog = addSheet(page);
+  const dictionary = dialog.getByRole("listbox", { name: "Словарь" });
+  await expect(dictionary.getByRole("option").first()).toBeVisible();
+  const variants = dialog.locator("[data-variants]");
+  await expect(variants.locator('[data-variant-slot="skeleton"]').first()).toBeVisible();
+  const before = (await dictionary.boundingBox())!.y;
+
+  suggest.release();
+  const error = variants.locator("[data-variant-error]");
+  await expect(error).toContainText("Не удалось подобрать варианты");
+  expect((await error.boundingBox())!.height).toBe(72);
+  expect((await dictionary.boundingBox())!.y).toBe(before);
+  const ru = dialog.getByRole("textbox", { name: "Русский" });
+  await expect(ru).toBeVisible();
+  expect((await ru.boundingBox())!.y).toBeGreaterThan((await error.boundingBox())!.y + 71);
+
+  fail = false;
+  await error.getByRole("button", { name: "Повторить" }).click();
+  await expect(option(page, "Выбрать: la thune — бабки, деньги")).toBeVisible();
+  expect((await dictionary.boundingBox())!.y).toBe(before);
+});
+
+test("while Ctrl/⌘+Enter saves, «Добавить и ещё» keeps its look and only «Добавить» says «Добавляем…»", async ({ page }) => {
+  await openDialog(page);
+  await search(page, "la thu");
+  await page.keyboard.press("Enter");
+  const dialog = addSheet(page);
+  await expect(dialog.getByRole("textbox", { name: "Французский" })).toHaveValue("la thune");
+  const more = dialog.getByRole("button", { name: "Добавить и ещё", exact: true });
+  const look = () => more.evaluate((el) => [getComputedStyle(el).opacity, getComputedStyle(el).color, getComputedStyle(el).borderColor]);
+  const idle = await look();
+
+  const release = await holdDatabase(page);
+  await page.keyboard.press("ControlOrMeta+Enter");
+  await expect(dialog.getByRole("button", { name: "Добавляем…", exact: true })).toHaveAttribute("aria-busy", "true");
+  await expect(more).toHaveAttribute("aria-disabled", "true");
+  expect(await look()).toEqual(idle);
+  await release();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText("Добавлено · la thune")).toBeVisible();
 });
