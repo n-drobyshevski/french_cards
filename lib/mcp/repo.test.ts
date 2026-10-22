@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { describe, expect, it } from "vitest";
-import { createSupabaseRepo, PAGE, RepoError } from "./repo";
+import { createSupabaseRepo, PAGE, PartialWriteError, RepoError } from "./repo";
 
 interface Call {
   table: string;
@@ -102,6 +102,25 @@ describe("createSupabaseRepo", () => {
       ]),
     );
     expect(calls.some((c) => c.ops.some(([op]) => op === "upsert"))).toBe(false);
+  });
+
+  it("reports the rows a failing replace did write, and sends nothing after the failed chunk", async () => {
+    const idOf = (call: Call) => call.ops.find(([op, column]) => op === "eq" && column === "id")?.[2] as string;
+    const { client, calls } = fakeClient((call) =>
+      idOf(call) === "w12" ? { data: null, error: { message: "fetch failed" } } : { data: [{ id: idOf(call), updated_at: "2026-10-22T10:00:00+00:00" }], error: null },
+    );
+    const repo = createSupabaseRepo(client, "user-1");
+    const changes = Array.from({ length: 25 }, (_, i) => ({
+      row: { id: `w${i}`, updated_at: "2026-10-22T10:00:00.000Z" } as Parameters<typeof repo.replace<"words">>[1][number]["row"],
+      expected: "2026-10-21T08:00:00.000Z",
+    }));
+    const error = await repo.replace("words", changes).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(PartialWriteError);
+    const partial = error as PartialWriteError;
+    expect(partial.message).toBe("words: fetch failed");
+    expect(partial.written).toEqual(Array.from({ length: 20 }, (_, i) => `w${i}`).filter((id) => id !== "w12"));
+    expect(partial.failed).toEqual(["w12", ...Array.from({ length: 5 }, (_, i) => `w${20 + i}`)]);
+    expect(calls).toHaveLength(20);
   });
 
   it("turns Supabase errors into RepoError", async () => {

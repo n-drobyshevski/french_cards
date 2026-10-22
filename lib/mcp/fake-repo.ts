@@ -2,7 +2,7 @@
 // updated_at is not newer than the stored one is kept out and the stored row comes back. Replaces
 // write a row only while the stored updated_at is still the expected one.
 import type { Folder, ReviewLog, ReviewState, Word } from "@/lib/types";
-import type { McpRepo, Replacement, TableRows, WritableTable } from "./repo";
+import { PartialWriteError, type McpRepo, type Replacement, type TableRows, type WritableTable } from "./repo";
 
 type Tables = { [T in keyof TableRows]: Map<string, TableRows[T]> };
 
@@ -15,6 +15,11 @@ export interface FakeRepo {
   beforeUpsert?: (table: WritableTable, rows: readonly unknown[]) => void;
   /** Makes the next upsert or replace to `table` throw. */
   failNextUpsert(table: WritableTable): void;
+  /**
+   * Makes the next replace to `table` fail part-way: the first `after` rows go through, the rest
+   * are reported failed (and, with `lostAnswers`, are written anyway, as when an answer is lost).
+   */
+  failNextReplace(table: WritableTable, options: { after: number; lostAnswers?: boolean }): void;
 }
 
 const clone = <T>(x: T): T => structuredClone(x);
@@ -29,10 +34,12 @@ export function createFakeRepo(
     review_log: new Map((seed.review_log ?? []).map((r) => [r.id, clone(r)])),
   };
   const failing = new Set<WritableTable>();
+  const partial = new Map<WritableTable, { after: number; lostAnswers?: boolean }>();
   const fake: FakeRepo = {
     tables,
     writes: [],
     failNextUpsert: (table) => void failing.add(table),
+    failNextReplace: (table, options) => void partial.set(table, options),
     repo: {
       folders: async () => clone([...tables.folders.values()]),
       words: async () => clone([...tables.words.values()]),
@@ -58,12 +65,19 @@ export function createFakeRepo(
         if (failing.delete(table)) throw new Error(`${table}: simulated failure`);
         fake.beforeUpsert?.(table, rows);
         const target = tables[table] as Map<string, TableRows[T]>;
-        return changes.flatMap(({ row, expected }) => {
+        const apply = ({ row, expected }: Replacement<T>): TableRows[T][] => {
           const stored = target.get(row.id);
           if (!stored || Date.parse(stored.updated_at) !== Date.parse(expected) || Date.parse(row.updated_at) <= Date.parse(stored.updated_at)) return [];
           target.set(row.id, clone(row));
           return [clone(row)];
-        });
+        };
+        const fail = partial.get(table);
+        if (!fail) return changes.flatMap(apply);
+        partial.delete(table);
+        const written = changes.slice(0, fail.after).flatMap(apply);
+        const rest = changes.slice(fail.after);
+        if (fail.lostAnswers) rest.forEach(apply);
+        throw new PartialWriteError(`${table}: simulated failure`, written.map((r) => r.id), rest.map((c) => c.row.id));
       },
     },
   };

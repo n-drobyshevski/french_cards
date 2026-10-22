@@ -16,7 +16,7 @@ import { buildWord, cleanText, directionsOf, isMovable } from "@/lib/core/words"
 import { newId } from "@/lib/id";
 import { newReviewState, reviewStateId, wordStatus, type CardStatus } from "@/lib/scheduler";
 import type { Confidence, Direction, Folder, ReviewState, Word } from "@/lib/types";
-import { RepoError, type McpRepo, type Replacement, type WritableTable } from "./repo";
+import { PartialWriteError, RepoError, type McpRepo, type Replacement } from "./repo";
 import { studyDay } from "./study-day";
 
 export interface ToolDeps {
@@ -132,17 +132,53 @@ function wordView(w: Word, ctx: ViewContext) {
   };
 }
 
-/**
- * Rewrites rows read earlier, each only if its stored copy is unchanged since the read (so a
- * parallel call or a device sync is never silently overwritten). Returns the ids that conflicted.
- */
-async function writeRows<T extends WritableTable>(repo: McpRepo, table: T, changes: Replacement<T>[]): Promise<Set<string>> {
-  if (changes.length === 0) return new Set();
-  const written = new Set((await repo.replace(table, changes)).map((r) => r.id));
-  return new Set(changes.map((c) => c.row.id).filter((id) => !written.has(id)));
+interface WriteOutcome {
+  /** Ids someone else changed meanwhile (left as they were). */
+  conflicts: Set<string>;
+  /** Ids the database did not confirm either way (it failed part-way): may or may not be changed. */
+  failed: Set<string>;
+  /** The database error behind `failed`. */
+  error: string | null;
 }
 
-/** A rewrite of `before` into `row`, for writeRows. */
+/**
+ * Rewrites words read earlier, each only if its stored copy is unchanged since the read (so a
+ * parallel call or a device sync is never silently overwritten). When the database fails part-way
+ * the rows it did confirm still count as written, and the rest are read again to tell saved,
+ * unsaved and changed-meanwhile apart; the ones it can't tell stay in `failed`.
+ */
+async function writeWords(repo: McpRepo, changes: Replacement<"words">[]): Promise<WriteOutcome> {
+  const outcome: WriteOutcome = { conflicts: new Set(), failed: new Set(), error: null };
+  if (changes.length === 0) return outcome;
+  let written: Set<string>;
+  try {
+    written = new Set((await repo.replace("words", changes)).map((r) => r.id));
+  } catch (error) {
+    if (!(error instanceof PartialWriteError)) throw error;
+    written = new Set(error.written);
+    outcome.error = error.message;
+    const unsure = changes.filter((c) => error.failed.includes(c.row.id));
+    const stored = new Map((await repo.wordsByIds(unsure.map((c) => c.row.id)).catch(() => [])).map((w) => [w.id, w]));
+    for (const c of unsure) {
+      const at = stored.get(c.row.id)?.updated_at;
+      if (at !== undefined && Date.parse(at) === Date.parse(c.row.updated_at)) written.add(c.row.id);
+      else if (at === undefined || Date.parse(at) === Date.parse(c.expected)) outcome.failed.add(c.row.id);
+    }
+  }
+  for (const c of changes) if (!written.has(c.row.id) && !outcome.failed.has(c.row.id)) outcome.conflicts.add(c.row.id);
+  return outcome;
+}
+
+/** Fields for a result whose write failed part-way (nothing when it didn't). */
+const failedPart = (outcome: WriteOutcome): { failed?: string[]; error?: string } =>
+  outcome.failed.size === 0
+    ? {}
+    : {
+        failed: [...outcome.failed],
+        error: `The database failed part-way (${outcome.error}). The words in \`failed\` may or may not be changed: check them with search_words before retrying them; everything else in this result is as reported.`,
+      };
+
+/** A rewrite of `before` into `row`, for writeWords. */
 const change = <R extends { updated_at: string }>(before: R, row: R) => ({ row, expected: before.updated_at });
 
 /**
@@ -527,7 +563,9 @@ export const updateWord = tool({
     let conflict = false;
     if (changed) {
       next.updated_at = stampAfter(now, current.updated_at);
-      conflict = (await writeRows(deps.repo, "words", [change(current, next)])).size > 0;
+      const outcome = await writeWords(deps.repo, [change(current, next)]);
+      if (outcome.failed.size > 0) throw new RepoError(outcome.error ?? "words: no answer");
+      conflict = outcome.conflicts.size > 0;
     }
     if (conflict) {
       return {
@@ -600,14 +638,17 @@ export const moveWords = tool({
       undo.push({ id, folder_id: w.folder_id, folder_source: w.folder_source, folder_confidence: w.folder_confidence });
       moved.push({ id, fr: w.fr, from: folderRef(placeOf(w, live)), to: folderRef(target) });
     }
-    const conflicts = await writeRows(deps.repo, "words", changes);
+    const outcome = await writeWords(deps.repo, changes);
+    const { conflicts, failed } = outcome;
+    // The words in `failed` may have moved, so their way back stays in: restore_moves leaves an unmoved word unchanged.
     const undoMoves = undo.filter((u) => !conflicts.has(u.id));
     return {
-      moved: moved.filter((m) => !conflicts.has(m.id)),
+      moved: moved.filter((m) => !conflicts.has(m.id) && !failed.has(m.id)),
       skipped,
       unchanged,
       not_found: notFound,
       conflicts: [...conflicts],
+      ...failedPart(outcome),
       undo: undoMoves.length > 0 ? { tool: "restore_moves", moves: undoMoves } : null,
       note: SYNC_NOTE,
     };
@@ -652,12 +693,14 @@ export const restoreMoves = tool({
       }
       changes.push(change(w, { ...w, ...placed, updated_at: stampAfter(now, w.updated_at) }));
     }
-    const conflicts = await writeRows(deps.repo, "words", changes);
+    const outcome = await writeWords(deps.repo, changes);
+    const { conflicts, failed } = outcome;
     return {
-      restored: changes.filter((c) => !conflicts.has(c.row.id)).map((c) => brief(c.row, live)),
+      restored: changes.filter((c) => !conflicts.has(c.row.id) && !failed.has(c.row.id)).map((c) => brief(c.row, live)),
       unchanged,
       not_found: notFound,
       conflicts: [...conflicts],
+      ...failedPart(outcome),
       note: SYNC_NOTE,
     };
   },
@@ -677,15 +720,16 @@ export const deleteWords = tool({
     const live = new Map(liveFolders(folders).map((f) => [f.id, f]));
     const now = deps.now();
     const targets = found.filter((w) => w.deleted_at === null);
-    const conflicts = await writeRows(
+    const outcome = await writeWords(
       deps.repo,
-      "words",
       targets.map((w) => {
         const stamp = stampAfter(now, w.updated_at);
         return change(w, { ...w, deleted_at: stamp, updated_at: stamp });
       }),
     );
-    const deleted = targets.filter((w) => !conflicts.has(w.id));
+    const { conflicts, failed } = outcome;
+    // Cards only for words confirmed deleted: a live word must never be left without them.
+    const deleted = targets.filter((w) => !conflicts.has(w.id) && !failed.has(w.id));
     const cards = (await deps.repo.states(deleted.map((w) => w.id)))
       .filter((s) => s.deleted_at === null)
       .map((s) => {
@@ -696,8 +740,9 @@ export const deleteWords = tool({
     const deletedIds = new Set(deleted.map((w) => w.id));
     return {
       deleted: deleted.map((w) => brief(w, live)),
-      not_found: ids.filter((id) => !deletedIds.has(id) && !conflicts.has(id)),
+      not_found: ids.filter((id) => !deletedIds.has(id) && !conflicts.has(id) && !failed.has(id)),
       conflicts: [...conflicts],
+      ...failedPart(outcome),
       undo: deleted.length > 0 ? { tool: "restore_words", ids: deleted.map((w) => w.id) } : null,
       note: SYNC_NOTE,
     };
@@ -724,13 +769,15 @@ export const restoreWords = tool({
     const cards = revived.flatMap((w) => syncStates(w, existing.filter((s) => s.word_id === w.id), now));
     // Cards first: a live word must never be left without them.
     if (cards.length > 0) await deps.repo.upsert("review_state", cards);
-    const conflicts = await writeRows(deps.repo, "words", changes);
-    const restored = revived.filter((w) => !conflicts.has(w.id));
+    const outcome = await writeWords(deps.repo, changes);
+    const { conflicts, failed } = outcome;
+    const restored = revived.filter((w) => !conflicts.has(w.id) && !failed.has(w.id));
     const restoredIds = new Set(restored.map((w) => w.id));
     return {
       restored: restored.map((w) => brief(w, live)),
-      not_found: ids.filter((id) => !restoredIds.has(id) && !conflicts.has(id)),
+      not_found: ids.filter((id) => !restoredIds.has(id) && !conflicts.has(id) && !failed.has(id)),
       conflicts: [...conflicts],
+      ...failedPart(outcome),
       note: SYNC_NOTE,
     };
   },

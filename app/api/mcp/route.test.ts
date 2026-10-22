@@ -9,7 +9,7 @@ vi.mock("@/lib/mcp/repo", async (importOriginal) => ({
 }));
 
 import { resetRateLimits } from "@/lib/ai/rate-limit";
-import { DELETE, GET, OPTIONS, POST } from "./[key]/route";
+import { DELETE, GET, OPTIONS, PATCH, POST, PUT } from "./[key]/route";
 
 const SECRET = "test-secret-test-secret-test-secret-42";
 const ENV = {
@@ -93,10 +93,13 @@ describe("/api/mcp/[key]", () => {
     expect(wrong.headers.get("cache-control")).toBe("no-store");
     expect(await wrong.text()).toBe("Not Found");
     expect((await GET(new Request("https://frenchcards.vercel.app/api/mcp/x"), ctx("x"))).status).toBe(404);
-    // Exported so Next's automatic OPTIONS (204 + Allow) can't reveal the route for any key.
-    for (const method of [OPTIONS, DELETE]) {
-      expect((await method(new Request("https://frenchcards.vercel.app/api/mcp/x", { method: "OPTIONS" }), ctx("x"))).status).toBe(404);
+    // Exported so neither Next's automatic OPTIONS (204 + Allow) nor its 405 can reveal the route for any key.
+    const handlers = { OPTIONS, DELETE, PUT, PATCH };
+    for (const [name, method] of Object.entries(handlers)) {
+      expect((await method(new Request("https://frenchcards.vercel.app/api/mcp/x", { method: name }), ctx("x"))).status).toBe(404);
     }
+    // With the right key the SDK answers the methods it doesn't serve.
+    expect((await PUT(new Request(`https://frenchcards.vercel.app/api/mcp/${SECRET}`, { method: "PUT" }), ctx(SECRET))).status).toBe(405);
 
     delete process.env.MCP_SECRET;
     expect((await rpc(SECRET, "initialize")).status).toBe(404);

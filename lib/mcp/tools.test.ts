@@ -348,6 +348,70 @@ describe("move_words", () => {
   });
 });
 
+describe("writes that fail part-way", () => {
+  const seed = () =>
+    createFakeRepo({
+      folders: FOLDERS,
+      words: [
+        word("a", "fric", "бабло", { folder_id: "f-dengi", folder_confidence: "high" }),
+        word("b", "keuf", "мент", { folder_id: "f-dengi", folder_source: "user" }),
+        word("c", "ouf", "безумный", { folder_id: null }),
+      ],
+      review_state: [...cards("a"), ...cards("b"), ...cards("c")],
+    });
+
+  it("move_words reports what moved and keeps the undo of every word that may have moved", async () => {
+    const fake = seed();
+    fake.failNextReplace("words", { after: 1 });
+    const out = await ok(moveWords, fake, { ids: ["a", "b", "c"], folder: "Эмоции" });
+    expect(out.moved.map((m) => m.id)).toEqual(["a"]);
+    expect(out.failed).toEqual(["b", "c"]);
+    expect(out.error).toMatch(/simulated failure/);
+    expect(out.undo?.moves.map((m) => m.id)).toEqual(["a", "b", "c"]);
+    expect(fake.tables.words.get("a")).toMatchObject({ folder_id: "f-emotsii", folder_source: "user" });
+
+    const later = new Date(NOW.getTime() + 1000);
+    const res = await callTool(restoreMoves, { ...deps(fake), now: () => later }, out.undo);
+    const back = res.structuredContent as { restored: { id: string }[]; unchanged: string[] };
+    expect(back.restored.map((w) => w.id)).toEqual(["a"]);
+    expect(back.unchanged).toEqual(["b", "c"]);
+    expect(fake.tables.words.get("a")).toMatchObject({ folder_id: "f-dengi", folder_source: "auto", folder_confidence: "high" });
+  });
+
+  it("counts a write whose answer was lost as done once it reads it back", async () => {
+    const fake = seed();
+    fake.failNextReplace("words", { after: 1, lostAnswers: true });
+    const out = await ok(moveWords, fake, { ids: ["a", "b", "c"], folder: "Эмоции" });
+    expect(out.moved.map((m) => m.id)).toEqual(["a", "b", "c"]);
+    expect(out.failed).toBeUndefined();
+    expect(out.conflicts).toEqual([]);
+  });
+
+  it("delete_words still deletes the cards of the words it did delete", async () => {
+    const fake = seed();
+    fake.failNextReplace("words", { after: 1 });
+    const out = await ok(deleteWords, fake, { ids: ["a", "b"] });
+    expect(out.deleted.map((w) => w.id)).toEqual(["a"]);
+    expect(out.failed).toEqual(["b"]);
+    expect(out.not_found).toEqual([]);
+    expect(out.undo).toEqual({ tool: "restore_words", ids: ["a"] });
+    expect(fake.tables.review_state.get("a:fr_ru")?.deleted_at).toBe(NOW.toISOString());
+    expect(fake.tables.review_state.get("b:fr_ru")?.deleted_at).toBeNull();
+
+    const lost = seed();
+    lost.failNextReplace("words", { after: 0, lostAnswers: true });
+    const again = await ok(deleteWords, lost, { ids: ["a", "b"] });
+    expect(again.deleted.map((w) => w.id)).toEqual(["a", "b"]);
+    expect([...lost.tables.review_state.values()].filter((s) => s.word_id !== "c").every((s) => s.deleted_at !== null)).toBe(true);
+  });
+
+  it("update_word reports the failure as a database error", async () => {
+    const fake = seed();
+    fake.failNextReplace("words", { after: 0 });
+    expect(await refused(updateWord, fake, { id: "a", patch: { ru: "бабки" } })).toMatch(/database refused or did not answer: words: simulated failure/);
+  });
+});
+
 describe("delete_words / restore_words", () => {
   it("soft-deletes words with their cards and restores both with their progress", async () => {
     const reviewed = { ...cards("w1")[0], state: 2 as const, reps: 7, stability: 30 };

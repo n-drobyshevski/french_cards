@@ -44,6 +44,7 @@ async function handle(req: Request, ctx: RouteContext<"/api/mcp/[key]">): Promis
   }
 }
 
-// OPTIONS and DELETE too, so Next's automatic OPTIONS answer can't reveal the route: every method
-// checks the key first (the SDK answers the ones it doesn't serve with 405).
-export { handle as GET, handle as POST, handle as OPTIONS, handle as DELETE };
+// Every method Next routes (HEAD falls back to GET), so neither its automatic OPTIONS answer nor
+// its 405 for an unexported method can reveal the route: each checks the key first (the SDK
+// answers the ones it doesn't serve with 405).
+export { handle as GET, handle as POST, handle as PUT, handle as PATCH, handle as DELETE, handle as OPTIONS };

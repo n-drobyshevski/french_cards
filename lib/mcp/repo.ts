@@ -40,7 +40,8 @@ export interface McpRepo {
   /**
    * Compare-and-set rewrite of stored rows: each row is written only while the stored updated_at
    * is still `expected` (the value read before the change). Returns the rows that were written;
-   * a row left out was changed by someone else meanwhile.
+   * a row left out was changed by someone else meanwhile. When a request fails it throws a
+   * PartialWriteError that still names the rows confirmed written.
    */
   replace<T extends WritableTable>(table: T, changes: readonly Replacement<T>[]): Promise<TableRows[T][]>;
 }
@@ -55,6 +56,21 @@ export class RepoError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "RepoError";
+  }
+}
+
+/**
+ * A replace that failed part-way: `written` rows were confirmed stored, `failed` ids got no answer
+ * (or were not sent), so whether they changed is unknown. Every other id was a conflict.
+ */
+export class PartialWriteError extends RepoError {
+  constructor(
+    message: string,
+    readonly written: readonly string[],
+    readonly failed: readonly string[],
+  ) {
+    super(message);
+    this.name = "PartialWriteError";
   }
 }
 
@@ -112,8 +128,15 @@ export function createSupabaseRepo(client: SupabaseClient, userId: string): McpR
     },
     async replace(table, changes) {
       const out: TableRows[typeof table][] = [];
+      const failed: string[] = [];
+      let message = "";
       for (const part of chunks(changes, REPLACE_CONCURRENCY)) {
-        const pages = await Promise.all(
+        // Not after a failure: the database is likely down, and those rows are reported as failed.
+        if (failed.length > 0) {
+          failed.push(...part.map((c) => c.row.id));
+          continue;
+        }
+        const results = await Promise.allSettled(
           part.map(async ({ row, expected }) => {
             // Every writer stamps toISOString() (whole ms); the 1 ms window also matches a finer stored value.
             const at = Date.parse(expected);
@@ -129,8 +152,16 @@ export function createSupabaseRepo(client: SupabaseClient, userId: string): McpR
             return (data ?? []).map((r) => fromRemoteRow(table, r) as unknown as TableRows[typeof table]);
           }),
         );
-        out.push(...pages.flat());
+        results.forEach((result, i) => {
+          if (result.status === "fulfilled") out.push(...result.value);
+          else {
+            failed.push(part[i].row.id);
+            const reason: unknown = result.reason;
+            if (!message) message = reason instanceof RepoError ? reason.message : `${table}: ${reason instanceof Error ? reason.message : String(reason)}`;
+          }
+        });
       }
+      if (failed.length > 0) throw new PartialWriteError(message, out.map((r) => r.id), failed);
       return out;
     },
   };
