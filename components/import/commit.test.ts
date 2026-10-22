@@ -17,6 +17,8 @@ function item(fr: string, patch: Partial<VocabItem> = {}): VocabItem {
     ru: `ru:${fr}`,
     ru_suggested: false,
     note: null,
+    example_fr: null,
+    example_ru: null,
     pos: "noun",
     gender: "f",
     slang_level: 2,

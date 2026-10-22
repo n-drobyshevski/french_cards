@@ -8,6 +8,7 @@ vi.mock("ai", async (importOriginal) => ({ ...(await importOriginal<typeof impor
 
 import { resetRateLimits } from "@/lib/ai/rate-limit";
 import { POST as classify } from "./classify/route";
+import { POST as enrich } from "./enrich/route";
 import { POST as extract } from "./extract/route";
 import { POST as suggest } from "./suggest/route";
 
@@ -241,6 +242,44 @@ describe("POST /api/ai/classify", () => {
     ai.generateText.mockRejectedValue(new Error("down"));
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const res = await classify(json({ mode: "assign", words: [{ id: "a", fr: "raquer", ru: "платить" }], folders }));
+    spy.mockRestore();
+    expect(res.status).toBe(502);
+  });
+});
+
+describe("POST /api/ai/enrich", () => {
+  it("400 on invalid input", async () => {
+    expect((await enrich(json({ words: [] }))).status).toBe(400);
+    expect((await enrich(json({ words: [{ id: "a", fr: "chelou", ru: "" }] }))).status).toBe(400);
+    expect(ai.generateText).not.toHaveBeenCalled();
+  });
+
+  it("maps refs back to ids and normalizes the fields", async () => {
+    ai.generateText.mockResolvedValue({
+      output: {
+        items: [
+          { ref: "w2", pos: "adj", gender: "f", slang_level: "arg", verlan: true, example_fr: " Il est chelou. ", example_ru: "Он стрёмный.", confidence: "high" },
+          { ref: "w9", pos: "noun", gender: "m", slang_level: "vulg", verlan: false, example_fr: null, example_ru: null, confidence: "low" },
+          { ref: "w1", pos: "noun", gender: "f", slang_level: "fam", verlan: false, example_fr: null, example_ru: "лишнее", confidence: "high" },
+        ],
+      },
+    });
+    const res = await enrich(json({ words: [{ id: "a", fr: "la caisse", ru: "тачка" }, { id: "b", fr: "chelou", ru: "стрёмный" }] }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      results: [
+        { id: "a", pos: "noun", gender: "f", slang_level: 1, verlan: false, example_fr: null, example_ru: null, confidence: "high" },
+        { id: "b", pos: "adj", gender: "none", slang_level: 2, verlan: true, example_fr: "Il est chelou.", example_ru: "Он стрёмный.", confidence: "high" },
+      ],
+    });
+    const call = ai.generateText.mock.calls[0][0] as { prompt: string };
+    expect(call.prompt).toContain("w1\tla caisse\tтачка");
+  });
+
+  it("502 when the model call fails", async () => {
+    ai.generateText.mockRejectedValue(new Error("down"));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await enrich(json({ words: [{ id: "a", fr: "chelou", ru: "стрёмный" }] }));
     spy.mockRestore();
     expect(res.status).toBe(502);
   });

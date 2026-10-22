@@ -1,6 +1,6 @@
 import { expect, type Page, type Route } from "@playwright/test";
 
-// Wire formats mirror lib/ai/schemas.ts (SuggestLine, ExtractLine, Suggestion, VocabItem).
+// Wire formats mirror lib/ai/schemas.ts (SuggestLine, ExtractLine, Suggestion, VocabItem, EnrichResponse).
 // Kept as plain objects so e2e does not import app code.
 
 export const NDJSON = "application/x-ndjson; charset=utf-8";
@@ -72,7 +72,7 @@ export async function mockSuggest(page: Page, suggestions: readonly SuggestionWi
   });
 }
 
-export interface VocabItemWire extends Omit<SuggestionWire, "example_fr" | "example_ru" | "folder_alternatives"> {
+export interface VocabItemWire extends Omit<SuggestionWire, "folder_alternatives"> {
   fr_as_seen: string | null;
   ru_suggested: boolean;
   provenance: "pair" | "fr_only" | "ru_only" | "in_text";
@@ -82,6 +82,8 @@ export interface VocabItemWire extends Omit<SuggestionWire, "example_fr" | "exam
 export const vocab = (fields: Partial<VocabItemWire> & Pick<VocabItemWire, "fr" | "ru">): VocabItemWire => ({
   fr_as_seen: null,
   note: null,
+  example_fr: null,
+  example_ru: null,
   pos: "noun",
   gender: "m",
   slang_level: 0,
@@ -97,7 +99,17 @@ export const vocab = (fields: Partial<VocabItemWire> & Pick<VocabItemWire, "fr" 
 
 export const EXTRACTED: VocabItemWire[] = [
   vocab({ fr: "le fric", ru: "бабло", slang_level: 1, folder: "dengi" }),
-  vocab({ fr: "kiffer", ru: "тащиться, обожать", pos: "verb", gender: "none", slang_level: 2, folder: "emotsii", ru_suggested: true }),
+  vocab({
+    fr: "kiffer",
+    ru: "тащиться, обожать",
+    pos: "verb",
+    gender: "none",
+    slang_level: 2,
+    folder: "emotsii",
+    ru_suggested: true,
+    example_fr: "Je kiffe trop ce son.",
+    example_ru: "Обожаю этот трек.",
+  }),
   vocab({
     fr: "chelou",
     fr_as_seen: "chlou",
@@ -129,6 +141,53 @@ export async function mockExtract(page: Page, items: readonly VocabItemWire[], o
     });
   });
 }
+
+export interface EnrichResultWire {
+  id: string;
+  pos: SuggestionWire["pos"];
+  gender: SuggestionWire["gender"];
+  slang_level: 0 | 1 | 2 | 3;
+  verlan: boolean;
+  example_fr: string | null;
+  example_ru: string | null;
+  confidence: "high" | "med" | "low";
+}
+
+export interface EnrichWordWire {
+  id: string;
+  fr: string;
+  ru: string;
+  note?: string | null;
+}
+
+/** Answers POST /api/ai/enrich: `make` gives the detected fields for each word sent (null = skipped). */
+export async function mockEnrich(
+  page: Page,
+  make: (word: EnrichWordWire) => Omit<EnrichResultWire, "id"> | null,
+  onRequest?: (words: EnrichWordWire[]) => void,
+) {
+  await page.route("**/api/ai/enrich", async (route: Route) => {
+    const { words } = route.request().postDataJSON() as { words: EnrichWordWire[] };
+    onRequest?.(words);
+    const results = words.flatMap((w) => {
+      const r = make(w);
+      return r ? [{ id: w.id, ...r }] : [];
+    });
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ results }) });
+  });
+}
+
+/** Detected fields with an example built from the French side. */
+export const enriched = (word: EnrichWordWire, fields: Partial<Omit<EnrichResultWire, "id">> = {}): Omit<EnrichResultWire, "id"> => ({
+  pos: "noun",
+  gender: "f",
+  slang_level: 1,
+  verlan: false,
+  example_fr: `Exemple avec ${word.fr}.`,
+  example_ru: `Пример: ${word.ru}.`,
+  confidence: "high",
+  ...fields,
+});
 
 /** Draws a small chat-like screenshot in the browser and returns it as a PNG. */
 export async function screenshotPng(page: Page): Promise<Buffer> {

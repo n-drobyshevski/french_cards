@@ -4,10 +4,13 @@ import { z } from "zod";
 import {
   AssignRequestSchema,
   buildAssignmentSchema,
+  buildEnrichmentSchema,
   buildSuggestionSchema,
   buildTaxonomySchema,
   buildVocabItemSchema,
   ClassifyRequestSchema,
+  ENRICH_CHUNK_MAX,
+  EnrichRequestSchema,
   FOLDER_INBOX,
   FOLDER_NEW,
   SuggestRequestSchema,
@@ -48,6 +51,7 @@ const modelSchemas: Record<string, z.ZodType> = {
   taxonomy: buildTaxonomySchema(SLUGS),
   taxonomyEmpty: buildTaxonomySchema([]),
   assignment: buildAssignmentSchema(SLUGS),
+  enrichment: buildEnrichmentSchema(),
 };
 
 describe("model output schemas", () => {
@@ -136,5 +140,14 @@ describe("request schemas", () => {
     const tax = TaxonomyRequestSchema.parse({ mode: "taxonomy", words: [word(1)], folders });
     expect(tax.folders[0]).toMatchObject({ locked: false, created_by: "auto" });
     expect(ClassifyRequestSchema.safeParse({ mode: "other", words: [word(1)], folders }).success).toBe(false);
+  });
+
+  it("enrich: needs both sides, unique ids, at most a chunk", () => {
+    const word = (i: number) => ({ id: `id-${i}`, fr: `mot${i}`, ru: `слово${i}` });
+    expect(EnrichRequestSchema.safeParse({ words: [word(1)] }).success).toBe(true);
+    expect(EnrichRequestSchema.safeParse({ words: [] }).success).toBe(false);
+    expect(EnrichRequestSchema.safeParse({ words: [{ ...word(1), ru: " " }] }).success).toBe(false);
+    expect(EnrichRequestSchema.safeParse({ words: [word(1), word(1)] }).success).toBe(false);
+    expect(EnrichRequestSchema.safeParse({ words: Array.from({ length: ENRICH_CHUNK_MAX + 1 }, (_, i) => word(i)) }).success).toBe(false);
   });
 });

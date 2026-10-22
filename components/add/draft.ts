@@ -1,6 +1,6 @@
 // The filled form's state: built from a picked suggestion or empty for manual entry, then
 // turned into a save request. Pure (no Dexie), so it is unit-tested.
-import type { Suggestion } from "@/lib/ai/schemas";
+import type { EnrichResult, Suggestion } from "@/lib/ai/schemas";
 import type { Confidence, Folder, Gender, PartOfSpeech, SlangLevel, WordSource } from "@/lib/types";
 import { folderSource, foldersForSuggestion, INBOX_CHOICE, type FolderChoice, type SuggestionFolders } from "./folder-choice";
 import type { SaveRequest } from "./save";
@@ -17,6 +17,12 @@ export interface WordDraft {
   verlan: boolean;
   /** Level still as detected (shows «определён автоматически»). */
   slang_auto: boolean;
+  /** The user set the level or verlan by hand: detection leaves them alone. */
+  slang_touched: boolean;
+  /** The example was filled automatically and not edited since. */
+  example_auto: boolean;
+  /** The user typed in the example fields: detection leaves them alone. */
+  example_touched: boolean;
   both_directions: boolean;
   folder: FolderChoice;
   /** The user tapped a theme chip. */
@@ -48,6 +54,9 @@ export function draftFromSuggestion(
     slang_level: s.slang_level,
     verlan: s.verlan,
     slang_auto: true,
+    slang_touched: false,
+    example_auto: false,
+    example_touched: false,
     both_directions: true,
     folder: autoSort ? picks.auto : INBOX_CHOICE,
     folder_touched: false,
@@ -68,12 +77,50 @@ export function manualDraft(init: { fr?: string; ru?: string; folder?: FolderCho
     slang_level: 0,
     verlan: false,
     slang_auto: false,
+    slang_touched: false,
+    example_auto: false,
+    example_touched: false,
     both_directions: true,
     folder: init.folder ?? INBOX_CHOICE,
     folder_touched: init.folder !== undefined && init.folder.kind !== "inbox",
     auto: null,
     source: "manual",
   };
+}
+
+/** A manual draft waits for detection while both sides are filled. Key = what was asked for. */
+export function enrichKey(d: Pick<WordDraft, "fr" | "ru" | "source">): string | null {
+  if (d.source !== "manual") return null;
+  const fr = d.fr.replace(/\s+/g, " ").trim();
+  const ru = d.ru.replace(/\s+/g, " ").trim();
+  return fr && ru ? `${fr}\u0001${ru}` : null;
+}
+
+/** Fields detection may still fill: what the user has not set by hand. */
+export function enrichScope(d: WordDraft) {
+  return {
+    slang: !d.slang_touched,
+    example: !d.example_touched && (!d.example_fr.trim() || d.example_auto),
+    pos: true,
+  };
+}
+
+/** Applies a detection result to the untouched fields of a manual draft. */
+export function applyEnrichment(d: WordDraft, r: EnrichResult): WordDraft {
+  const scope = enrichScope(d);
+  const next: WordDraft = { ...d, pos: r.pos, gender: r.gender };
+  if (scope.slang) Object.assign(next, { slang_level: r.slang_level, verlan: r.verlan, slang_auto: true });
+  if (scope.example) {
+    Object.assign(
+      next,
+      r.example_fr
+        ? { example_fr: r.example_fr, example_ru: r.example_ru ?? "", example_auto: true }
+        : d.example_auto
+          ? { example_fr: "", example_ru: "", example_auto: false }
+          : {},
+    );
+  }
+  return next;
 }
 
 export interface DraftErrors {

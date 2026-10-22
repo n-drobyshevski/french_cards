@@ -6,7 +6,7 @@ import type { SystemModelMessage } from "ai";
 
 export const DEFAULT_MODEL_ID = "claude-haiku-5-5";
 
-export type AiTask = "suggest" | "extract" | "classify";
+export type AiTask = "suggest" | "extract" | "classify" | "enrich";
 
 export function modelIdFor(task: AiTask): string {
   if (task === "extract") return process.env.AI_MODEL_EXTRACT?.trim() || DEFAULT_MODEL_ID;

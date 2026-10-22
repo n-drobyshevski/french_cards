@@ -69,6 +69,8 @@ describe("normalizeVocabItem", () => {
     ru: "беситься",
     ru_suggested: false,
     note: null,
+    example_fr: " Il est trop vénère. ",
+    example_ru: "Он прям бесится.",
     pos: "expression",
     gender: "none",
     slang_level: "arg",
@@ -85,6 +87,14 @@ describe("normalizeVocabItem", () => {
     expect(v.ru_suggested).toBe(true);
     expect(normalizeVocabItem({ ...item, provenance: "pair" }, folders)!.ru_suggested).toBe(false);
     expect(normalizeVocabItem({ ...item, fr_as_seen: "vnr" }, folders)!.fr_as_seen).toBe("vnr");
+  });
+  it("keeps a trimmed example and drops its translation without one", () => {
+    const v = normalizeVocabItem(item, folders)!;
+    expect(v.example_fr).toBe("Il est trop vénère.");
+    expect(v.example_ru).toBe("Он прям бесится.");
+    const bare = normalizeVocabItem({ ...item, example_fr: " ", example_ru: "что-то" }, folders)!;
+    expect(bare.example_fr).toBeNull();
+    expect(bare.example_ru).toBeNull();
   });
 });
 

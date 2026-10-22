@@ -15,6 +15,8 @@ export const RATE_LIMITS = {
   extract: { capacity: 6, refillPerSec: 1 / 20 },
   // Re-sort runs pass B in parallel chunks.
   classify: { capacity: 20, refillPerSec: 1 / 3 },
+  // Manual cards one by one, pasted lists and the library backfill in parallel chunks.
+  enrich: { capacity: 30, refillPerSec: 1 / 2 },
 } satisfies Record<string, BucketConfig>;
 
 export type RateLimitedRoute = keyof typeof RATE_LIMITS;

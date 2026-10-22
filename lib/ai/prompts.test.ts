@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assignUserPrompt, estimateTokens, extractUserPrompt, suggestUserPrompt, SYSTEM_PROMPTS, taxonomyUserPrompt } from "./prompts";
+import { assignUserPrompt, enrichUserPrompt, estimateTokens, extractUserPrompt, suggestUserPrompt, SYSTEM_PROMPTS, taxonomyUserPrompt } from "./prompts";
 
 describe("system prompts", () => {
   for (const [name, text] of Object.entries(SYSTEM_PROMPTS)) {
@@ -56,5 +56,9 @@ describe("user prompts", () => {
     const a = assignUserPrompt({ folders, examples: [{ fr: "le fric", ru: "деньги", folder: "dengi" }], words: [{ ref: "w1", fr: "raquer", ru: "платить", note: null }] });
     expect(a).toContain("le fric — деньги → dengi");
     expect(a).toContain("w1\traquer\tплатить");
+    const e = enrichUserPrompt({ words: [{ ref: "w1", fr: "la\ncaisse", ru: "тачка", note: null }, { ref: "w2", fr: "chelou", ru: "стрёмный", note: "верлан" }] });
+    expect(e).toContain("Cards (2)");
+    expect(e).toContain("w1\tla caisse\tтачка\t");
+    expect(e).toContain("w2\tchelou\tстрёмный\tверлан");
   });
 });

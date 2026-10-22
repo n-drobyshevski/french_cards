@@ -16,6 +16,8 @@ export interface ImportRow {
   fr: string;
   ru: string;
   note: string | null;
+  exampleFr: string | null;
+  exampleRu: string | null;
   frAsSeen: string | null;
   pos: PartOfSpeech;
   gender: Gender;
@@ -101,6 +103,8 @@ export function buildRows(
       fr: it.fr,
       ru: it.ru,
       note: it.note,
+      exampleFr: it.example_fr,
+      exampleRu: it.example_ru,
       frAsSeen: it.fr_as_seen,
       pos: it.pos,
       gender: it.gender,
@@ -206,6 +210,8 @@ export function toWordInput(row: ImportRow, folderId: string | null): NewWordInp
     fr: row.fr,
     ru: row.ru,
     note: row.note,
+    example_fr: row.exampleFr,
+    example_ru: row.exampleFr ? row.exampleRu : null,
     pos: row.pos,
     gender: row.gender,
     slang_level: row.slang_level,

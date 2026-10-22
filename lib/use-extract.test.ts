@@ -8,6 +8,8 @@ const item = (fr: string): VocabItem => ({
   ru: "перевод",
   ru_suggested: false,
   note: null,
+  example_fr: null,
+  example_ru: null,
   pos: "other",
   gender: "none",
   slang_level: 1,

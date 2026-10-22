@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/Button";
 import { Sheet } from "@/components/ui/Sheet";
 import { Snackbar, useSnackbar } from "@/components/ui/Snackbar";
 import { detectDirection } from "@/lib/ai/normalize";
-import type { Suggestion } from "@/lib/ai/schemas";
+import type { EnrichResult, Suggestion } from "@/lib/ai/schemas";
+import { fillSavedWords, type EnrichInput } from "@/lib/enrich";
 import { listFolders } from "@/lib/folders";
 import { isLexiqueLoaded, loadLexique, prefixSearch, type LexiqueHit } from "@/lib/lexique";
 import { getSettings } from "@/lib/settings";
@@ -16,7 +17,18 @@ import { normalizeLemma } from "@/lib/text";
 import type { Folder } from "@/lib/types";
 import { toFolderInputs, useSuggest } from "@/lib/use-suggest";
 import { loadAddContext, loadDuplicate, loadListDuplicates } from "./data";
-import { draftFromSuggestion, draftToSaveRequest, hasErrors, manualDraft, validateDraft, type DraftErrors, type WordDraft } from "./draft";
+import {
+  applyEnrichment,
+  draftFromSuggestion,
+  draftToSaveRequest,
+  enrichKey,
+  enrichScope,
+  hasErrors,
+  manualDraft,
+  validateDraft,
+  type DraftErrors,
+  type WordDraft,
+} from "./draft";
 import { INBOX_CHOICE, type FolderChoice } from "./folder-choice";
 import { ListPanel, type ListRow } from "./ListPanel";
 import { cardNumber, nWords, plural } from "./match";
@@ -24,12 +36,16 @@ import { parseWordList } from "./parse-list";
 import { AddSheetChrome, ToolButton, ToolLink } from "./parts";
 import { saveWords, undoSave, type SaveRequest, type SaveResult } from "./save";
 import { SearchPanel, type QuickFields } from "./SearchPanel";
+import { FORM_ENRICH_DEBOUNCE_MS, LIST_ENRICH_DEBOUNCE_MS, useAutoEnrich } from "./use-auto-enrich";
 import { WordForm } from "./WordForm";
 
 type Mode = "search" | "form" | "list";
 type FocusTarget = "search" | "fr" | "ru" | "list";
 
 const NO_FOLDERS: Folder[] = [];
+const FULL_SCOPE = { slang: true, example: true, pos: true } as const;
+
+type ListEnrichInput = EnrichInput & { rowKey: string };
 const EMPTY_QUICK: QuickFields = { other: "", folder: INBOX_CHOICE, error: null };
 const DICTIONARY_ROWS = 3;
 /** How long the in-sheet «Отменить» bar stays after «Добавить и ещё». */
@@ -89,6 +105,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
   const [listText, setListText] = useState("");
   const [listFolder, setListFolder] = useState<FolderChoice>(INBOX_CHOICE);
   const [listToggled, setListToggled] = useState<ReadonlySet<string>>(() => new Set());
+  const [listEnriched, setListEnriched] = useState<ReadonlyMap<string, EnrichResult>>(() => new Map());
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [lexReady, setLexReady] = useState(isLexiqueLoaded);
@@ -176,10 +193,47 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
             ? "duplicate"
             : "ok";
       const checked = status !== "invalid" && (status === "ok") !== listToggled.has(key);
-      return { ...r, key, status, checked };
+      return { ...r, key, status, checked, enrich: listEnriched.get(key) ?? null };
     });
-  }, [parsed, listDuplicates, listToggled]);
+  }, [parsed, listDuplicates, listToggled, listEnriched]);
   const listSelected = listRows.filter((r) => r.checked);
+
+  // Slang level and example: for the manual form while both sides are filled, and for the
+  // pasted rows not detected yet. Shown before saving; anything set by hand stays.
+  const formKey = mode === "form" && draft && suggestionsEnabled ? enrichKey(draft) : null;
+  const formEnrichWords = useMemo<EnrichInput[] | null>(() => {
+    if (!formKey) return null;
+    const [fr, ru] = formKey.split("\u0001");
+    return [{ id: "w1", fr, ru }];
+  }, [formKey]);
+  const formEnriching = useAutoEnrich(
+    formEnrichWords,
+    (results, [sent]) => {
+      const result = results.get(sent.id);
+      if (!result) return;
+      const sentKey = `${sent.fr}\u0001${sent.ru}`;
+      setDraft((d) => (d && enrichKey(d) === sentKey ? applyEnrichment(d, result) : d));
+    },
+    FORM_ENRICH_DEBOUNCE_MS,
+  );
+  const listEnrichWords = useMemo<ListEnrichInput[] | null>(() => {
+    if (mode !== "list" || !suggestionsEnabled) return null;
+    const missing = listRows.filter((r) => r.status !== "invalid" && !r.enrich);
+    return missing.length > 0 ? missing.map((r, i) => ({ id: `l${i + 1}`, fr: r.fr, ru: r.ru, rowKey: r.key })) : null;
+  }, [mode, suggestionsEnabled, listRows]);
+  useAutoEnrich(
+    listEnrichWords,
+    (results, sent) =>
+      setListEnriched((prev) => {
+        const next = new Map(prev);
+        for (const w of sent) {
+          const r = results.get(w.id);
+          if (r) next.set(w.rowKey, r);
+        }
+        return next;
+      }),
+    LIST_ENRICH_DEBOUNCE_MS,
+  );
 
   // ---------------------------------------------------------------------------------------
   // Actions
@@ -267,7 +321,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
     onOpenWord(id);
   };
 
-  const commit = async (request: SaveRequest, message: string, andMore: boolean) => {
+  const commit = async (request: SaveRequest, message: string, andMore: boolean): Promise<SaveResult | null> => {
     setSaving(true);
     setSaveError(null);
     try {
@@ -280,8 +334,10 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
         showUndoSnackbar(message, result);
         onOpenChange(false);
       }
+      return result;
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "Не получилось сохранить");
+      return null;
     } finally {
       setSaving(false);
     }
@@ -295,7 +351,11 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
       setFocusRequest({ target: found.fr ? "fr" : "ru" });
       return;
     }
-    void commit(draftToSaveRequest(draft), `Добавлено · ${draft.fr.trim()}`, andMore);
+    // Saved before detection came back: fill what the user has not set once it does.
+    const fillLater = formEnriching ? enrichScope(draft) : null;
+    void commit(draftToSaveRequest(draft), `Добавлено · ${draft.fr.trim()}`, andMore).then((result) => {
+      if (result && fillLater) void fillSavedWords(result.words.map((word) => ({ word, scope: fillLater })));
+    });
   };
 
   const saveQuick = () => {
@@ -307,14 +367,28 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
     }
     const fr = direction === "ru" ? other : trimmed;
     const ru = direction === "ru" ? trimmed : other;
-    void commit(draftToSaveRequest(manualDraft({ fr, ru, folder: quick.folder })), `Добавлено · ${fr}`, false);
+    void commit(draftToSaveRequest(manualDraft({ fr, ru, folder: quick.folder })), `Добавлено · ${fr}`, false).then((result) => {
+      if (result) void fillSavedWords(result.words.map((word) => ({ word, scope: FULL_SCOPE })));
+    });
   };
 
   const saveList = () => {
     if (saving || listSelected.length === 0) return;
     void commit(
       {
-        words: listSelected.map((r) => ({ fr: r.fr, ru: r.ru, source: "import" as const })),
+        words: listSelected.map((r) => ({
+          fr: r.fr,
+          ru: r.ru,
+          source: "import" as const,
+          ...(r.enrich && {
+            pos: r.enrich.pos,
+            gender: r.enrich.gender,
+            slang_level: r.enrich.slang_level,
+            verlan: r.enrich.verlan,
+            example_fr: r.enrich.example_fr,
+            example_ru: r.enrich.example_ru,
+          }),
+        })),
         folder: listFolder,
         folderSource: listFolder.kind === "inbox" ? "auto" : "user",
         folderConfidence: null,
@@ -322,7 +396,11 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
       },
       `Добавлено ${nWords(listSelected.length)}`,
       false,
-    );
+    ).then((result) => {
+      if (!result) return;
+      const later = result.words.filter((_, i) => !listSelected[i]?.enrich);
+      if (later.length > 0) void fillSavedWords(later.map((word) => ({ word, scope: FULL_SCOPE })));
+    });
   };
 
   const submitSearch = () => {
@@ -482,6 +560,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
           onOpenWord={openWord}
           onAddAnyway={() => setAckDuplicate(dupKey)}
           onSubmit={() => saveForm(false)}
+          enriching={formEnriching}
         />
       )}
 
