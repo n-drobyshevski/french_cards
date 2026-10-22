@@ -263,29 +263,36 @@ function PhoneLibrary() {
       </header>
 
       {/* Ledger strip: the counts are also the quickest filters */}
-      <div role="group" aria-label="Быстрый фильтр" className="mt-3 grid shrink-0 grid-cols-3 overflow-hidden rounded-card border border-rule bg-surface">
-        <LedgerCell
-          value={totals?.total}
-          label={plural(totals?.total ?? 0, ["слово", "слова", "слов"])}
-          ariaLabel={`Все слова: ${totals?.total ?? 0}`}
-          pressed={view === "words" && filter.status === "all"}
-          onClick={onAllWords}
-        />
-        <LedgerCell
-          value={totals?.due}
-          label="к повт."
-          ariaLabel={`К повторению: ${totals?.due ?? 0}`}
-          attention={!!totals?.due}
-          pressed={filter.status === "due"}
-          onClick={() => toggleStatus("due")}
-        />
-        <LedgerCell
-          value={totals?.difficult}
-          label={plural(totals?.difficult ?? 0, ["трудное", "трудных", "трудных"])}
-          ariaLabel={`Трудные: ${totals?.difficult ?? 0}`}
-          pressed={filter.status === "difficult"}
-          onClick={() => toggleStatus("difficult")}
-        />
+      <div className="mt-3 shrink-0 overflow-hidden rounded-card border border-rule bg-surface">
+        <div role="group" aria-label="Быстрый фильтр" className="grid grid-cols-3">
+          <LedgerCell
+            value={totals?.total}
+            label={plural(totals?.total ?? 0, ["слово", "слова", "слов"])}
+            ariaLabel={`Все слова: ${totals?.total ?? 0}`}
+            pressed={view === "words" && filter.status === "all"}
+            onClick={onAllWords}
+          />
+          <LedgerCell
+            value={totals?.due}
+            label="к повт."
+            ariaLabel={`К повторению: ${totals?.due ?? 0}`}
+            attention={!!totals?.due}
+            pressed={filter.status === "due"}
+            onClick={() => toggleStatus("due")}
+          />
+          <LedgerCell
+            value={totals?.difficult}
+            label={plural(totals?.difficult ?? 0, ["трудное", "трудных", "трудных"])}
+            ariaLabel={`Трудные: ${totals?.difficult ?? 0}`}
+            pressed={filter.status === "difficult"}
+            onClick={() => toggleStatus("difficult")}
+          />
+        </div>
+        {/* Progress KPIs: counts only, not filters */}
+        <div className="grid grid-cols-2 border-t border-rule">
+          <KpiCell value={totals?.reviewed} label="повторено" />
+          <KpiCell value={totals?.reviewedToday} label="сегодня" />
+        </div>
       </div>
 
       {listMode ? (
@@ -536,6 +543,16 @@ function LedgerCell({ value, label, ariaLabel, pressed, attention = false, onCli
       <span className={cx("h-7 min-w-[2ch] font-serif text-[26px] leading-7 font-medium tabular-nums", !pressed && attention && "text-red")}>{value}</span>
       <span className={cx("font-mono text-[11px] leading-4 tracking-[.06em] uppercase", pressed ? "opacity-80" : "text-muted")}>{label}</span>
     </button>
+  );
+}
+
+/** A ledger count that is not a filter (words reviewed so far, today). */
+function KpiCell({ value, label }: { value: number | undefined; label: string }) {
+  return (
+    <p className="m-0 flex h-14 flex-col items-start justify-center gap-0.5 border-l border-rule px-3 first:border-l-0">
+      <span className="h-6 min-w-[2ch] font-serif text-[22px] leading-6 font-medium tabular-nums">{value}</span>{" "}
+      <span className="font-mono text-[11px] leading-4 tracking-[.06em] text-muted uppercase">{label}</span>
+    </p>
   );
 }
 

@@ -17,6 +17,7 @@ import {
   stableId,
   updateFolder,
 } from "./folders";
+import { startOfStudyDay } from "./session";
 import { addWord, gradeCard } from "./words";
 
 const T0 = new Date(2026, 9, 21, 12, 0);
@@ -123,13 +124,28 @@ describe("getLibraryStats", () => {
     expect(await getFolderStats(null, T0)).toEqual(lib.inbox);
   });
 
+  it("counts the words graded since the study day began", async () => {
+    const f = await createFolder({ name: "Tmp" }, T0);
+    const today = await addWord({ fr: "today", ru: "x", folder_id: f.id, both_directions: false }, T0);
+    const yesterday = await addWord({ fr: "yesterday", ru: "x", folder_id: f.id, both_directions: false }, T0);
+    await addWord({ fr: "new", ru: "x", folder_id: f.id, both_directions: false }, T0);
+    await gradeCard(today.id, "fr_ru", 3, startOfStudyDay(T0));
+    await gradeCard(yesterday.id, "fr_ru", 3, new Date(startOfStudyDay(T0).getTime() - 1));
+
+    const lib = await getLibraryStats(T0);
+    const s = lib.folders.find((x) => x.id === f.id)!.stats;
+    expect(s.reviewedToday).toBe(1);
+    expect(s.reviewed).toBe(2);
+    expect(lib.totals.reviewedToday).toBe(1);
+  });
+
   it("counts words «на паузе» apart: never due, new or difficult", async () => {
     const a = await addWord({ fr: "mute", ru: "x", both_directions: false, muted: true }, T0);
     const st = (await db.review_state.get(`${a.id}:fr_ru`))!;
     await db.review_state.put({ ...st, state: 2, stability: 1, lapses: 4, due: new Date(T0.getTime() - DAY).toISOString() });
     await addWord({ fr: "new", ru: "y", both_directions: false }, T0);
     const lib = await getLibraryStats(T0);
-    expect(lib.totals).toMatchObject({ total: 2, due: 0, difficult: 0, fresh: 1, paused: 1 });
+    expect(lib.totals).toMatchObject({ total: 2, due: 0, difficult: 0, fresh: 1, paused: 1, reviewed: 1 });
   });
 
   it("previews the newest words of a theme, at most three", async () => {
