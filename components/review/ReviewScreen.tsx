@@ -18,7 +18,6 @@ import { advancePractice, buildPracticeQueue, startOfStudyDay, type QueueItem } 
 import { getSettings } from "@/lib/settings";
 import { useFinePointer, useLayoutClass } from "@/lib/use-media";
 import { getLastReview, getWord, gradeCard, undoLastReview } from "@/lib/words";
-import type { Direction } from "@/lib/types";
 import { loadReviewScreen, type ReviewScreenData } from "./data";
 import { EmptyFolder, EmptyLibrary } from "./EmptyStates";
 import { effectiveDirection, nextDirection, toSessionFilter, type FolderChoice } from "./filter";
@@ -84,17 +83,6 @@ function isFresh(data: ReviewScreenData | undefined, awaiting: Awaiting | null):
 
 function errorText(error: unknown): string {
   return error instanceof Error && error.message ? error.message : "Не получилось сохранить ответ";
-}
-
-function GradeMessage({ rating, fr }: { rating: Rating; fr: string }) {
-  return (
-    <>
-      {GRADE_LABELS[rating]} ·{" "}
-      <span lang="fr" className="font-serif text-[16px] italic">
-        {fr}
-      </span>
-    </>
-  );
 }
 
 /** «Повторение»: today's queue, the answer card, grading, undo, practice and the done view. */
@@ -232,7 +220,7 @@ export function ReviewScreen() {
     setPinned({ key: current.key, revealed: false, revealedAt: 0, flip: "down" });
   };
 
-  const undo = async (target?: { wordId: string; direction: Direction }) => {
+  const undo = async () => {
     if (busy.current) return;
     if (practice) {
       setPractice((p) => {
@@ -246,7 +234,7 @@ export function ReviewScreen() {
     busy.current = true;
     const before = latestData.current;
     try {
-      const result = await undoLastReview(target ?? {});
+      const result = await undoLastReview();
       if (!result) return;
       setAwaiting({ data: before, key: null, updatedAt: null });
       setPinned({ key: reviewStateId(result.log.word_id, result.log.direction), revealed: false, revealedAt: 0 });
@@ -271,8 +259,9 @@ export function ReviewScreen() {
     }
   };
 
-  const grade = async (rating: Rating) => {
-    if (!current || !revealed || busy.current) return;
+  /** A swipe grades from either side; buttons and keys only from the answer. */
+  const grade = async (rating: Rating, swiped = false) => {
+    if (!current || (!revealed && !swiped) || busy.current) return;
     const item = current;
     if (focusInCard()) refocus.current = "reveal";
     resetCard();
@@ -285,12 +274,7 @@ export function ReviewScreen() {
         return;
       }
       setPractice({ ...practice, queue: nextQueue, history: [...practice.history, practice.queue] });
-      snackbar.show({
-        message: <GradeMessage rating={rating} fr={item.word.fr} />,
-        actionLabel: "Отменить",
-        actionKey: letters ? "Z" : undefined,
-        onAction: () => void undo(),
-      });
+      snackbar.hide();
       return;
     }
 
@@ -298,12 +282,7 @@ export function ReviewScreen() {
     setAwaiting({ data: latestData.current, key: item.key, updatedAt: item.state.updated_at });
     try {
       await gradeCard(item.word.id, item.direction, rating);
-      snackbar.show({
-        message: <GradeMessage rating={rating} fr={item.word.fr} />,
-        actionLabel: "Отменить",
-        actionKey: letters ? "Z" : undefined,
-        onAction: () => void undo({ wordId: item.word.id, direction: item.direction }),
-      });
+      snackbar.hide();
     } catch (error) {
       setAwaiting(null);
       snackbar.show({ message: errorText(error) });
@@ -546,7 +525,7 @@ export function ReviewScreen() {
               haptics={hapticsEnabled}
               folderName={(current.word.folder_id && folderNames.get(current.word.folder_id)) || "Входящие"}
               swipeEnabled={cardSwipe}
-              onSwipe={(outcome) => void grade(outcome === "good" ? 3 : 1)}
+              onSwipe={(outcome) => void grade(outcome === "good" ? 3 : 1, true)}
               hasNext={hasNext}
               number={ordinal ? cardNumber(ordinal) : undefined}
               remaining={remaining}
@@ -559,10 +538,10 @@ export function ReviewScreen() {
           {swipeEnabled && (
             <p
               aria-hidden="true"
-              className={cx("meta mt-4 mb-0 flex h-4 shrink-0 justify-between leading-4 md:hidden", !revealed && "invisible")}
+              className="meta mt-4 mb-0 flex h-4 shrink-0 justify-between leading-4 md:hidden"
             >
               <span>← {GRADE_LABELS[1]}</span>
-              <span>тап — вопрос</span>
+              <span>{revealed ? "тап — вопрос" : "тап — ответ"}</span>
               <span>{GRADE_LABELS[3]} →</span>
             </p>
           )}

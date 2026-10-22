@@ -273,3 +273,4 @@ Intervals under grade buttons (FSRS): Не знаю «<1 мин», Сложно 
 ## Quality bar
 Pixel-careful, consistent spacing (8px grid), real hierarchy, nothing overlapping unintentionally, text never clipped mid-word inside fixed boxes (choose sizes so Russian fits), everything inside 390×844.
 - Review header in the built app: one row — direction + theme chips on the left, undo + settings on the right, no app mark (user request, 2026-10-22).
+- Review grading in the built app: the card swipes on either side (no flip needed, the hint under it reads «тап — ответ» / «тап — вопрос»), and grading shows no «Знаю · …» snackbar — undo is the header button or Z (user request, 2026-10-22).

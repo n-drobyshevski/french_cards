@@ -62,21 +62,22 @@ test("a click flips both ways without moving the card; keys 1/2/3 grade, with ca
   await expect(answerCard(page)).toHaveCount(0);
   await expect(questionCard(page)).toBeVisible();
 
-  // Space flips, 3 grades «Знаю»; the snackbar offers «Отменить» with the Z cap; Z undoes.
+  // Space flips, 3 grades «Знаю» with no snackbar (undo is in the running head); Z undoes,
+  // and the «Ответ отменён» snackbar floats centred in the content area.
   await page.keyboard.press("Space");
   await expect(answerCard(page)).toBeVisible();
   await page.keyboard.press("3");
   await expect(page.getByText("01 / 11", { exact: true })).toBeVisible();
+  await expect(page.locator("[data-snackbar]")).toHaveCount(0);
+
+  await page.keyboard.press("z");
+  await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
   const snackbar = page.locator("[data-snackbar]");
-  await expect(snackbar).toContainText(/^Знаю ·/);
-  await expect(snackbar.getByRole("button", { name: "Отменить" }).locator("kbd")).toHaveText("Z");
+  await expect(snackbar).toContainText(/^Ответ отменён/);
   const snackBox = (await snackbar.boundingBox())!;
   expect(snackBox.height).toBe(44);
   expect(snackBox.width).toBeLessThanOrEqual(480);
   expect(Math.abs(snackBox.x + snackBox.width / 2 - (CONTENT.left + CONTENT.width / 2))).toBeLessThan(1);
-
-  await page.keyboard.press("z");
-  await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
 });
 
 test("with a mouse, dragging the answer does not grade it", async ({ page }) => {

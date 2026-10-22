@@ -67,7 +67,6 @@ test("the undo snackbar after adding from the review screen stays above the grad
   }).toPass();
   // A tap on «Знаю» grades the card instead of undoing the new word.
   await grades.getByRole("button", { name: /^Знаю, следующий показ/ }).click();
-  await expect(page.getByText(/^Знаю ·/)).toBeVisible();
   await expect(page.getByText("01 / 12", { exact: true })).toBeVisible();
 });
 

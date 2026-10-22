@@ -232,3 +232,23 @@ export async function openReview(page: Page) {
 export const tabBar = (page: Page) => page.getByRole("navigation", { name: "Основная навигация" });
 
 export const addSheet = (page: Page) => page.getByRole("dialog", { name: /Новое слово/ });
+
+/** Ratings in the local review log, oldest first (1 = Не знаю … 3 = Знаю). Undone answers are gone. */
+export async function loggedRatings(page: Page): Promise<number[]> {
+  return page.evaluate(
+    () =>
+      new Promise<number[]>((resolve, reject) => {
+        const open = indexedDB.open("kartochki");
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const all = open.result.transaction("review_log").objectStore("review_log").getAll();
+          all.onerror = () => reject(all.error);
+          all.onsuccess = () => {
+            const rows = all.result as { rating: number; review: string; deleted_at: string | null }[];
+            resolve(rows.filter((r) => !r.deleted_at).sort((a, b) => a.review.localeCompare(b.review)).map((r) => r.rating));
+            open.result.close();
+          };
+        };
+      }),
+  );
+}
