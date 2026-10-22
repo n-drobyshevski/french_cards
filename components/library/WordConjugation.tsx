@@ -76,9 +76,10 @@ export function ConjugationForm({
 }: {
   draft: ConjDraft;
   onChange: (next: ConjDraft) => void;
-  word: Word;
+  /** The saved word, or the add form's draft (no id: no «Вернуть из словаря»). */
+  word: Pick<Word, "fr" | "ru" | "pos"> & Partial<Pick<Word, "id" | "conjugation">>;
   /** After «Вернуть из словаря» (the form closes). */
-  onReset: () => void;
+  onReset?: () => void;
   /** Offer «Заполнить автоматически» (/api/ai/fill): the dictionary has no conjugation for the verb. */
   autofill?: boolean;
   size: "sheet" | "pane";
@@ -93,10 +94,12 @@ export function ConjugationForm({
     onChange({ ...draft, tenses: { ...draft.tenses, [tense]: draft.tenses[tense].map((f, j) => (j === i ? value : f)) } });
 
   const reset = async () => {
+    const id = word.id;
+    if (!id) return;
     const before = word.conjugation ?? null;
-    await updateWord(word.id, { conjugation: null });
-    onReset();
-    showUndo({ message: "Спряжение из словаря", undo: () => void updateWord(word.id, { conjugation: before }).catch(() => {}) });
+    await updateWord(id, { conjugation: null });
+    onReset?.();
+    showUndo({ message: "Спряжение из словаря", undo: () => void updateWord(id, { conjugation: before }).catch(() => {}) });
   };
 
   return (
@@ -143,7 +146,7 @@ export function ConjugationForm({
           </fieldset>
         ))}
       </div>
-      {own && (
+      {own && word.id && (
         <Button type="button" variant="tertiary" size="sm" className="self-start text-[13px]" onClick={() => void reset()}>
           Вернуть из словаря
         </Button>

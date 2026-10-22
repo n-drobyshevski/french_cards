@@ -9,6 +9,7 @@ import { Icon } from "@/components/ui/Icons";
 import { ExampleList } from "@/components/examples/ExampleList";
 import { SLANG_LABELS, type Folder, type SlangLevel } from "@/lib/types";
 import type { DuplicateInfo } from "./data";
+import { DraftExtras } from "./DraftExtras";
 import { draftFieldsSummary, draftFieldValue, withDraftField } from "./draft";
 import { DuplicateReveal, PendingDots, UnknownMeter, useFieldSpotlight } from "./parts";
 import { detectionStates, type WordFormProps } from "./WordForm";
@@ -226,6 +227,7 @@ export function DeskWordForm({
         {draft.example_auto && hasExample && <span className="mt-1 text-[12px] leading-4 text-muted">подобран автоматически</span>}
 
         <DeskDraftFields draft={draft} onChange={onChange} />
+        <DraftExtras draft={draft} onChange={onChange} errors={errors} layout="desk" />
 
         <span id={ids.level} className={cx(FIELD_LABEL, "mt-4")}>
           Уровень сленга

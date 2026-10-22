@@ -154,6 +154,7 @@ export function prefillFromLookup(lookup: LookupResponse, example?: { fr: string
     verlan: lookup.verlan,
     example_fr: example?.fr ?? "",
     example_ru: example?.ru ?? "",
+    origin: lookup.origin ?? null,
   };
 }
 

@@ -515,7 +515,7 @@ function AddSession({ open, onOpenChange, initialFr, initialDraft, onOpenWord }:
     const found = validateDraft(draft);
     setErrors(found);
     if (hasErrors(found)) {
-      setFocusRequest({ target: found.fr ? "fr" : "ru" });
+      if (found.fr || found.ru) setFocusRequest({ target: found.fr ? "fr" : "ru" });
       return;
     }
     // Saved before detection came back: fill what the user has not set once it does.
