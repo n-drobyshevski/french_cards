@@ -5,7 +5,9 @@ import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { AbbrHint } from "@/components/ui/AbbrHint";
 import { Kbd } from "@/components/ui/Kbd";
+import { SkeletonBar } from "@/components/ui/Skeleton";
 import { SlangMeter } from "@/components/ui/SlangMeter";
+import { useMediaQuery } from "@/lib/use-media";
 import { SLANG_LABELS, type Direction, type Word } from "@/lib/types";
 import { headwordStep, posAbbr, type HeadwordStep } from "./format";
 import type { SwipeOutcome } from "./swipe";
@@ -14,6 +16,18 @@ import { useSwipe } from "./useSwipe";
 
 /** Index-card shell: white, radius 6, 1px rule, the red header rule 44px from the top. */
 const cardShell = "flex flex-col overflow-hidden rounded-card border border-rule bg-surface text-ink";
+
+/** The card's place in the column (phone: fills it; from 768: the fixed index card). Shared with the placeholder. */
+const cardSlot =
+  "relative mt-4 flex min-h-[280px] flex-1 flex-col md:mt-0 md:h-(--card-h) md:max-h-full md:min-h-0 md:w-(--card-w) md:max-w-full md:flex-none";
+
+/** Body of the question side: the prompt centred on phones, on the ruled lines from 768. */
+const questionBody = "relative flex min-h-0 flex-1 flex-col justify-center px-6 pb-6 md:justify-start md:px-10 md:pb-0";
+
+/** Content written into a blank that was reserved for it: fade in, no movement (MOTION-SPEC §3.2). */
+export const WRITE_IN = "animate-[fade-in_var(--dur-quick)_var(--ease-enter)]";
+
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
 /**
  * Desktop card size (DESKTOP-SPEC §2 height tiers), as --card-w / --card-h on the review root:
@@ -142,6 +156,8 @@ export interface ReviewCardProps {
   number?: string;
   /** Cards still to come after this one (desktop stack outlines). */
   remaining?: number;
+  /** Replaces the loading placeholder: the text fades in over the same frame (R1). */
+  enter?: boolean;
 }
 
 /**
@@ -164,12 +180,15 @@ export function ReviewCard({
   hasNext,
   number,
   remaining = 0,
+  enter = false,
 }: ReviewCardProps) {
   const swipe = useSwipe({ enabled: swipeEnabled, haptics, onDecide: onSwipe });
   const { dx, width, mode } = swipe.view;
   const visual = swipeVisual(dx, width || 1);
   const moving = mode !== "idle" || dx !== 0;
   const [bodyRef, clipped] = useClippedBelow<HTMLDivElement>();
+  const reduced = useMediaQuery(REDUCED_MOTION_QUERY);
+  const writeIn = enter && WRITE_IN;
 
   const fromFr = direction === "fr_ru";
   const label = fromFr ? "FR" : "RU";
@@ -177,18 +196,28 @@ export function ReviewCard({
   const pos = posAbbr(word);
   const step = headwordStep(prompt, word.fr);
 
+  // Reduced motion (§2.7): the card follows the finger without tilting, a decided swipe fades out
+  // where it was let go (useSwipe keeps dx), a cancelled one returns in --dur-quick.
   const motion: CSSProperties | undefined = moving
-    ? {
-        transform: `translateX(${dx}px) rotate(${visual.rotate}deg)`,
-        transition: mode === "dragging" ? "none" : "transform 180ms ease-out",
-      }
+    ? reduced
+      ? {
+          transform: `translateX(${dx}px)`,
+          opacity: mode === "flying" ? 0 : undefined,
+          transition:
+            mode === "dragging"
+              ? "none"
+              : mode === "flying"
+                ? "opacity var(--dur-quick) var(--ease-exit)"
+                : "transform var(--dur-quick) var(--ease-standard)",
+        }
+      : {
+          transform: `translateX(${dx}px) rotate(${visual.rotate}deg)`,
+          transition: mode === "dragging" ? "none" : "transform 180ms ease-out",
+        }
     : undefined;
 
   return (
-    <div
-      data-review-focus=""
-      className="relative mt-4 flex min-h-[280px] flex-1 flex-col md:mt-0 md:h-(--card-h) md:max-h-full md:min-h-0 md:w-(--card-w) md:max-w-full md:flex-none"
-    >
+    <div data-review-focus="" className={cardSlot}>
       <CardStack count={Math.min(2, remaining)} />
 
       {hasNext && moving && (
@@ -216,30 +245,38 @@ export function ReviewCard({
             flip === "down" && "animate-[card-turn-down_220ms_ease-out]",
           )}
         >
-          <CardHeader label={<CallNumber side={label} number={number} />} />
-          <span className="relative flex min-h-0 flex-1 flex-col justify-center px-6 pb-6 md:justify-start md:px-10 md:pb-0">
-            {/* Ruled front: a 1px blue-grey line every 32px from 32px under the red rule. */}
-            <span
-              aria-hidden="true"
-              className="absolute inset-x-0 top-8 bottom-6 bg-[linear-gradient(var(--card-lines)_0_1px,transparent_1px)] bg-size-[100%_32px] max-md:hidden"
-            />
+          <CardHeader
+            label={
+              <span className={cx(writeIn)}>
+                <CallNumber side={label} number={number} />
+              </span>
+            }
+          />
+          <span className={questionBody}>
+            <CardRules />
             <span
               lang={fromFr ? "fr" : undefined}
               className={cx(
                 "relative font-serif font-medium tracking-[-0.015em] break-words md:tracking-[-0.02em]",
                 promptSize(prompt),
                 STEP_HEADWORD[step],
+                writeIn,
               )}
             >
               {prompt}
             </span>
             {fromFr && pos && (
-              <span lang="fr" className={cx("abbr relative mt-2 text-[15px] leading-5 md:text-[17px] md:leading-8", STEP_POS[step])}>
+              <span lang="fr" className={cx("abbr relative mt-2 text-[15px] leading-5 md:text-[17px] md:leading-8", STEP_POS[step], writeIn)}>
                 {pos}
               </span>
             )}
           </span>
-          <span className="mx-5 flex h-12 shrink-0 items-center gap-2 border-t border-rule text-[12px] text-muted md:mx-10 md:gap-1.5 md:text-[13px] md:leading-5">
+          <span
+            className={cx(
+              "mx-5 flex h-12 shrink-0 items-center gap-2 border-t border-rule text-[12px] text-muted md:mx-10 md:gap-1.5 md:text-[13px] md:leading-5",
+              writeIn,
+            )}
+          >
             <Icon name="flip" size={14} />
             <span className="md:hidden">тапни, чтобы перевернуть</span>
             <span className="ml-0.5 max-md:hidden">Щелчок или</span>
@@ -390,19 +427,39 @@ function Tracings({ folderName, word }: { folderName: string; word: Word }) {
   );
 }
 
+/** Ruled front: a 1px blue-grey line every 32px from 32px under the red rule (from 768). */
+function CardRules() {
+  return (
+    <span
+      aria-hidden="true"
+      className="absolute inset-x-0 top-8 bottom-6 bg-[linear-gradient(var(--card-lines)_0_1px,transparent_1px)] bg-size-[100%_32px] max-md:hidden"
+    />
+  );
+}
+
 /**
- * Placeholder with the same footprint while the next card loads. From 768 up: the card outline at
- * its place with two hairline skeleton bars (DESKTOP-SPEC, described states).
+ * The card while the queue loads (MOTION-SPEC R1): the question side's exact frame — same slot,
+ * header with the red rule, ruled front from 768 — with no text. After --loading-delay two static
+ * skeleton bars appear where the headword and the POS line will be (8px × 40 %, 6px × 24 %); a read
+ * that lands sooner never paints them. The real card then writes its text in over the same frame.
  */
 export function ReviewCardPlaceholder() {
   return (
-    <div className="relative mt-4 flex min-h-[280px] flex-1 flex-col md:mt-0 md:h-(--card-h) md:max-h-full md:min-h-0 md:w-(--card-w) md:max-w-full md:flex-none">
-      <div aria-hidden="true" className={cx(cardShell, "absolute inset-0")}>
+    <div data-review-placeholder="" aria-hidden="true" className={cardSlot}>
+      <div className={cx(cardShell, "absolute inset-0")}>
         <CardHeader label="" />
-        <span className="flex flex-col gap-4 px-10 pt-8 max-md:hidden">
-          <span className="h-px w-[40%] bg-rule" />
-          <span className="h-px w-[24%] bg-rule" />
+        <span className={questionBody}>
+          <CardRules />
+          {/* Line boxes of a short headword and its POS line (phone 44 + 8 + 20; from 768 the
+              step-1 boxes on ruled lines 2 and 3), so the bars sit where the text will. */}
+          <span className="relative flex h-11 pt-3.5 md:mt-(--hw1-top) md:h-16 md:pt-[25px]">
+            <SkeletonBar width="40%" height={8} className="delayed-in" />
+          </span>
+          <span className="relative mt-2 flex h-5 pt-[7px] md:mt-(--hw1-pos) md:h-8 md:pt-[9px]">
+            <SkeletonBar width="24%" height={6} className="delayed-in" />
+          </span>
         </span>
+        <span className="mx-5 h-12 shrink-0 md:mx-10" />
       </div>
     </div>
   );

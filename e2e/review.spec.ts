@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { openReview, questionCard, tabBar } from "./fixtures";
+import { slowDatabase, watchPlaceholder } from "./review-loading";
 
 test.describe("review", () => {
   test("first run seeds the prototype words and default themes", async ({ page }) => {
@@ -106,4 +107,72 @@ test("a tap on an abbreviation on the answer explains it instead of flipping the
   // A tap elsewhere on the card closes the hint and flips the card back as usual.
   await answer.click({ position: { x: 40, y: 300 } });
   await expect(answer).toHaveCount(0);
+});
+
+test.describe("loading and moving on (MOTION-SPEC R1, R2, R9)", () => {
+  test("the loading placeholder has the card's final geometry; bars only after 300 ms; nothing shifts", async ({ page }) => {
+    await slowDatabase(page, 1500);
+    await page.goto("/");
+    const placeholder = page.locator("[data-review-placeholder]");
+    await expect(placeholder).toBeVisible();
+    const slot = (await placeholder.boundingBox())!;
+    const gradeSlot = (await page.locator("[data-review-focus][inert]").boundingBox())!;
+    // Blank first; the two static bars fade in after --loading-delay.
+    const bars = placeholder.locator(".delayed-in");
+    await expect(bars).toHaveCount(2);
+    await expect(bars.first()).toHaveCSS("opacity", "1");
+
+    await expect(questionCard(page)).toBeVisible();
+    await expect(placeholder).toHaveCount(0);
+    await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
+    expect(await questionCard(page).boundingBox()).toEqual(slot);
+    expect(await page.locator("[data-review-focus][inert]").boundingBox()).toEqual(gradeSlot);
+    // CLS 0 in practice; allow sub-pixel noise (the old placeholder scored > 0.1).
+    expect(await page.evaluate(() => window.__cls)).toBeLessThan(0.001);
+  });
+
+  test("grading and undo go straight to the next card, with no blank card in between", async ({ page }) => {
+    await openReview(page);
+    await watchPlaceholder(page);
+    await page.keyboard.press("Space");
+    await expect(page.getByText("шутка", { exact: true })).toBeVisible();
+    await page.keyboard.press("3");
+    await expect(page.getByText("01 / 11", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Карточка une blague/ })).toHaveCount(0);
+
+    // A button grade, then two undos back to the first card.
+    const second = (await questionCard(page).getAttribute("aria-label"))!;
+    await questionCard(page).click();
+    await page.getByRole("group", { name: "Оценка" }).getByRole("button", { name: /^Не знаю, следующий показ/ }).click();
+    await expect(page.locator("[data-review-answer]")).toHaveCount(0);
+    await expect(questionCard(page)).toBeVisible();
+
+    await page.keyboard.press("z");
+    await expect(page.getByRole("button", { name: second })).toBeVisible();
+    await page.keyboard.press("z");
+    await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Карточка une blague/ })).toBeVisible();
+    expect(await page.evaluate(() => window.__placeholderSeen)).toBe(false);
+  });
+
+  test("the review snackbar overlays the card's footer above the grade bar; the card keeps its size", async ({ page }) => {
+    await openReview(page);
+    await page.keyboard.press("Space");
+    await page.keyboard.press("3");
+    await expect(page.getByText("01 / 11", { exact: true })).toBeVisible();
+    const before = (await questionCard(page).boundingBox())!;
+
+    await page.keyboard.press("z");
+    const bar = page.locator("[data-snackbar]", { hasText: "Ответ отменён" });
+    await expect(bar).toBeVisible();
+    await expect(page.getByRole("button", { name: /Карточка une blague/ })).toBeVisible();
+    await expect(async () => {
+      const card = (await questionCard(page).boundingBox())!;
+      const box = (await bar.boundingBox())!;
+      const grades = (await page.locator("[data-review-focus][inert]").boundingBox())!;
+      expect(card).toEqual(before);
+      expect(box.y + box.height).toBeCloseTo(grades.y - 8, 0);
+      expect(box.y).toBeLessThan(card.y + card.height);
+    }).toPass();
+  });
 });
