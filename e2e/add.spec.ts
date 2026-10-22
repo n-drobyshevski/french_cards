@@ -90,6 +90,8 @@ test("the filled form: Return moves from French to Russian, then saves; fields a
   const sheet = addSheet(page);
   await sheet.getByPlaceholder("Слово или выражение — FR или RU").fill("la thu");
   await sheet.getByRole("button", { name: "Выбрать: la thune — бабки, деньги" }).click();
+  // The picked row holds its ink fill for --dur-flash before the form replaces it (A5).
+  await expect(sheet.getByRole("textbox", { name: "Французский" })).toBeVisible();
 
   const fields = sheet.locator("input:visible, textarea:visible, select:visible");
   const sizes = await fields.evaluateAll((els) => els.map((el) => parseFloat(getComputedStyle(el).fontSize)));
