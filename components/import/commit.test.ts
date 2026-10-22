@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { VocabItem } from "@/lib/ai/schemas";
 import { db } from "@/lib/db";
 import { createFolder, listFolders } from "@/lib/folders";
+import { newReviewState } from "@/lib/scheduler";
 import { addWord } from "@/lib/words";
 import { commitImport, undoImport } from "./commit";
 import { buildRows, setAllChecked, updateRow } from "./rows";
@@ -83,5 +84,27 @@ describe("commitImport", () => {
     const rows = setAllChecked(buildRows([item("kiffer")], [], new Map()), false);
     expect(await commitImport(rows, NOW)).toEqual({ words: [], createdFolders: [], skipped: 0 });
     expect(await db.words.count()).toBe(0);
+  });
+});
+
+describe("commitImport options (Anki)", () => {
+  it("saves the given source and tags, and carried-over states replace the fresh cards", async () => {
+    const rows = buildRows([item("la meuf"), item("relou")], [], new Map()).map((r, i) => ({ ...r, ref: `n${i}` }));
+    const due = "2026-11-02T00:00:00.000Z";
+    const result = await commitImport(rows, NOW, {
+      source: "import",
+      tags: (row) => ["anki", `deck-${row.ref}`],
+      states: (row) =>
+        row.ref === "n0"
+          ? [{ ...newReviewState("x", "fr_ru", NOW), due, stability: 12, state: 2 as const, reps: 5 }]
+          : null,
+    });
+    expect(result.words[0]).toMatchObject({ source: "import", tags: ["anki", "deck-n0"] });
+    const states = await db.review_state.where("word_id").equals(result.words[0].id).toArray();
+    const fr = states.find((s) => s.direction === "fr_ru");
+    expect(fr).toMatchObject({ id: `${result.words[0].id}:fr_ru`, word_id: result.words[0].id, due, stability: 12, state: 2, reps: 5 });
+    expect(states.find((s) => s.direction === "ru_fr")).toMatchObject({ state: 0, reps: 0 });
+    const other = await db.review_state.where("word_id").equals(result.words[1].id).toArray();
+    expect(other.every((s) => s.state === 0)).toBe(true);
   });
 });

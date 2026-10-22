@@ -1,8 +1,12 @@
 import { asSchema } from "ai";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
+import { ANKI_CHUNK_MAX, ANKI_FIELD_CHARS, ANKI_FIELDS_MAX, ANKI_TAGS_MAX } from "@/lib/anki/types";
+import { FIELD_HINT_MAX, FIELD_LABEL_MAX, MAX_FIELD_DEFS } from "@/lib/core/custom-fields";
 import {
+  AnkiRequestSchema,
   AssignRequestSchema,
+  buildAnkiSchema,
   buildAssignmentSchema,
   buildEnrichmentSchema,
   buildSuggestionSchema,
@@ -44,6 +48,7 @@ function violations(schema: unknown, path = "$"): string[] {
 }
 
 const SLUGS = ["povsednevnoe", "dengi", "eda"];
+const FIELD_REFS = ["f1", "f2"];
 const modelSchemas: Record<string, z.ZodType> = {
   suggestion: buildSuggestionSchema(SLUGS),
   suggestionNoFolders: buildSuggestionSchema([]),
@@ -53,6 +58,11 @@ const modelSchemas: Record<string, z.ZodType> = {
   assignment: buildAssignmentSchema(SLUGS),
   enrichment: buildEnrichmentSchema(),
   enrichmentWithThemes: buildEnrichmentSchema(SLUGS),
+  enrichmentWithFields: buildEnrichmentSchema(SLUGS, FIELD_REFS),
+  enrichmentFieldsOnly: buildEnrichmentSchema(null, FIELD_REFS),
+  anki: buildAnkiSchema(SLUGS),
+  ankiNoFolders: buildAnkiSchema([]),
+  ankiWithFields: buildAnkiSchema(SLUGS, FIELD_REFS),
 };
 
 describe("model output schemas", () => {
@@ -85,6 +95,30 @@ describe("model output schemas", () => {
     const assign = z.toJSONSchema(modelSchemas.assignment) as Json;
     const items = ((assign.properties as Json).assignments as Json).items as Json;
     expect(((items.properties as Json).folder as Json).enum).toEqual([FOLDER_INBOX, ...SLUGS]);
+  });
+
+  it("custom fields: only when refs are sent, the ref is an enum, the value nullable; anki always has used_fields", () => {
+    const item = (schema: z.ZodType) => {
+      const json = z.toJSONSchema(schema) as Json;
+      return (((json.properties as Json).items as Json).items as Json).properties as Json;
+    };
+    expect(item(modelSchemas.enrichment).custom).toBeUndefined();
+    expect(item(modelSchemas.anki).custom).toBeUndefined();
+    expect(item(modelSchemas.anki).used_fields).toBeDefined();
+    for (const schema of [modelSchemas.enrichmentWithFields, modelSchemas.enrichmentFieldsOnly, modelSchemas.ankiWithFields]) {
+      const custom = ((item(schema).custom as Json).items as Json).properties as Json;
+      expect((custom.field as Json).enum).toEqual(FIELD_REFS);
+    }
+    expect(item(modelSchemas.enrichmentFieldsOnly).folder).toBeUndefined();
+    const parsed = buildEnrichmentSchema(null, FIELD_REFS).safeParse({
+      items: [{ ref: "w1", pos: "adj", gender: "none", slang_level: "arg", verlan: true, example_fr: null, example_ru: null, confidence: "high", custom: [{ field: "f1", value: null }] }],
+    });
+    expect(parsed.success).toBe(true);
+    expect(
+      buildEnrichmentSchema(null, FIELD_REFS).safeParse({
+        items: [{ ref: "w1", pos: "adj", gender: "none", slang_level: "arg", verlan: true, example_fr: null, example_ru: null, confidence: "high", custom: [{ field: "f3", value: "x" }] }],
+      }).success,
+    ).toBe(false);
   });
 
   it("slang_level and confidence are enums, nullable fields are required", () => {
@@ -163,5 +197,38 @@ describe("request schemas", () => {
     expect(EnrichRequestSchema.safeParse({ words: [{ ...word(1), ru: " " }] }).success).toBe(false);
     expect(EnrichRequestSchema.safeParse({ words: [word(1), word(1)] }).success).toBe(false);
     expect(EnrichRequestSchema.safeParse({ words: Array.from({ length: ENRICH_CHUNK_MAX + 1 }, (_, i) => word(i)) }).success).toBe(false);
+  });
+
+  it("enrich and anki: custom fields are optional, bounded, with unique ids", () => {
+    const word = { id: "a", fr: "chelou", ru: "стрёмный" };
+    const field = (i: number) => ({ id: `def-${i}`, name: ` Поле ${i} `, hint: null });
+    expect(EnrichRequestSchema.parse({ words: [word] }).fields).toBeUndefined();
+    expect(EnrichRequestSchema.parse({ words: [word], fields: [field(1), { id: "x", name: "Синонимы" }] }).fields).toEqual([
+      { id: "def-1", name: "Поле 1", hint: null },
+      { id: "x", name: "Синонимы" },
+    ]);
+    expect(EnrichRequestSchema.safeParse({ words: [word], fields: Array.from({ length: MAX_FIELD_DEFS }, (_, i) => field(i)) }).success).toBe(true);
+    expect(EnrichRequestSchema.safeParse({ words: [word], fields: Array.from({ length: MAX_FIELD_DEFS + 1 }, (_, i) => field(i)) }).success).toBe(false);
+    expect(EnrichRequestSchema.safeParse({ words: [word], fields: [field(1), field(1)] }).success).toBe(false);
+    expect(EnrichRequestSchema.safeParse({ words: [word], fields: [{ id: "a", name: " " }] }).success).toBe(false);
+    expect(EnrichRequestSchema.safeParse({ words: [word], fields: [{ id: "a", name: "x".repeat(FIELD_LABEL_MAX + 1) }] }).success).toBe(false);
+    expect(EnrichRequestSchema.safeParse({ words: [word], fields: [{ id: "a", name: "x", hint: "x".repeat(FIELD_HINT_MAX + 1) }] }).success).toBe(false);
+    const note = { ref: "1", fields: [{ name: "Front", text: "chelou" }] };
+    expect(AnkiRequestSchema.parse({ notes: [note], fields: [field(1)] }).fields).toEqual([{ id: "def-1", name: "Поле 1", hint: null }]);
+    expect(AnkiRequestSchema.safeParse({ notes: [note], fields: [field(1), field(1)] }).success).toBe(false);
+  });
+
+  it("anki: bounded notes, fields and tags, unique refs", () => {
+    const note = (i: number) => ({ ref: String(1000 + i), fields: [{ name: "Front", text: ` mot${i} ` }] });
+    expect(AnkiRequestSchema.parse({ notes: [note(1)] })).toEqual({ notes: [{ ref: "1001", fields: [{ name: "Front", text: "mot1" }], tags: [] }], model: "fast" });
+    expect(AnkiRequestSchema.safeParse({ notes: Array.from({ length: ANKI_CHUNK_MAX }, (_, i) => note(i)) }).success).toBe(true);
+    expect(AnkiRequestSchema.safeParse({ notes: Array.from({ length: ANKI_CHUNK_MAX + 1 }, (_, i) => note(i)) }).success).toBe(false);
+    expect(AnkiRequestSchema.safeParse({ notes: [note(1), note(1)] }).success).toBe(false);
+    expect(AnkiRequestSchema.safeParse({ notes: [{ ...note(1), ref: "x".repeat(41) }] }).success).toBe(false);
+    expect(AnkiRequestSchema.safeParse({ notes: [{ ...note(1), fields: [] }] }).success).toBe(false);
+    const fields = Array.from({ length: ANKI_FIELDS_MAX + 1 }, (_, i) => ({ name: `F${i}`, text: "x" }));
+    expect(AnkiRequestSchema.safeParse({ notes: [{ ...note(1), fields }] }).success).toBe(false);
+    expect(AnkiRequestSchema.safeParse({ notes: [{ ...note(1), fields: [{ name: "F", text: "x".repeat(ANKI_FIELD_CHARS + 1) }] }] }).success).toBe(false);
+    expect(AnkiRequestSchema.safeParse({ notes: [{ ...note(1), tags: Array(ANKI_TAGS_MAX + 1).fill("t") }] }).success).toBe(false);
   });
 });

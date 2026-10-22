@@ -40,9 +40,9 @@ import { takeSkeletonHandoff } from "./DeskPlaceholder";
 import { BulkBar, EmptyPane, FilterStrip, SelectionSummary, summaryTargets, TextLink, type StatusFilter } from "./DeskParts";
 import { DisbandSheet, disbandMessage } from "./DisbandSheet";
 import { EnrichPlanSheet } from "./EnrichPlanSheet";
-import { cachedFolder, rememberLibrary } from "./first-paint";
+import { cachedFolder, rememberLibrary, useSearchWait } from "./first-paint";
 import { FolderFormSheet } from "./FolderFormSheet";
-import { nWords, plural, practiceHref, reviewHref } from "./format";
+import { enrichCaption, nWords, plural, practiceHref, reviewHref } from "./format";
 import { markLeaving, markReturning } from "./leaving";
 import { Menu, MenuItem, MenuSeparator, type MenuAnchor } from "./Menu";
 import { ThemeMenuItems } from "./ThemeActions";
@@ -187,6 +187,9 @@ function Desk({ scope }: { scope: LibraryScope }) {
     );
   }, [sortedRows, status, slang, deferredQuery]);
   const capped = useMemo(() => (filtered && deferredQuery.trim() ? filtered.slice(0, RESULTS_MAX) : filtered), [filtered, deferredQuery]);
+  // L5: while the deferred query lags, the old rows stay (dimmed after 150 ms); «Ищем…» after 300 ms.
+  const stale = query !== deferredQuery;
+  const wait = useSearchWait(stale, listMode && (capped === undefined || stale));
   const rows = capped ?? EMPTY_ROWS;
   const ids = useMemo(() => rows.map((r) => r.word.id), [rows]);
   const byId = useMemo(() => new Map(rows.map((r) => [r.word.id, r])), [rows]);
@@ -598,7 +601,13 @@ function Desk({ scope }: { scope: LibraryScope }) {
   if (listMode) {
     subline = (
       <span role="status" className="font-medium text-ink">
-        {capped === undefined || query !== deferredQuery ? "Ищем…" : filtered && filtered.length ? `Найдено ${nWords(filtered.length)}` : "Ничего не найдено"}
+        {wait.searching
+          ? "Ищем…"
+          : capped === undefined
+            ? ""
+            : filtered && filtered.length
+              ? `Найдено ${nWords(filtered.length)}`
+              : "Ничего не найдено"}
       </span>
     );
   } else if (scopeStats) {
@@ -655,7 +664,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
         {toEnrich && toEnrich.total > 0 && (
           <span className="inline-flex items-baseline gap-2">
             <span className="tabular-nums">
-              {toEnrich.noExample > 0 ? `${nWords(toEnrich.noExample)} без примера` : `Уровень сленга для ${nWords(toEnrich.total)}`}
+              {enrichCaption(toEnrich)}
             </span>
             <TextLink aria-haspopup="dialog" onClick={() => setEnrichOpen(true)} className="items-center gap-1">
               <Icon name="spark" size={14} strokeWidth={1.5} className="shrink-0" />
@@ -675,7 +684,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
           ? "В этой теме пока нет слов."
           : "В библиотеке пока нет слов."
       : null;
-  const noResults = hasWords && capped && capped.length === 0 && query === deferredQuery;
+  const noResults = hasWords && capped && capped.length === 0;
 
   // ----- Detail pane content
   const pane: ReactNode =
@@ -715,13 +724,13 @@ function Desk({ scope }: { scope: LibraryScope }) {
   const rowMenuItem = rowMenu ? byId.get(rowMenu.id) : undefined;
 
   return (
-    <main data-wide="" style={{ height: "calc(100dvh - env(safe-area-inset-top))" }} className="flex min-h-0 w-full flex-none overflow-hidden">
+    <main data-wide="" style={{ height: "calc(100dvh - var(--safe-top))" }} className="flex min-h-0 w-full flex-none overflow-hidden">
       <Suspense fallback={null}>
         <LibraryParams onParams={onParams} />
       </Suspense>
 
       {/* List pane */}
-      <section aria-label={title} className="relative flex min-w-0 flex-1 flex-col min-[1600px]:max-w-[1148px]">
+      <section aria-label={title} className="relative flex min-w-0 flex-1 flex-col min-[1600px]:max-w-[1148px] min-[1600px]:grow-0 min-[1600px]:basis-[1148px]">
         <header className="shrink-0 px-6 pt-5">
           <div className="flex h-9 items-center gap-3">
             <h1 className="m-0 min-w-0 truncate font-serif text-[28px] leading-9 font-medium tracking-[-0.015em]">{title}</h1>
@@ -884,6 +893,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
               fine={fine}
               label={`Слова: ${title}`}
               loading={capped === undefined}
+              stale={wait.dim}
               skeletonStyle={skeletonStyle}
               handlers={handlers}
               onSelectAll={(all) => {
@@ -950,7 +960,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
       {docked ? (
         <aside
           aria-label="Карточка слова"
-          className="flex w-[400px] shrink-0 flex-col overflow-y-auto overscroll-contain border-l border-rule px-6 pt-4 pb-8 min-[1200px]:max-[1439px]:w-[360px] min-[1600px]:flex-1"
+          className="flex w-[400px] shrink-0 flex-col overflow-y-auto overscroll-contain border-l border-rule px-6 pt-4 pb-8 min-[1200px]:max-[1439px]:w-[360px] min-[1600px]:min-w-[400px] min-[1600px]:flex-1"
         >
           <div className="w-full min-[1600px]:max-w-[560px]">{pane}</div>
         </aside>

@@ -17,6 +17,13 @@ export function plural(n: number, forms: readonly [one: string, few: string, man
 export const WORD_FORMS = ["слово", "слова", "слов"] as const;
 export const nWords = (n: number) => `${n} ${plural(n, WORD_FORMS)}`;
 
+/** The «Дополнить карточки» row caption: what most of the plan is about. */
+export function enrichCaption(c: { total: number; noExample: number; noFields: number }): string {
+  if (c.noExample > 0) return `${nWords(c.noExample)} без примера`;
+  if (c.noFields === c.total) return `Свои поля для ${nWords(c.total)}`;
+  return `Уровень сленга для ${nWords(c.total)}`;
+}
+
 /** Dictionary abbreviation for the part of speech: «n. f.», «v. pron.», «loc.». */
 export function posAbbr(word: Pick<Word, "pos" | "gender" | "fr">): string | null {
   switch (word.pos) {
@@ -79,6 +86,7 @@ export const SOURCE_LABELS: Record<WordSource, string> = {
   suggest: "из подсказок",
   screenshot: "со скриншота",
   import: "из импорта",
+  chat: "из чата",
 };
 
 /** 12.09.2026 */

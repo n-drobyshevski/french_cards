@@ -10,7 +10,8 @@ import { SkeletonBar } from "@/components/ui/Skeleton";
 import { SlangMeter } from "@/components/ui/SlangMeter";
 import { REDUCED_MOTION_QUERY, tokenMs } from "@/lib/motion";
 import { useMediaQuery } from "@/lib/use-media";
-import { SLANG_LABELS, type Direction, type Word } from "@/lib/types";
+import { fieldsForDisplay } from "@/lib/core/custom-fields";
+import { SLANG_LABELS, type Direction, type FieldDef, type Word } from "@/lib/types";
 import {
   SETTLE_MS,
   exitStart,
@@ -177,6 +178,43 @@ export interface CardFace {
   direction: Direction;
   /** Catalog number «№ 001» (desktop header). */
   number?: string;
+  /** Shared «Свои поля» definitions, for the answer side (its shared fields under their current names). */
+  fieldDefs?: readonly FieldDef[];
+}
+
+/** «Свои поля» the answer side lists; the rest are counted («+2 поля»). */
+const CARD_FIELDS = 3;
+const FIELD_FORMS = ["поле", "поля", "полей"] as const;
+const fieldsWord = (n: number) => {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  return m10 === 1 && m100 !== 11 ? FIELD_FORMS[0] : m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20) ? FIELD_FORMS[1] : FIELD_FORMS[2];
+};
+
+/**
+ * The word's filled «Свои поля» after the examples: label in the mono meta style, the value muted
+ * like the note. Up to three; more are counted in a muted line (the word's view has them all).
+ */
+function CardFields({ word, defs }: { word: Word; defs: readonly FieldDef[] }) {
+  const fields = fieldsForDisplay(word, defs);
+  if (fields.length === 0) return null;
+  const shown = fields.slice(0, CARD_FIELDS);
+  const more = fields.length - shown.length;
+  return (
+    <dl data-card-fields="" className="m-0 mt-5 flex flex-col gap-2.5 border-t border-rule pt-4 md:mt-4 md:gap-2">
+      {shown.map((f) => (
+        <div key={f.key} className="flex flex-col gap-0.5">
+          <dt className="meta leading-4">{f.label}</dt>
+          <dd className="m-0 font-serif text-[16px] leading-[22px] break-words text-muted md:text-[17px] md:leading-6">{f.value}</dd>
+        </div>
+      ))}
+      {more > 0 && (
+        <p className="m-0 text-[12px] leading-4 text-muted">
+          +{more} {fieldsWord(more)}
+        </p>
+      )}
+    </dl>
+  );
 }
 
 /**
@@ -250,11 +288,12 @@ const QuestionFace = memo(function QuestionFace({
   );
 });
 
-/** Answer side: headword and POS, then the answer block (meter, translation, note, examples, footer). */
+/** Answer side: headword and POS, then the answer block (meter, translation, note, examples, «Свои поля», footer). */
 const AnswerFace = memo(function AnswerFace({
   word,
   direction,
   number,
+  fieldDefs = [],
   folderName,
   headRef,
   write,
@@ -354,6 +393,7 @@ const AnswerFace = memo(function AnswerFace({
               )}
             </div>
           )}
+          <CardFields word={word} defs={fieldDefs} />
         </div>
       </div>
 
@@ -469,6 +509,7 @@ export interface ReviewCardProps extends CardFace {
 export function ReviewCard({
   word,
   direction,
+  fieldDefs,
   revealed,
   onReveal,
   onHide,
@@ -563,7 +604,7 @@ export function ReviewCard({
   return (
     <>
       {next && <StackCard face={next} style={stackStyle} drop={arriveOnMount?.kind === "return"} />}
-      <div ref={layerRef} data-review-card="" style={motion} className="absolute inset-0 will-change-transform">
+      <div ref={layerRef} data-review-card="" style={motion} className={cx("absolute inset-0 will-change-transform", mode === "dragging" && "cursor-grabbing select-none [&_*]:cursor-grabbing")}>
         <div data-pressed={pressed ? "" : undefined} className={CARD_PRESS}>
           {!revealed ? (
             <button
@@ -577,7 +618,7 @@ export function ReviewCard({
               aria-label={`Карточка ${prompt}, перевернуть`}
               aria-keyshortcuts="Space"
               data-review-reveal=""
-              className={cx(cardShell, "absolute inset-0 text-left", swipeEnabled && "touch-pan-y select-none")}
+              className={cx(cardShell, "absolute inset-0 text-left", swipeEnabled && "touch-pan-y pointer-coarse:select-none")}
             >
               <QuestionFace
                 word={word}
@@ -602,12 +643,13 @@ export function ReviewCard({
               data-review-answer=""
               tabIndex={-1}
               aria-label={`${word.fr} — ${word.ru}`}
-              className={cx(cardShell, "absolute inset-0 outline-none", swipeEnabled && "touch-pan-y select-none")}
+              className={cx(cardShell, "absolute inset-0 outline-none", swipeEnabled && "touch-pan-y pointer-coarse:select-none")}
             >
               <AnswerFace
                 word={word}
                 direction={direction}
                 number={number}
+                fieldDefs={fieldDefs}
                 folderName={folderName}
                 headRef={answerHeadRef}
                 write={flip === "up" && ANSWER_WRITE}
@@ -637,7 +679,7 @@ export interface LeavingCardProps extends CardFace {
  * inert. It takes over from the live card in the frame of the grade — at the release pose of a
  * swipe — and plays its exit independently of the next card's read, then reports `onDone`.
  */
-export function LeavingCard({ word, direction, number, revealed, folderName, exit, onDone }: LeavingCardProps) {
+export function LeavingCard({ word, direction, number, fieldDefs, revealed, folderName, exit, onDone }: LeavingCardProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [start] = useState(() => ({ exit, onDone }));
   useLayoutEffect(() => {
@@ -647,7 +689,7 @@ export function LeavingCard({ word, direction, number, revealed, folderName, exi
     animation.finished.then(start.onDone, () => {});
     return () => animation.cancel();
   }, [start]);
-  const face = { word, direction, number };
+  const face = { word, direction, number, fieldDefs };
   return (
     <div
       ref={ref}

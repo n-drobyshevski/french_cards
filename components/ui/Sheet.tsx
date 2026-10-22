@@ -146,7 +146,7 @@ function DrawerSheet({
   const viewport = useVisualViewport(open);
   const keyboard = viewport && viewport.keyboard >= KEYBOARD_MIN ? viewport.keyboard : 0;
   const visible = viewport ? `${viewport.height}px` : "100dvh";
-  const maxHeight = `calc(${visible} - ${TOP_GAP}px - ${keyboard ? "0px" : "env(safe-area-inset-top)"})`;
+  const maxHeight = `calc(${visible} - ${TOP_GAP}px - ${keyboard ? "0px" : "var(--safe-top)"})`;
   const sizeStyle =
     height === "full"
       ? { height: maxHeight }
@@ -321,7 +321,7 @@ export function DialogCloseButton({ className, label = "Закрыть" }: { cla
         title={`${label} (Esc)`}
         aria-keyshortcuts="Escape"
         className={cx(
-          "inline-flex size-8 shrink-0 items-center justify-center rounded-[4px] bg-transparent text-ink hoverable:bg-hover-surface",
+          "hover-fade inline-flex size-8 shrink-0 items-center justify-center rounded-[4px] bg-transparent text-ink hoverable:bg-hover-surface",
           className,
         )}
       >

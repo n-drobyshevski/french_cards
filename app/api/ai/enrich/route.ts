@@ -1,12 +1,13 @@
 // POST /api/ai/enrich — slang level, part of speech and an example for cards the learner typed
 // (manual form, «Список», quick save, library backfill). JSON in, JSON out.
-// Request: { words: [{id, fr, ru, note?}] (≤50), folders?: [{slug,name,description}] } →
+// Request: { words: [{id, fr, ru, note?}] (≤50), folders?: [{slug,name,description}], fields?: [{id,name,hint}] (≤10) } →
 // EnrichResponse { results: [{id, pos, gender, slang_level, verlan, example_fr, example_ru, confidence,
-// folder, folder_alternatives, new_folder}] }. Without `folders` no theme is picked (folder null).
+// folder, folder_alternatives, new_folder, custom: [{id, value}]}] }. Without `folders` no theme is picked
+// (folder null); without `fields` custom is empty.
 import { generateText, Output } from "ai";
 import { guardAiRequest, jsonError, limitAiRequest, NO_STORE } from "@/lib/ai/auth";
 import { refFor } from "@/lib/ai/classify";
-import { finalizeEnrichment } from "@/lib/ai/enrich";
+import { fieldRefMap, finalizeEnrichment } from "@/lib/ai/enrich";
 import { cachedInstructions, modelFor, modelIdFor, providerOptionsFor } from "@/lib/ai/model";
 import { ENRICH_SYSTEM, enrichUserPrompt } from "@/lib/ai/prompts";
 import { buildEnrichmentSchema, EnrichRequestSchema, type EnrichmentModel, type EnrichResponse } from "@/lib/ai/schemas";
@@ -25,10 +26,11 @@ export async function POST(req: Request): Promise<Response> {
   }
   const parsed = EnrichRequestSchema.safeParse(body);
   if (!parsed.success) return jsonError(400, "bad_request", parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`));
-  const { words, folders, model } = parsed.data;
+  const { words, folders, fields = [], model } = parsed.data;
   const limited = limitAiRequest("enrich", guard);
   if (limited) return limited;
 
+  const fieldRefs = [...fieldRefMap(fields).keys()];
   try {
     const { output } = await generateText({
       model: modelFor("enrich", model),
@@ -36,14 +38,16 @@ export async function POST(req: Request): Promise<Response> {
       prompt: enrichUserPrompt({
         words: words.map((w, i) => ({ ref: refFor(i), fr: w.fr, ru: w.ru, note: w.note ?? null })),
         folders,
+        fields: fields.map((f, i) => ({ ref: fieldRefs[i], name: f.name, hint: f.hint ?? null })),
       }),
-      output: Output.object({ schema: buildEnrichmentSchema(folders ? folders.map((f) => f.slug) : null), name: "cards" }),
+      output: Output.object({ schema: buildEnrichmentSchema(folders ? folders.map((f) => f.slug) : null, fieldRefs), name: "cards" }),
       providerOptions: providerOptionsFor(modelIdFor("enrich", model)),
-      maxOutputTokens: 8000,
+      // Custom fields add up to ten short values per word.
+      maxOutputTokens: fields.length > 0 ? 16000 : 8000,
       abortSignal: req.signal,
     });
     const folderRefs = folders ? folders.map((f) => ({ slug: f.slug, name: f.name })) : null;
-    const response: EnrichResponse = { results: finalizeEnrichment(output as EnrichmentModel, words, folderRefs) };
+    const response: EnrichResponse = { results: finalizeEnrichment(output as EnrichmentModel, words, folderRefs, fields) };
     return Response.json(response, { headers: NO_STORE });
   } catch (error) {
     if (req.signal.aborted) return jsonError(499, "aborted");

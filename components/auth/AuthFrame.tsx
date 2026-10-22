@@ -33,6 +33,10 @@ export const AUTH_LABEL = "block text-[13px] leading-[18px] text-muted md:text-[
 export const AUTH_PRIMARY =
   "mt-4 flex h-[52px] w-full shrink-0 cursor-pointer items-center justify-center rounded-[6px] bg-ink text-[15px] font-medium tracking-[.01em] text-on-ink disabled:cursor-default disabled:opacity-40 md:mx-6 md:mt-5 md:h-11 md:w-[calc(100%-48px)] md:text-[14px] md:tracking-normal";
 
+/** AUTH_PRIMARY's placement for a <Button> (it brings the ink look, pending label and width lock). */
+export const AUTH_PRIMARY_BUTTON =
+  "mt-4 cursor-pointer tracking-[.01em] md:mx-6 md:mt-5 md:flex md:h-11 md:w-[calc(100%-48px)] md:text-[14px] md:tracking-normal";
+
 /** «Забыли пароль?» / «Создать аккаунт» row; in the panel from 768 up, 32px tertiary buttons. */
 export const AUTH_LINKS = "mt-2 flex items-center justify-between gap-3 md:mx-4 md:mt-2 md:mb-6 md:h-8";
 

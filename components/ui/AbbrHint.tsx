@@ -1,14 +1,24 @@
 "use client";
 
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type SyntheticEvent } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FocusEvent, type KeyboardEvent, type SyntheticEvent } from "react";
 import { abbrEntry } from "@/lib/abbr";
 import { cx } from "./cx";
 
 /** Gutter the hint keeps from the screen edges. */
 const EDGE = 16;
 /** Mouse hover: open after this pause, close this long after leaving (so the pointer can cross the gap). */
-const HOVER_OPEN_MS = 250;
+const HOVER_OPEN_MS = 500;
 const HOVER_CLOSE_MS = 120;
+/** After a hint closes, a neighbour hovered within this long opens at once (D7). */
+const WARM_MS = 400;
+
+/**
+ * Shared by every hint on the page (D7): while one is open, or just after it closed, the pointer
+ * moving to a neighbour opens it with no pause and no fade. One hint at a time: opening one closes
+ * the other at once (`closeOpen`).
+ */
+const warmth: { open: number; closedAt: number; closeOpen: (() => void) | null } = { open: 0, closedAt: -Infinity, closeOpen: null };
+const isWarm = () => warmth.open > 0 || performance.now() - warmth.closedAt < WARM_MS;
 
 export interface AbbrHintProps {
   /** The abbreviation as printed: «n. m.», «loc.», «arg.»… */
@@ -25,14 +35,19 @@ export interface AbbrHintProps {
  * Существительное мужского рода». With a mouse it also opens on hover; a click pins it. Taps and
  * keys stay inside, so it works on the review card (which flips on a tap) and in sheets (where
  * Escape would close the sheet). Unknown abbreviations render as plain text.
+ * Motion (D7): hover opens after 500 ms, then at once for neighbours while one is open; keyboard
+ * focus opens it at once. It fades in over --dur-quick (not when warm) and closes instantly.
  */
 export function AbbrHint({ abbr, className, lang = "fr", align = "start" }: AbbrHintProps) {
   const entry = abbrEntry(abbr);
   const id = useId();
   const [pinned, setPinned] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  /** Whether the bubble fades in: not when it opens straight after a neighbour. */
+  const [fade, setFade] = useState(true);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const open = pinned || hovered;
+  const open = pinned || hovered || focused;
   const wrap = useRef<HTMLSpanElement>(null);
   const bubble = useRef<HTMLSpanElement>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -51,10 +66,29 @@ export function AbbrHint({ abbr, className, lang = "fr", align = "start" }: Abbr
 
   useEffect(() => {
     if (!open) return;
+    const close = () => {
+      if (hoverTimer.current) clearTimeout(hoverTimer.current);
+      setPinned(false);
+      setHovered(false);
+      setFocused(false);
+    };
+    warmth.closeOpen?.();
+    warmth.closeOpen = close;
+    warmth.open += 1;
+    return () => {
+      if (warmth.closeOpen === close) warmth.closeOpen = null;
+      warmth.open -= 1;
+      warmth.closedAt = performance.now();
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
     const close = (event: PointerEvent) => {
       if (wrap.current?.contains(event.target as Node)) return;
       setPinned(false);
       setHovered(false);
+      setFocused(false);
     };
     document.addEventListener("pointerdown", close, true);
     return () => document.removeEventListener("pointerdown", close, true);
@@ -83,6 +117,7 @@ export function AbbrHint({ abbr, className, lang = "fr", align = "start" }: Abbr
       event.preventDefault();
       setPinned(false);
       setHovered(false);
+      setFocused(false);
       button.current?.focus();
     }
   };
@@ -90,7 +125,26 @@ export function AbbrHint({ abbr, className, lang = "fr", align = "start" }: Abbr
   const hoverTo = (next: boolean) => (event: { pointerType: string }) => {
     if (event.pointerType !== "mouse") return;
     if (hoverTimer.current) clearTimeout(hoverTimer.current);
-    hoverTimer.current = setTimeout(() => setHovered(next), next ? HOVER_OPEN_MS : HOVER_CLOSE_MS);
+    if (next && !open && isWarm()) {
+      hoverTimer.current = null;
+      setFade(false);
+      setHovered(true);
+      return;
+    }
+    hoverTimer.current = setTimeout(
+      () => {
+        if (next && !open) setFade(!isWarm());
+        setHovered(next);
+      },
+      next ? HOVER_OPEN_MS : HOVER_CLOSE_MS,
+    );
+  };
+
+  // Keyboard focus explains at once; a focus from a tap or click is left to the click (pin).
+  const onFocus = (event: FocusEvent<HTMLButtonElement>) => {
+    if (!event.currentTarget.matches(":focus-visible")) return;
+    if (!open) setFade(!isWarm());
+    setFocused(true);
   };
 
   return (
@@ -110,9 +164,14 @@ export function AbbrHint({ abbr, className, lang = "fr", align = "start" }: Abbr
         aria-expanded={open}
         aria-describedby={open ? id : undefined}
         aria-label={`${abbr} — ${entry.full}`}
+        onFocus={onFocus}
+        onBlur={() => setFocused(false)}
         onClick={() => {
           // A click pins a hovered hint open; a click on a pinned one closes it.
-          if (pinned) setHovered(false);
+          if (pinned) {
+            setHovered(false);
+            setFocused(false);
+          } else if (!open) setFade(true);
           setPinned(!pinned);
         }}
         className={cx(
@@ -129,8 +188,9 @@ export function AbbrHint({ abbr, className, lang = "fr", align = "start" }: Abbr
           id={id}
           role="tooltip"
           className={cx(
-            "absolute top-full z-40 mt-2 flex w-max max-w-[min(280px,calc(100vw-32px))] flex-col gap-0.5 rounded-[4px] border border-ink bg-surface px-3 py-2 text-left font-sans text-[13px] leading-5 font-normal text-ink not-italic shadow-[0_4px_16px_rgb(0_0_0/0.12)]",
+            "absolute top-full z-40 mt-2 flex w-max max-w-[min(280px,calc(100vw-32px))] flex-col whitespace-normal break-words gap-0.5 rounded-[4px] border border-ink bg-surface px-3 py-2 text-left font-sans text-[13px] leading-5 font-normal text-ink not-italic shadow-[0_4px_16px_rgb(0_0_0/0.12)]",
             align === "end" ? "right-0" : "left-0",
+            fade && "animate-[fade-in_var(--dur-quick)_var(--ease-enter)]",
           )}
         >
           <span lang="fr" className="font-serif text-[15px] italic">

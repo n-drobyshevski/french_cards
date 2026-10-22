@@ -1,13 +1,16 @@
 "use client";
 
-import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { Collapse } from "@/components/ui/Collapse";
 import { cx } from "@/components/ui/cx";
+import { FIELD_VALUE_MAX, useFieldDefs } from "@/lib/custom-fields";
 import { SLANG_NAMES_RU } from "@/components/ui/SlangMeter";
 import { Icon } from "@/components/ui/Icons";
 import { ExampleList } from "@/components/examples/ExampleList";
 import { SLANG_LABELS, type Folder, type SlangLevel } from "@/lib/types";
 import type { DuplicateInfo } from "./data";
-import { PendingDots, UnknownMeter, useFieldSpotlight } from "./parts";
+import { draftFieldsSummary, draftFieldValue, withDraftField } from "./draft";
+import { DuplicateReveal, PendingDots, UnknownMeter, useFieldSpotlight } from "./parts";
 import { detectionStates, type WordFormProps } from "./WordForm";
 import { CheckBox, DESK_INPUT, DeskFieldError, DeskFrame, FIELD_LABEL, HIDDEN_CONTROL_FOCUS, HintLine, KeyButton, ThemeSquare, type Hint } from "./desk-parts";
 import { choiceKey, choiceName, INBOX_CHOICE, sameChoice, type FolderChoice } from "./folder-choice";
@@ -35,7 +38,7 @@ const isEnter = (e: KeyboardEvent) => e.key === "Enter" && !e.shiftKey && !e.alt
 
 /**
  * D-Add-Form: the picked suggestion (or a manual entry) as a two-column form. Tab runs
- * Французский → Русский → Заметка → Пример FR → RU → level → verl. → theme → «Другие темы» →
+ * Французский → Русский → Заметка → Пример FR → RU → «Свои поля» (when there are any) → level → verl. → theme → «Другие темы» →
  * «в обе стороны» → «Добавить и ещё» → «Добавить». ⌘↵ / ⇧⌘↵ and Esc are handled by the dialog.
  */
 export function DeskWordForm({
@@ -142,7 +145,9 @@ export function DeskWordForm({
               className={cx(DESK_INPUT, "font-serif text-[20px] font-medium placeholder:font-sans placeholder:text-[15px] placeholder:font-normal")}
             />
             <DeskFieldError id={ids.frError}>{errors.fr}</DeskFieldError>
-            {duplicate && <DuplicateLine id={ids.dup} info={duplicate} onOpen={() => onOpenWord(duplicate.word.id)} />}
+            <DuplicateReveal info={duplicate}>
+              {(info) => <DuplicateLine id={ids.dup} info={info} onOpen={() => onOpenWord(info.word.id)} />}
+            </DuplicateReveal>
           </div>
           <div className="min-w-0">
             <label htmlFor={ids.ru} className={FIELD_LABEL}>
@@ -220,6 +225,8 @@ export function DeskWordForm({
         </div>
         {draft.example_auto && hasExample && <span className="mt-1 text-[12px] leading-4 text-muted">подобран автоматически</span>}
 
+        <DeskDraftFields draft={draft} onChange={onChange} />
+
         <span id={ids.level} className={cx(FIELD_LABEL, "mt-4")}>
           Уровень сленга
         </span>
@@ -287,6 +294,53 @@ export function DeskWordForm({
         </label>
       </form>
     </DeskFrame>
+  );
+}
+
+/**
+ * «Свои поля ▾» (only when Settings has shared fields): a disclosure under «Пример» that opens one
+ * optional input per field, two to a row, the field's hint as the placeholder.
+ */
+function DeskDraftFields({ draft, onChange }: Pick<DeskWordFormProps, "draft" | "onChange">) {
+  const defs = useFieldDefs();
+  const id = useId();
+  const [open, setOpen] = useState(() => draft.customFields.length > 0);
+  if (defs.length === 0) return null;
+  return (
+    <div className="mt-4 flex flex-col">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((o) => !o)}
+        className="-mx-1 flex h-7 min-w-0 cursor-pointer items-center gap-2 self-start rounded-[4px] bg-transparent px-1 text-left hoverable:bg-hover-surface"
+      >
+        <span className="text-[12px] leading-4 font-medium text-muted">Свои поля</span>
+        <span className="min-w-0 truncate text-[12px] leading-4 text-muted">· {draftFieldsSummary(draft, defs)}</span>
+        <Icon name="chevron" size={14} className={cx("shrink-0 text-muted transition-transform duration-(--dur-move) ease-standard", open && "rotate-180")} />
+      </button>
+      <Collapse open={open} innerClassName="px-0.5">
+        <div id={id} role="group" aria-label="Свои поля" className="grid grid-cols-2 gap-x-4 gap-y-3 pt-1.5 pb-0.5">
+          {defs.map((def) => (
+            <div key={def.id} className="min-w-0">
+              <label htmlFor={`${id}-${def.id}`} className={FIELD_LABEL}>
+                {def.name}
+              </label>
+              <input
+                id={`${id}-${def.id}`}
+                type="text"
+                value={draftFieldValue(draft, def)}
+                onChange={(e) => onChange({ customFields: withDraftField(draft.customFields, def, e.target.value) })}
+                placeholder={def.hint ?? "Необязательно"}
+                maxLength={FIELD_VALUE_MAX}
+                autoComplete="off"
+                className={DESK_INPUT}
+              />
+            </div>
+          ))}
+        </div>
+      </Collapse>
+    </div>
   );
 }
 

@@ -4,6 +4,8 @@
 // Limits live in `.describe()` text and are enforced by slicing on the server.
 // Client code imports only types from here (erased at build); plain values live in ./constants.
 import { z } from "zod";
+import { ANKI_CHUNK_MAX, ANKI_FIELD_CHARS, ANKI_FIELDS_MAX, ANKI_TAGS_MAX, type AnkiItem } from "@/lib/anki/types";
+import { FIELD_HINT_MAX, FIELD_LABEL_MAX, MAX_FIELD_DEFS } from "@/lib/core/custom-fields";
 import type { Confidence, Gender, PartOfSpeech, SlangLevel } from "@/lib/types";
 import {
   ASSIGN_CHUNK_MAX,
@@ -45,6 +47,28 @@ const newFolderShape = () =>
     })
     .nullable()
     .describe("A new theme to offer when no existing folder fits well; otherwise null.");
+
+/** Short refs for the learner's custom fields in one request (f1, f2…), mapped back to definition ids on the server. */
+export const fieldRefFor = (index: number) => `f${index + 1}`;
+
+/** «Свои поля» to fill: one entry per listed field. Only in the schema when fields were sent. */
+const customShape = (fieldRefs: readonly string[]) =>
+  z
+    .array(
+      z.object({
+        field: z.enum(fieldRefs as [string, ...string[]]).describe("The custom field ref from the user message, e.g. f1."),
+        value: z
+          .string()
+          .nullable()
+          .describe("The value, following the field's name and hint, short (at most about 150 characters). Null when nothing sensible fits or you are unsure."),
+      }),
+    )
+    .describe("One entry per custom field listed in the user message, in that order.");
+
+export interface CustomModel {
+  field: string;
+  value: string | null;
+}
 
 /** The `folder` enum for one request: existing slugs + NEW + INBOX. */
 export function folderEnum(slugs: readonly string[]) {
@@ -149,7 +173,7 @@ export type AssignmentModel = z.infer<ReturnType<typeof buildAssignmentSchema>>;
  * Slang level, part of speech and an example for cards the learner wrote themselves; with
  * `slugs` (the learner's themes) also a theme pick, as for suggestions.
  */
-export function buildEnrichmentSchema(slugs: readonly string[] | null = null) {
+export function buildEnrichmentSchema(slugs: readonly string[] | null = null, fieldRefs: readonly string[] = []) {
   const base = z.object({
     ref: z.string().describe("The word ref from the input, e.g. w3."),
     pos: posField(),
@@ -163,16 +187,17 @@ export function buildEnrichmentSchema(slugs: readonly string[] | null = null) {
     example_ru: z.string().nullable().describe("Russian translation of example_fr in the same register, or null when example_fr is null."),
     confidence: confidenceField(),
   });
-  let item: z.ZodType = base;
+  let item: z.ZodObject = base;
   if (slugs !== null) {
     const folder = folderEnum(slugs);
-    item = base.extend({
+    item = item.extend({
       folder: folder.describe("Best theme slug from the list; NEW when new_folder fits better than every existing theme; INBOX when unsure."),
       folder_alternatives: z.array(folder).describe("Up to 2 other plausible theme slugs from the list, best first. Never repeats folder."),
       new_folder: newFolderShape(),
     });
   }
-  return z.object({ items: z.array(item).describe("Exactly one entry per input word, in input order.") });
+  if (fieldRefs.length > 0) item = item.extend({ custom: customShape(fieldRefs) });
+  return z.object({ items: z.array(item as z.ZodType).describe("Exactly one entry per input word, in input order.") });
 }
 
 export interface EnrichmentItemModel {
@@ -188,9 +213,71 @@ export interface EnrichmentItemModel {
   folder?: string;
   folder_alternatives?: string[];
   new_folder?: { slug: string; name: string; description: string } | null;
+  /** Only when custom fields were sent. */
+  custom?: CustomModel[];
 }
 export interface EnrichmentModel {
   items: EnrichmentItemModel[];
+}
+
+/**
+ * One Anki note turned into a card (or skipped). Same fields as a screenshot row, read from the
+ * note's fields instead of an image; provenance is derived on the server from ru_suggested.
+ */
+function ankiItemBase(slugs: readonly string[]) {
+  const folder = folderEnum(slugs);
+  return z.object({
+    ref: z.string().describe("The note ref from the input, e.g. n3."),
+    skip: z.boolean().describe("True when the note is not French vocabulary (grammar rule, empty, another language); the other fields may then be minimal."),
+    fr_field: z.string().nullable().describe("Name of the note field the French term was read from, exactly as given; null when skipped."),
+    fr: z.string().describe("French dictionary form (article + noun, infinitive with se for pronominal verbs, masculine singular adjective, or the expression). Empty when skipped."),
+    fr_as_seen: z
+      .string()
+      .nullable()
+      .describe("The French text as written in the note when it differs from fr (conjugated, plural, feminine, no article, typo); null when identical."),
+    ru: z.string().describe("Russian side: the note's own Russian translation cleaned up, otherwise your translation, 1-3 equivalents. Empty when skipped."),
+    ru_suggested: z.boolean().describe("True when the note has no Russian translation and you wrote ru yourself."),
+    note: z
+      .string()
+      .nullable()
+      .describe("Short Russian usage note (at most 120 characters); holds the note's original non-Russian gloss, e.g. «англ.: car». Null if nothing useful."),
+    example_fr: z.string().nullable().describe("The note's French example sentence when it has one, otherwise one short natural sentence, or null."),
+    example_ru: z.string().nullable().describe("Russian translation of example_fr (copied from the note when present there), or null when example_fr is null."),
+    pos: posField(),
+    gender: genderField(),
+    slang_level: slangField(),
+    verlan: z.boolean().describe("True if the word is verlan."),
+    confidence: confidenceField(),
+    issue: z
+      .string()
+      .nullable()
+      .describe("Short Russian remark when something is off (why the note is skipped, likely typo, doubtful translation in the note); otherwise null."),
+    folder: folder.describe("Best theme slug from the list; NEW to use new_folder; INBOX when unsure or skipped."),
+    new_folder: newFolderShape(),
+    used_fields: z
+      .array(z.string())
+      .describe(
+        "Names of the note fields whose text went into fr, ru, note, the example or a custom value (fr_field included), exactly as given; empty when skipped.",
+      ),
+  });
+}
+
+/** With `fieldRefs` (the learner's custom fields, f1…) each item also fills them. */
+export function buildAnkiItemSchema(slugs: readonly string[], fieldRefs: readonly string[] = []) {
+  const base = ankiItemBase(slugs);
+  return fieldRefs.length > 0 ? base.extend({ custom: customShape(fieldRefs) }) : base;
+}
+export type AnkiItemModel = z.infer<ReturnType<typeof ankiItemBase>> & {
+  /** Only when custom fields were sent. */
+  custom?: CustomModel[];
+};
+
+/** /api/ai/anki model output: one entry per note. */
+export function buildAnkiSchema(slugs: readonly string[], fieldRefs: readonly string[] = []) {
+  return z.object({ items: z.array(buildAnkiItemSchema(slugs, fieldRefs)).describe("Exactly one entry per input note, in input order.") });
+}
+export interface AnkiModel {
+  items: AnkiItemModel[];
 }
 
 // ---------------------------------------------------------------------------------------
@@ -230,6 +317,20 @@ export const SuggestRequestSchema = z.object({
 export type SuggestRequest = z.input<typeof SuggestRequestSchema>;
 
 export const ExtractFoldersSchema = foldersInput(60);
+
+/** A custom field («Свои поля») to fill: the definition id, its name and hint. */
+export const CustomFieldInputSchema = z.object({
+  id: z.string().min(1).max(64),
+  name: shortText(FIELD_LABEL_MAX).min(1),
+  hint: shortText(FIELD_HINT_MAX).nullable().optional(),
+});
+export type CustomFieldInput = z.input<typeof CustomFieldInputSchema>;
+
+const customFieldsInput = () =>
+  z
+    .array(CustomFieldInputSchema)
+    .max(MAX_FIELD_DEFS)
+    .refine((list) => new Set(list.map((f) => f.id)).size === list.length, "duplicate field id");
 
 const wordId = z.string().min(1).max(64);
 
@@ -320,9 +421,36 @@ export const EnrichRequestSchema = z.object({
     .refine((list) => new Set(list.map((w) => w.id)).size === list.length, "duplicate word id"),
   /** The learner's themes: when present, each result also gets a theme pick. */
   folders: foldersInput(60).optional(),
+  /** Custom fields to fill for each word (definitions marked for the automatic fill). */
+  fields: customFieldsInput().optional(),
   model: z.enum(MODEL_TIERS).default("fast"),
 });
 export type EnrichRequest = z.input<typeof EnrichRequestSchema>;
+
+/** POST /api/ai/anki: one chunk of notes from an Anki deck. `ref` is the AnkiNote id. */
+export const AnkiRequestSchema = z.object({
+  notes: z
+    .array(
+      z.object({
+        ref: shortText(40).min(1),
+        fields: z
+          .array(z.object({ name: shortText(60).min(1), text: shortText(ANKI_FIELD_CHARS).min(1) }))
+          .min(1)
+          .max(ANKI_FIELDS_MAX),
+        tags: z.array(shortText(60)).max(ANKI_TAGS_MAX).default([]),
+      }),
+    )
+    .min(1)
+    .max(ANKI_CHUNK_MAX)
+    .refine((list) => new Set(list.map((n) => n.ref)).size === list.length, "duplicate note ref"),
+  /** The learner's themes; without them every card goes to «Входящие» or a proposed new theme. */
+  folders: foldersInput(60).optional(),
+  /** Custom fields to fill for each card (definitions marked for the automatic fill). */
+  fields: customFieldsInput().optional(),
+  model: z.enum(MODEL_TIERS).default("fast"),
+});
+export type AnkiRequest = z.input<typeof AnkiRequestSchema>;
+export type AnkiRequestNote = z.infer<typeof AnkiRequestSchema>["notes"][number];
 
 // ---------------------------------------------------------------------------------------
 // Wire types: what the routes send back after server-side normalization.
@@ -408,6 +536,12 @@ export interface AssignResponse {
   assignments: AssignmentResult[];
 }
 
+/** A filled custom field: the definition id sent with the request and its value. */
+export interface CustomFill {
+  id: string;
+  value: string;
+}
+
 /** Detected fields for one word sent to /api/ai/enrich. */
 export interface EnrichResult {
   id: string;
@@ -422,10 +556,17 @@ export interface EnrichResult {
   folder: string | null;
   folder_alternatives: string[];
   new_folder: NewFolderProposal | null;
+  /** Filled custom fields, only those with a value (missing from older responses). */
+  custom?: CustomFill[];
 }
 
 export interface EnrichResponse {
   results: EnrichResult[];
+}
+
+/** /api/ai/anki: one item per note the model returned, in note order (skips included). */
+export interface AnkiResponse {
+  items: AnkiItem[];
 }
 
 export interface AiErrorBody {

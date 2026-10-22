@@ -10,6 +10,7 @@ import { SKELETON_WIDTHS, SkeletonBar } from "@/components/ui/Skeleton";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { StatusLine } from "@/components/ui/StatusLine";
 import { Toggle } from "@/components/ui/Toggle";
+import { CrossfadeText } from "@/components/import/SwapLabel";
 import { cx } from "@/components/ui/cx";
 import { NEW_FOLDER_MIN_WORDS } from "@/lib/ai/constants";
 import { markFoldersChanged } from "@/lib/folder-spotlight";
@@ -234,7 +235,7 @@ export function SortPlanSheet({ open, onOpenChange }: SortPlanSheetProps) {
                 disabled={!plan || !summary || summary.apply === 0}
                 pending={applying}
                 pendingLabel="Применяем…"
-                trailing={summary ? summary.apply : undefined}
+                trailing={summary ? <CrossfadeText text={String(summary.apply)} /> : undefined}
                 onClick={() => plan && void apply(plan)}
               >
                 Применить
@@ -679,7 +680,7 @@ function DeskFooter({
             )}
           >
             Применить
-            {summary && <span className="font-mono text-[13px] tabular-nums">{summary.apply}</span>}
+            {summary && <CrossfadeText text={String(summary.apply)} className="font-mono text-[13px]" />}
             <Kbd tone={disabled ? "paper" : "ink"} aria-hidden="true">
               {keys("Mod+Enter")}
             </Kbd>

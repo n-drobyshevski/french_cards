@@ -128,7 +128,7 @@ export function tableColumns({ inner, layout, coarse, themeColumn }: ColumnInput
   const theme = themeColumn && inner >= (medium ? 960 : 720);
   const abbr = inner < 680;
   const level = abbr ? "abbr" : "meter";
-  const levelWidth = abbr ? (coarse ? 64 : 56) : 104;
+  const levelWidth = abbr ? (coarse ? 64 : 56) : 112;
   const dueCompact = !coarse && medium && inner < 760;
   const dueWidth = coarse ? 152 : dueCompact ? 72 : 120;
   const text = medium ? "minmax(150px,1fr)" : "minmax(160px,1fr)";

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { useAddSheet } from "@/components/providers/AddSheetContext";
 import { cx } from "./cx";
 import { Icon, type IconName } from "./Icons";
@@ -25,36 +25,75 @@ export function hidesTabBar(pathname: string | null): boolean {
 /** Height the bar takes, including its 1px top rule and the home-indicator inset. */
 export const TAB_BAR_HEIGHT = "calc(61px + env(safe-area-inset-bottom))";
 
+// Press (N1): the label tints in --dur-instant and settles back in --dur-quick.
 const itemClass =
-  "relative flex h-[60px] flex-col items-center justify-center gap-1 bg-transparent text-[12px] leading-4 no-underline";
+  "relative flex h-[60px] touch-manipulation flex-col items-center justify-center gap-1 bg-transparent text-[12px] leading-4 no-underline transition-colors duration-(--dur-quick) ease-press active:duration-(--dur-instant)";
 
-function TabMarker() {
-  return <span aria-hidden="true" className="absolute inset-x-0 -top-px h-0.5 bg-red" />;
+/** Grid column of each tab (Повторение · Добавить · Библиотека). */
+const COLUMN: Record<TabId, number> = { review: 0, library: 2 };
+
+/**
+ * One shared 2px red marker over the bar's top rule (N1). Between tabs it moves with translateX
+ * (--dur-move --ease-standard; jumps under reduced motion); it mounts in place when a tab first
+ * becomes known.
+ */
+function TabMarker({ tab }: { tab: TabId }) {
+  return (
+    <span
+      aria-hidden="true"
+      data-tab-marker=""
+      className="pointer-events-none absolute -top-px left-0 h-0.5 w-1/3 bg-red motion-safe:[transition:transform_var(--dur-move)_var(--ease-standard)]"
+      style={{ transform: `translateX(${COLUMN[tab] * 100}%)` }}
+    />
+  );
 }
 
-function TabLink({ href, icon, label, active }: { href: string; icon: IconName; label: string; active: boolean }) {
+function TabLink({
+  href,
+  icon,
+  label,
+  active,
+  current,
+  onTap,
+}: {
+  href: string;
+  icon: IconName;
+  label: string;
+  /** Looks active: the route's tab, or the one just tapped while its route loads. */
+  active: boolean;
+  /** The route's tab (aria-current). */
+  current: boolean;
+  onTap: () => void;
+}) {
   return (
     <Link
       href={href}
-      aria-current={active ? "page" : undefined}
+      aria-current={current ? "page" : undefined}
+      onNavigate={onTap}
       className={cx(itemClass, active ? "font-semibold text-ink" : "font-medium text-muted active:text-ink")}
     >
-      {active && <TabMarker />}
       <Icon name={icon} size={20} strokeWidth={1.5} />
       <span>{label}</span>
     </Link>
   );
 }
 
-function Bar({ active }: { active: TabId | null }) {
+function Bar({ active, pathname = null }: { active: TabId | null; pathname?: string | null }) {
   const addSheet = useAddSheet();
+  // Optimistic (N1): a tapped tab shows as active at once and holds until the route commits; it
+  // is dropped as soon as the path changes, so the committed route takes over.
+  const [tapped, setTapped] = useState<{ tab: TabId; from: string | null } | null>(null);
+  if (tapped && tapped.from !== pathname) setTapped(null);
+  const shown = tapped && tapped.from === pathname ? tapped.tab : active;
+  const tap = (tab: TabId) => () => setTapped({ tab, from: pathname });
   return (
     <nav
       data-tabbar=""
       aria-label="Основная навигация"
-      className="fixed inset-x-0 bottom-0 z-30 mx-auto grid w-full max-w-[440px] grid-cols-3 border-t border-rule bg-surface pb-[env(safe-area-inset-bottom)] md:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 mx-auto grid w-full max-w-[440px] grid-cols-3 border-t border-rule bg-surface pb-[env(safe-area-inset-bottom)] [view-transition-name:tab-bar] md:hidden"
     >
-      <TabLink href="/" icon="cards" label="Повторение" active={active === "review"} />
+      {shown && <TabMarker tab={shown} />}
+      <TabLink href="/" icon="cards" label="Повторение" active={shown === "review"} current={active === "review"} onTap={tap("review")} />
       <button
         type="button"
         aria-haspopup="dialog"
@@ -65,7 +104,14 @@ function Bar({ active }: { active: TabId | null }) {
         <Icon name="plus" size={20} strokeWidth={1.5} />
         <span>Добавить</span>
       </button>
-      <TabLink href="/library" icon="library" label="Библиотека" active={active === "library"} />
+      <TabLink
+        href="/library"
+        icon="library"
+        label="Библиотека"
+        active={shown === "library"}
+        current={active === "library"}
+        onTap={tap("library")}
+      />
     </nav>
   );
 }
@@ -73,7 +119,7 @@ function Bar({ active }: { active: TabId | null }) {
 function RoutedBar() {
   const pathname = usePathname();
   if (hidesTabBar(pathname)) return null;
-  return <Bar active={tabForPath(pathname)} />;
+  return <Bar active={tabForPath(pathname)} pathname={pathname} />;
 }
 
 /**

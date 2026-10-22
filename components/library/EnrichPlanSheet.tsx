@@ -10,6 +10,7 @@ import { SlangMeter } from "@/components/ui/SlangMeter";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { StatusLine } from "@/components/ui/StatusLine";
 import { Toggle } from "@/components/ui/Toggle";
+import { CrossfadeText } from "@/components/import/SwapLabel";
 import { cx } from "@/components/ui/cx";
 import {
   applyEnrichChanges,
@@ -111,7 +112,7 @@ export function EnrichPlanSheet({ open, onOpenChange }: EnrichPlanSheetProps) {
 
   const plan = phase.status === "ready" ? phase.plan : null;
   const picked = plan ? planChanges(plan).filter((c) => !off.has(c.key)) : [];
-  const empty = plan !== null && plan.examples.length === 0 && plan.slang.length === 0;
+  const empty = plan !== null && planChanges(plan).length === 0;
 
   const apply = async () => {
     setApplying(true);
@@ -171,7 +172,7 @@ export function EnrichPlanSheet({ open, onOpenChange }: EnrichPlanSheetProps) {
             disabled={!plan || picked.length === 0}
             pending={applying}
             pendingLabel="Применяем…"
-            trailing={plan ? picked.length : undefined}
+            trailing={plan ? <CrossfadeText text={String(picked.length)} /> : undefined}
             onClick={() => void apply()}
           >
             Применить
@@ -186,6 +187,7 @@ export function EnrichPlanSheet({ open, onOpenChange }: EnrichPlanSheetProps) {
       ? ([
           ["example", "Примеры", plan.examples],
           ["slang", "Уровень сленга", plan.slang],
+          ["fields", FIELDS_TITLE, plan.fields],
         ] as const).filter(([, , changes]) => changes.length > 0)
       : [];
     return (
@@ -259,8 +261,9 @@ export function EnrichPlanSheet({ open, onOpenChange }: EnrichPlanSheetProps) {
                         aria-checked={checked}
                         onClick={() => toggle([c.key], !checked)}
                         className={cx(
-                          "grid min-h-8 w-full items-center border-b border-rule bg-transparent px-6 py-1 text-left text-ink hoverable:bg-hover-surface",
+                          "grid min-h-8 w-full items-center border-b border-rule bg-transparent px-6 py-1 text-left text-ink transition-opacity duration-(--dur-quick) ease-standard hoverable:bg-hover-surface",
                           !checked && "text-muted",
+                          on === 0 && "opacity-50",
                         )}
                         style={{ gridTemplateColumns: ENRICH_LEDGER }}
                       >
@@ -269,7 +272,9 @@ export function EnrichPlanSheet({ open, onOpenChange }: EnrichPlanSheetProps) {
                           {c.word.fr}
                         </span>
                         <span className="truncate pr-3 text-[13px] text-muted">{c.word.ru}</span>
-                        {field === "example" ? (
+                        {field === "fields" ? (
+                          <FilledFields change={c} desk />
+                        ) : field === "example" ? (
                           <span className="flex min-w-0 flex-col">
                             <span lang="fr" className="truncate font-serif text-[15px] leading-5 italic">
                               {c.patch.example_fr}
@@ -326,6 +331,7 @@ export function EnrichPlanSheet({ open, onOpenChange }: EnrichPlanSheetProps) {
               [
                 ["example", "Примеры", plan.examples],
                 ["slang", "Уровень сленга", plan.slang],
+                ["fields", FIELDS_TITLE, plan.fields],
               ] as const
             )
               .filter(([, , changes]) => changes.length > 0)
@@ -446,7 +452,12 @@ function ChangeGroup({
   return (
     <section aria-label={`${title}: ${changes.length}`} className={cx("border-t", first ? "border-ink" : "border-rule")} style={style}>
       <div className="flex min-h-11 items-center gap-3">
-        <span className="flex min-w-0 flex-1 items-baseline gap-2 py-2">
+        <span
+          className={cx(
+            "flex min-w-0 flex-1 items-baseline gap-2 py-2 transition-opacity duration-(--dur-quick) ease-standard",
+            on === 0 && "opacity-50",
+          )}
+        >
           <span className="min-w-0 truncate font-serif text-[19px] leading-6 font-medium">{title}</span>
           <span className="font-mono text-[11px] tracking-[.06em] text-muted">
             {on === changes.length ? changes.length : `${on} из ${changes.length}`}
@@ -454,7 +465,8 @@ function ChangeGroup({
         </span>
         <Toggle checked={on > 0} onCheckedChange={(v) => onToggle(keys, v)} aria-label={`${title}: применить все`} />
       </div>
-      <ul className="m-0 list-none p-0">
+      {/* A group switched off dims to .5 over --dur-quick, as in «Разложить по темам» (S4). */}
+      <ul className={cx("m-0 list-none p-0 transition-opacity duration-(--dur-quick) ease-standard", on === 0 && "opacity-50")}>
         {changes.map((c) => (
           <li key={c.key}>
             <ChangeRow change={c} field={field} checked={!off.has(c.key)} onToggle={() => onToggle([c.key], off.has(c.key))} />
@@ -494,7 +506,9 @@ function ChangeRow({ change, field, checked, onToggle }: { change: EnrichChange;
           </span>
           <span className="min-w-0 truncate text-[13px] leading-5 text-muted">{word.ru}</span>
         </span>
-        {field === "example" ? (
+        {field === "fields" ? (
+          <FilledFields change={change} />
+        ) : field === "example" ? (
           <>
             <span lang="fr" className="truncate font-serif text-[15px] leading-5 italic">
               {patch.example_fr}
@@ -516,6 +530,22 @@ function ChangeRow({ change, field, checked, onToggle }: { change: EnrichChange;
 }
 
 const ENRICH_LEDGER = "32px 180px 160px minmax(0,1fr)";
+
+const FIELDS_TITLE = "Свои поля";
+
+/** The custom field values a change fills, «Название: значение», one line each (as an example's two lines). */
+function FilledFields({ change, desk = false }: { change: EnrichChange; desk?: boolean }) {
+  return (
+    <span className="flex min-w-0 flex-col">
+      {(change.filled ?? []).map((f) => (
+        <span key={f.field_id ?? f.label} className={cx("truncate leading-5", desk ? "text-[14px]" : "text-[15px]")}>
+          <span className="text-muted">{f.label}: </span>
+          {f.value}
+        </span>
+      ))}
+    </span>
+  );
+}
 
 function DeskEnrichFooter({
   ready,
@@ -585,7 +615,7 @@ function DeskEnrichFooter({
             )}
           >
             Применить
-            {ready && <span className="font-mono text-[13px] tabular-nums">{count}</span>}
+            {ready && <CrossfadeText text={String(count)} className="font-mono text-[13px]" />}
             <Kbd tone={disabled ? "paper" : "ink"} aria-hidden="true">
               {keys("Mod+Enter")}
             </Kbd>

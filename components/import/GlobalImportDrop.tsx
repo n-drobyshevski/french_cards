@@ -7,6 +7,7 @@ import { Icon } from "@/components/ui/Icons";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { partitionImages } from "@/lib/image-prep";
 import { useLayoutClass } from "@/lib/use-media";
+import { ankiFileOf } from "./anki-files";
 import { dragHasFiles, handOffImages, imagesFrom } from "./clipboard";
 
 /** Where the hand-over lands (SharedImages takes the files there). */
@@ -37,9 +38,15 @@ export function GlobalImportDrop() {
     if (!active) return;
 
     const start = (files: File[]) => {
+      const deck = ankiFileOf(files);
+      if (deck) {
+        handOffImages([deck]);
+        router.push(GLOBAL_IMPORT_URL);
+        return;
+      }
       const { accepted } = partitionImages(files);
       if (accepted.length === 0) {
-        snackbar.show({ message: "Подходят только PNG, JPEG и WebP." });
+        snackbar.show({ message: "Подходят PNG, JPEG, WebP или колода Anki." });
         return;
       }
       handOffImages(files);

@@ -8,6 +8,7 @@ import { SlangMeter } from "@/components/ui/SlangMeter";
 import { haptic } from "@/lib/haptics";
 import { prefersReducedMotion } from "@/lib/motion";
 import { formatInterval } from "@/lib/scheduler";
+import { useDelayedFlag } from "@/lib/use-delayed-flag";
 import type { DoneScreenData } from "./data";
 import { countWords, formatDateStamp, formatDayMonth, formatPercent, pluralRu } from "./format";
 
@@ -29,7 +30,11 @@ export interface SessionDoneProps {
   onRepeatMistakes: () => void;
   onPractice: () => void;
   onAddWords: () => void;
-  busy?: boolean;
+  /**
+   * A practice round is being built (R11): «mistakes» or «extra» is the pressed action, which shows
+   * the pending pattern (§3.5); any other value only blocks both. Neither greys out.
+   */
+  pending?: string | null;
   /** In-flow snackbar (undo of the last answer), shown above the actions. */
   snackbar?: ReactNode;
   /** 768 and up: focus lands on «Повторить ошибки» (or the heading), keys printed on the actions. */
@@ -87,7 +92,7 @@ export function SessionDone({
   onRepeatMistakes,
   onPractice,
   onAddWords,
-  busy,
+  pending = null,
   snackbar,
   desktop = false,
   letters = true,
@@ -133,6 +138,9 @@ export function SessionDone({
   const date = new Date(data.at);
   const day = formatDayMonth(date);
   const moreText = moreHard > 0 ? `И ещё ${moreHard} ${pluralRu(moreHard, ["слово", "слова", "слов"])}` : null;
+  // R11: the queue is local, so the pending label almost never shows (150 ms delay); until then the
+  // pressed action and its sibling just stop taking taps at full contrast.
+  const practiceSwapped = useDelayedFlag(pending === "extra", { delay: 150, min: 0 });
 
   return (
     <div data-session-done="" data-moment={moment ? "" : undefined} className="contents md:block md:min-h-0 md:flex-1 md:overflow-y-auto">
@@ -234,7 +242,9 @@ export function SessionDone({
           {summary.mistakes > 0 && (
             <Button
               block
-              disabled={busy}
+              pending={pending === "mistakes"}
+              pendingLabel="Подбираем…"
+              blocked={pending != null}
               onClick={onRepeatMistakes}
               data-done-primary=""
               className="md:h-11 md:w-auto md:px-4 md:text-[14px] md:tabular-nums md:focus:outline-2 md:focus:outline-offset-2 md:focus:outline-ink"
@@ -245,12 +255,39 @@ export function SessionDone({
           <div className="contents md:flex md:items-center md:gap-2">
             <button
               type="button"
-              disabled={busy}
-              onClick={onPractice}
+              aria-disabled={pending != null || undefined}
+              aria-busy={pending === "extra" || undefined}
+              onClick={(event) => {
+                if (pending != null) {
+                  event.preventDefault();
+                  return;
+                }
+                onPractice();
+              }}
               aria-keyshortcuts={desktop && letters ? "P" : undefined}
-              className="flex h-14 w-full flex-col items-center justify-center gap-0.5 rounded-btn border border-ink bg-surface text-ink active:bg-surface-2 disabled:opacity-40 md:h-11 md:w-auto md:flex-row md:gap-2 md:whitespace-nowrap md:rounded-chip md:border-0 md:bg-transparent md:px-2 hoverable:bg-hover"
+              className={cx(
+                "flex h-14 w-full flex-col items-center justify-center gap-0.5 rounded-btn border border-ink bg-surface text-ink active:bg-surface-2 md:h-11 md:w-auto md:flex-row md:gap-2 md:whitespace-nowrap md:rounded-chip md:border-0 md:bg-transparent md:px-2 hoverable:bg-hover",
+                pending != null && "pointer-events-none",
+              )}
             >
-              <span className="text-[15px] leading-5 font-medium">Ещё практика</span>
+              {/* Both labels in one cell: the button keeps the wider width (§3.5). */}
+              <span className="grid text-[15px] leading-5 font-medium">
+                <span
+                  aria-hidden={practiceSwapped || undefined}
+                  className={cx("col-start-1 row-start-1 transition-opacity duration-(--dur-exit) ease-exit", practiceSwapped && "opacity-0")}
+                >
+                  Ещё практика
+                </span>
+                <span
+                  aria-hidden={!practiceSwapped || undefined}
+                  className={cx(
+                    "col-start-1 row-start-1 text-muted transition-opacity duration-(--dur-quick) ease-enter",
+                    !practiceSwapped && "opacity-0",
+                  )}
+                >
+                  Подбираем…
+                </span>
+              </span>
               {letters && (
                 <Kbd aria-hidden="true" className="max-md:hidden">
                   P

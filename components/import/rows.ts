@@ -2,7 +2,7 @@
 // edits, selection and theme choice. Pure functions (no Dexie) so they are unit-tested.
 import type { NewFolderProposal, VocabItem } from "@/lib/ai/schemas";
 import { NEW_FOLDER_MIN_WORDS } from "@/lib/ai/constants";
-import type { Confidence, Folder, Gender, PartOfSpeech, SlangLevel, Word } from "@/lib/types";
+import type { Confidence, CustomFieldValue, Folder, Gender, PartOfSpeech, SlangLevel, Word, WordSource } from "@/lib/types";
 import type { NewWordInput } from "@/lib/words";
 
 /** Where a row goes: «Входящие», an existing theme, or a theme proposed with the rows. */
@@ -36,6 +36,10 @@ export interface ImportRow {
   folder: FolderChoice;
   /** "auto" while the theme is the automatic pick; "user" once changed by hand. */
   folderSource: "auto" | "user";
+  /** Where the row came from outside the reader, e.g. the Anki note id (carries its progress). */
+  ref?: string;
+  /** «Свои поля» saved with the word (Anki: filled values and the note's other fields); none for screenshots. */
+  customFields?: CustomFieldValue[];
 }
 
 export const INBOX: FolderChoice = { kind: "inbox" };
@@ -205,7 +209,11 @@ export function newFoldersNeeded(rows: readonly ImportRow[]): Extract<FolderChoi
  * The word to save for a row. `folderId` is the resolved theme (null = «Входящие»).
  * Automatic picks keep the reader's confidence; manual ones are marked as placed by the user.
  */
-export function toWordInput(row: ImportRow, folderId: string | null): NewWordInput {
+export function toWordInput(
+  row: ImportRow,
+  folderId: string | null,
+  { source = "screenshot", tags }: { source?: WordSource; tags?: string[] } = {},
+): NewWordInput {
   const manual = row.folderSource === "user";
   return {
     fr: row.fr,
@@ -220,7 +228,9 @@ export function toWordInput(row: ImportRow, folderId: string | null): NewWordInp
     folder_id: folderId,
     folder_source: manual ? "user" : "auto",
     folder_confidence: folderId === null || manual ? null : row.confidence,
-    source: "screenshot",
+    source,
+    ...(tags ? { tags } : {}),
+    ...(row.customFields?.length ? { custom_fields: row.customFields } : {}),
   };
 }
 
@@ -235,4 +245,6 @@ export function pluralRu(n: number, forms: readonly [one: string, few: string, m
 
 export const wordsRu = (n: number) => `${n} ${pluralRu(n, ["слово", "слова", "слов"])}`;
 export const fragmentsRu = (n: number) => `${n} ${pluralRu(n, ["фрагмент", "фрагмента", "фрагментов"])}`;
-export const screenshotsRu = (n: number) => `${n} ${pluralRu(n, ["скриншот", "скриншота", "скриншотов"])}`;
+/** «+1 поле», «+3 поля», «+5 полей»: the custom fields a review row will be saved with. */
+export const moreFieldsRu = (n: number) => `+${n} ${pluralRu(n, ["поле", "поля", "полей"])}`;
+export const screenshotsRu =(n: number) => `${n} ${pluralRu(n, ["скриншот", "скриншота", "скриншотов"])}`;

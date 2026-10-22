@@ -20,6 +20,7 @@ import { cachedFolder, rememberLibrary, useRevealClass } from "./first-paint";
 import { FolderFormSheet } from "./FolderFormSheet";
 import { DisbandSheet, disbandMessage } from "./DisbandSheet";
 import { FolderMenuSheet } from "./FolderMenuSheet";
+import { NAV_BACK } from "./FolderTile";
 import { useLibraryDesk } from "./lazy-desk";
 import { nWords, practiceHref, reviewHref } from "./format";
 import { useLibraryWords } from "./useLibraryWords";
@@ -51,7 +52,8 @@ export function FolderScreen({ id }: { id: string | null }) {
   // Until the desk's chunk is in, the placeholder stays where it is (same element, no restart).
   return (
     <>
-      <div className="contents md:hidden">{!wantsDesk && <PhoneFolder id={id} />}</div>
+      {/* A real box, not `contents`: the library ⇄ theme slide (NavSlide, L6) snapshots it. */}
+      <div className="flex min-w-0 flex-1 flex-col md:hidden">{!wantsDesk && <PhoneFolder id={id} />}</div>
       <DeskPlaceholder
         title={id === INBOX_SEGMENT ? "Входящие" : id !== null ? (cachedFolder(id)?.name ?? "") : ""}
         scope={id === null ? "unknown" : id === INBOX_SEGMENT ? "inbox" : "folder"}
@@ -97,7 +99,7 @@ function PhoneFolder({ id }: { id: string | null }) {
   if (meta?.folder === "missing") {
     return (
       <main className="flex flex-1 flex-col">
-        <Header eyebrow="Библиотека / тема" back="/library" backLabel="Назад в библиотеку" />
+        <Header eyebrow="Библиотека / тема" back="/library" backLabel="Назад в библиотеку" backTransitionTypes={NAV_BACK} />
         <div className="flex flex-1 flex-col items-start px-4 pt-6">
           <h1 className="m-0 font-serif text-[28px] leading-9 font-medium">Тема не найдена</h1>
           <p className="m-0 mt-2 text-[15px] leading-[22px] text-muted">Возможно, её удалили на другом устройстве.</p>
@@ -138,6 +140,7 @@ function PhoneFolder({ id }: { id: string | null }) {
         eyebrow="Библиотека / тема"
         back="/library"
         backLabel="Назад в библиотеку"
+        backTransitionTypes={NAV_BACK}
         actions={
           known && folderId !== null ? (
             // Shown from the first frame; the menu opens once the theme is read.

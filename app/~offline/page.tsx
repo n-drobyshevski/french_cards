@@ -13,7 +13,7 @@ export const metadata: Metadata = {
 // Precached by the service worker and shown when a page that was never opened is requested offline.
 export default function OfflinePage() {
   return (
-    <main className="mx-auto flex w-full max-w-[440px] flex-1 flex-col px-4 md:max-h-[720px] md:max-w-[560px] md:justify-center pt-[calc(16px+env(safe-area-inset-top))] pb-[calc(16px+env(safe-area-inset-bottom))]">
+    <main className="mx-auto flex w-full max-w-[440px] flex-1 flex-col px-4 md:max-h-[720px] md:max-w-[560px] md:justify-center pt-[calc(16px+var(--safe-top))] pb-[calc(16px+env(safe-area-inset-bottom))]">
       <header className="flex h-11 shrink-0 items-center">
         <AppMark />
       </header>
@@ -47,12 +47,13 @@ export default function OfflinePage() {
       </section>
 
       <div className="mt-4 flex shrink-0 flex-col gap-2">
-        <OfflineRetry />
-        {/* A full navigation (not next/link), so the service worker can answer from its cache. */}
-        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-        <a href="/" className={buttonClasses({ variant: "secondary", block: true })}>
-          Открыть повторение
-        </a>
+        <OfflineRetry>
+          {/* A full navigation (not next/link), so the service worker can answer from its cache. */}
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <a href="/" className={buttonClasses({ variant: "secondary", block: true })}>
+            Открыть повторение
+          </a>
+        </OfflineRetry>
       </div>
     </main>
   );

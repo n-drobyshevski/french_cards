@@ -1,16 +1,13 @@
 // Word CRUD and review persistence. Every write stamps updated_at; the outbox middleware
 // (lib/outbox.ts, installed in lib/db.ts) queues each written row for sync.
-import { db, liveRows, newId } from "./db";
+import { cleanCustomFields } from "./core/custom-fields";
+import { buildWord, cleanText, directionsOf, type NewWordInput, type WordPatch } from "./core/words";
+import { db, liveRows } from "./db";
 import { cleanExamples } from "./examples";
 import { fromSnapshot, grade, newReviewState, resetState, reviewStateId, type GradeResult, type Rating } from "./scheduler";
 import type { Confidence, Direction, ReviewLog, ReviewState, Word } from "./types";
 
-export type WordFields = Omit<Word, "id" | "created_at" | "updated_at" | "deleted_at">;
-
-/** fr + ru are required; everything else has a default (see `addWord`). */
-export type NewWordInput = Pick<Word, "fr" | "ru"> & Partial<WordFields> & { id?: string; created_at?: string };
-
-export type WordPatch = Partial<WordFields>;
+export { buildWord, cleanText, directionsOf, type NewWordInput, type WordFields, type WordPatch } from "./core/words";
 
 export interface MoveRecord {
   word_id: string;
@@ -27,46 +24,6 @@ export interface MoveOptions {
 }
 
 const WRITE_TABLES = () => [db.words, db.review_state, db.review_log, db.outbox];
-
-function cleanText(s: string | null | undefined): string | null {
-  const t = s?.replace(/\s+/g, " ").trim();
-  return t ? t : null;
-}
-
-function buildWord(input: NewWordInput, now: Date): Word {
-  const fr = cleanText(input.fr);
-  const ru = cleanText(input.ru);
-  if (!fr) throw new Error("Пустое французское слово");
-  if (!ru) throw new Error("Пустой перевод");
-  const iso = now.toISOString();
-  const folderId = input.folder_id ?? null;
-  return {
-    id: input.id ?? newId(),
-    fr,
-    ru,
-    note: cleanText(input.note),
-    example_fr: cleanText(input.example_fr),
-    example_ru: cleanText(input.example_ru),
-    extra_examples: cleanExamples(input.extra_examples),
-    pos: input.pos ?? "other",
-    gender: input.gender ?? "none",
-    slang_level: input.slang_level ?? 0,
-    verlan: input.verlan ?? false,
-    tags: [...new Set((input.tags ?? []).map((t) => t.trim()).filter(Boolean))],
-    folder_id: folderId,
-    folder_source: input.folder_source ?? "auto",
-    folder_confidence: folderId === null ? null : (input.folder_confidence ?? null),
-    source: input.source ?? "manual",
-    both_directions: input.both_directions ?? true,
-    created_at: input.created_at ?? iso,
-    updated_at: iso,
-    deleted_at: null,
-  };
-}
-
-function directionsOf(word: Pick<Word, "both_directions">): Direction[] {
-  return word.both_directions ? ["fr_ru", "ru_fr"] : ["fr_ru"];
-}
 
 /**
  * Ensures live review_state rows exist for the words' directions (reviving soft-deleted ones with
@@ -95,13 +52,27 @@ export async function addWord(input: NewWordInput, now: Date = new Date()): Prom
   return word;
 }
 
-/** Bulk add (screenshot/list import) in one transaction. Undo with `softDeleteWords(ids)`. */
-export async function addWords(inputs: readonly NewWordInput[], now: Date = new Date()): Promise<Word[]> {
+/**
+ * Bulk add (screenshot/list import) in one transaction. Undo with `softDeleteWords(ids)`.
+ * `statesFor` may hand in carried-over progress for a word (Anki import); its directions the
+ * word doesn't have are ignored and missing ones start fresh.
+ */
+export async function addWords(
+  inputs: readonly NewWordInput[],
+  now: Date = new Date(),
+  statesFor?: (word: Word, index: number) => readonly ReviewState[] | null,
+): Promise<Word[]> {
   const words = inputs.map((i) => buildWord(i, now));
   if (words.length === 0) return [];
   await db.transaction("rw", WRITE_TABLES(), async () => {
     await db.words.bulkPut(words);
-    const states = words.flatMap((w) => directionsOf(w).map((d) => newReviewState(w.id, d, now)));
+    const states = words.flatMap((w, i) => {
+      const carried = statesFor?.(w, i) ?? [];
+      return directionsOf(w).map((d) => {
+        const found = carried.find((s) => s.direction === d);
+        return found ? { ...found, id: reviewStateId(w.id, d), word_id: w.id, deleted_at: null } : newReviewState(w.id, d, now);
+      });
+    });
     await db.review_state.bulkPut(states);
   });
   return words;
@@ -140,6 +111,7 @@ export function applyWordPatch(current: Word, patch: WordPatch, now: Date): Word
     if (key in patch) next[key] = cleanText(patch[key]);
   }
   if ("extra_examples" in patch) next.extra_examples = cleanExamples(patch.extra_examples);
+  if ("custom_fields" in patch) next.custom_fields = cleanCustomFields(patch.custom_fields);
   if (patch.tags) next.tags = [...new Set(patch.tags.map((t) => t.trim()).filter(Boolean))];
   if ("folder_id" in patch && patch.folder_id !== current.folder_id) {
     if (patch.folder_source === undefined) next.folder_source = "user";

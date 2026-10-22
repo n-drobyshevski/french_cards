@@ -23,6 +23,7 @@ import { SlangMeter } from "@/components/ui/SlangMeter";
 import { SLANG_LABELS } from "@/lib/types";
 import { CheckMark } from "./Checkbox";
 import { CURRENT_ROW_BG } from "./dark";
+import { STALE_DIM } from "./first-paint";
 import { posAbbr } from "./format";
 import { useLeavingList, type ListEntry } from "./leaving";
 import type { MenuAnchor } from "./Menu";
@@ -59,6 +60,8 @@ export interface WordTableProps {
   fine: boolean;
   label: string;
   loading: boolean;
+  /** The search lags behind the typed query: the rows stay, dimmed to .5 (L5). */
+  stale?: boolean;
   /** Timing override for the delayed skeleton rows (the hand-over from DeskPlaceholder). */
   skeletonStyle?: CSSProperties;
   handlers: RefObject<RowHandlers>;
@@ -99,6 +102,7 @@ export function WordTable({
   fine,
   label,
   loading,
+  stale = false,
   skeletonStyle,
   handlers,
   onSelectAll,
@@ -193,7 +197,7 @@ export function WordTable({
                     tabIndex={-1}
                     onClick={() => onSort(h.key)}
                     className={cx(
-                      "inline-flex h-8 items-center gap-1 bg-transparent p-0 font-mono text-[11px] tracking-[.06em] uppercase hoverable:text-ink",
+                      "hover-fade inline-flex h-8 items-center gap-1 bg-transparent p-0 font-mono text-[11px] tracking-[.06em] uppercase hoverable:text-ink",
                       active ? "text-ink" : "text-muted",
                     )}
                   >
@@ -206,7 +210,7 @@ export function WordTable({
           </div>
         </div>
 
-        <div role="rowgroup">
+        <div role="rowgroup" className={cx(STALE_DIM, stale && "opacity-50")}>
           {loading ? (
             // Rows are reserved; skeleton rows only if the read is still pending at 300 ms (§3.1, D4).
             <div data-table-skeleton="" aria-hidden="true" className="delayed-in" style={skeletonStyle}>
@@ -252,7 +256,7 @@ export function WordTable({
           {pending && <div aria-hidden="true" style={{ height: (rows.length - limit) * (coarse ? 48 : 40) }} />}
         </div>
       </div>
-      {empty}
+      <div className={cx(STALE_DIM, stale && "opacity-50")}>{empty}</div>
       {footer}
       {/* Drag ghost (DESKTOP-SPEC §3): white, 1px ink, the word + «+N». */}
       <div aria-hidden="true" className="pointer-events-none fixed -top-[200px] left-0">
@@ -396,7 +400,11 @@ const Row = memo(function Row({ item, index, leaving, returning, columns, curren
                 ? "[transition:height_var(--dur-move)_var(--ease-standard),opacity_var(--dur-enter)_var(--ease-enter)] starting:h-0 starting:opacity-0"
                 : "transition-opacity duration-(--dur-quick) ease-standard",
             ),
-        current ? CURRENT_ROW_BG : selected ? "bg-selected" : "hoverable:bg-hover",
+        current ? CURRENT_ROW_BG : selected ? "bg-selected" : "",
+        // Hover (D11): a layer under the cells fades in --dur-quick, so the row's own background
+        // (current, selected) still changes at once under the keyboard.
+        "isolate before:absolute before:inset-0 before:-z-10 before:transition-colors before:duration-(--dur-quick) before:ease-standard",
+        !current && !selected && "hoverable:before:bg-hover",
       )}
     >
       {current && <span aria-hidden="true" className="absolute inset-y-0 left-0 w-0.5 bg-ink" />}
@@ -476,7 +484,7 @@ function RowIcon({ icon, label, shortcut, onClick }: { icon: "move" | "trash"; l
         e.stopPropagation();
         onClick(e);
       }}
-      className="inline-flex size-7 items-center justify-center rounded-[4px] bg-transparent text-ink hoverable:bg-hover-surface"
+      className="hover-fade inline-flex size-7 items-center justify-center rounded-[4px] bg-transparent text-ink hoverable:bg-hover-surface"
     >
       <Icon name={icon} size={16} />
     </button>

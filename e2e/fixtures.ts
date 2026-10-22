@@ -1,6 +1,6 @@
 import { expect, type Page, type Route } from "@playwright/test";
 
-// Wire formats mirror lib/ai/schemas.ts (SuggestLine, ExtractLine, Suggestion, VocabItem, EnrichResponse).
+// Wire formats mirror lib/ai/schemas.ts (SuggestLine, ExtractLine, Suggestion, VocabItem, EnrichResponse, AnkiResponse).
 // Kept as plain objects so e2e does not import app code.
 
 export const NDJSON = "application/x-ndjson; charset=utf-8";
@@ -155,6 +155,8 @@ export interface EnrichResultWire {
   folder: string | null;
   folder_alternatives: string[];
   new_folder: { slug: string; name: string; description: string } | null;
+  /** Filled custom fields («Свои поля»): definition id and value. */
+  custom?: { id: string; value: string }[];
 }
 
 export interface EnrichWordWire {
@@ -178,6 +180,40 @@ export async function mockEnrich(
       return r ? [{ id: w.id, ...r }] : [];
     });
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ results }) });
+  });
+}
+
+export interface AnkiNoteWire {
+  /** The AnkiNote id. */
+  ref: string;
+  fields: { name: string; text: string }[];
+  tags: string[];
+}
+
+export interface AnkiItemWire extends VocabItemWire {
+  ref: string;
+  skip: boolean;
+  fr_field: string | null;
+  /** Note fields the card was made from; the other ones become custom fields of the word. */
+  used_fields?: string[];
+  /** Filled custom fields («Свои поля»): definition id and value. */
+  custom?: { id: string; value: string }[];
+}
+
+/** Answers POST /api/ai/anki: `make` gives the card for each note sent (null = the model left it out). */
+export async function mockAnki(
+  page: Page,
+  make: (note: AnkiNoteWire) => Omit<AnkiItemWire, "ref"> | null,
+  onRequest?: (notes: AnkiNoteWire[], folders: { slug: string }[] | undefined) => void,
+) {
+  await page.route("**/api/ai/anki", async (route: Route) => {
+    const { notes, folders } = route.request().postDataJSON() as { notes: AnkiNoteWire[]; folders?: { slug: string }[] };
+    onRequest?.(notes, folders);
+    const items = notes.flatMap((n) => {
+      const item = make(n);
+      return item ? [{ ...item, ref: n.ref }] : [];
+    });
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ items }) });
   });
 }
 

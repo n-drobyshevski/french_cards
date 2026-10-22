@@ -89,6 +89,7 @@ const REQUIRED: Record<SyncTable, Record<string, "string" | "number" | "boolean"
   review_log: { word_id: "string", direction: "string", rating: "number", review: "string" },
   reorg_runs: { created_at: "string", moves: "array" },
   review_sets: { name: "string", created_at: "string", folders: "array", statuses: "array", slang: "array" },
+  field_defs: { name: "string", sort: "number", ai_fill: "boolean" },
 };
 
 function hasFields(table: SyncTable, row: Record<string, unknown>): boolean {

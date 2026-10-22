@@ -6,6 +6,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
+import { Button } from "@/components/ui/Button";
 import { Collapse } from "@/components/ui/Collapse";
 import { cx } from "@/components/ui/cx";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -33,6 +34,7 @@ import {
   AUTH_PANEL_HEAD,
   AUTH_PANEL_TEXT,
   AUTH_PRIMARY,
+  AUTH_PRIMARY_BUTTON,
   AuthMark,
 } from "./AuthFrame";
 
@@ -214,15 +216,9 @@ export function LoginScreen() {
     void submit();
   }
 
-  const primaryLabel = busy
-    ? mode === "reset"
-      ? "Отправляем…"
-      : "Входим…"
-    : mode === "signin"
-      ? "Войти"
-      : mode === "signup"
-        ? "Создать аккаунт"
-        : "Отправить ссылку";
+  const primaryLabel = mode === "signin" ? "Войти" : mode === "signup" ? "Создать аккаунт" : "Отправить ссылку";
+  // U1: the network is certain, so the label swaps at once; the button keeps the wider label's width.
+  const pendingLabel = mode === "reset" ? "Отправляем…" : "Входим…";
 
   const clearError = () => {
     if (error) setError(null);
@@ -337,9 +333,9 @@ export function LoginScreen() {
             </div>
           </section>
 
-          <button type="submit" disabled={busy} aria-busy={busy || undefined} className={AUTH_PRIMARY}>
+          <Button type="submit" block pending={busy} pendingLabel={pendingLabel} pendingDelay={0} className={AUTH_PRIMARY_BUTTON}>
             {primaryLabel}
-          </button>
+          </Button>
 
           <div className={AUTH_LINKS}>
             {mode === "signin" ? (

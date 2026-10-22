@@ -24,11 +24,11 @@ import { BootNotice } from "./BootNotice";
 import { DeskPlaceholder } from "./DeskPlaceholder";
 import { DisbandSheet, disbandMessage } from "./DisbandSheet";
 import { EnrichPlanSheet } from "./EnrichPlanSheet";
-import { rememberLibrary, rememberLibraryShape, useLibraryShape, useRevealClass, type LibraryShape } from "./first-paint";
+import { rememberLibrary, rememberLibraryShape, STALE_DIM, useLibraryShape, useRevealClass, useSearchWait, type LibraryShape } from "./first-paint";
 import { FolderFormSheet } from "./FolderFormSheet";
 import { FolderMenuSheet } from "./FolderMenuSheet";
-import { FolderTile, NewFolderTile, TileSkeleton } from "./FolderTile";
-import { folderHref, nWords, plural } from "./format";
+import { FolderTile, NAV_FORWARD, NewFolderTile, TileSkeleton } from "./FolderTile";
+import { enrichCaption, folderHref, nWords, plural } from "./format";
 import { useLibraryDesk } from "./lazy-desk";
 import { LibraryFilterSheet } from "./LibraryFilterSheet";
 import {
@@ -42,6 +42,7 @@ import {
   type StatusFilter,
 } from "./phone-filter";
 import { SortPlanSheet } from "./SortPlanSheet";
+import { SyncMark } from "./SyncMark";
 import { useLibraryWords } from "./useLibraryWords";
 import { WordList } from "./WordList";
 
@@ -67,7 +68,8 @@ export function LibraryScreen() {
   // Until the desk's chunk is in, the placeholder stays where it is (same element, no restart).
   return (
     <>
-      <div className="contents md:hidden">{!wide && <PhoneLibrary />}</div>
+      {/* A real box, not `contents`: the library ⇄ theme slide (NavSlide, L6) snapshots it. */}
+      <div className="flex min-w-0 flex-1 flex-col md:hidden">{!wide && <PhoneLibrary />}</div>
       <DeskPlaceholder title="Библиотека" />
     </>
   );
@@ -127,6 +129,9 @@ function PhoneLibrary() {
   const showMore = useCallback(() => setPage({ key: listKey, size: shown + PAGE_SIZE }), [listKey, shown]);
   // «Все слова»: the rows fade in over the reserved blank, or replace the skeleton at once (L4).
   const listReveal = useRevealClass(!!results);
+  // L5: while the deferred query lags, the old results stay (dimmed after 150 ms); «Ищем…» after 300 ms.
+  const stale = query !== deferredQuery;
+  const wait = useSearchWait(stale, filtered && (!results || stale));
 
   const totals = stats?.totals;
   const inbox = stats?.inbox;
@@ -161,7 +166,7 @@ function PhoneLibrary() {
       upkeep.push(
         <UpkeepRow
           key="enrich"
-          caption={toEnrich.noExample > 0 ? `${nWords(toEnrich.noExample)} без примера` : `Уровень сленга для ${nWords(toEnrich.total)}`}
+          caption={enrichCaption(toEnrich)}
           ai
           action="Дополнить карточки"
           onClick={() => setEnrichOpen(true)}
@@ -241,7 +246,10 @@ function PhoneLibrary() {
   return (
     <main className="flex flex-1 flex-col px-4">
       <header className="mt-4 flex h-11 shrink-0 items-center justify-between">
-        <h1 className="m-0 font-serif text-[28px] leading-9 font-medium tracking-[-0.015em]">Библиотека</h1>
+        <div className="flex min-w-0 items-baseline gap-2">
+          <h1 className="m-0 shrink-0 font-serif text-[28px] leading-9 font-medium tracking-[-0.015em]">Библиотека</h1>
+          <SyncMark />
+        </div>
         <Link
           href="/settings"
           aria-label="Настройки"
@@ -281,15 +289,17 @@ function PhoneLibrary() {
         <section aria-label="Слова" aria-busy={!results || undefined} className="mt-5 flex flex-col">
           <div className="meta flex h-8 items-center justify-between border-b border-ink">
             <span className="font-medium text-ink" role="status">
-              {!results
-                ? filtered
-                  ? "Ищем…"
-                  : "Все слова"
-                : !filtered
-                  ? `Все слова · ${results.length}`
-                  : results.length
-                    ? `Найдено ${nWords(results.length)}${themeName ? ` · ${themeName}` : ""}`
-                    : "Ничего не найдено"}
+              {wait.searching
+                ? "Ищем…"
+                : !results
+                  ? filtered
+                    ? ""
+                    : "Все слова"
+                  : !filtered
+                    ? `Все слова · ${results.length}`
+                    : results.length
+                      ? `Найдено ${nWords(results.length)}${themeName ? ` · ${themeName}` : ""}`
+                      : "Ничего не найдено"}
             </span>
             {!filtered ? (
               <Button variant="tertiary" size="sm" className="-mr-1 text-[13px]" onClick={() => setView("themes")}>
@@ -311,35 +321,38 @@ function PhoneLibrary() {
               ))}
             </div>
           )}
-          {results && pageItems && words && (
-            <WordList
-              className={listReveal}
-              items={pageItems}
-              folders={words.folders}
-              showFolder={filter.theme === ALL_THEMES}
-              label={filtered ? "Найденные слова" : "Все слова"}
-              moreLabel={results.length > shown ? `Показать ещё ${Math.min(PAGE_SIZE, results.length - shown)} из ${results.length - shown}` : undefined}
-              onMore={showMore}
-            />
-          )}
-          {results && results.length === 0 && !filtered && (
-            <div className="mt-4 flex flex-col items-start gap-3">
-              <p className="m-0 text-[15px] leading-[22px] text-muted">В библиотеке пока нет слов.</p>
-              <Button variant="secondary" size="md" icon="plus" onClick={() => addSheet.open()}>
-                Добавить слово
-              </Button>
-            </div>
-          )}
-          {results && results.length === 0 && filtered && (
-            <div className="mt-4 flex flex-col items-start gap-3">
-              <p className="m-0 text-[15px] leading-[22px] text-muted">{emptyMessage}</p>
-              {searching && (
-                <Button variant="secondary" size="md" icon="plus" onClick={() => addSheet.open({ fr: query.trim() })}>
-                  Добавить «{query.trim()}»
+          {/* Stale results stay in place, dimmed (L5); the new ones replace them in one frame. */}
+          <div className={cx("flex flex-col", STALE_DIM, wait.dim && "opacity-50")}>
+            {results && pageItems && words && (
+              <WordList
+                className={listReveal}
+                items={pageItems}
+                folders={words.folders}
+                showFolder={filter.theme === ALL_THEMES}
+                label={filtered ? "Найденные слова" : "Все слова"}
+                moreLabel={results.length > shown ? `Показать ещё ${Math.min(PAGE_SIZE, results.length - shown)} из ${results.length - shown}` : undefined}
+                onMore={showMore}
+              />
+            )}
+            {results && results.length === 0 && !filtered && (
+              <div className="mt-4 flex flex-col items-start gap-3">
+                <p className="m-0 text-[15px] leading-[22px] text-muted">В библиотеке пока нет слов.</p>
+                <Button variant="secondary" size="md" icon="plus" onClick={() => addSheet.open()}>
+                  Добавить слово
                 </Button>
-              )}
-            </div>
-          )}
+              </div>
+            )}
+            {results && results.length === 0 && filtered && (
+              <div className="mt-4 flex flex-col items-start gap-3">
+                <p className="m-0 text-[15px] leading-[22px] text-muted">{emptyMessage}</p>
+                {searching && (
+                  <Button variant="secondary" size="md" icon="plus" onClick={() => addSheet.open({ fr: query.trim() })}>
+                    Добавить «{query.trim()}»
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
         </section>
       ) : bootFailed ? (
         // First-run setup failed: say so where the tiles would be (B1).
@@ -352,6 +365,7 @@ function PhoneLibrary() {
             <div className={cx("mt-2 flex h-12 shrink-0 items-center gap-2 rounded-card border border-dashed border-muted pr-1 pl-3", tilesReveal)}>
               <Link
                 href={folderHref(null)}
+                transitionTypes={NAV_FORWARD}
                 aria-label={`Входящие: ${nWords(inbox.total)} без темы, нужно разобрать`}
                 className="flex h-full min-w-0 flex-1 items-center gap-2 text-[14px] leading-5 text-ink no-underline"
               >

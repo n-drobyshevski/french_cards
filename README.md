@@ -27,14 +27,16 @@ The e2e suite starts `next start` on port 3100 and mocks `/api/ai/*`. It uses th
 
 ## Deploy (Vercel + Supabase)
 
-1. Apply the migrations in `supabase/migrations/` in order (`0001_init.sql`, `0002_user_keys_and_stale_writes.sql`, `0003_extra_examples.sql`, then `0004_review_sets.sql`). Apply a new migration before deploying the app version that needs it.
+1. Apply the migrations in `supabase/migrations/` in order (`0001_init.sql`, `0002_user_keys_and_stale_writes.sql`, `0003_extra_examples.sql`, `0004_review_sets.sql`, `0005_connector_grants.sql`, `0006_custom_fields.sql`, then `0007_connector_field_writes.sql`). Apply a new migration before deploying the app version that needs it.
 2. Auth → Sign In / Providers → Email: keep the provider on and turn **Confirm email** off. Sign-in is email + password, so no custom SMTP is needed; email is only used for «Забыли пароль?» (the default reset template works: its link lands on `/auth/confirm`, then `/auth/reset`).
 3. Auth → URL Configuration: Site URL = the production URL, Redirect URLs = `<production URL>/**`.
 4. Create the account in the app («Создать аккаунт»), then turn off «Allow new users to sign up». RLS keeps other accounts' data apart and `ALLOWED_EMAIL` keeps them off the AI routes, but there is no reason to let them in.
 5. Set in Vercel: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `ALLOWED_EMAIL`, `NEXT_PUBLIC_ALLOWED_EMAIL` (optional), `ANTHROPIC_API_KEY`, `AI_MODEL_EXTRACT` (optional), `CRON_SECRET`.
 6. Another person (each account has its own library): turn «Allow new users to sign up» back on, clear `NEXT_PUBLIC_ALLOWED_EMAIL` if it is set (it makes the login screen refuse other addresses) and redeploy; they create their account in the app; turn sign-up off again. Then add their address to `ALLOWED_EMAIL` (comma-separated, e.g. `a@x.io,b@x.io`; the same list may go back into `NEXT_PUBLIC_ALLOWED_EMAIL`) and redeploy, so the AI routes answer them too.
+7. Optional, Claude connector (use the cards from Claude on the web, desktop and mobile): set `MCP_SECRET`, `SUPABASE_SECRET_KEY`, `MCP_USER_ID` and optionally `MCP_TIMEZONE`, redeploy, then add `https://<production URL>/api/mcp/<MCP_SECRET>` as a custom connector in claude.ai with no sign-in. Steps, the companion skill and the security trade-offs are in [`docs/CONNECTOR.md`](docs/CONNECTOR.md).
 
 ## Attribution
 
 - `public/lexique/fr-lemmas.json` is derived from **Lexique 3.83** by Boris New & Christophe Pallier ([lexique.org](http://www.lexique.org)), licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/); the derived file is shared under the same license. See `public/lexique/LICENSE.txt`; rebuild with `node scripts/build-lexique.mjs`.
 - Ideas and patterns from [ts-fsrs-demo](https://github.com/ishiko732/ts-fsrs-demo) (MIT) and [jiaci](https://github.com/leoon-hu/jiaci) (MIT).
+- Anki import reads decks on the device with [sql.js](https://github.com/sql-js/sql.js) (MIT), [fflate](https://github.com/101arrowz/fflate) (MIT) and [fzstd](https://github.com/101arrowz/fzstd) (MIT).

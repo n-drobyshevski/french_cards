@@ -14,11 +14,14 @@ import type {
   TaxonomyResponse,
   ModelTierInput,
 } from "./ai/schemas";
+import { isMovable } from "./core/words";
 import { db, liveRows, newId } from "./db";
 import { createFolder, disbandFolder, FOLDER_COLORS, listFolders } from "./folders";
 import { getSettings } from "./settings";
 import type { Confidence, Folder, ReorgRun, Word } from "./types";
 import { moveWords, type MoveRecord } from "./words";
+
+export { isMovable } from "./core/words";
 
 export const REORG_UNDO_DAYS = 7;
 export const TAXONOMY_WORDS_MAX = 4000;
@@ -59,11 +62,6 @@ export async function loadReorgSnapshot(): Promise<ReorgSnapshot> {
 /** The folder a word is really in: a missing or deleted folder counts as «Входящие» (null). */
 function liveFolderOf(word: Pick<Word, "folder_id">, liveIds: ReadonlySet<string>): string | null {
   return word.folder_id !== null && liveIds.has(word.folder_id) ? word.folder_id : null;
-}
-
-/** True when automatic sorting may move the word: not placed by hand and not in a locked folder. */
-export function isMovable(word: Word, lockedIds: ReadonlySet<string>): boolean {
-  return word.deleted_at === null && word.folder_source !== "user" && !(word.folder_id !== null && lockedIds.has(word.folder_id));
 }
 
 function partition(snap: ReorgSnapshot) {

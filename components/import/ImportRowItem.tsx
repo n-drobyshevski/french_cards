@@ -7,7 +7,7 @@ import { Segmented } from "@/components/ui/Segmented";
 import { SlangMeter } from "@/components/ui/SlangMeter";
 import { cx } from "@/components/ui/cx";
 import { SLANG_LABELS, type Folder, type SlangLevel } from "@/lib/types";
-import { canAdd, choiceName, type ImportRow } from "./rows";
+import { canAdd, choiceName, moreFieldsRu, type ImportRow } from "./rows";
 
 /** Mono outlined tag: «ДОГАДКА», «УЖЕ ЕСТЬ». */
 export function Tag({ children, title, className }: { children: string; title?: string; className?: string }) {
@@ -135,7 +135,7 @@ export function ImportRowItem({ row, folders, onToggle, onEdit, onPickFolder }: 
       >
         {row.ru.trim() || "нет перевода"}
       </span>
-      {row.ruGuess && row.ru.trim() && <Tag title="Перевода не было на скриншоте">ДОГАДКА</Tag>}
+      {row.ruGuess && row.ru.trim() && <Tag title="Перевода не было — подобран автоматически">ДОГАДКА</Tag>}
     </span>
   );
 
@@ -150,6 +150,7 @@ export function ImportRowItem({ row, folders, onToggle, onEdit, onPickFolder }: 
           {row.exampleFr}
         </span>
       )}
+      {!dup && row.customFields?.length ? <span className="text-[12px] leading-4 text-muted">{moreFieldsRu(row.customFields.length)}</span> : null}
     </>
   );
 

@@ -1,6 +1,10 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useRef, useState, type ChangeEvent } from "react";
+import { ANKI_ACCEPT } from "@/components/import/anki-files";
+import { handOffImages } from "@/components/import/clipboard";
+import { GLOBAL_IMPORT_URL } from "@/components/import/GlobalImportDrop";
 import { signOut, useAuthUser } from "@/components/auth/session";
 import { isIos } from "@/components/pwa/platform";
 import { cx } from "@/components/ui/cx";
@@ -103,6 +107,16 @@ export function DataSection({ desktop = false }: { desktop?: boolean }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const htmlInput = useRef<HTMLInputElement>(null);
+  const ankiInput = useRef<HTMLInputElement>(null);
+  const router = useRouter();
+  // The deck goes to the import screen, which reads it and asks what to take.
+  const onAnkiFile = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    handOffImages([file]);
+    router.push(GLOBAL_IMPORT_URL);
+  };
 
   // The phone rows swap their label in place (T6): after 150 ms for local work, at once for the
   // network (sign-out), then for at least 500 ms. They never grey out.
@@ -249,6 +263,7 @@ export function DataSection({ desktop = false }: { desktop?: boolean }) {
         aria-busy={busy === "html" || undefined}
         onClick={() => htmlInput.current?.click()}
       />
+      <DeskButtonRow label="Импорт из Anki" disabled={busy !== null} onClick={() => ankiInput.current?.click()} />
       {signedIn && (
         <DeskButtonRow
           label={busy === "signout" ? "Выходим…" : "Выйти"}
@@ -265,7 +280,7 @@ export function DataSection({ desktop = false }: { desktop?: boolean }) {
   return (
     <>
       {rows ?? (
-        <SettingsSection title="Данные">
+        <SettingsSection title="Данные" anchor="set-data">
           {line.canSync || syncBusy ? (
             <SettingsButtonRow
               label="Синхронизация"
@@ -307,6 +322,12 @@ export function DataSection({ desktop = false }: { desktop?: boolean }) {
             swapped={readingHtml}
             blocked={busy !== null}
             onClick={() => htmlInput.current?.click()}
+            trailing={<Icon name="chevron-right" size={14} strokeWidth={2} className="text-muted" />}
+          />
+          <SettingsButtonRow
+            label="Импорт из Anki"
+            blocked={busy !== null}
+            onClick={() => ankiInput.current?.click()}
             trailing={<Icon name="chevron-right" size={14} strokeWidth={2} className="text-muted" />}
           />
           {signedIn && (
@@ -351,6 +372,7 @@ export function DataSection({ desktop = false }: { desktop?: boolean }) {
         aria-hidden="true"
         onChange={(e) => void onHtmlFile(e)}
       />
+      <input ref={ankiInput} type="file" accept={ANKI_ACCEPT} className="hidden" tabIndex={-1} aria-hidden="true" onChange={onAnkiFile} />
     </>
   );
 }

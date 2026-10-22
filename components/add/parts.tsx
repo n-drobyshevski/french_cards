@@ -15,6 +15,7 @@ import {
 import { Button, IconButton } from "@/components/ui/Button";
 import { AbbrHint } from "@/components/ui/AbbrHint";
 import { Chip } from "@/components/ui/Chip";
+import { Collapse } from "@/components/ui/Collapse";
 import { Icon, type IconName } from "@/components/ui/Icons";
 import { Segmented } from "@/components/ui/Segmented";
 import { SheetCloseButton, SheetTitle } from "@/components/ui/Sheet";
@@ -521,6 +522,22 @@ export function PendingDots({ className }: { className?: string }) {
 
 // ---------------------------------------------------------------------------------------
 // Notices
+
+/**
+ * A9: the «Уже есть…» notice opens with Collapse (height --dur-move + fade) instead of appearing at
+ * once, and closes the same way, keeping the last duplicate on screen while it closes. No shake, no
+ * red: the notice's own warn colours carry it.
+ */
+export function DuplicateReveal({ info, children }: { info: DuplicateInfo | null; children: (info: DuplicateInfo) => ReactNode }) {
+  const [held, setHeld] = useState(info);
+  if (info && info !== held) setHeld(info);
+  const shown = info ?? held;
+  return (
+    <Collapse open={info != null} appear onClosed={() => setHeld(null)}>
+      {shown && children(shown)}
+    </Collapse>
+  );
+}
 
 export function DuplicateNotice({
   info,

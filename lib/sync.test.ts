@@ -20,7 +20,7 @@ import {
   toRemoteRow,
   type SyncMeta,
 } from "./sync";
-import { DEFAULT_SETTINGS, type Folder, type ReviewLog, type Word } from "./types";
+import { DEFAULT_SETTINGS, SYNC_TABLES, type Folder, type ReviewLog, type Word } from "./types";
 
 // syncNow() takes its client from here.
 const browser = vi.hoisted(() => ({ client: null as unknown }));
@@ -524,7 +524,7 @@ describe("pullChanges", () => {
 
     const pulling = pullChanges(remote.client, testDb);
     // Every table has asked before any answer arrived.
-    await vi.waitFor(() => expect(new Set(remote.calls.map((c) => c.table)).size).toBe(6));
+    await vi.waitFor(() => expect(new Set(remote.calls.map((c) => c.table)).size).toBe(SYNC_TABLES.length));
     open();
 
     expect(await pulling).toBe(1);
@@ -673,7 +673,7 @@ describe("syncNow", () => {
 
     expect(getSession).toHaveBeenCalledTimes(2);
     // Only the second cycle pulled: one select per table.
-    expect(remote.calls.filter((c) => c.op === "select")).toHaveLength(6);
+    expect(remote.calls.filter((c) => c.op === "select")).toHaveLength(SYNC_TABLES.length);
   });
 
   it("answers a pull asked for during a push-only cycle once that pull has run", async () => {
@@ -682,7 +682,7 @@ describe("syncNow", () => {
     const full = await syncNow();
 
     expect(full.ok).toBe(true);
-    expect(remote.calls.filter((c) => c.op === "select")).toHaveLength(6);
+    expect(remote.calls.filter((c) => c.op === "select")).toHaveLength(SYNC_TABLES.length);
   });
 
   it("keeps a pull failure on show through a push-only cycle", async () => {

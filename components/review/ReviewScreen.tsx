@@ -12,6 +12,7 @@ import { bottomBarRef } from "@/components/ui/bottom-clearance";
 import { Icon } from "@/components/ui/Icons";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { cardNumber } from "@/components/add/match";
+import { useFieldDefs } from "@/lib/custom-fields";
 import { listFolders } from "@/lib/folders";
 import { haptic, type HapticKind } from "@/lib/haptics";
 import { tokenMs } from "@/lib/motion";
@@ -20,7 +21,7 @@ import { advancePractice, buildPracticeQueue, sessionFilterKey, startOfStudyDay,
 import { listReviewSets, setIdOf, setSessionFilter } from "@/lib/review-sets";
 import { getSettings } from "@/lib/settings";
 import { useDelayedFlag } from "@/lib/use-delayed-flag";
-import { useFinePointer, useLayoutClass } from "@/lib/use-media";
+import { useLayoutClass } from "@/lib/use-media";
 import { getLastReview, getWord, gradeCard, undoLastReview } from "@/lib/words";
 import { returnSide, type CardArrival, type CardExit, type ReturnSide } from "./card-motion";
 import { loadDoneScreen, loadReviewScreen, type ReviewScreenData } from "./data";
@@ -33,7 +34,7 @@ import { GradeBar } from "./GradeBar";
 import { HINT_LINE_CSS, HintLine } from "./HintLine";
 import { isTypingTarget, keepsActivationKeys, reviewKeyAction } from "./keys";
 import { CardDeck, LeavingCard, REVIEW_DESK_CSS, ReviewCard, ReviewCardPlaceholder, WRITE_IN, type CardFace } from "./ReviewCard";
-import { PENDING_PROGRESS, ReviewTopBar, type ReviewProgress } from "./ReviewTopBar";
+import { PENDING_PROGRESS, ReviewTopBar, type GradeEcho, type ReviewProgress } from "./ReviewTopBar";
 import { SessionDone } from "./SessionDone";
 import { useInlineSnackbar } from "./useInlineSnackbar";
 import { useReviewFilter } from "./useReviewFilter";
@@ -50,6 +51,10 @@ const SAVE_WAIT_MS = 2000;
 
 /** Haptic of a grade (MOTION-SPEC §5.13): «Знаю» good, «Не знаю» again, «Сложно» a tick. */
 const GRADE_HAPTIC: Record<Rating, HapticKind> = { 1: "again", 2: "tick", 3: "good", 4: "good" };
+
+/** The progress echo's tone of a grade (R12): «Знаю» good, «Не знаю» again, «Сложно» ink. */
+const GRADE_ECHO: Record<Rating, GradeEcho["tone"]> = { 1: "again", 2: "ink", 3: "good", 4: "good" };
+let echoSeq = 0;
 
 /**
  * The grade bar's labels fade in --dur-quick once the headword has glided (R3; the bar's slot is
@@ -132,6 +137,8 @@ export function ReviewScreen() {
 
   const settings = useLiveQuery(() => getSettings(), []);
   const folders = useLiveQuery(() => listFolders(), []);
+  // «Свои поля» on the answer side (shared fields under their current names).
+  const fieldDefs = useFieldDefs();
   const [tick, setTick] = useState(0);
   const [pickerOpen, setPickerOpen] = useState(false);
   /** «Изменить карточку»: the word whose sheet is open over the card. */
@@ -140,8 +147,11 @@ export function ReviewScreen() {
   const [awaiting, setAwaiting] = useState<Awaiting | null>(null);
   const [instance, setInstance] = useState(0);
   const [practice, setPractice] = useState<Practice | null>(null);
-  const [practiceLoading, setPracticeLoading] = useState(false);
+  /** The practice round being built (its kind), so «Готово на сегодня» shows which action waits (R11). */
+  const [practiceLoading, setPracticeLoading] = useState<Practice["kind"] | null>(null);
   const [flash, setFlash] = useState<Rating | null>(null);
+  /** The latest grade, echoed by the progress step it causes (R12); `practice` keeps it to its round. */
+  const [lastGrade, setLastGrade] = useState<(GradeEcho & { practice: boolean }) | null>(null);
   /** Graded cards on their way out, over the next card. */
   const [leaving, setLeaving] = useState<Leaving[]>([]);
   /** How the card with this key appears: out of the stack after a grade, or back after an undo. */
@@ -152,7 +162,6 @@ export function ReviewScreen() {
   const guardUntil = useRef(0);
   const layout = useLayoutClass();
   const desktop = layout !== "compact";
-  const finePointer = useFinePointer();
   const shortcutsEnabled = useShortcutsEnabled();
   /** Single-letter keys (Z, P): settings.shortcuts on desktop; phones keep Z as before. */
   const letters = desktop ? shortcutsEnabled : true;
@@ -248,8 +257,8 @@ export function ReviewScreen() {
   const storedWord = useLiveQuery(() => (currentWordId ? getWord(currentWordId) : undefined), [currentWordId]);
   const gradeButtons = settings?.grade_buttons ?? 3;
   const swipeEnabled = settings?.swipe_grading ?? true;
-  // With a mouse or trackpad a drag does not grade: a click flips, keys and buttons grade.
-  const cardSwipe = swipeEnabled && !finePointer;
+  // A mouse drags the card too (click and hold, then drag sideways); a click still flips.
+  const cardSwipe = swipeEnabled;
   const keyHints = settings?.key_hints ?? true;
   const hapticsEnabled = settings?.haptics ?? true;
   const canUndo = practice ? practice.history.length > 0 : !!lastToday;
@@ -321,7 +330,7 @@ export function ReviewScreen() {
   const wordOf = (item: QueueItem) => (storedWord?.id === item.word.id ? storedWord : item.word);
   const faceOf = (item: QueueItem): CardFace => {
     const ordinal = ordinals?.get(item.word.id);
-    return { word: wordOf(item), direction: item.direction, number: ordinal ? cardNumber(ordinal) : undefined };
+    return { word: wordOf(item), direction: item.direction, number: ordinal ? cardNumber(ordinal) : undefined, fieldDefs };
   };
   const folderOf = (item: QueueItem) => {
     const word = wordOf(item);
@@ -437,6 +446,7 @@ export function ReviewScreen() {
     setInstance(instance + 1);
     setPinned(null);
     setFlash(null);
+    setLastGrade({ seq: ++echoSeq, tone: GRADE_ECHO[rating], practice: !!practice });
 
     if (practice) {
       if (nextQueue.length === 0) {
@@ -461,6 +471,7 @@ export function ReviewScreen() {
         refocus.current = null;
         setAwaiting(null);
         setPinned(before);
+        setLastGrade(null);
         snackbar.show({ message: errorText(error) });
       } finally {
         busy.current = false;
@@ -502,7 +513,7 @@ export function ReviewScreen() {
 
   const startPractice = async (kind: Practice["kind"], over: SessionFilter = filter) => {
     if (practiceLoading) return;
-    setPracticeLoading(true);
+    setPracticeLoading(kind);
     try {
       const scope = kind === "mistakes" ? "today" : kind === "theme" || kind === "set" ? "all" : "recent";
       const items = await buildPracticeQueue({ ...over, scope });
@@ -523,7 +534,7 @@ export function ReviewScreen() {
       resetCard();
       snackbar.hide();
     } finally {
-      setPracticeLoading(false);
+      setPracticeLoading(null);
     }
   };
 
@@ -661,6 +672,7 @@ export function ReviewScreen() {
             : "Практика · не влияет на расписание",
       right: formatProgress(cleared, practice.total),
       ratio: progressRatio(cleared, practice.total),
+      echo: lastGrade?.practice ? lastGrade : null,
     };
   } else if (shown && cardsShown) {
     const c = shown.session.counts;
@@ -668,6 +680,7 @@ export function ReviewScreen() {
       left: queueSummary(c.due, c.new),
       right: formatProgress(c.done, c.total),
       ratio: progressRatio(c.done, c.total),
+      echo: lastGrade && !lastGrade.practice ? lastGrade : null,
     };
   }
 
@@ -759,7 +772,7 @@ export function ReviewScreen() {
             data={doneData}
             moment={moment}
             haptics={hapticsEnabled}
-            busy={practiceLoading}
+            pending={practiceLoading}
             desktop={desktop}
             letters={letters}
             onRepeatMistakes={() => void startPractice("mistakes")}

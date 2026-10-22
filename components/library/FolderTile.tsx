@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { SKELETON_WIDTHS, SkeletonBar } from "@/components/ui/Skeleton";
@@ -9,6 +9,30 @@ import { folderHref, nWords } from "./format";
 import { useLongPress } from "./use-long-press";
 
 const TILE = "relative flex flex-col overflow-hidden rounded-card px-3 pt-[15px] pb-3 text-ink no-underline";
+
+/** Opening a theme slides the page in from the right (L6, `nav-forward`; see app/globals.css). */
+export const NAV_FORWARD = ["nav-forward"];
+/** Back from a theme to the library: the reverse slide. */
+export const NAV_BACK = ["nav-back"];
+
+/**
+ * The tile's mastery line. While the theme's route is still loading (L6, §3.1) the tile holds its
+ * pressed tint (`data-link-pending`, at once) and, after --link-pending-delay, the line becomes the
+ * ink run: a 32px ink segment crossing the track (a still mark under reduced motion).
+ */
+function MasteryLine({ pct, color }: { pct: number; color: string }) {
+  const { pending } = useLinkStatus();
+  return (
+    <span aria-hidden="true" data-link-pending={pending ? "" : undefined} className="relative mt-auto block h-0.5 overflow-hidden bg-surface-2">
+      <span className="block h-0.5" style={{ width: `${pct}%`, background: color }} />
+      {pending && (
+        <span className="link-pending absolute inset-0 bg-surface-2">
+          <span className="motion-loop absolute inset-y-0 w-8 bg-ink animate-[ink-run_2000ms_linear_infinite]" />
+        </span>
+      )}
+    </span>
+  );
+}
 
 /**
  * Card-catalog drawer label: 3px band in the theme ink, name, counts and a mastery line.
@@ -31,9 +55,10 @@ export function FolderTile({
   return (
     <Link
       href={folderHref(folder.id)}
+      transitionTypes={NAV_FORWARD}
       aria-label={`${folder.name}: ${nWords(total)}${due ? `, ${due} к повторению` : ""}, выучено ${pct} %`}
       {...(onLongPress ? longPress : {})}
-      className={`${TILE} ${samples ? "h-[116px]" : "h-24"} border border-rule bg-surface select-none active:bg-surface-2 [-webkit-touch-callout:none]`}
+      className={`${TILE} ${samples ? "h-[116px]" : "h-24"} border border-rule bg-surface select-none active:bg-surface-2 has-[[data-link-pending]]:bg-surface-2 [-webkit-touch-callout:none]`}
     >
       <span aria-hidden="true" className="absolute inset-x-0 top-0 h-[3px]" style={{ background: folder.color }} />
       <span className="truncate font-serif text-[19px] leading-6 font-medium">{folder.name}</span>
@@ -51,9 +76,7 @@ export function FolderTile({
           {preview.length > 0 ? preview.join(", ") : "пока пусто"}
         </span>
       )}
-      <span aria-hidden="true" className="mt-auto block h-0.5 bg-surface-2">
-        <span className="block h-0.5" style={{ width: `${pct}%`, background: folder.color }} />
-      </span>
+      <MasteryLine pct={pct} color={folder.color} />
     </Link>
   );
 }
@@ -63,6 +86,7 @@ export function InboxTile({ stats }: { stats: FolderStats }) {
   return (
     <Link
       href={folderHref(null)}
+      transitionTypes={NAV_FORWARD}
       aria-label={`Входящие: ${nWords(stats.total)} без темы, нужно разобрать`}
       className={`${TILE} h-24 border border-dashed border-muted bg-transparent active:bg-surface-2`}
     >

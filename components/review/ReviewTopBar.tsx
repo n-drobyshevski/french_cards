@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useShell } from "@/components/shell/ShellContext";
 import { IconButton } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
@@ -16,6 +16,27 @@ export interface ReviewProgress {
   ratio: number;
   /** Still loading: the row keeps its height, the counts are blank and only the track is drawn (MOTION-SPEC R1). */
   pending?: boolean;
+  /** The latest grade (R12): the progress step it causes echoes its tone. */
+  echo?: GradeEcho | null;
+}
+
+/** A grade for the progress echo; `seq` tells two grades of the same tone apart. */
+export interface GradeEcho {
+  seq: number;
+  tone: "good" | "again" | "ink";
+}
+
+const ECHO_TONE: Record<GradeEcho["tone"], string> = {
+  good: "starting:bg-good",
+  again: "starting:bg-again",
+  ink: "starting:bg-ink",
+};
+
+interface EchoSegment {
+  from: number;
+  to: number;
+  tone: GradeEcho["tone"];
+  seq: number;
 }
 
 /** The progress row while the queue loads; the counts write in when it arrives. */
@@ -101,8 +122,21 @@ export function ReviewTopBar({ canUndo, onUndo, letters = true, progress, headin
  * The fill steps as `scaleX` from the left and the phone's tick with `translateX` (never width or
  * left), --dur-move --ease-standard; the counter is a plain tabular swap (MOTION-SPEC R8, §5.5).
  */
-export function ProgressLine({ left, right, ratio, pending }: ReviewProgress) {
+export function ProgressLine({ left, right, ratio, pending, echo }: ReviewProgress) {
   const p = Math.max(0, Math.min(1, ratio));
+
+  // R12, the last-grade echo: the step a grade causes is drawn in the grade's tone (good / again; ink
+  // for «Сложно») and fades to ink over --dur-spotlight. A grade echoes once, on the first step after
+  // it (a session's step lands with the read, after the grade); a step back (undo) drops the echo.
+  const [seen, setSeen] = useState({ ratio: p, seq: echo?.seq ?? 0 });
+  const [segment, setSegment] = useState<EchoSegment | null>(null);
+  if (p !== seen.ratio) {
+    const fresh = !pending && echo != null && echo.seq !== seen.seq && p > seen.ratio;
+    setSeen({ ratio: p, seq: fresh ? echo.seq : seen.seq });
+    if (fresh) setSegment({ from: seen.ratio, to: p, tone: echo.tone, seq: echo.seq });
+    else if (segment && p < segment.to) setSegment(null);
+  }
+
   // While pending the spans stay (empty) so nothing shifts; the counts fade in when they arrive.
   return (
     <>
@@ -133,6 +167,19 @@ export function ProgressLine({ left, right, ratio, pending }: ReviewProgress) {
               className="absolute inset-x-0 top-[2px] h-px origin-left bg-ink transition-transform duration-(--dur-move) ease-standard md:top-0 md:h-0.5"
               style={{ transform: `scaleX(${p})` }}
             />
+            {/* The echo grows with the fill (same span, duration and curve), then inks over. */}
+            {segment && (
+              <div
+                key={segment.seq}
+                data-progress-echo={segment.tone}
+                className={cx(
+                  "absolute top-[2px] h-px origin-left scale-x-100 bg-ink starting:scale-x-0 md:top-0 md:h-0.5",
+                  "[transition:scale_var(--dur-move)_var(--ease-standard),background-color_var(--dur-spotlight)_linear]",
+                  ECHO_TONE[segment.tone],
+                )}
+                style={{ left: `${(segment.from * 100).toFixed(3)}%`, width: `${((segment.to - segment.from) * 100).toFixed(3)}%` }}
+              />
+            )}
             {/* The tick travels over the width less its own 1px, so at 100 % it ends on the line's end. */}
             <div
               aria-hidden="true"

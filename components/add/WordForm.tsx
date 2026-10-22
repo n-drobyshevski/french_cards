@@ -1,15 +1,19 @@
 "use client";
 
-import { useId, useRef, type KeyboardEvent, type Ref } from "react";
+import { useId, useRef, useState, type KeyboardEvent, type Ref } from "react";
 import { ExampleList } from "@/components/examples/ExampleList";
+import { Collapse } from "@/components/ui/Collapse";
 import { cx } from "@/components/ui/cx";
+import { Icon } from "@/components/ui/Icons";
+import { FIELD_VALUE_MAX, useFieldDefs } from "@/lib/custom-fields";
 import type { Folder } from "@/lib/types";
 import type { DuplicateInfo } from "./data";
-import type { DraftErrors, WordDraft } from "./draft";
+import { draftFieldsSummary, draftFieldValue, withDraftField, type DraftErrors, type WordDraft } from "./draft";
 import { posAbbr } from "./match";
 import {
   BothDirectionsRow,
   DuplicateNotice,
+  DuplicateReveal,
   FIELD_INPUT,
   FieldError,
   FieldRow,
@@ -57,6 +61,62 @@ export function detectionStates(draft: WordDraft, detection: FormDetection | und
     // One «не определилось»: on the level, or on the theme when the level is not detected.
     themeFailed: theme && d.failed && !slang,
   };
+}
+
+/**
+ * «Свои поля» in the form (only when Settings has shared fields): a collapsed row that opens one
+ * optional input per field, the field's hint as the placeholder. Opens by itself when the draft
+ * already has values.
+ */
+function DraftFields({ draft, onChange }: Pick<WordFormProps, "draft" | "onChange">) {
+  const defs = useFieldDefs();
+  const id = useId();
+  const [open, setOpen] = useState(() => draft.customFields.length > 0);
+  if (defs.length === 0) return null;
+  return (
+    <div className="flex flex-col">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((o) => !o)}
+        className="flex min-h-12 items-center gap-0 border-b border-rule bg-transparent p-0 text-left text-ink"
+      >
+        <span className="meta w-[88px] shrink-0">Свои поля</span>
+        <span className="min-w-0 flex-1 truncate text-[14px] leading-5 text-muted">{draftFieldsSummary(draft, defs)}</span>
+        <Icon
+          name="chevron"
+          size={16}
+          className={cx("ml-2 shrink-0 text-muted transition-transform duration-(--dur-move) ease-standard", open && "rotate-180")}
+        />
+      </button>
+      <Collapse open={open}>
+        <div id={id} role="group" aria-label="Свои поля" className="flex flex-col">
+          {defs.map((def) => (
+            <FieldRow
+              key={def.id}
+              label={
+                // A long name («Произношение») ends in «…» instead of running into the input.
+                <span title={def.name} className="block truncate pr-2">
+                  {def.name}
+                </span>
+              }
+            >
+              <input
+                type="text"
+                value={draftFieldValue(draft, def)}
+                onChange={(e) => onChange({ customFields: withDraftField(draft.customFields, def, e.target.value) })}
+                placeholder={def.hint ?? "Необязательно"}
+                maxLength={FIELD_VALUE_MAX}
+                autoComplete="off"
+                className={FIELD_INPUT}
+              />
+            </FieldRow>
+          ))}
+        </div>
+      </Collapse>
+    </div>
+  );
 }
 
 const EXAMPLE_FR =
@@ -110,7 +170,9 @@ export function WordForm({
         <FieldError id={frErrorId}>{errors.fr}</FieldError>
       </div>
 
-      {duplicate && <DuplicateNotice info={duplicate} onOpen={() => onOpenWord(duplicate.word.id)} onAddAnyway={onAddAnyway} />}
+      <DuplicateReveal info={duplicate}>
+        {(info) => <DuplicateNotice info={info} onOpen={() => onOpenWord(info.word.id)} onAddAnyway={onAddAnyway} />}
+      </DuplicateReveal>
 
       <div className="mx-4 mt-2 flex flex-col">
         <FieldRow label="Русский" spot="ru">
@@ -174,6 +236,7 @@ export function WordForm({
             {draft.example_auto && <span className="pb-1.5 text-[12px] leading-4 text-muted">подобран автоматически</span>}
           </span>
         </FieldRow>
+        <DraftFields draft={draft} onChange={onChange} />
       </div>
 
       <SlangPicker

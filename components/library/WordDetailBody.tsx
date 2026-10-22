@@ -34,7 +34,8 @@ import { spotlight } from "@/lib/motion";
 import { useDelayedFlag } from "@/lib/use-delayed-flag";
 import { formatDueIn, formatStability, wordStatus, type CardStatus } from "@/lib/scheduler";
 import { findDuplicate, normalizeLemma } from "@/lib/text";
-import { SLANG_LABELS, type Direction, type Folder, type ReviewLog, type SlangLevel, type Word } from "@/lib/types";
+import { FIELD_LABEL_MAX, FIELD_VALUE_MAX, useFieldDefs } from "@/lib/custom-fields";
+import { SLANG_LABELS, type Direction, type FieldDef, type Folder, type ReviewLog, type SlangLevel, type Word } from "@/lib/types";
 import {
   getWordHistory,
   getWordStates,
@@ -50,6 +51,7 @@ import {
 import { cardNumber } from "@/components/add/match";
 import { spotlightTheme } from "@/components/shell/dnd";
 import { CheckMark } from "./Checkbox";
+import { useRevealClass } from "./first-paint";
 import { formatDate, plural, posAbbr, SOURCE_LABELS, STATUS_LABELS } from "./format";
 import { markLeaving, markReturning } from "./leaving";
 import { INBOX_KEY, MoveMenu, ThemeSquare } from "./MoveMenu";
@@ -60,6 +62,8 @@ import { useTranslationProposal, type TranslationProposal } from "./translation-
 import { useUndoSnackbar } from "./undo";
 import { ExampleList, toDrafts, type ExampleDraft } from "@/components/examples/ExampleList";
 import { examplesPatch, wordExamples } from "@/lib/examples";
+import { draftOf, isDirty, patchFor, undoFor, type Draft, type Editing } from "./word-editor";
+import { canAddField, fieldRows, fieldRowsError, newFieldRow, type FieldRow } from "./word-fields";
 
 // A word's entry, editable fields, schedule, history and actions. One body, two layouts: the
 // phone sheet (WordDetailSheet) and the desktop detail pane (DESKTOP-SPEC §5 #6–8). Data, editing,
@@ -75,47 +79,6 @@ const SLANG_OPTIONS = [
 ];
 const HISTORY_SLOTS = 8;
 const PANE_HISTORY = 6;
-
-type Editing = null | "entry" | "note" | "example";
-
-interface Draft {
-  fr: string;
-  ru: string;
-  slang_level: SlangLevel;
-  verlan: boolean;
-  note: string;
-  examples: ExampleDraft[];
-}
-
-const draftOf = (w: Word): Draft => ({
-  fr: w.fr,
-  ru: w.ru,
-  slang_level: w.slang_level,
-  verlan: w.verlan,
-  note: w.note ?? "",
-  examples: toDrafts(wordExamples(w)),
-});
-
-function patchFor(editing: Exclude<Editing, null>, draft: Draft): WordPatch {
-  if (editing === "entry") return { fr: draft.fr, ru: draft.ru, slang_level: draft.slang_level, verlan: draft.verlan };
-  if (editing === "note") return { note: draft.note };
-  return examplesPatch(draft.examples);
-}
-
-/** The word's current values of the fields a patch touches (to undo it). */
-function undoFor(word: Word, patch: WordPatch): WordPatch {
-  const undo: Record<string, unknown> = {};
-  for (const key of Object.keys(patch)) undo[key] = word[key as keyof Word];
-  return undo as WordPatch;
-}
-
-const norm = (v: unknown) => (Array.isArray(v) ? JSON.stringify(v) : typeof v === "string" ? v.trim() : v ?? "");
-function isDirty(word: Word, editing: Editing, draft: Draft | null): boolean {
-  if (!editing || !draft) return false;
-  const patch = patchFor(editing, draft);
-  const current = { ...word, extra_examples: word.extra_examples ?? [] };
-  return Object.entries(patch).some(([k, v]) => norm(v) !== norm(current[k as keyof Word]));
-}
 
 /** ↻ and «+ Ещё пример» in the word's view: saved at once, with «Отменить». */
 function useExampleSaver(word: Word | null) {
@@ -192,7 +155,7 @@ function useCatalogIndex(): CatalogIndex | undefined {
 }
 
 /** Editing state of one word: which field is open, the draft, saving with the duplicate guard. */
-function useWordEditor(word: Word | null, folders: readonly Folder[]) {
+function useWordEditor(word: Word | null, folders: readonly Folder[], defs: readonly FieldDef[]) {
   const [editing, setEditing] = useState<Editing>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [saving, setSaving] = useState(false);
@@ -201,7 +164,7 @@ function useWordEditor(word: Word | null, folders: readonly Folder[]) {
 
   const start = (what: Exclude<Editing, null>, from?: Draft) => {
     if (!word) return;
-    setDraft(from ?? draftOf(word));
+    setDraft(from ?? draftOf(word, defs));
     setEditing(what);
     setFormError(null);
     setDupConfirm(null);
@@ -222,6 +185,11 @@ function useWordEditor(word: Word | null, folders: readonly Folder[]) {
   const save = async (): Promise<WordPatch | null> => {
     if (!draft || !editing || !word) return null;
     const patch = patchFor(editing, draft);
+    const problem = editing === "fields" ? fieldRowsError(draft.fields, defs) : null;
+    if (problem) {
+      setFormError(problem);
+      return null;
+    }
     setSaving(true);
     setFormError(null);
     try {
@@ -247,7 +215,40 @@ function useWordEditor(word: Word | null, folders: readonly Folder[]) {
     }
   };
 
-  return { editing, draft, saving, formError, dupConfirm, start, cancel, set, save, dirty: !!word && isDirty(word, editing, draft) };
+  /** «Свои поля», optionally with other rows than the word's (a new one-off row from «+ Поле»). */
+  const startFields = (rows?: FieldRow[]) => {
+    if (!word) return;
+    start("fields", rows ? { ...draftOf(word, defs), fields: rows } : undefined);
+  };
+
+  return {
+    editing,
+    draft,
+    saving,
+    formError,
+    dupConfirm,
+    start,
+    startFields,
+    cancel,
+    set,
+    save,
+    dirty: !!word && isDirty(word, editing, draft),
+  };
+}
+
+/**
+ * L9: a saved edit lights what it changed (spotlight, §5.14), one region: the entry's headword,
+ * grammar and translation together (`data-edited~="entry"`), or the note, or the examples. Call
+ * `lit(what)` once the save went through; the fields are lit after the view is back.
+ */
+function useSavedSpotlight() {
+  const root = useRef<HTMLDivElement>(null);
+  const [saved, setSaved] = useState<{ what: Exclude<Editing, null>; n: number } | null>(null);
+  useEffect(() => {
+    if (saved) root.current?.querySelectorAll(`[data-edited~="${saved.what}"]`).forEach((el) => spotlight(el));
+  }, [saved]);
+  const lit = (what: Exclude<Editing, null>) => setSaved((s) => ({ what, n: (s?.n ?? 0) + 1 }));
+  return { ref: root, lit };
 }
 
 /** Move / reset / delete with undo snackbars. */
@@ -345,11 +346,17 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
   const data = useWordDetail(wordId);
   const word = data && data.word ? data.word : null;
   const folders = data && "folders" in data ? data.folders : [];
-  const editor = useWordEditor(word, folders);
+  const defs = useFieldDefs();
+  const editor = useWordEditor(word, folders, defs);
   const actions = useWordActions(word, folders, onClose);
   const saveExamples = useExampleSaver(word);
   const proposal = useTranslationProposal(editor.draft?.fr ?? "", editor.draft?.ru ?? "", editor.editing === "entry");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [fieldFocus, setFieldFocus] = useState<string | null>(null);
+  const { ref: savedRef, lit: litSaved } = useSavedSpotlight();
+  // L9: the content is usually there on the first frame; when it is not, the sheet keeps a reserved
+  // blank (never a skeleton) and the content fades in --dur-quick over it.
+  const reveal = useRevealClass(!!data?.word);
   useCloseWhenGone(data, onClose);
 
   if (!data || !data.word) {
@@ -360,10 +367,16 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
   const { folder } = actions;
   const { editing, draft, set } = editor;
   const abbr = posAbbr(w);
+  const shownFields = fieldRows(w, defs);
+  const editFields = (focus: string | null, rows?: FieldRow[]) => {
+    setFieldFocus(focus);
+    editor.startFields(rows);
+  };
 
   const save = async (event: FormEvent) => {
     event.preventDefault();
-    await editor.save();
+    const what = editor.editing;
+    if (what && (await editor.save())) litSaved(what);
   };
 
   const editActions = (
@@ -383,7 +396,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
   );
 
   return (
-    <div data-word-detail="" className="flex flex-col px-4 pb-4">
+    <div ref={savedRef} data-word-detail="" className={cx("flex flex-col px-4 pb-4", reveal)}>
       {/* Card header: theme chip + close, above the red index-card rule */}
       <div className="flex h-11 shrink-0 items-center justify-between">
         <Chip dropdown onClick={() => setPickerOpen(true)} aria-label={`Тема: ${folder?.name ?? "Входящие"}, изменить`}>
@@ -446,13 +459,13 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
         </form>
       ) : (
         <>
-          <div className="mt-4 flex items-start gap-2">
+          <div data-edited="entry" className="mt-4 flex items-start gap-2">
             <h2 lang="fr" className="m-0 min-w-0 flex-1 font-serif text-[36px] leading-10 font-medium tracking-[-0.015em] break-words">
               {w.fr}
             </h2>
             <IconButton icon="pencil" label="Изменить слово и перевод" className="-mr-3 text-muted" onClick={() => editor.start("entry")} />
           </div>
-          <div data-refresh="slang pos" className="mt-2 flex h-5 items-center gap-2">
+          <div data-refresh="slang pos" data-edited="entry" className="mt-2 flex h-5 items-center gap-2">
             {abbr && (
               <>
                 <AbbrHint abbr={abbr} className="text-[15px] leading-5" />
@@ -463,7 +476,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             )}
             <SlangMeter level={w.slang_level} verlan={w.verlan} hints />
           </div>
-          <p data-refresh="ru" className="m-0 mt-1 text-[18px] leading-6">
+          <p data-refresh="ru" data-edited="entry" className="m-0 mt-1 text-[18px] leading-6">
             {w.ru}
           </p>
         </>
@@ -524,6 +537,23 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
         >
           <ExampleList card={w} examples={toDrafts(wordExamples(w))} onChange={(next, change) => void saveExamples(next, change)} />
         </SheetField>
+        <div data-edited="fields" className="flex items-start gap-2 border-t border-rule py-3">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="meta">Свои поля</span>
+            {editing === "fields" && draft ? (
+              <form onSubmit={save} className="flex flex-col" aria-label="Изменить свои поля">
+                <FieldsForm size="sheet" rows={draft.fields} focusKey={fieldFocus} onChange={(rows) => set("fields", rows)} onFocusKey={setFieldFocus} />
+                {errorLine}
+                {editActions}
+              </form>
+            ) : (
+              <FieldsView size="sheet" rows={shownFields} onEdit={editFields} />
+            )}
+          </div>
+          {editing !== "fields" && shownFields.length > 0 && (
+            <IconButton icon="pencil" label="Изменить свои поля" className="-mt-1 -mr-3 text-muted" onClick={() => editFields(null)} />
+          )}
+        </div>
       </div>
 
       {/* Progress */}
@@ -596,7 +626,7 @@ function SheetField({
   children: ReactNode;
 }) {
   return (
-    <div data-refresh={refresh} className="flex items-start gap-2 border-t border-rule py-3">
+    <div data-refresh={refresh} data-edited={refresh} className="flex items-start gap-2 border-t border-rule py-3">
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="meta">{label}</span>
         {editing ? form : children}
@@ -733,7 +763,9 @@ function PaneContent({
   const keys = useFormatKeys();
   const word = data.word;
   const folders = data.folders;
-  const editor = useWordEditor(word, folders);
+  const defs = useFieldDefs();
+  const editor = useWordEditor(word, folders, defs);
+  const [fieldFocus, setFieldFocus] = useState<string | null>(null);
   const actions = useWordActions(word, folders, onClose);
   const refreshAnchor = useRef<HTMLButtonElement>(null);
   const refresh = useRefresh(word, refreshAnchor);
@@ -742,6 +774,7 @@ function PaneContent({
   const proposal = useTranslationProposal(editor.draft?.fr ?? "", editor.draft?.ru ?? "", editor.editing === "entry");
   const [themeMenu, setThemeMenu] = useState<HTMLElement | null>(null);
   const ruRef = useRef<HTMLInputElement>(null);
+  const { ref: savedRef, lit: litSaved } = useSavedSpotlight();
 
   // `E` from the list: open the entry form with «Русский» focused (once the word on screen is the
   // cursor's word).
@@ -785,8 +818,11 @@ function PaneContent({
 
   const submit = async (event?: FormEvent) => {
     event?.preventDefault();
+    const what = editor.editing;
     const undo = await editor.save();
-    if (undo) cardRef?.current?.focus({ preventScroll: true });
+    if (!undo) return;
+    cardRef?.current?.focus({ preventScroll: true });
+    if (what) litSaved(what);
   };
   // Esc discards the edit; «Вернуть» brings the draft back.
   const discard = () => {
@@ -815,7 +851,8 @@ function PaneContent({
   };
 
   const formActions = (
-    <div className="mt-4 flex items-center justify-end gap-3">
+    // Wraps in a narrow pane (1280 with «Ctrl+Enter») instead of running out of the card.
+    <div className="mt-4 flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
       {editor.formError && (
         <p role="alert" className="m-0 mr-auto min-w-0 text-[12px] leading-4 text-warn">
           {editor.formError}
@@ -861,13 +898,13 @@ function PaneContent({
   );
 
   const note = (
-    <div data-refresh="note" className="flex items-start gap-2">
+    <div data-refresh="note" data-edited="note" className="flex items-start gap-2">
       <p className={cx("m-0 min-w-0 flex-1 text-[14px] leading-5 whitespace-pre-line", !w.note && "text-muted")}>{w.note || "Нет заметки"}</p>
       {!editing && pencil("Изменить заметку", () => editor.start("note"))}
     </div>
   );
   const example = (
-    <div data-refresh="example" className="flex items-start gap-2">
+    <div data-refresh="example" data-edited="example" className="flex items-start gap-2">
       <ExampleList
         size="pane"
         card={w}
@@ -879,8 +916,31 @@ function PaneContent({
     </div>
   );
 
+  const shownFields = fieldRows(w, defs);
+  const editFields = (focus: string | null, rows?: FieldRow[]) => {
+    setFieldFocus(focus);
+    editor.startFields(rows);
+  };
+  const fields =
+    editing === "fields" && draft ? (
+      <form onSubmit={(e) => void submit(e)} onKeyDown={formKeys} aria-label="Изменить свои поля" className="flex flex-col">
+        <span className="text-[12px] leading-4 text-muted">Свои поля</span>
+        <FieldsForm size="pane" rows={draft.fields} focusKey={fieldFocus} onChange={(rows) => set("fields", rows)} onFocusKey={setFieldFocus} />
+        {formActions}
+      </form>
+    ) : (
+      <div data-edited="fields" className="flex items-start gap-2">
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="text-[12px] leading-4 text-muted">Свои поля</span>
+          {/* While another part is edited: what is filled, read-only (like the pencils, the rest waits). */}
+          <FieldsView size="pane" rows={editing ? shownFields.filter((f) => f.value) : shownFields} onEdit={editing ? undefined : editFields} />
+        </div>
+        {!editing && shownFields.length > 0 && pencil("Изменить свои поля", () => editFields(null))}
+      </div>
+    );
+
   return (
-    <div data-word-detail="" className="flex flex-col">
+    <div ref={savedRef} data-word-detail="" className="flex flex-col">
       {/* Theme button + previous / next */}
       <div className="flex h-8 items-center justify-between gap-2">
         <button
@@ -912,7 +972,7 @@ function PaneContent({
         aria-labelledby={`${id}-head`}
         className="mt-4 flex flex-col rounded-[6px] border border-rule bg-surface focus-visible:outline-offset-2"
       >
-        <div data-refresh="slang" className="flex h-10 items-center justify-between px-5">
+        <div data-refresh="slang" data-edited="entry" className="flex h-10 items-center justify-between px-5">
           <span className="font-mono text-[11px] text-muted tabular-nums">FR · {cardNumber(data.number ?? 1)}</span>
           <SlangMeter level={w.slang_level} verlan={false} hints hintAlign="end" />
         </div>
@@ -976,7 +1036,7 @@ function PaneContent({
             </form>
           ) : (
             <>
-              <div className="flex items-start gap-2">
+              <div data-edited="entry" className="flex items-start gap-2">
                 <h2
                   id={`${id}-head`}
                   aria-live="polite"
@@ -988,7 +1048,7 @@ function PaneContent({
                 <span className="mt-1.5">{pencil("Изменить слово и перевод", () => editor.start("entry"), "E")}</span>
               </div>
               {showGrammar && (
-                <p data-refresh="pos slang" className="m-0 mt-1 flex flex-wrap items-baseline gap-x-1 text-[15px] leading-5">
+                <p data-refresh="pos slang" data-edited="entry" className="m-0 mt-1 flex flex-wrap items-baseline gap-x-1 text-[15px] leading-5">
                   {abbr && <AbbrHint abbr={abbr} />}
                   {!coarse && (
                     <>
@@ -1002,7 +1062,7 @@ function PaneContent({
                   )}
                 </p>
               )}
-              <p data-refresh="ru" className="m-0 mt-2 text-[18px] leading-6 font-medium">
+              <p data-refresh="ru" data-edited="entry" className="m-0 mt-2 text-[18px] leading-6 font-medium">
                 {w.ru}
               </p>
               <RefreshResult refresh={refresh} />
@@ -1020,6 +1080,7 @@ function PaneContent({
                   {e.ru && <span className="text-[13px] leading-5 text-muted">— {e.ru}</span>}
                 </div>
               ))}
+              {shownFields.some((f) => f.value) && <FieldsView size="pane" rows={shownFields.filter((f) => f.value)} />}
             </div>
           ) : (
             <div className="mt-3 flex flex-col gap-3">
@@ -1054,6 +1115,7 @@ function PaneContent({
               ) : (
                 example
               )}
+              <div className="border-t border-rule pt-3">{fields}</div>
             </div>
           )}
 
@@ -1640,6 +1702,176 @@ function RefreshDiff({ refresh, rows, picked }: { refresh: Refresh; rows: DiffRo
         </button>
       </div>
     </section>
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+// «Свои поля» (both layouts): shared fields always listed, empty ones as a muted «Добавить»; the
+// word's one-off fields after them; «+ Поле» adds a one-off field. Edited as one block, saved as
+// one `custom_fields` patch.
+
+type FieldsSize = "sheet" | "pane";
+
+/** Opens the fields editor, focusing `focus` (a row's key); `rows` replaces the word's rows («+ Поле»). */
+type EditFields = (focus: string | null, rows?: FieldRow[]) => void;
+
+function AddFieldButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="relative mt-1 inline-flex h-9 items-center gap-1.5 self-start bg-transparent text-[13px] leading-5 font-medium text-ink before:absolute before:-inset-y-1 before:inset-x-0"
+    >
+      <Icon name="plus" size={14} strokeWidth={1.75} />
+      Поле
+    </button>
+  );
+}
+
+/** The fields as label / value rows. Without `onEdit` (the desktop card while its entry is edited) only filled ones, read-only. */
+function FieldsView({ size, rows, onEdit }: { size: FieldsSize; rows: readonly FieldRow[]; onEdit?: EditFields }) {
+  const pane = size === "pane";
+  return (
+    <div className="flex flex-col">
+      {rows.length > 0 && (
+        <dl className="m-0 flex flex-col">
+          {rows.map((r) => (
+            <div
+              key={r.key}
+              data-field={r.label}
+              className={cx("grid gap-x-3 py-1", pane ? "grid-cols-[minmax(0,100px)_minmax(0,1fr)]" : "grid-cols-[minmax(0,108px)_minmax(0,1fr)]")}
+            >
+              <dt className={cx("break-words text-muted", pane ? "text-[13px] leading-5" : "text-[13px] leading-[22px]")}>{r.label}</dt>
+              <dd className="m-0 min-w-0">
+                {r.value ? (
+                  <span className={cx("break-words", pane ? "text-[14px] leading-5" : "text-[15px] leading-[22px]")}>{r.value}</span>
+                ) : (
+                  onEdit && (
+                    <button
+                      type="button"
+                      aria-label={`Добавить: ${r.label}`}
+                      onClick={() => onEdit(r.key)}
+                      className={cx(
+                        "relative bg-transparent p-0 text-left text-muted underline decoration-rule decoration-1 underline-offset-4 before:absolute before:-inset-y-2.5 before:inset-x-0 hoverable:text-ink",
+                        pane ? "text-[14px] leading-5" : "text-[15px] leading-[22px]",
+                      )}
+                    >
+                      Добавить
+                    </button>
+                  )
+                )}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {onEdit && canAddField(rows) && (
+        <AddFieldButton
+          onClick={() => {
+            const row = newFieldRow();
+            onEdit(row.key, [...rows, row]);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * The fields editor: one input per field (placeholder = the shared field's hint); one-off fields get
+ * × «Убрать поле», added ones a name input too. `focusKey`: the row whose input takes focus.
+ */
+function FieldsForm({
+  size,
+  rows,
+  focusKey,
+  onChange,
+  onFocusKey,
+}: {
+  size: FieldsSize;
+  rows: FieldRow[];
+  focusKey: string | null;
+  onChange: (rows: FieldRow[]) => void;
+  onFocusKey: (key: string) => void;
+}) {
+  const id = useId();
+  const pane = size === "pane";
+  const input = pane
+    ? cx(fieldInput, "min-w-0 text-[14px]")
+    : "h-11 min-w-0 rounded-chip border border-rule bg-surface px-3 text-[15px] text-ink outline-none placeholder:text-muted focus:border-ink pointer-coarse:text-[16px]";
+  const update = (key: string, patch: Partial<FieldRow>) => onChange(rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  const remove = (key: string) => onChange(rows.filter((r) => r.key !== key));
+  const removeButton = (r: FieldRow) => (
+    <button
+      type="button"
+      onClick={() => remove(r.key)}
+      aria-label={r.label.trim() ? `Убрать поле «${r.label.trim()}»` : "Убрать новое поле"}
+      className={cx(
+        "inline-flex shrink-0 items-center justify-center rounded-[4px] bg-transparent text-muted hoverable:bg-hover-surface hoverable:text-ink",
+        pane ? "size-8" : "-mr-3 size-11",
+      )}
+    >
+      <Icon name="close" size={16} />
+    </button>
+  );
+  return (
+    <div className={cx("flex flex-col gap-3", pane ? "mt-1.5" : "mt-1")}>
+      {rows.map((r, i) => {
+        const valueId = `${id}-v${i}`;
+        return r.added ? (
+          <div key={r.key} role="group" aria-label={r.label.trim() || "Новое поле"} className="flex items-center gap-2">
+            <input
+              aria-label="Название поля"
+              value={r.label}
+              onChange={(e) => update(r.key, { label: e.target.value })}
+              maxLength={FIELD_LABEL_MAX}
+              placeholder="Название"
+              autoComplete="off"
+              autoFocus={r.key === focusKey}
+              className={cx(input, "w-[38%] shrink-0")}
+            />
+            <input
+              aria-label="Значение поля"
+              value={r.value}
+              onChange={(e) => update(r.key, { value: e.target.value })}
+              maxLength={FIELD_VALUE_MAX}
+              placeholder="Значение"
+              autoComplete="off"
+              className={cx(input, "flex-1")}
+            />
+            {removeButton(r)}
+          </div>
+        ) : (
+          <div key={r.key} className="flex flex-col">
+            <label htmlFor={valueId} className={cx("text-muted", pane ? "text-[12px] leading-4" : "text-[13px] leading-5")}>
+              {r.label}
+            </label>
+            <div className="mt-1 flex items-center gap-2">
+              <input
+                id={valueId}
+                value={r.value}
+                onChange={(e) => update(r.key, { value: e.target.value })}
+                maxLength={FIELD_VALUE_MAX}
+                placeholder={r.hint ?? "Значение"}
+                autoComplete="off"
+                autoFocus={r.key === focusKey}
+                className={cx(input, "flex-1")}
+              />
+              {!r.shared && removeButton(r)}
+            </div>
+          </div>
+        );
+      })}
+      {canAddField(rows) && (
+        <AddFieldButton
+          onClick={() => {
+            const row = newFieldRow();
+            onFocusKey(row.key);
+            onChange([...rows, row]);
+          }}
+        />
+      )}
+    </div>
   );
 }
 

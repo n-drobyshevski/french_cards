@@ -53,7 +53,7 @@ export function Snackbar({ message, actionLabel, onAction, actionKey, ghost = fa
           type="button"
           onClick={onAction}
           aria-keyshortcuts={actionKey}
-          className="inline-flex h-11 shrink-0 items-center gap-2 rounded-chip bg-transparent px-3 text-[14px] font-medium text-on-ink active:opacity-70 md:h-8 md:px-2 hoverable:bg-on-ink/10"
+          className="hover-fade inline-flex h-11 shrink-0 items-center gap-2 rounded-chip bg-transparent px-3 text-[14px] font-medium text-on-ink active:opacity-70 md:h-8 md:px-2 hoverable:bg-on-ink/10"
         >
           <span className="underline decoration-1 underline-offset-[3px]">{actionLabel}</span>
           {actionKey && (
