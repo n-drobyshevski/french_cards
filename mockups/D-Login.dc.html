@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Десктоп · Вход</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#111111}a:hover{color:#c8331f}
+button{font:inherit}
+input,textarea{font:inherit}
+::placeholder{color:#5a5a57;opacity:1}
+</style>
+</helmet>
+<div style="width: 1440px; height: 800px; box-sizing: border-box; position: relative; overflow: hidden; background: #f1f1ee; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif; font-size: 14px">
+<div style="position: absolute; left: 520px; top: 120px; width: 400px">
+  <p style="margin: 0; height: 44px; display: flex; align-items: center; gap: 12px"><span style="position: relative; top: -4px; display: flex"><svg aria-hidden="true" width="14" height="20" viewBox="0 0 14 20" fill="none"><rect x="0.5" y="0.5" width="13" height="19" rx="1.5" stroke="#111111" stroke-width="1"></rect><path d="M0.5 5h13" stroke="#c8331f" stroke-width="1.5"></path></svg></span><span style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 40px; line-height: 44px; letter-spacing: -0.02em; color: #111111">Карточки</span></p>
+  <p style="margin: 8px 0 0; font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 18px; line-height: 24px; color: #5a5a57">Слова, которые хочется запомнить.</p>
+</div>
+<main aria-labelledby="login-h" style="position: absolute; left: 520px; top: 232px; width: 400px">
+  <section style="box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden">
+    <div style="height: 40px; box-sizing: border-box; padding: 0 24px; display: flex; align-items: center; border-bottom: 2px solid #c8331f">
+      <h1 id="login-h" style="margin: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; font-weight: 400; letter-spacing: .06em; color: #5a5a57">ВХОД</h1>
+    </div>
+    <form aria-labelledby="login-h" style="margin: 0; padding: 24px; display: flex; flex-direction: column">
+      <label for="li-mail" style="font-size: 12px; line-height: 16px; font-weight: 500; color: #5a5a57">Почта</label>
+      <input id="li-mail" type="email" autocomplete="email" placeholder="you@example.com" value="n.drobyshevski@pm.me" style="margin-top: 8px; display: block; width: 100%; height: 44px; box-sizing: border-box; border-radius: 4px; outline: none; background: #ffffff; color: #111111; font-size: 15px; padding: 0 11px; border: 1px solid #8a8a85">
+      <label for="li-pass" style="margin-top: 16px; font-size: 12px; line-height: 16px; font-weight: 500; color: #5a5a57">Пароль</label>
+      <div style="position: relative; margin-top: 8px">
+        <input id="li-pass" type="password" autocomplete="current-password" value="kiffer2026" style="display: block; width: 100%; height: 44px; box-sizing: border-box; border-radius: 4px; outline: none; background: #ffffff; color: #111111; font-size: 15px; padding: 0 44px 0 10px; border: 2px solid #111111">
+        <span aria-hidden="true" style="position: absolute; left: 73px; top: 12px; width: 1px; height: 20px; background: #111111"></span>
+        <button type="button" aria-label="Показать пароль" aria-pressed="false" style="position: absolute; right: 6px; top: 6px; width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 4px; background: transparent; color: #5a5a57; cursor: pointer"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"></path><circle cx="12" cy="12" r="3"></circle></svg></button>
+      </div>
+      <a href="D-Review-Question.dc.html" style="height: 44px; box-sizing: border-box; padding: 0 16px 0 16px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 6px; background: #111111; border: 1px solid #111111; color: #ffffff; cursor: pointer; font-size: 14px; font-weight: 500; text-decoration: none; white-space: nowrap; width: 100%; margin-top: 20px"><span>Войти</span></a>
+      <div style="margin: 8px -8px 0; height: 32px; display: flex; align-items: center; justify-content: space-between">
+        <button type="button" style="height: 32px; box-sizing: border-box; padding: 0 8px; display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 4px; background: transparent; color: #111111; font-size: 14px; font-weight: 500; text-decoration: none; white-space: nowrap; cursor: pointer"><span>Забыли пароль?</span></button>
+        <button type="button" style="height: 32px; box-sizing: border-box; padding: 0 8px; display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 4px; background: transparent; color: #111111; font-size: 14px; font-weight: 500; text-decoration: none; white-space: nowrap; cursor: pointer"><span>Создать аккаунт</span></button>
+      </div>
+    </form>
+  </section>
+  <p style="margin: 16px 0 0; font-size: 12px; line-height: 16px; color: #5a5a57">Вход по паролю работает и в приложении на главном экране iPhone.</p>
+</main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":800}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

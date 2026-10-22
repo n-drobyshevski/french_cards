@@ -1,46 +1,501 @@
 {
-  "v": 3,
-  "createdOnFiles": {"v": 1, "at": "2026-10-21T22:05:00Z"},
-  "title": "Карточки — макеты",
-  "launch": {"view": "canvas"},
-  "pages": [],
-  "boards": {
-    "Main.dc.html":            {"x": 0,    "y": 0,    "w": 390, "h": 844, "title": "Повторение · вопрос", "is_interactive": true, "radius": 28},
-    "Review-Back.dc.html":     {"x": 470,  "y": 0,    "w": 390, "h": 844, "title": "Повторение · ответ", "is_interactive": true, "radius": 28},
-    "Review-Swipe.dc.html":    {"x": 940,  "y": 0,    "w": 390, "h": 844, "title": "Повторение · свайп + отмена", "is_interactive": true, "radius": 28},
-    "Session-Done.dc.html":    {"x": 1410, "y": 0,    "w": 390, "h": 844, "title": "Сессия завершена", "is_interactive": true, "radius": 28},
-
-    "Add-Empty.dc.html":       {"x": 0,    "y": 1164, "w": 390, "h": 844, "title": "Добавление · пусто", "is_interactive": true, "radius": 28},
-    "Add-Suggest.dc.html":     {"x": 470,  "y": 1164, "w": 390, "h": 844, "title": "Добавление · подсказки", "is_interactive": true, "radius": 28},
-    "Add-Filled.dc.html":      {"x": 940,  "y": 1164, "w": 390, "h": 844, "title": "Добавление · заполнено", "is_interactive": true, "radius": 28},
-    "Add-Duplicate.dc.html":   {"x": 1410, "y": 1164, "w": 390, "h": 844, "title": "Добавление · дубликат / офлайн", "is_interactive": true, "radius": 28},
-
-    "Import-Processing.dc.html": {"x": 0,   "y": 2328, "w": 390, "h": 844, "title": "Скриншот · распознавание", "is_interactive": true, "radius": 28},
-    "Import-Review.dc.html":     {"x": 470, "y": 2328, "w": 390, "h": 844, "title": "Скриншот · проверка", "is_interactive": true, "radius": 28},
-
-    "Library.dc.html":         {"x": 0,    "y": 3492, "w": 390, "h": 844, "title": "Библиотека", "is_interactive": true, "radius": 28},
-    "Sort-Plan.dc.html":       {"x": 470,  "y": 3492, "w": 390, "h": 844, "title": "Разложить по темам", "is_interactive": true, "radius": 28},
-    "Folder.dc.html":          {"x": 940,  "y": 3492, "w": 390, "h": 844, "title": "Папка · слова", "is_interactive": true, "radius": 28},
-    "Word-Detail.dc.html":     {"x": 1410, "y": 3492, "w": 390, "h": 844, "title": "Карточка слова", "is_interactive": true, "radius": 28},
-
-    "Settings.dc.html":        {"x": 0,    "y": 4656, "w": 390, "h": 844, "title": "Настройки", "is_interactive": true, "radius": 28},
-    "Login.dc.html":           {"x": 470,  "y": 4656, "w": 390, "h": 844, "title": "Вход по коду", "is_interactive": true, "radius": 28},
-    "Review-Back-Dark.dc.html": {"x": 940, "y": 4656, "w": 390, "h": 844, "title": "Ответ · тёмная тема", "is_interactive": true, "radius": 28},
-    "Library-Dark.dc.html":    {"x": 1410, "y": 4656, "w": 390, "h": 844, "title": "Библиотека · тёмная тема", "is_interactive": true, "radius": 28}
+ "v": 3,
+ "createdOnFiles": {
+  "v": 1,
+  "at": "2026-10-21T22:05:00Z"
+ },
+ "title": "Карточки — макеты",
+ "launch": {
+  "view": "canvas"
+ },
+ "pages": [],
+ "boards": {
+  "Main.dc.html": {
+   "x": 0,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Повторение · вопрос",
+   "is_interactive": true,
+   "radius": 28
   },
-  "order": [
-    "Main.dc.html", "Review-Back.dc.html", "Review-Swipe.dc.html", "Session-Done.dc.html",
-    "Add-Empty.dc.html", "Add-Suggest.dc.html", "Add-Filled.dc.html", "Add-Duplicate.dc.html",
-    "Import-Processing.dc.html", "Import-Review.dc.html",
-    "Library.dc.html", "Sort-Plan.dc.html", "Folder.dc.html", "Word-Detail.dc.html",
-    "Settings.dc.html", "Login.dc.html", "Review-Back-Dark.dc.html", "Library-Dark.dc.html"
-  ],
-  "notes": {
-    "row1": {"x": 0, "y": -280, "text": "1 · Повторение", "kind": "title1", "maxW": 1800},
-    "row2": {"x": 0, "y": 884,  "text": "2 · Быстрое добавление", "kind": "title1", "maxW": 1800},
-    "row3": {"x": 0, "y": 2048, "text": "3 · Импорт со скриншота", "kind": "title1", "maxW": 860},
-    "row4": {"x": 0, "y": 3212, "text": "4 · Библиотека и темы", "kind": "title1", "maxW": 1800},
-    "row5": {"x": 0, "y": 4376, "text": "5 · Настройки, вход, тёмная тема", "kind": "title1", "maxW": 1800}
+  "Review-Back.dc.html": {
+   "x": 470,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Повторение · ответ",
+   "is_interactive": true,
+   "radius": 28
   },
-  "designSystems": []
+  "Review-Swipe.dc.html": {
+   "x": 940,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Повторение · свайп + отмена",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Session-Done.dc.html": {
+   "x": 1410,
+   "y": 0,
+   "w": 390,
+   "h": 844,
+   "title": "Сессия завершена",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Add-Empty.dc.html": {
+   "x": 0,
+   "y": 1164,
+   "w": 390,
+   "h": 844,
+   "title": "Добавление · пусто",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Add-Suggest.dc.html": {
+   "x": 470,
+   "y": 1164,
+   "w": 390,
+   "h": 844,
+   "title": "Добавление · подсказки",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Add-Filled.dc.html": {
+   "x": 940,
+   "y": 1164,
+   "w": 390,
+   "h": 844,
+   "title": "Добавление · заполнено",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Add-Duplicate.dc.html": {
+   "x": 1410,
+   "y": 1164,
+   "w": 390,
+   "h": 844,
+   "title": "Добавление · дубликат / офлайн",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Import-Processing.dc.html": {
+   "x": 0,
+   "y": 2328,
+   "w": 390,
+   "h": 844,
+   "title": "Скриншот · распознавание",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Import-Review.dc.html": {
+   "x": 470,
+   "y": 2328,
+   "w": 390,
+   "h": 844,
+   "title": "Скриншот · проверка",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Library.dc.html": {
+   "x": 0,
+   "y": 3492,
+   "w": 390,
+   "h": 844,
+   "title": "Библиотека",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Sort-Plan.dc.html": {
+   "x": 470,
+   "y": 3492,
+   "w": 390,
+   "h": 844,
+   "title": "Разложить по темам",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Folder.dc.html": {
+   "x": 940,
+   "y": 3492,
+   "w": 390,
+   "h": 844,
+   "title": "Папка · слова",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Word-Detail.dc.html": {
+   "x": 1410,
+   "y": 3492,
+   "w": 390,
+   "h": 844,
+   "title": "Карточка слова",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Settings.dc.html": {
+   "x": 0,
+   "y": 4656,
+   "w": 390,
+   "h": 844,
+   "title": "Настройки",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Login.dc.html": {
+   "x": 470,
+   "y": 4656,
+   "w": 390,
+   "h": 844,
+   "title": "Вход по коду",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Review-Back-Dark.dc.html": {
+   "x": 940,
+   "y": 4656,
+   "w": 390,
+   "h": 844,
+   "title": "Ответ · тёмная тема",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Library-Dark.dc.html": {
+   "x": 1410,
+   "y": 4656,
+   "w": 390,
+   "h": 844,
+   "title": "Библиотека · тёмная тема",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "D-Review-Question.dc.html": {
+   "x": 0,
+   "y": 5820,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Повторение · вопрос",
+   "is_interactive": true
+  },
+  "D-Review-Answer.dc.html": {
+   "x": 1520,
+   "y": 5820,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Повторение · ответ",
+   "is_interactive": true
+  },
+  "D-Review-Practice.dc.html": {
+   "x": 3040,
+   "y": 5820,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Практика",
+   "is_interactive": true
+  },
+  "D-Session-Done.dc.html": {
+   "x": 4560,
+   "y": 5820,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Готово на сегодня",
+   "is_interactive": true
+  },
+  "D-Shortcuts.dc.html": {
+   "x": 6080,
+   "y": 5820,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Клавиши",
+   "is_interactive": true
+  },
+  "D-Library.dc.html": {
+   "x": 0,
+   "y": 7020,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Библиотека",
+   "is_interactive": true
+  },
+  "D-Library-Edit.dc.html": {
+   "x": 1520,
+   "y": 7020,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Библиотека · правка слова",
+   "is_interactive": true
+  },
+  "D-Library-Refresh.dc.html": {
+   "x": 3040,
+   "y": 7020,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Библиотека · обновить перевод",
+   "is_interactive": true
+  },
+  "D-Library-Bulk.dc.html": {
+   "x": 4560,
+   "y": 7020,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Входящие · выбор и перенос",
+   "is_interactive": true
+  },
+  "D-Theme.dc.html": {
+   "x": 0,
+   "y": 8220,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Тема · Деньги",
+   "is_interactive": true
+  },
+  "D-Theme-New.dc.html": {
+   "x": 1520,
+   "y": 8220,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Новая тема",
+   "is_interactive": true
+  },
+  "D-Sort-Plan.dc.html": {
+   "x": 3040,
+   "y": 8220,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Разложить по темам",
+   "is_interactive": true
+  },
+  "D-Add-Empty.dc.html": {
+   "x": 0,
+   "y": 9420,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Новое слово · пусто",
+   "is_interactive": true
+  },
+  "D-Add-Suggest.dc.html": {
+   "x": 1520,
+   "y": 9420,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Новое слово · подсказки",
+   "is_interactive": true
+  },
+  "D-Add-Form.dc.html": {
+   "x": 3040,
+   "y": 9420,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Новое слово · форма",
+   "is_interactive": true
+  },
+  "D-Add-List.dc.html": {
+   "x": 4560,
+   "y": 9420,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Несколько слов",
+   "is_interactive": true
+  },
+  "D-Import-Drop.dc.html": {
+   "x": 0,
+   "y": 10620,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Импорт · скриншот",
+   "is_interactive": true
+  },
+  "D-Import-Processing.dc.html": {
+   "x": 1520,
+   "y": 10620,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Импорт · распознавание",
+   "is_interactive": true
+  },
+  "D-Import-Review.dc.html": {
+   "x": 3040,
+   "y": 10620,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Импорт · проверка",
+   "is_interactive": true
+  },
+  "D-Settings.dc.html": {
+   "x": 0,
+   "y": 11820,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Настройки",
+   "is_interactive": true
+  },
+  "D-Login.dc.html": {
+   "x": 1520,
+   "y": 11820,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Вход",
+   "is_interactive": true
+  },
+  "D-Library-Medium.dc.html": {
+   "x": 3040,
+   "y": 11820,
+   "w": 1024,
+   "h": 768,
+   "title": "1024 · Библиотека",
+   "is_interactive": true
+  },
+  "D-Library-Touch.dc.html": {
+   "x": 4144,
+   "y": 11820,
+   "w": 1180,
+   "h": 820,
+   "title": "1180 · Библиотека · сенсорный экран",
+   "is_interactive": true
+  },
+  "D-Review-Answer-Dark.dc.html": {
+   "x": 5404,
+   "y": 11820,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Ответ · тёмная тема",
+   "is_interactive": true
+  },
+  "D-Library-Dark.dc.html": {
+   "x": 6924,
+   "y": 11820,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · Библиотека · тёмная тема",
+   "is_interactive": true
+  }
+ },
+ "order": [
+  "Main.dc.html",
+  "Review-Back.dc.html",
+  "Review-Swipe.dc.html",
+  "Session-Done.dc.html",
+  "Add-Empty.dc.html",
+  "Add-Suggest.dc.html",
+  "Add-Filled.dc.html",
+  "Add-Duplicate.dc.html",
+  "Import-Processing.dc.html",
+  "Import-Review.dc.html",
+  "Library.dc.html",
+  "Sort-Plan.dc.html",
+  "Folder.dc.html",
+  "Word-Detail.dc.html",
+  "Settings.dc.html",
+  "Login.dc.html",
+  "Review-Back-Dark.dc.html",
+  "Library-Dark.dc.html",
+  "D-Review-Question.dc.html",
+  "D-Review-Answer.dc.html",
+  "D-Review-Practice.dc.html",
+  "D-Session-Done.dc.html",
+  "D-Shortcuts.dc.html",
+  "D-Library.dc.html",
+  "D-Library-Edit.dc.html",
+  "D-Library-Refresh.dc.html",
+  "D-Library-Bulk.dc.html",
+  "D-Theme.dc.html",
+  "D-Theme-New.dc.html",
+  "D-Sort-Plan.dc.html",
+  "D-Add-Empty.dc.html",
+  "D-Add-Suggest.dc.html",
+  "D-Add-Form.dc.html",
+  "D-Add-List.dc.html",
+  "D-Import-Drop.dc.html",
+  "D-Import-Processing.dc.html",
+  "D-Import-Review.dc.html",
+  "D-Settings.dc.html",
+  "D-Login.dc.html",
+  "D-Library-Medium.dc.html",
+  "D-Library-Touch.dc.html",
+  "D-Review-Answer-Dark.dc.html",
+  "D-Library-Dark.dc.html"
+ ],
+ "notes": {
+  "row1": {
+   "x": 0,
+   "y": -280,
+   "text": "1 · Повторение",
+   "kind": "title1",
+   "maxW": 1800
+  },
+  "row2": {
+   "x": 0,
+   "y": 884,
+   "text": "2 · Быстрое добавление",
+   "kind": "title1",
+   "maxW": 1800
+  },
+  "row3": {
+   "x": 0,
+   "y": 2048,
+   "text": "3 · Импорт со скриншота",
+   "kind": "title1",
+   "maxW": 860
+  },
+  "row4": {
+   "x": 0,
+   "y": 3212,
+   "text": "4 · Библиотека и темы",
+   "kind": "title1",
+   "maxW": 1800
+  },
+  "row5": {
+   "x": 0,
+   "y": 4376,
+   "text": "5 · Настройки, вход, тёмная тема",
+   "kind": "title1",
+   "maxW": 1800
+  },
+  "row6": {
+   "x": 0,
+   "y": 5540,
+   "text": "6 · Десктоп · Повторение",
+   "kind": "title1",
+   "maxW": 7520
+  },
+  "row7": {
+   "x": 0,
+   "y": 6740,
+   "text": "7 · Десктоп · Библиотека",
+   "kind": "title1",
+   "maxW": 6000
+  },
+  "row8": {
+   "x": 0,
+   "y": 7940,
+   "text": "8 · Десктоп · Темы",
+   "kind": "title1",
+   "maxW": 4480
+  },
+  "row9": {
+   "x": 0,
+   "y": 9140,
+   "text": "9 · Десктоп · Новое слово",
+   "kind": "title1",
+   "maxW": 6000
+  },
+  "row10": {
+   "x": 0,
+   "y": 10340,
+   "text": "10 · Десктоп · Импорт со скриншота",
+   "kind": "title1",
+   "maxW": 4480
+  },
+  "row11": {
+   "x": 0,
+   "y": 11540,
+   "text": "11 · Десктоп · Настройки, вход, размеры, тёмная тема",
+   "kind": "title1",
+   "maxW": 8364
+  }
+ },
+ "designSystems": []
 }
