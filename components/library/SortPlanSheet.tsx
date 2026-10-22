@@ -11,7 +11,7 @@ import { useSnackbar } from "@/components/ui/Snackbar";
 import { StatusLine } from "@/components/ui/StatusLine";
 import { Toggle } from "@/components/ui/Toggle";
 import { cx } from "@/components/ui/cx";
-import { NEW_FOLDER_MIN_WORDS } from "@/lib/ai/schemas";
+import { NEW_FOLDER_MIN_WORDS } from "@/lib/ai/constants";
 import { markFoldersChanged } from "@/lib/folder-spotlight";
 import { exitMs, sheetCloseMs } from "@/lib/motion";
 import {

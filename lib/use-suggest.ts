@@ -6,7 +6,8 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { readNdjson } from "./ai/ndjson";
 import { dedupeKey, detectDirection } from "./ai/normalize";
-import { SUGGEST_MAX, type FolderInput, type ModelTierInput, type SuggestLine, type SuggestRegister, type Suggestion } from "./ai/schemas";
+import { SUGGEST_MAX } from "./ai/constants";
+import type { FolderInput, ModelTierInput, SuggestLine, SuggestRegister, Suggestion } from "./ai/schemas";
 import { foldKey } from "./lexique";
 import type { Folder } from "./types";
 

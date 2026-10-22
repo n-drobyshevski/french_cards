@@ -1,7 +1,7 @@
 // Review-list model for the screenshot import: one row per extracted item, with the user's
 // edits, selection and theme choice. Pure functions (no Dexie) so they are unit-tested.
 import type { NewFolderProposal, VocabItem } from "@/lib/ai/schemas";
-import { NEW_FOLDER_MIN_WORDS } from "@/lib/ai/schemas";
+import { NEW_FOLDER_MIN_WORDS } from "@/lib/ai/constants";
 import type { Confidence, Folder, Gender, PartOfSpeech, SlangLevel, Word } from "@/lib/types";
 import type { NewWordInput } from "@/lib/words";
 

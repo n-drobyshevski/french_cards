@@ -4,17 +4,15 @@
 // the new folders and a reorg_runs row so the whole run can be undone.
 // Rules: words placed by hand (folder_source 'user') and words in locked folders never move;
 // a new theme needs ≥3 words; «Входящие» (INBOX / low confidence) never pulls a word out of a theme.
-import {
-  ASSIGN_CHUNK_MAX,
-  FOLDER_INBOX,
-  NEW_FOLDER_MIN_WORDS,
-  type AiErrorBody,
-  type AssignRequest,
-  type AssignResponse,
-  type AssignmentResult,
-  type TaxonomyRequest,
-  type TaxonomyResponse,
-  type ModelTierInput,
+import { ASSIGN_CHUNK_MAX, FOLDER_INBOX, NEW_FOLDER_MIN_WORDS } from "./ai/constants";
+import type {
+  AiErrorBody,
+  AssignRequest,
+  AssignResponse,
+  AssignmentResult,
+  TaxonomyRequest,
+  TaxonomyResponse,
+  ModelTierInput,
 } from "./ai/schemas";
 import { db, newId } from "./db";
 import { createFolder, disbandFolder, FOLDER_COLORS, listFolders } from "./folders";
