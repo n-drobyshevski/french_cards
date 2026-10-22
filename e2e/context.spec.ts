@@ -203,3 +203,30 @@ test("ways in: the add sheet, the library search with no match, the word card", 
   await expect(page.getByRole("heading", { level: 1, name: "se casser" })).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Карточка слова" })).toBeHidden();
 });
+
+test("a history row can be removed on its own, with «Отменить»", async ({ page }) => {
+  await mockAll(page);
+  await page.goto("/context");
+  await searchFor(page, "kiffer");
+  await expect(examples(page)).toHaveCount(3);
+  await searchFor(page, "triper");
+  await expect(page.getByRole("heading", { level: 1, name: "triper" })).toBeVisible();
+
+  await page.goto("/context");
+  const history = page.getByRole("region", { name: "Недавние" });
+  const rows = history.getByRole("listitem");
+  await expect(rows).toHaveCount(2);
+  await history.getByRole("button", { name: "Убрать «kiffer» из истории" }).click();
+  await expect(rows).toHaveCount(1);
+  await expect(history.getByRole("link", { name: /triper/ })).toBeVisible();
+
+  await page.getByRole("button", { name: "Отменить" }).click();
+  await expect(rows).toHaveCount(2);
+  // Back in its place: the older query stays below the newer one.
+  await expect(rows.nth(1)).toContainText("kiffer");
+
+  await history.getByRole("button", { name: "Убрать «kiffer» из истории" }).click();
+  await expect(rows).toHaveCount(1);
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Недавние" }).getByRole("listitem")).toHaveCount(1);
+});

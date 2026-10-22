@@ -12,8 +12,8 @@ import { Header } from "@/components/ui/Header";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import type { LookupResponse } from "@/lib/ai/schemas";
-import { cleanQuery, clearHistory, useContextSearch, useLookupHistory, type ContextSearchState } from "@/lib/context";
-import { db } from "@/lib/db";
+import { cleanQuery, clearHistory, deleteLookup, useContextSearch, useLookupHistory, type ContextSearchState } from "@/lib/context";
+import { db, type LookupEntry } from "@/lib/db";
 import { ExampleError, requestExample } from "@/lib/examples";
 import { getSettings } from "@/lib/settings";
 import { useLayoutClass } from "@/lib/use-media";
@@ -165,13 +165,20 @@ function ContextView({ q }: { q: string }) {
     showUndo({ message: "История очищена", undo: () => void db.lookups.bulkPut(rows) });
   };
 
+  const remove = async (entry: LookupEntry) => {
+    await deleteLookup(entry.key);
+    const name = entry.lookup.found ? entry.lookup.fr : entry.q;
+    // The row keeps its `at`, so «Отменить» puts it back in its place.
+    showUndo({ message: `«${name}» убрано из истории`, undo: () => void db.lookups.put(entry) });
+  };
+
   const field = (
     <SearchField value={input} onChange={setInput} onSubmit={go} online={online} inputRef={inputRef} strong={!q} wide={wide} />
   );
 
   const home = (
     <>
-      {history && history.length > 0 && <HistoryList rows={history} onOpen={go} onClear={() => void clear()} wide={wide} />}
+      {history && history.length > 0 && <HistoryList rows={history} onOpen={go} onDelete={(r) => void remove(r)} onClear={() => void clear()} wide={wide} />}
       {online && <NoExampleChips words={noExample ?? []} onOpen={go} />}
     </>
   );

@@ -53,3 +53,21 @@ test("G then C opens «Контекст»; / focuses its search", async ({ page 
   await page.keyboard.press("/");
   await expect(field(page)).toBeFocused();
 });
+
+test("a history row shows its «×» on hover and removes only itself", async ({ page }) => {
+  await mockLookup(page, () => KIFFER_LOOKUP);
+  await mockContext(page, () => KIFFER_EXAMPLES);
+  await page.goto("/context");
+  await field(page).fill("kiffer");
+  await field(page).press("Enter");
+  await expect(rows(page)).toHaveCount(3);
+
+  await page.goto("/context");
+  const history = page.getByRole("region", { name: "Недавние" });
+  const remove = history.getByRole("button", { name: "Убрать «kiffer» из истории" });
+  await expect(remove).toHaveCSS("opacity", "0");
+  await history.getByRole("link", { name: /kiffer/ }).hover();
+  await expect(remove).toHaveCSS("opacity", "1");
+  await remove.click();
+  await expect(page.getByRole("region", { name: "Недавние" })).toHaveCount(0);
+});

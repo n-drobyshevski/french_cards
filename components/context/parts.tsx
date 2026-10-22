@@ -768,11 +768,14 @@ export function SectionHead({ id, title, aside }: { id?: string; title: string; 
 export function HistoryList({
   rows,
   onOpen,
+  onDelete,
   onClear,
   wide = false,
 }: {
   rows: readonly LookupEntry[];
   onOpen: (q: string) => void;
+  /** «×» on a row: drop that one query (the screen offers «Отменить»). */
+  onDelete: (entry: LookupEntry) => void;
   onClear: () => void;
   wide?: boolean;
 }) {
@@ -794,14 +797,18 @@ export function HistoryList({
       <ul className="m-0 list-none p-0">
         {rows.map((r) => {
           const found = r.lookup.found;
+          const name = found ? r.lookup.fr : r.q;
           return (
-            <li key={r.key}>
+            <li
+              key={r.key}
+              className={cx("group flex items-center border-b border-rule", wide && "hover-fade -mx-2 hoverable:bg-hover")}
+            >
               <a
                 href={contextHref(r.q)}
                 onClick={routeClick(() => onOpen(r.q))}
                 className={cx(
-                  "flex min-h-[60px] items-center gap-2.5 border-b border-rule py-2 text-ink no-underline",
-                  wide ? "hover-fade -mx-2 px-2 hoverable:bg-hover" : "active:bg-surface-2",
+                  "flex min-h-[60px] min-w-0 flex-1 items-center gap-2.5 py-2 text-ink no-underline",
+                  wide ? "pl-2" : "active:bg-surface-2",
                 )}
               >
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -815,6 +822,17 @@ export function HistoryList({
                 </span>
                 <span className="meta shrink-0 text-right">{historyMeta(r)}</span>
               </a>
+              <button
+                type="button"
+                onClick={() => onDelete(r)}
+                aria-label={`Убрать «${name}» из истории`}
+                className={cx(
+                  "flex size-11 shrink-0 items-center justify-center rounded-btn bg-transparent text-muted hoverable:text-ink",
+                  wide ? "opacity-0 group-hover:opacity-100 focus-visible:opacity-100" : "-mr-3",
+                )}
+              >
+                <Icon name="close" size={16} />
+              </button>
             </li>
           );
         })}
