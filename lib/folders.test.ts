@@ -148,6 +148,17 @@ describe("getLibraryStats", () => {
     expect(lib.totals).toMatchObject({ total: 2, due: 0, difficult: 0, fresh: 1, paused: 1, reviewed: 1 });
   });
 
+  it("counts every word of a theme «на паузе» as paused", async () => {
+    const f = await createFolder({ name: "Потом" }, T0);
+    const a = await addWord({ fr: "a", ru: "x", folder_id: f.id, both_directions: false }, T0);
+    const st = (await db.review_state.get(`${a.id}:fr_ru`))!;
+    await db.review_state.put({ ...st, state: 2, stability: 1, due: new Date(T0.getTime() - DAY).toISOString() });
+    await addWord({ fr: "b", ru: "y", folder_id: f.id, both_directions: false }, T0);
+    expect((await getFolderStats(f.id, T0)).due).toBe(1);
+    await updateFolder(f.id, { muted: true }, T0);
+    expect(await getFolderStats(f.id, T0)).toMatchObject({ total: 2, due: 0, fresh: 0, paused: 2 });
+  });
+
   it("previews the newest words of a theme, at most three", async () => {
     const f = await createFolder({ name: "Tmp" }, T0);
     for (let i = 0; i < 5; i++) await addWord({ fr: `w${i}`, ru: "x", folder_id: f.id }, new Date(T0.getTime() + i * 1000));

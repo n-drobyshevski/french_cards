@@ -1,6 +1,6 @@
 ---
 name: kartochki
-description: Conventions for the user's «Карточки» flashcard app for colloquial French (the user is a Russian speaker). Use whenever the user wants to add, find, fix, sort or delete French words or slang, asks what to review today («что повторить сегодня»), sends a French text, chat, song or screenshot to turn into cards, or mentions карточки, темы or «Входящие». Covers card format (dictionary form, Russian translation in the same register, example), the slang level rubric 0–3 with verlan, theme choice, when to ask before changing anything, and step-by-step recipes for the Kartochki connector tools (search_words, add_words, update_word, move_words, restore_moves, delete_words, restore_words, create_folder, update_folder, delete_folder, restore_folder, list_folders, list_fields, create_field, update_field, delete_field, restore_field, study_summary). Needs the Kartochki connector; without it, explain that it must be added first.
+description: Conventions for the user's «Карточки» flashcard app for colloquial French (the user is a Russian speaker). Use whenever the user wants to add, find, fix, sort, pause or delete French words, slang or themes, asks what to review today («что повторить сегодня»), sends a French text, chat, song or screenshot to turn into cards, or mentions карточки, темы or «Входящие». Covers card format (dictionary form, Russian translation in the same register, example), the slang level rubric 0–3 with verlan, theme choice, when to ask before changing anything, and step-by-step recipes for the Kartochki connector tools (search_words, add_words, update_word, move_words, restore_moves, delete_words, restore_words, create_folder, update_folder, delete_folder, restore_folder, list_folders, list_fields, create_field, update_field, delete_field, restore_field, study_summary). Needs the Kartochki connector; without it, explain that it must be added first.
 ---
 
 # Карточки: working with the user's French cards
@@ -61,6 +61,8 @@ Most verlan is level 2; a few words are now level 1 (meuf, ouf, relou). Plain ab
 - Call `list_folders` to see the themes and their descriptions before choosing one.
 - `folder_chosen_by_user: true` only when the user named the theme («добавь в Эмоции»). When you picked it, send `false`: the app then knows it may re-sort the word later. In a mixed call, set it per word next to the per-word `folder`. When no theme fits well, leave the word in «Входящие» rather than force it.
 - Create a theme (`create_folder`) only when the user asks, or after proposing it and getting a yes. Give it a Russian name of one or two capitalised words and a one-sentence description.
+- **«На паузе»:** `update_folder` with `muted: true` keeps a theme and its progress but takes all its words out of review and practice; `muted: false` brings it back. `list_folders` shows paused themes (`muted: true`) and each theme's `new` count (words never reviewed). A single word is paused with `update_word` `muted`.
+- **Propose pausing** when `list_folders` shows many themes with new words and some look like later steps of a sequence (Уровень 1/2/3, Урок 5…, chapters of a book or course, numbered or dated themes) or the user said they can wait: say which themes would stay in review and which would pause, and wait for the OK. When the user finishes a step, propose bringing the next theme back. Never pause or unpause without a yes.
 - Rename, re-describe, lock or reorder a theme with `update_folder`; delete one with `delete_folder` (its words go to «Входящие»). Both only after naming the change (and, for a delete, how many words the theme holds) and getting a yes. Undo: `update_folder` with `previous`, `restore_folder` with the delete's `undo`.
 
 ## Ask first
@@ -95,7 +97,7 @@ Make write calls one at a time, never in parallel, even for different fields of 
 ### «Что повторить сегодня?»
 
 1. `study_summary` (pass `new_per_day` if the user mentioned a different daily limit; the default is 15).
-2. Answer in two or three lines: how many cards are due, how many new cards are left for today, how many reviews are done, and a few of the words due soonest. Reviewing itself happens in the app, so suggest opening it. The numbers come from the synced copy, so reviews the phone has not synced yet are missing.
+2. Answer in two or three lines: how many cards are due, how many new cards are left for today, how many reviews are done, and a few of the words due soonest. Mention `muted_themes` if there are any. If new cards pile up across many themes that look sequential, offer to pause the later ones (see Themes). Reviewing itself happens in the app, so suggest opening it. The numbers come from the synced copy, so reviews the phone has not synced yet are missing.
 
 ### Sort «Входящие»
 

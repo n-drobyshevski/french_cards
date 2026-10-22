@@ -41,7 +41,7 @@ An optional skill (`claude/skills/kartochki/`) teaches Claude the card conventio
 | `delete_words` | write | Soft-deletes words and their cards. |
 | `restore_words` | write | Undoes `delete_words`, with the old progress. |
 | `create_folder` | write | New theme, same rules as in the app (unique name, slug, colour, order). |
-| `update_folder` | write | Rename a theme, change its description, lock/unlock it or move it (`position`, 1-based); the slug and the words stay. Returns `previous` for undo. «Входящие» can't be changed. |
+| `update_folder` | write | Rename a theme, change its description, lock/unlock it, pause it (`muted`) or move it (`position`, 1-based); the slug and the words stay. Returns `previous` for undo. «Входящие» can't be changed. |
 | `delete_folder` | write | Soft-deletes a theme; its words move to «Входящие» (as in the app). Undo: `restore_folder` with the returned `undo`. |
 | `restore_folder` | write | Brings a deleted theme back and returns its words to it (only those still in «Входящие»). |
 
@@ -63,6 +63,8 @@ The shared definitions are edited in the app (Settings → «Свои поля»
 - `update_word` `patch.muted`: `true` keeps the word in the library but takes it out of every review and practice round (the review card's mute button does the same); `false` brings it back with its progress.
 - **Output:** such words carry `muted: true`; their `due_today` is false and `study_summary` leaves them out of the due and new counts.
 - **Storage:** `words.muted` (boolean, default false), migration `0009_word_muted.sql`, synced like the other word columns.
+- **A whole theme:** `update_folder` `muted: true` pauses every word of the theme (`false` brings them back with their progress). `list_folders` marks it `muted: true` and gives every theme a `new` count (words never reviewed); `search_words` marks its words `theme_muted: true`; `study_summary` lists `muted_themes` and leaves their words out of the due and new counts. Storage: `folders.muted`, migration `0010_folder_muted.sql`.
+- **Proposals:** the server instructions ask Claude to suggest pausing themes that look like later steps of a sequence (levels, lessons, chapters) or that the user said can wait, when many themes still hold new words — naming them and waiting for the OK, never pausing on its own.
 
 ## Setup
 
@@ -77,7 +79,7 @@ The shared definitions are edited in the app (Settings → «Свои поля»
    - `MCP_TIMEZONE` (optional): your IANA time zone, for example `Europe/Moscow`. The default is `Europe/Paris`.
 
    Then redeploy.
-   Apply `supabase/migrations/0005_connector_grants.sql`, `0006_custom_fields.sql`, `0007_connector_field_writes.sql`, `0008_word_origin_conjugation.sql` and `0009_word_muted.sql` if you haven't (README, step 1).
+   Apply `supabase/migrations/0005_connector_grants.sql`, `0006_custom_fields.sql`, `0007_connector_field_writes.sql`, `0008_word_origin_conjugation.sql`, `0009_word_muted.sql` and `0010_folder_muted.sql` if you haven't (README, step 1).
 3. Check the endpoint. A wrong key must give `404`, with no redirect:
    ```sh
    curl -s -o /dev/null -w "%{http_code}\n" -X POST https://frenchcards.vercel.app/api/mcp/wrong

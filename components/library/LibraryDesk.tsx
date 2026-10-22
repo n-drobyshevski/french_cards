@@ -47,6 +47,7 @@ import { enrichCaption, nWords, plural, practiceHref, reviewHref } from "./forma
 import { markLeaving, markReturning } from "./leaving";
 import { Menu, MenuItem, MenuSeparator, type MenuAnchor } from "./Menu";
 import { ThemeMenuItems } from "./ThemeActions";
+import { useThemePause } from "./theme-pause";
 import { INBOX_KEY, MoveMenu, ThemeSquare } from "./MoveMenu";
 import { matchesSlang, type SlangKey } from "./SlangFilter";
 import { SortPlanSheet } from "./SortPlanSheet";
@@ -127,6 +128,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
   const shortcuts = useShortcutsEnabled();
   const keys = useFormatKeys();
   const showUndo = useUndoSnackbar();
+  const setThemePaused = useThemePause();
   const undoLast = useUndoLast();
   const snackbar = useSnackbar();
   const addSheet = useAddSheetActions();
@@ -181,9 +183,9 @@ function Desk({ scope }: { scope: LibraryScope }) {
     return sortedRows.filter(
       (item) =>
         (status !== "due" || item.schedule.due) &&
-        (status !== "difficult" || (item.schedule.status === "difficult" && !item.word.muted)) &&
+        (status !== "difficult" || (item.schedule.status === "difficult" && item.schedule.tone !== "paused")) &&
         (status !== "new" || item.schedule.tone === "new") &&
-        (status !== "paused" || !!item.word.muted) &&
+        (status !== "paused" || item.schedule.tone === "paused") &&
         matchesSlang(item.word, slang) &&
         (!q || matchesSearch(item.word, q)),
     );
@@ -202,7 +204,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
     let paused = 0;
     for (const r of scopeRows ?? []) {
       if (r.schedule.due) due++;
-      if (r.word.muted) paused++;
+      if (r.schedule.tone === "paused") paused++;
       else if (r.schedule.status === "difficult") difficult++;
       if (r.schedule.tone === "new") fresh++;
     }
@@ -746,10 +748,24 @@ function Desk({ scope }: { scope: LibraryScope }) {
           <div className="flex h-9 items-center gap-3">
             <h1 className="m-0 min-w-0 truncate font-serif text-[28px] leading-9 font-medium tracking-[-0.015em]">{title}</h1>
             {folder?.locked && <span className="shrink-0 rounded-[4px] border border-rule px-1.5 font-mono text-[11px] leading-5 text-muted">закреплена</span>}
+            {folder?.muted && <span className="shrink-0 rounded-[4px] border border-rule px-1.5 font-mono text-[11px] leading-5 text-muted">на паузе</span>}
             <span className="flex-1" />
             {guideShown && <GuideWords rows={rows} rowH={rowH} scrollRef={scrollRef} loaded={loaded} />}
+            {/* A theme «на паузе» has nothing to review or practise: the way back instead. */}
+            {folder?.muted && hasWords && (
+              <button
+                type="button"
+                onClick={() => void setThemePaused(folder, false)}
+                className={cx(
+                  "inline-flex shrink-0 items-center gap-2 rounded-[6px] border border-ink bg-surface px-4 text-[14px] font-medium text-ink hoverable:bg-hover-surface",
+                  coarse ? "h-11" : "h-9",
+                )}
+              >
+                Вернуть в повторения
+              </button>
+            )}
             {/* Nothing due: a practice round over the whole theme instead, as on phones. */}
-            {scope.kind !== "all" && hasWords && theme && theme.cards === 0 && (
+            {scope.kind !== "all" && !folder?.muted && hasWords && theme && theme.cards === 0 && (
               <Link
                 href={practiceHref(folderId ?? null)}
                 className={cx(

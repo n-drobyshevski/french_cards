@@ -50,11 +50,11 @@ function matchesStatus(item: LibraryWord, status: StatusFilter): boolean {
     case "due":
       return item.schedule.due;
     case "difficult":
-      return item.schedule.status === "difficult" && !item.word.muted;
+      return item.schedule.status === "difficult" && item.schedule.tone !== "paused";
     case "new":
       return item.schedule.tone === "new";
     case "paused":
-      return !!item.word.muted;
+      return item.schedule.tone === "paused";
     default:
       return true;
   }

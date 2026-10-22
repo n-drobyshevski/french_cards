@@ -60,6 +60,7 @@ import { INBOX_KEY, MoveMenu, ThemeSquare } from "./MoveMenu";
 import { alphaOrder, catalogNumbers, neighboursAt, type Neighbour } from "./table";
 import { folderOptions, TargetPickerSheet } from "./TargetPickerSheet";
 import { TextOptions } from "./TextOptions";
+import { useThemePause } from "./theme-pause";
 import { useTranslationProposal, type TranslationProposal } from "./translation-proposal";
 import { useUndoSnackbar } from "./undo";
 import { LifeExamplesLink } from "@/components/context/ContextLink";
@@ -324,16 +325,37 @@ function useWordActions(word: Word | null, folders: readonly Folder[], onDeleted
     });
   };
 
-  return { folder, changeFolder, reset, remove, setMuted };
+  const setThemePaused = useThemePause();
+  /** «Вернуть тему»: the word's theme is «на паузе». */
+  const unpauseTheme = () => (folder ? setThemePaused(folder, false) : Promise.resolve());
+
+  return { folder, changeFolder, reset, remove, setMuted, unpauseTheme };
+}
+
+/** «Повторение»'s notice for a word «на паузе», itself or through its theme. */
+function PauseNotice({ word, folder, actions, size }: { word: Word; folder: Folder | undefined; actions: ReturnType<typeof useWordActions>; size: "sheet" | "pane" }) {
+  if (word.muted) return <MutedNotice size={size} onUnmute={() => void actions.setMuted(false)} />;
+  if (folder?.muted) return <MutedNotice size={size} text={`Тема «${folder.name}» на паузе`} action="Вернуть тему" onUnmute={() => void actions.unpauseTheme()} />;
+  return null;
 }
 
 /** Under «Повторение» while the word is «на паузе»: what that means and the way back. */
-function MutedNotice({ onUnmute, size }: { onUnmute: () => void; size: "sheet" | "pane" }) {
+function MutedNotice({
+  onUnmute,
+  size,
+  text = "На паузе — не показывается в повторениях",
+  action = "Вернуть",
+}: {
+  onUnmute: () => void;
+  size: "sheet" | "pane";
+  text?: string;
+  action?: string;
+}) {
   return (
     <div className={cx("flex items-center justify-between gap-3 border-b border-rule", size === "sheet" ? "min-h-11 py-1" : "min-h-9 py-1")}>
       <span className={cx("flex min-w-0 items-center gap-2 text-muted", size === "sheet" ? "text-[14px]" : "text-[13px]")}>
         <Icon name="mute" size={16} strokeWidth={1.5} className="shrink-0" />
-        На паузе — не показывается в повторениях
+        {text}
       </span>
       <button
         type="button"
@@ -343,7 +365,7 @@ function MutedNotice({ onUnmute, size }: { onUnmute: () => void; size: "sheet" |
           size === "sheet" ? "h-11 text-[14px]" : "h-8 text-[13px] pointer-coarse:h-11",
         )}
       >
-        Вернуть
+        {action}
       </button>
     </div>
   );
@@ -666,7 +688,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
         </span>
       </div>
       <div className="mt-1 flex flex-col">
-        {w.muted && <MutedNotice size="sheet" onUnmute={() => void actions.setMuted(false)} />}
+        <PauseNotice word={w} folder={actions.folder} actions={actions} size="sheet" />
         {schedule.map((s) => (
           <div
             key={s.direction}
@@ -1300,7 +1322,7 @@ function PaneContent({
             {STATUS_LABELS[data.status]} · {data.reviews} {plural(data.reviews, ["показ", "показа", "показов"])}
           </span>
         </div>
-        {w.muted && <MutedNotice size="pane" onUnmute={() => void actions.setMuted(false)} />}
+        <PauseNotice word={w} folder={actions.folder} actions={actions} size="pane" />
         {data.schedule.map((s) => (
           <div key={s.direction} className="flex h-9 items-center gap-4 border-b border-rule">
             <span className="w-14 shrink-0 font-mono text-[12px]">{DIRECTION_LABEL[s.direction]}</span>

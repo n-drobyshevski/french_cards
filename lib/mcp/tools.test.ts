@@ -530,7 +530,7 @@ describe("search_words / list_folders", () => {
       ["Замок", 0, 0],
     ]);
     expect(out.inbox).toMatchObject({ words: 2, due: 1 });
-    expect(out.total).toEqual({ words: 3, due: 1 });
+    expect(out.total).toEqual({ words: 3, due: 1, new: 2 });
   });
 });
 
@@ -714,7 +714,7 @@ describe("changing and deleting themes", () => {
     const fake = createFakeRepo({ folders: FOLDERS });
     const out = await ok(updateFolder, fake, { folder: "эмоции", name: "Чувства", description: "Эмоции и реакции", locked: true, position: 1 });
     expect(out.folder).toMatchObject({ id: "f-emotsii", slug: "emotsii", name: "Чувства", description: "Эмоции и реакции", locked: true, position: 1 });
-    expect(out.previous).toEqual({ name: "Эмоции", description: null, locked: false, position: 2 });
+    expect(out.previous).toEqual({ name: "Эмоции", description: null, locked: false, muted: false, position: 2 });
     expect(liveNames(fake)).toEqual(["Чувства", "Деньги", "Замок"]);
     expect((await callTool(updateFolder, deps(fake), { folder: "Деньги", name: "замок" })).isError).toBe(true);
     expect((await callTool(updateFolder, deps(fake), { folder: "inbox", name: "Новое" })).isError).toBe(true);
@@ -805,6 +805,31 @@ describe("muted («на паузе»)", () => {
     expect((await ok(studySummary, fake, { new_per_day: 3 })).due_cards).toBe(0);
     await ok(updateWord, fake, { id: "w1", patch: { muted: false } });
     expect((await ok(searchWords, fake, { query: "relou" })).words[0]).not.toHaveProperty("muted");
+  });
+
+  it("update_folder pauses a theme: its words are never due, list_folders and study_summary say so", async () => {
+    const due = (id: string) => cards(id, false).map((s) => ({ ...s, state: 2 as const, due: OLD.toISOString() }));
+    const fake = createFakeRepo({
+      folders: FOLDERS,
+      words: [word("w1", "relou", "занудный", { folder_id: "f-dengi" }), word("w2", "chelou", "странный", { folder_id: "f-emotsii" })],
+      review_state: [...due("w1"), ...due("w2")],
+    });
+    const out = await ok(updateFolder, fake, { folder: "Деньги", muted: true });
+    expect(out.folder).toMatchObject({ name: "Деньги", muted: true });
+    expect(out.previous).toMatchObject({ muted: false });
+    expect(fake.tables.folders.get("f-dengi")).toMatchObject({ muted: true });
+
+    const list = await ok(listFolders, fake, {});
+    expect(list.folders.find((f) => f.name === "Деньги")).toMatchObject({ muted: true, words: 1, due: 0, new: 0 });
+    expect(list.folders.find((f) => f.name === "Эмоции")).not.toHaveProperty("muted");
+    expect(list.total).toMatchObject({ words: 2, due: 1 });
+    expect((await ok(searchWords, fake, { query: "relou" })).words[0]).toMatchObject({ theme_muted: true, due_today: false });
+    const summary = await ok(studySummary, fake, { new_per_day: 3 });
+    expect(summary).toMatchObject({ due_cards: 1, muted_themes: ["Деньги"] });
+
+    expect(await ok(updateFolder, fake, { folder: "Деньги", muted: true })).toMatchObject({ result: "unchanged" });
+    await ok(updateFolder, fake, { folder: "Деньги", muted: false });
+    expect((await ok(studySummary, fake, { new_per_day: 3 })).due_cards).toBe(2);
   });
 });
 

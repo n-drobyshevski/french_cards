@@ -49,6 +49,7 @@ export function FolderTile({
   onLongPress?: () => void;
 }) {
   const { total, due, mastery } = folder.stats;
+  const paused = !!folder.muted;
   const pct = Math.round(mastery * 100);
   const preview = samples ? folder.stats.samples : [];
   const longPress = useLongPress(() => onLongPress?.());
@@ -56,7 +57,7 @@ export function FolderTile({
     <Link
       href={folderHref(folder.id)}
       transitionTypes={NAV_FORWARD}
-      aria-label={`${folder.name}: ${nWords(total)}${due ? `, ${due} к повторению` : ""}, выучено ${pct} %`}
+      aria-label={`${folder.name}: ${nWords(total)}${paused ? ", на паузе" : due ? `, ${due} к повторению` : ""}, выучено ${pct} %`}
       {...(onLongPress ? longPress : {})}
       className={`${TILE} ${samples ? "h-[116px]" : "h-24"} border border-rule bg-surface select-none active:bg-surface-2 has-[[data-link-pending]]:bg-surface-2 [-webkit-touch-callout:none]`}
     >
@@ -64,6 +65,7 @@ export function FolderTile({
       <span className="truncate font-serif text-[19px] leading-6 font-medium">{folder.name}</span>
       <span className="meta mt-1 tabular-nums">
         {total}
+        {paused && " · на паузе"}
         {due > 0 && (
           <>
             {" · "}
