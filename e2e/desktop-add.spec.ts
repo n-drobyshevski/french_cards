@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addSheet, gateSuggest, holdDatabase, LA_THUNE, mockEnrich, mockSuggest, openReview, SE_CASSER_LA_TETE } from "./fixtures";
+import { addSheet, gateSuggest, holdDatabase, LA_THUNE, mockEnrich, mockSuggest, motionSettled, openReview, SE_CASSER_LA_TETE } from "./fixtures";
 
 // Desktop «Новое слово» dialog (mockups/D-Add-*.dc.html, DESKTOP-SPEC §4 «Add dialog»). Runs in the
 // desktop-chromium project (1440×800); /api/ai/* is mocked.
@@ -32,6 +32,7 @@ async function openDialog(page: Page) {
 test("N opens the dialog centred with the recent words", async ({ page }) => {
   await openDialog(page);
   const dialog = addSheet(page);
+  await motionSettled(page);
   const box = (await dialog.boundingBox())!;
   expect(box.width).toBe(640);
   expect(Math.abs(box.x + box.width / 2 - 720)).toBeLessThan(2);

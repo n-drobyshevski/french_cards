@@ -6,8 +6,9 @@ export type ButtonVariant = "primary" | "secondary" | "tertiary" | "danger";
 /** lg 52px (main actions), md 44px, sm 32px (compact tools inside a 44px row). */
 export type ButtonSize = "lg" | "md" | "sm";
 
+// Press (MOTION-SPEC §5.1): every variant scales to --press-scale (.98) via `press`; the tint is per variant.
 const VARIANTS: Record<ButtonVariant, string> = {
-  primary: "border border-ink bg-ink text-on-ink active:opacity-85",
+  primary: "border border-ink bg-ink text-on-ink active:border-ink-press active:bg-ink-press",
   secondary: "border border-ink bg-surface text-ink active:bg-surface-2",
   tertiary:
     "bg-transparent text-ink underline decoration-1 underline-offset-4 active:decoration-2 active:text-muted",
@@ -32,7 +33,7 @@ export interface ButtonStyleOptions {
 export function buttonClasses({ variant = "primary", size = "lg", block = false, className }: ButtonStyleOptions = {}): string {
   return cx(
     "inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-btn font-medium leading-5 no-underline",
-    "transition-[opacity,background-color] duration-(--dur-quick) ease-press disabled:pointer-events-none disabled:opacity-40 aria-disabled:pointer-events-none aria-disabled:opacity-40",
+    "press disabled:pointer-events-none disabled:opacity-40 aria-disabled:pointer-events-none aria-disabled:opacity-40",
     // Pending (or a pending sibling's footer) blocks taps but keeps full contrast (MOTION-SPEC §3.5).
     "data-blocked:pointer-events-none data-blocked:opacity-100!",
     VARIANTS[variant],

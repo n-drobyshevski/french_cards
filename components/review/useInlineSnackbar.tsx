@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Snackbar } from "@/components/ui/Snackbar";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { LeavingSnackbars, Snackbar, useLeavingSnackbars, usePageHidden } from "@/components/ui/Snackbar";
 import { cx } from "@/components/ui/cx";
 
 interface Entry {
@@ -34,38 +34,39 @@ const PLACEMENT = {
 } as const;
 
 const DURATION_MS = 5000;
-/** --dur-exit: the bar fades out (and drops 8px) before it unmounts. */
-const EXIT_MS = 140;
 let nextId = 1;
 
 /**
  * Snackbar of the review screen, placed by the screen instead of the app's floating host so it
- * never covers the grade buttons. One at a time; hides after 5 s unless hovered or focused. Enters
- * with an 8px rise (--dur-enter), leaves the way it came (--dur-exit); fades only under reduced motion.
+ * never covers the grade buttons. One at a time; hides after 5 s unless hovered or focused (the
+ * timer also stops while the page is hidden). Enters with an 8px rise (--dur-enter), leaves the
+ * way it came (--dur-exit); a replacement enters while the old bar leaves. Fades only under
+ * reduced motion.
  */
 export function useInlineSnackbar() {
   const [entry, setEntry] = useState<Entry | null>(null);
-  const [leaving, setLeaving] = useState(false);
   const [paused, setPaused] = useState(false);
+  const hidden = usePageHidden();
+  const { leaving, leave } = useLeavingSnackbars<Entry>();
+  const current = useRef<Entry | null>(null);
 
-  const show = useCallback((options: InlineSnackbarOptions) => {
-    setEntry({ ...options, id: nextId++ });
-    setLeaving(false);
-    setPaused(false);
-  }, []);
-  const hide = useCallback(() => setLeaving(true), []);
+  const swap = useCallback(
+    (next: Entry | null) => {
+      if (current.current) leave(current.current);
+      current.current = next;
+      setEntry(next);
+      setPaused(false);
+    },
+    [leave],
+  );
+  const show = useCallback((options: InlineSnackbarOptions) => swap({ ...options, id: nextId++ }), [swap]);
+  const hide = useCallback(() => swap(null), [swap]);
 
   useEffect(() => {
-    if (!entry || paused || leaving) return;
-    const timer = window.setTimeout(() => setLeaving(true), DURATION_MS);
+    if (!entry || paused || hidden) return;
+    const timer = window.setTimeout(hide, DURATION_MS);
     return () => window.clearTimeout(timer);
-  }, [entry, paused, leaving]);
-
-  useEffect(() => {
-    if (!entry || !leaving) return;
-    const timer = window.setTimeout(() => setEntry(null), EXIT_MS);
-    return () => window.clearTimeout(timer);
-  }, [entry, leaving]);
+  }, [entry, paused, hidden, hide]);
 
   /** The bar in place; `className` spaces it from its neighbours when it is in the flow. */
   const render = (className?: string, placement: keyof typeof PLACEMENT = "review") => (
@@ -77,33 +78,34 @@ export function useInlineSnackbar() {
         PLACEMENT[placement],
       )}
     >
-      {entry && (
-        <div
-          key={entry.id}
-          className={cx(
-            className,
-            "animate-[enter-pop_var(--dur-enter)_var(--ease-enter)] transition-[opacity,translate] duration-(--dur-exit) ease-exit md:m-0",
-            leaving ? "translate-y-[calc(var(--dist-pop)*var(--motion-scale))] opacity-0" : "pointer-events-auto",
+      {(entry || leaving.length > 0) && (
+        <div className="relative flow-root">
+          <LeavingSnackbars leaving={leaving} overlap={!!entry} className={cx(className, "md:m-0")} />
+          {entry && (
+            <div
+              key={entry.id}
+              className={cx(className, "snackbar-in pointer-events-auto md:m-0")}
+              onPointerEnter={() => setPaused(true)}
+              onPointerLeave={() => setPaused(false)}
+              onFocus={() => setPaused(true)}
+              onBlur={() => setPaused(false)}
+            >
+              <Snackbar
+                message={entry.message}
+                actionLabel={entry.actionLabel}
+                actionKey={entry.actionKey}
+                onAction={
+                  entry.onAction
+                    ? () => {
+                        const action = entry.onAction;
+                        hide();
+                        action?.();
+                      }
+                    : undefined
+                }
+              />
+            </div>
           )}
-          onPointerEnter={() => setPaused(true)}
-          onPointerLeave={() => setPaused(false)}
-          onFocus={() => setPaused(true)}
-          onBlur={() => setPaused(false)}
-        >
-          <Snackbar
-            message={entry.message}
-            actionLabel={entry.actionLabel}
-            actionKey={entry.actionKey}
-            onAction={
-              entry.onAction
-                ? () => {
-                    const action = entry.onAction;
-                    setEntry(null);
-                    action?.();
-                  }
-                : undefined
-            }
-          />
         </div>
       )}
     </div>

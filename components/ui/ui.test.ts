@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { Button, buttonClasses } from "./Button";
 import { Chip } from "./Chip";
+import { Collapse } from "./Collapse";
 import { ICON_NAMES, Icon } from "./Icons";
 import { Segmented } from "./Segmented";
 import { SlangMeter, slangAbbr, slangAriaLabel } from "./SlangMeter";
@@ -86,6 +87,9 @@ describe("Toggle and Segmented", () => {
     const html = renderToStaticMarkup(h(Toggle, { checked: true, onCheckedChange: () => {}, "aria-label": "Свайпы" }));
     expect(html).toContain('role="switch"');
     expect(html).toContain('aria-checked="true"');
+    // The thumb sits at the end by translation (it slides there after a tap), and the switch presses in.
+    expect(html).toContain("translate-x-5");
+    expect(html).toContain("press-sm");
   });
 
   it("renders a radiogroup with one tabbable option", () => {
@@ -104,6 +108,20 @@ describe("Toggle and Segmented", () => {
     expect(html).toContain('role="radiogroup"');
     expect(count(html, 'aria-checked="true"')).toBe(1);
     expect(count(html, 'tabindex="0"')).toBe(1);
+  });
+});
+
+describe("Collapse", () => {
+  it("animates the grid row and takes a closed row out of focus order", () => {
+    const open = renderToStaticMarkup(h(Collapse, { open: true, children: "строка" }));
+    expect(open).toContain('data-state="open"');
+    expect(open).toContain("grid-rows-[1fr]");
+    expect(open).not.toContain("inert");
+    const closed = renderToStaticMarkup(h(Collapse, { open: false, appear: true, children: "строка" }));
+    expect(closed).toContain('data-state="closed"');
+    expect(closed).toContain("grid-rows-[0fr]");
+    expect(closed).toContain("inert");
+    expect(closed).toContain("starting:grid-rows-[0fr]");
   });
 });
 

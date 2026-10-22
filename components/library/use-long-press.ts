@@ -11,7 +11,8 @@ const GUARD_MS = 800;
 
 /**
  * The finger lifting after a long press still produces a click, and it lands on whatever is under
- * it by then — often the menu that just opened. Swallow that one click, wherever it lands.
+ * it by then — often the menu that just opened. Swallow that one click, wherever it lands; a new
+ * press or key (a real tap in the menu, which now opens in 380ms) ends the guard.
  */
 function swallowNextClick() {
   if (typeof document === "undefined") return;
@@ -23,9 +24,13 @@ function swallowNextClick() {
   const done = () => {
     clearTimeout(timer);
     document.removeEventListener("click", swallow, true);
+    document.removeEventListener("pointerdown", done, true);
+    document.removeEventListener("keydown", done, true);
   };
   const timer = setTimeout(done, GUARD_MS);
   document.addEventListener("click", swallow, true);
+  document.addEventListener("pointerdown", done, true);
+  document.addEventListener("keydown", done, true);
 }
 
 /**

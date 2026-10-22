@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { openReview, questionCard } from "./fixtures";
+import { motionSettled, openReview, questionCard } from "./fixtures";
 import { slowDatabase } from "./review-loading";
 
 // Desktop review (mockups/DESKTOP-SPEC.md §5 #1–#4): running head, the landscape index card centred
@@ -93,6 +93,7 @@ test("a click flips both ways without moving the card; keys 1/2/3 grade, with ca
   await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
   const snackbar = page.locator("[data-snackbar]");
   await expect(snackbar).toContainText(/^Ответ отменён/);
+  await motionSettled(page);
   const snackBox = (await snackbar.boundingBox())!;
   expect(snackBox.height).toBe(44);
   expect(snackBox.width).toBeLessThanOrEqual(480);

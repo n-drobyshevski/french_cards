@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -15,6 +16,7 @@ import { createPortal } from "react-dom";
 import { cx } from "@/components/ui/cx";
 import { Icon, type IconName } from "@/components/ui/Icons";
 import { Kbd } from "@/components/ui/Kbd";
+import { exitMs } from "@/lib/motion";
 import { useFinePointer } from "@/lib/use-media";
 import { CheckMark } from "./Checkbox";
 
@@ -22,6 +24,9 @@ import { CheckMark } from "./Checkbox";
 // padding 4, items 32px (44 on coarse pointers), key cap right, danger items in --again. Arrow
 // keys, Home/End, type-ahead, Esc and Tab close it; focus returns where it was. role="menu" also
 // blocks page shortcuts (OPEN_LAYER_SELECTOR) while it is open.
+// Motion (MOTION-SPEC D6): placed before the first paint, it fades in with 4px of travel from the
+// trigger side over --dur-quick (`popover-in`), and fades out over --dur-exit (`popover-out`) as an
+// inert copy of its last open state. No scale.
 
 export type MenuAnchor =
   | { element: HTMLElement; align?: "start" | "end" }
@@ -69,10 +74,25 @@ function portalContainer(anchor: MenuAnchor | null): HTMLElement | null {
   return (from?.closest?.("[role='dialog']") as HTMLElement | null) ?? document.body;
 }
 
-export function Menu({ open, anchor, onClose, label, width = 220, exactWidth = false, returnFocus, id, className, children }: MenuProps) {
+export function Menu(props: MenuProps) {
+  // The props of the last open render: what the menu shows while it fades out.
+  const [last, setLast] = useState<MenuProps | null>(null);
+  if (props.open && last !== props) setLast(props);
+  useEffect(() => {
+    if (props.open || !last) return;
+    const timer = window.setTimeout(() => setLast(null), exitMs());
+    return () => window.clearTimeout(timer);
+  }, [props.open, last]);
+
+  const shown = props.open ? props : last;
+  return shown ? <MenuPanel {...shown} open={props.open} /> : null;
+}
+
+/** The menu itself; `open` false = the inert copy on its way out. */
+function MenuPanel({ open, anchor, onClose, label, width = 220, exactWidth = false, returnFocus, id, className, children }: MenuProps) {
   const ref = useRef<HTMLDivElement>(null);
   const fine = useFinePointer();
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
+  const [pos, setPos] = useState<{ left: number; top: number; side: "top" | "bottom" } | null>(null);
   const restoreTo = useRef<HTMLElement | null>(null);
   const typed = useRef({ text: "", at: 0 });
   const onCloseRef = useRef(onClose);
@@ -81,7 +101,7 @@ export function Menu({ open, anchor, onClose, label, width = 220, exactWidth = f
     onCloseRef.current = onClose;
     anchorRef.current = anchor;
   });
-  const container = open ? portalContainer(anchor) : null;
+  const container = useMemo(() => portalContainer(anchor), [anchor]);
 
   // Remember what had focus, and give it back on close (unless the user clicked elsewhere).
   const close = useCallback(
@@ -96,11 +116,9 @@ export function Menu({ open, anchor, onClose, label, width = 220, exactWidth = f
     [returnFocus],
   );
 
+  // Measured and placed before the first paint (it renders invisible until then); kept while closing.
   useLayoutEffect(() => {
-    if (!open || !anchor || !ref.current || !container) {
-      setPos(null);
-      return;
-    }
+    if (!open || !anchor || !ref.current || !container) return;
     const menu = ref.current.getBoundingClientRect();
     const a = anchorRect(anchor);
     const box = container === document.body ? { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight } : container.getBoundingClientRect();
@@ -113,8 +131,12 @@ export function Menu({ open, anchor, onClose, label, width = 220, exactWidth = f
     if (top + menu.height > box.top + box.height - EDGE && a.top - GAP - menu.height >= box.top + EDGE) top = a.top - GAP - menu.height;
     top = Math.max(box.top + EDGE, Math.min(top, box.top + box.height - EDGE - menu.height));
     // Inside a transformed dialog `position: fixed` is relative to the dialog.
-    const next = { left: left - (container === document.body ? 0 : box.left), top: top - (container === document.body ? 0 : box.top) };
-    setPos((prev) => (prev && prev.left === next.left && prev.top === next.top ? prev : next));
+    const next = {
+      left: left - (container === document.body ? 0 : box.left),
+      top: top - (container === document.body ? 0 : box.top),
+      side: top < a.top ? ("top" as const) : ("bottom" as const),
+    };
+    setPos((prev) => (prev && prev.left === next.left && prev.top === next.top && prev.side === next.side ? prev : next));
   }, [open, anchor, container]);
 
   useEffect(() => {
@@ -151,7 +173,7 @@ export function Menu({ open, anchor, onClose, label, width = 220, exactWidth = f
     };
   }, [open, close]);
 
-  if (!open || !container) return null;
+  if (!container) return null;
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     const items = [...event.currentTarget.querySelectorAll<HTMLElement>(ITEM_SELECTOR)];
@@ -207,15 +229,25 @@ export function Menu({ open, anchor, onClose, label, width = 220, exactWidth = f
     <MenuContext.Provider value={{ close, coarse: !fine }}>
       <div
         ref={ref}
-        id={id}
-        role="menu"
-        aria-label={label}
+        id={open ? id : undefined}
+        role={open ? "menu" : undefined}
+        aria-label={open ? label : undefined}
+        aria-hidden={open ? undefined : true}
+        inert={!open}
         tabIndex={-1}
+        data-side={pos?.side}
         onKeyDown={onKeyDown}
         onContextMenu={(e) => e.preventDefault()}
-        style={{ minWidth: width, width: exactWidth ? width : undefined, left: pos?.left ?? -9999, top: pos?.top ?? -9999 }}
+        style={{
+          minWidth: width,
+          width: exactWidth ? width : undefined,
+          left: pos?.left ?? 0,
+          top: pos?.top ?? 0,
+          visibility: pos ? undefined : "hidden",
+        }}
         className={cx(
           "fixed z-[70] flex max-h-[min(480px,calc(100dvh-16px))] flex-col overflow-y-auto rounded-[6px] border border-ink bg-surface p-1 text-ink outline-none",
+          open ? "popover-in" : "popover-out",
           className,
         )}
       >
