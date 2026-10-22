@@ -54,6 +54,8 @@ type FocusTarget = "search" | "fr" | "ru" | "list";
 
 const NO_FOLDERS: Folder[] = [];
 const FULL_SCOPE = { slang: true, example: true, pos: true } as const;
+/** Detection already applied: only the custom fields marked for the automatic fill are still asked for. */
+const FIELDS_ONLY = { slang: false, example: false, pos: false, folder: false } as const;
 
 type ListEnrichInput = EnrichInput & { rowKey: string };
 const EMPTY_QUICK: QuickFields = { other: "", folder: INBOX_CHOICE, error: null };
@@ -506,7 +508,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
     // Saved before detection came back: fill what the user has not set once it does.
     const fillLater = formEnrich.pending ? enrichScope(draft) : null;
     void commit(draftToSaveRequest(draft), `Добавлено · ${draft.fr.trim()}`, andMore).then((result) => {
-      if (result && fillLater) void fillSavedWords(result.words.map((word) => ({ word, scope: fillLater })));
+      if (result) void fillSavedWords(result.words.map((word) => ({ word, scope: fillLater ?? FIELDS_ONLY })));
     });
   };
 
@@ -567,8 +569,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
     ).then((result) => {
       if (!result) return;
       const scope = { ...FULL_SCOPE, folder: listAuto };
-      const later = result.words.filter((_, i) => !rows[i]?.enrich);
-      if (later.length > 0) void fillSavedWords(later.map((word) => ({ word, scope })));
+      void fillSavedWords(result.words.map((word, i) => ({ word, scope: rows[i]?.enrich ? FIELDS_ONLY : scope })));
     });
   };
 
