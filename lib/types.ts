@@ -10,7 +10,8 @@ export const SLANG_LABELS = ["нейтр.", "fam.", "arg.", "vulg."] as const;
 export type PartOfSpeech = "noun" | "verb" | "adj" | "adv" | "expression" | "other";
 export type Gender = "m" | "f" | "mf" | "none";
 export type Confidence = "high" | "med" | "low";
-export type WordSource = "manual" | "suggest" | "screenshot" | "import";
+/** Where a word came from; "chat" = added through the Claude connector (lib/mcp). */
+export type WordSource = "manual" | "suggest" | "screenshot" | "import" | "chat";
 
 export interface Syncable {
   id: string;
