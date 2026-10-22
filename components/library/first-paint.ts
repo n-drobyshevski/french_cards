@@ -107,7 +107,7 @@ export function rememberLibraryShape(shape: LibraryShape): void {
 
 // ----- Themes seen this session
 
-export type CachedFolder = Pick<FolderWithStats, "id" | "name" | "color" | "locked" | "stats">;
+export type CachedFolder = Pick<FolderWithStats, "id" | "name" | "color" | "locked" | "muted" | "stats">;
 
 const folders = new Map<string, CachedFolder>();
 

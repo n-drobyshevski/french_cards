@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "./db";
-import { createFolder } from "./folders";
+import { createFolder, updateFolder } from "./folders";
 import {
   advancePractice,
   buildPracticeQueue,
@@ -96,6 +96,24 @@ describe("loadSession", () => {
     expect(counts).toEqual({ due: 0, new: 1, done: 0, total: 1 });
     expect(keys(await buildPracticeQueue({ scope: "all" }, NOON))).toEqual([`${a.id}:fr_ru`]);
     expect(muted.muted).toBe(true);
+  });
+
+  it("leaves the words of a theme «на паузе» out of every session, even the theme's own", async () => {
+    await updateSettings({ new_per_day: 5 });
+    const later = await createFolder({ name: "Потом" }, NOON);
+    const a = await word("a", { both_directions: false });
+    const b = await word("b", { both_directions: false, folder_id: later.id });
+    await setReview(b, "fr_ru", at(-DAY));
+    expect((await loadSession({}, NOON)).counts).toEqual({ due: 1, new: 1, done: 0, total: 2 });
+
+    await updateFolder(later.id, { muted: true }, NOON);
+    const { queue, counts } = await loadSession({}, NOON);
+    expect(keys(queue)).toEqual([`${a.id}:fr_ru`]);
+    expect(counts).toEqual({ due: 0, new: 1, done: 0, total: 1 });
+    expect((await loadSession({ folderId: later.id }, NOON)).queue).toEqual([]);
+    expect(keys(await buildPracticeQueue({ scope: "all", folderId: later.id }, NOON))).toEqual([]);
+    const pre = await loadSessionData();
+    expect([...matchWords(pre.words, pre.states, pre.liveFolderIds, {}, pre.pausedFolderIds).keys()]).toEqual([a.id]);
   });
 
   it("orders due cards by due date and includes review cards due later today", async () => {

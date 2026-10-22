@@ -23,6 +23,7 @@ import { FolderMenuSheet } from "./FolderMenuSheet";
 import { NAV_BACK } from "./FolderTile";
 import { useLibraryDesk } from "./lazy-desk";
 import { nWords, practiceHref, reviewHref } from "./format";
+import { useThemePause } from "./theme-pause";
 import { useLibraryWords } from "./useLibraryWords";
 import { WordList } from "./WordList";
 
@@ -67,6 +68,7 @@ function PhoneFolder({ id }: { id: string | null }) {
   const folderId = id === INBOX_SEGMENT ? null : id;
   const router = useRouter();
   const snackbar = useSnackbar();
+  const setPaused = useThemePause();
   const addSheet = useAddSheetActions();
   const [menuOpen, setMenuOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -116,6 +118,7 @@ function PhoneFolder({ id }: { id: string | null }) {
   const stats = meta?.stats ?? cached?.stats;
   const color = folder?.color ?? cached?.color ?? "var(--ink)";
   const locked = folder ? folder.locked : (cached?.locked ?? false);
+  const paused = folder ? !!folder.muted : !!cached?.muted;
   const pct = Math.round((stats?.mastery ?? 0) * 100);
   const items = words?.words;
   // Until the words are read, expect what the tile showed (or words, when nothing is known).
@@ -153,6 +156,7 @@ function PhoneFolder({ id }: { id: string | null }) {
         <div className="mt-2 flex min-h-10 items-center gap-3">
           <h1 className="m-0 min-w-0 font-serif text-[32px] leading-10 font-medium tracking-[-0.015em] break-words">{name}</h1>
           {locked && <span className="meta shrink-0 rounded-chip border border-rule px-1.5 leading-5">закреплена</span>}
+          {paused && <span className="meta shrink-0 rounded-chip border border-rule px-1.5 leading-5">на паузе</span>}
         </div>
         <p className="meta m-0 mt-2 min-h-4 tabular-nums">
           {stats && (
@@ -229,6 +233,11 @@ function PhoneFolder({ id }: { id: string | null }) {
               <span aria-hidden="true" className={buttonClasses({ block: true, className: "invisible" })}>
                 Повторить тему
               </span>
+            ) : paused && folder ? (
+              // «На паузе»: nothing to review or practise, so the way back.
+              <Button variant="secondary" block onClick={() => void setPaused(folder, false)}>
+                Вернуть в повторения
+              </Button>
             ) : reviewable ? (
               <Link href={reviewHref(folderId)} className={buttonClasses({ block: true })}>
                 Повторить тему

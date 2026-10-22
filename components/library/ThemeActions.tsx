@@ -10,6 +10,7 @@ import { DisbandSheet, disbandMessage } from "./DisbandSheet";
 import { FolderFormSheet } from "./FolderFormSheet";
 import { folderHref, nWords, practiceHref, reviewHref } from "./format";
 import { Menu, MenuCheckboxItem, MenuItem, MenuSeparator, type MenuAnchor } from "./Menu";
+import { THEME_PAUSE_CAPTION, useThemePause } from "./theme-pause";
 import { useUndoSnackbar } from "./undo";
 
 // Desktop actions on a theme — the phone's FolderMenuSheet as a menu (DESKTOP-SPEC §3 «menu»):
@@ -31,6 +32,7 @@ export interface ThemeMenuItemsProps {
 
 /** The items of a theme's menu, inside a <Menu>. */
 export function ThemeMenuItems({ folder, words, navigation = false, cards, onNavigate, onEdit, onDisband, onDelete }: ThemeMenuItemsProps) {
+  const setPaused = useThemePause();
   return (
     <>
       {navigation && (
@@ -45,7 +47,7 @@ export function ThemeMenuItems({ folder, words, navigation = false, cards, onNav
           )}
         </>
       )}
-      {words > 0 && (
+      {words > 0 && !folder.muted && (
         <MenuItem icon="refresh" caption={`${nWords(words)} вперемешку, не влияет на расписание.`} onSelect={() => onNavigate(practiceHref(folder.id))}>
           Тренировка всей темы
         </MenuItem>
@@ -59,6 +61,9 @@ export function ThemeMenuItems({ folder, words, navigation = false, cards, onNav
         caption="Раскладка по темам не переименует её и не будет забирать из неё слова."
       >
         Закрепить тему
+      </MenuCheckboxItem>
+      <MenuCheckboxItem checked={!!folder.muted} onCheckedChange={(muted) => void setPaused(folder, muted)} caption={THEME_PAUSE_CAPTION}>
+        На паузе
       </MenuCheckboxItem>
       <MenuSeparator />
       {words > 0 && (

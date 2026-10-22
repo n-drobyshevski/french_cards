@@ -1,4 +1,5 @@
 // Live-query loaders for the review screen. Each runs as one read inside useLiveQuery.
+import { isPaused } from "@/lib/core/words";
 import {
   endOfStudyDay,
   getDaySummary,
@@ -43,7 +44,7 @@ export function wordOrdinals(words: readonly Pick<Word, "id" | "created_at">[]):
 
 function wordsMatching(filter: SessionFilter, pre: SessionData): readonly Word[] {
   const narrowed = filter.folderId !== undefined || !!filter.folderIds || !!filter.slang || !!filter.statuses || !!filter.addedSince;
-  return narrowed ? [...matchWords(pre.words, pre.states, pre.liveFolderIds, filter).values()] : pre.words;
+  return narrowed ? [...matchWords(pre.words, pre.states, pre.liveFolderIds, filter, pre.pausedFolderIds).values()] : pre.words;
 }
 
 // The library is read once per run (grades re-run this), and the session and counts derive from it.
@@ -70,7 +71,7 @@ export async function loadDoneScreen(filter: SessionFilter, now: Date = new Date
   const dayEnd = endOfStudyDay(now).toISOString();
   const loading = loadSessionData();
   const [pre, summary] = await Promise.all([loading, getDaySummary(filter, now, loading)]);
-  const ids = new Set(wordsMatching(filter, pre).filter((w) => !w.muted).map((w) => w.id));
+  const ids = new Set(wordsMatching(filter, pre).filter((w) => !isPaused(w, pre.pausedFolderIds)).map((w) => w.id));
   let nextDue: string | null = null;
   for (const s of pre.states) {
     if (s.state === 0 || s.due < dayEnd) continue;

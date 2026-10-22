@@ -27,6 +27,8 @@ export interface Folder extends Syncable {
   created_by: "user" | "auto";
   locked: boolean; // auto-sort never renames/deletes/moves words out
   sort: number;
+  /** «На паузе»: every word of the theme stays out of review and practice. Missing on older rows (= false). */
+  muted?: boolean;
 }
 
 /** One example sentence and its translation. */
