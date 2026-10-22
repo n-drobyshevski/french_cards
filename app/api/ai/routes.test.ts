@@ -9,9 +9,11 @@ vi.mock("ai", async (importOriginal) => ({ ...(await importOriginal<typeof impor
 import { resetRateLimits } from "@/lib/ai/rate-limit";
 import { POST as anki } from "./anki/route";
 import { POST as classify } from "./classify/route";
+import { POST as context } from "./context/route";
 import { POST as enrich } from "./enrich/route";
 import { POST as example } from "./example/route";
 import { POST as extract } from "./extract/route";
+import { POST as lookup } from "./lookup/route";
 import { POST as suggest } from "./suggest/route";
 
 const json = (body: unknown, init: RequestInit = {}) =>
@@ -567,5 +569,97 @@ describe("POST /api/ai/anki", () => {
     spy.mockRestore();
     expect(last!.status).toBe(429);
     expect(Number(last!.headers.get("Retry-After"))).toBeGreaterThan(0);
+  });
+});
+
+describe("POST /api/ai/lookup", () => {
+  const model = {
+    found: true,
+    fr: "kiffer",
+    pos: "verb",
+    gender: "none",
+    slang_level: "fam",
+    verlan: false,
+    note: null,
+    translations: [{ ru: "тащиться", share: 60 }, { ru: "нравиться", share: 40 }],
+    synonyms: [{ fr: "adorer", ru: "обожать", slang_level: "neutral" }],
+    conjugation: null,
+  };
+
+  it("400 on an empty query", async () => {
+    expect((await lookup(json({ q: "  " }))).status).toBe(400);
+    expect(ai.generateText).not.toHaveBeenCalled();
+  });
+
+  it("returns the cleaned entry and sends the query with its language", async () => {
+    ai.generateText.mockResolvedValue({ output: model });
+    const res = await lookup(json({ q: "тащиться" }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ found: true, q: "тащиться", direction: "ru", fr: "kiffer", slang_level: 1, translations: [{ ru: "тащиться", share: 60 }, { ru: "нравиться", share: 40 }] });
+    expect((ai.generateText.mock.calls[0][0] as { prompt: string }).prompt).toBe("Query (Russian): тащиться");
+  });
+
+  it("502 when the model call fails", async () => {
+    ai.generateText.mockRejectedValue(new Error("down"));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await lookup(json({ q: "kiffer" }));
+    spy.mockRestore();
+    expect(res.status).toBe(502);
+  });
+});
+
+describe("POST /api/ai/context", () => {
+  const cited = (url: string, citedText: string) => ({ sourceType: "url", url, title: "Fil", providerMetadata: { anthropic: { citedText } } });
+
+  it("searches the web, then keeps only sentences quoted from cited pages", async () => {
+    ai.generateText
+      .mockResolvedValueOnce({
+        text: "...",
+        sources: [cited("https://www.forum.exemple.fr/t/1", "Franchement je kiffe trop ce son."), { sourceType: "url", url: "https://autre.exemple.fr", title: null }],
+      })
+      .mockResolvedValueOnce({
+        output: {
+          examples: [
+            { snippet: 1, fr: "Franchement je kiffe trop ce son.", hit: "kiffe", ru: "Честно, я тащусь от этого трека.", meaning: "тащиться", kind: "forum" },
+            { snippet: 1, fr: "Je kiffe pas ce son du tout.", hit: "kiffe", ru: "Мне не нравится.", meaning: null, kind: "forum" },
+          ],
+        },
+      });
+    const res = await context(json({ fr: "kiffer", meanings: ["тащиться", "нравиться"] }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      sources: 2,
+      examples: [
+        {
+          fr: "Franchement je kiffe trop ce son.",
+          ru: "Честно, я тащусь от этого трека.",
+          hit: "kiffe",
+          meaning: "тащиться",
+          kind: "forum",
+          url: "https://www.forum.exemple.fr/t/1",
+          domain: "forum.exemple.fr",
+          title: "Fil",
+        },
+      ],
+    });
+    const [searchCall, pickCall] = ai.generateText.mock.calls.map((c) => c[0] as { tools?: Record<string, unknown>; prompt: string; output?: unknown });
+    expect(Object.keys(searchCall.tools ?? {})).toEqual(["web_search"]);
+    expect(searchCall.prompt).toBe("Headword: kiffer\nSenses (Russian): тащиться | нравиться");
+    expect(pickCall.tools).toBeUndefined();
+    expect(pickCall.prompt).toContain("[1] (forum.exemple.fr — Fil) Franchement je kiffe trop ce son.");
+  });
+
+  it("no cited snippets: empty list without a second call", async () => {
+    ai.generateText.mockResolvedValueOnce({ text: "Rien trouvé.", sources: [] });
+    const res = await context(json({ fr: "kiffance" }));
+    expect(await res.json()).toEqual({ examples: [], sources: 0 });
+    expect(ai.generateText).toHaveBeenCalledTimes(1);
+  });
+
+  it("429 after 6 runs in a row", async () => {
+    ai.generateText.mockResolvedValue({ text: "", sources: [] });
+    let last: Response | null = null;
+    for (let i = 0; i < 7; i++) last = await context(json({ fr: "kiffer" }));
+    expect(last!.status).toBe(429);
   });
 });

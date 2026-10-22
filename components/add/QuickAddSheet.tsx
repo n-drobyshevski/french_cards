@@ -31,8 +31,10 @@ import {
   enrichScope,
   hasErrors,
   manualDraft,
+  prefilledDraft,
   validateDraft,
   type DraftErrors,
+  type DraftPrefill,
   type WordDraft,
 } from "./draft";
 import { choiceKey, INBOX_CHOICE, listFolderChoices, type FolderChoice } from "./folder-choice";
@@ -92,7 +94,8 @@ export function QuickAddSheet() {
           key={sheet.session}
           open={sheet.isOpen}
           onOpenChange={sheet.setOpen}
-          initialFr={sheet.initial.fr ?? ""}
+          initialFr={sheet.initial.draft?.fr ?? sheet.initial.fr ?? ""}
+          initialDraft={sheet.initial.draft}
           onOpenWord={openWord}
         />
       )}
@@ -105,10 +108,12 @@ interface AddSessionProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   initialFr: string;
+  /** Opens in the filled form instead of the search. */
+  initialDraft?: DraftPrefill;
   onOpenWord: (id: string) => void;
 }
 
-function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionProps) {
+function AddSession({ open, onOpenChange, initialFr, initialDraft, onOpenWord }: AddSessionProps) {
   const snackbar = useSnackbar();
   const folders = useLiveQuery(listFolders, [], NO_FOLDERS);
   const settings = useLiveQuery(getSettings);
@@ -131,12 +136,14 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
 
   // From 768 up the sheet is the desktop dialog (mockups D-Add-*): its own panels and keys.
   const desk = useLayoutClass() !== "compact";
-  const [mode, setMode] = useState<Mode>("search");
+  const [mode, setMode] = useState<Mode>(initialDraft ? "form" : "search");
   const [query, setQuery] = useState(initialFr);
-  const [draft, setDraft] = useState<WordDraft | null>(null);
+  const [draft, setDraft] = useState<WordDraft | null>(() => (initialDraft ? prefilledDraft(initialDraft) : null));
   // Which headword and option the draft came from. On desktop Esc goes back to the search with the
   // draft kept; ↵ on the same option reopens it until the headword changes.
-  const [draftOrigin, setDraftOrigin] = useState<{ query: string; key: string } | null>(null);
+  const [draftOrigin, setDraftOrigin] = useState<{ query: string; key: string } | null>(() =>
+    initialDraft ? { query: initialFr, key: MANUAL_KEY } : null,
+  );
   const [errors, setErrors] = useState<DraftErrors>({});
   const [ackDuplicate, setAckDuplicate] = useState<string | null>(null);
   const [quick, setQuick] = useState<QuickFields>(EMPTY_QUICK);
@@ -188,10 +195,11 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
     };
   }, [lex, open]);
 
-  // Prefill from useAddSheet().open({fr}).
+  // Prefill from useAddSheet().open({fr}). A filled form ({draft}) asks for nothing.
+  const prefilled = initialDraft !== undefined;
   useEffect(() => {
-    if (initialFr.trim()) requestSuggestions(initialFr);
-  }, [initialFr, requestSuggestions]);
+    if (initialFr.trim() && !prefilled) requestSuggestions(initialFr);
+  }, [initialFr, prefilled, requestSuggestions]);
 
   useEffect(() => {
     if (!open) cancelSuggestions();
@@ -405,6 +413,8 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
   const backToSearch = () => {
     setSpot(null);
     setMode("search");
+    // A form opened filled (from «Контекст») never asked for «Варианты»; same query = no new request.
+    requestSuggestions(query);
     if (!desk) {
       setDraft(null);
       setDraftOrigin(null);
@@ -769,6 +779,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
             onAddAnyway={() => setAckDuplicate(dupKey)}
             quick={quickVisible ? quick : null}
             onQuickChange={(patch) => setQuick((q) => ({ ...q, ...patch }))}
+            onLeave={() => handleOpenChange(false)}
             onQuickSave={saveQuick}
             preferredKey={draft && draftOrigin && draftOrigin.query === query ? draftOrigin.key : null}
             freshId={freshId}
@@ -869,6 +880,7 @@ function AddSession({ open, onOpenChange, initialFr, onOpenWord }: AddSessionPro
           onAddAnyway={() => setAckDuplicate(dupKey)}
           quick={quickVisible ? quick : null}
           onQuickChange={(patch) => setQuick((q) => ({ ...q, ...patch }))}
+          onLeave={() => handleOpenChange(false)}
           freshId={freshId}
         />
       )}

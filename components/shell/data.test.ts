@@ -60,6 +60,7 @@ describe("navKeyForPath", () => {
     expect(navKeyForPath("/library/inbox")).toBe("inbox");
     expect(navKeyForPath("/library/abc-1")).toBe("theme:abc-1");
     expect(navKeyForPath("/import")).toBe("import");
+    expect(navKeyForPath("/context")).toBe("context");
     expect(navKeyForPath("/settings")).toBe("settings");
     expect(navKeyForPath("/login")).toBeNull();
     expect(navKeyForPath(null)).toBeNull();

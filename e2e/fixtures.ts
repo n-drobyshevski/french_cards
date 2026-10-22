@@ -251,6 +251,144 @@ export async function mockExample(
   });
 }
 
+// «Контекст»: LookupResponse and ContextResponse (lib/ai/schemas.ts).
+
+export interface LookupWire {
+  found: boolean;
+  q: string;
+  direction: "fr" | "ru";
+  fr: string;
+  pos: SuggestionWire["pos"];
+  gender: SuggestionWire["gender"];
+  slang_level: 0 | 1 | 2 | 3;
+  verlan: boolean;
+  note: string | null;
+  translations: { ru: string; share: number }[];
+  synonyms: { fr: string; ru: string; slang_level: 0 | 1 | 2 | 3 }[];
+  conjugation: {
+    auxiliary: "avoir" | "être";
+    remark: string | null;
+    tenses: Record<"present" | "passe_compose" | "imparfait" | "futur", string[]>;
+  } | null;
+}
+
+export interface ContextExampleWire {
+  fr: string;
+  ru: string;
+  hit: string;
+  meaning: string | null;
+  kind: "forum" | "song" | "article" | "subtitles" | "social" | "book" | "other";
+  url: string;
+  domain: string;
+  title: string | null;
+}
+
+export const KIFFER_LOOKUP: LookupWire = {
+  found: true,
+  q: "kiffer",
+  direction: "fr",
+  fr: "kiffer",
+  pos: "verb",
+  gender: "none",
+  slang_level: 1,
+  verlan: false,
+  note: "От арабского kif",
+  translations: [
+    { ru: "тащиться", share: 38 },
+    { ru: "нравиться", share: 27 },
+    { ru: "кайфовать", share: 21 },
+    { ru: "обожать", share: 14 },
+  ],
+  synonyms: [
+    { fr: "adorer", ru: "обожать", slang_level: 0 },
+    { fr: "triper", ru: "тащиться", slang_level: 1 },
+    { fr: "surkiffer", ru: "дико тащиться", slang_level: 2 },
+  ],
+  conjugation: {
+    auxiliary: "avoir",
+    remark: "Правильный на -er",
+    tenses: {
+      present: ["je kiffe", "tu kiffes", "il/elle kiffe", "nous kiffons", "vous kiffez", "ils/elles kiffent"],
+      passe_compose: ["j'ai kiffé", "tu as kiffé", "il/elle a kiffé", "nous avons kiffé", "vous avez kiffé", "ils/elles ont kiffé"],
+      imparfait: ["je kiffais", "tu kiffais", "il/elle kiffait", "nous kiffions", "vous kiffiez", "ils/elles kiffaient"],
+      futur: ["je kifferai", "tu kifferas", "il/elle kiffera", "nous kifferons", "vous kifferez", "ils/elles kifferont"],
+    },
+  },
+};
+
+export const KIFFER_EXAMPLES: ContextExampleWire[] = [
+  {
+    fr: "Franchement, je kiffe trop ce son, je l'écoute en boucle.",
+    ru: "Честно, я так тащусь от этого трека, слушаю на повторе.",
+    hit: "kiffe",
+    meaning: "тащиться",
+    kind: "forum",
+    url: "https://forum.exemple.fr/t/1",
+    domain: "forum.exemple.fr",
+    title: "Vos sons du moment",
+  },
+  {
+    fr: "Elle kiffe grave le mec de sa classe.",
+    ru: "Ей очень нравится парень из её класса.",
+    hit: "kiffe",
+    meaning: "нравиться",
+    kind: "subtitles",
+    url: "https://sous-titres.exemple.org/s/2",
+    domain: "sous-titres.exemple.org",
+    title: null,
+  },
+  {
+    fr: "On a kiffé la soirée, c'était ouf.",
+    ru: "Мы кайфанули на вечеринке, было офигенно.",
+    hit: "kiffé",
+    meaning: "кайфовать",
+    kind: "social",
+    url: "https://social.exemple.com/p/3",
+    domain: "social.exemple.com",
+    title: null,
+  },
+];
+
+/** Answers POST /api/ai/lookup: `make` gives the response for the query (a number = that HTTP error). */
+export async function mockLookup(page: Page, make: (q: string) => LookupWire | number, onRequest?: (body: { q: string }) => void) {
+  await page.route("**/api/ai/lookup", async (route: Route) => {
+    const body = route.request().postDataJSON() as { q: string };
+    onRequest?.(body);
+    const answer = make(body.q);
+    if (typeof answer === "number") {
+      await route.fulfill({ status: answer, contentType: "application/json", body: JSON.stringify({ error: "failed" }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(answer) });
+  });
+}
+
+/**
+ * Answers POST /api/ai/context with `make(body)`. With `gate`, each request waits for
+ * `release()` (to look at «Ищем примеры в вебе»).
+ */
+export async function mockContext(
+  page: Page,
+  make: (body: { fr: string; meanings: string[] }) => ContextExampleWire[] | number,
+  opts: { onRequest?: (body: { fr: string; meanings: string[] }) => void; gate?: boolean } = {},
+) {
+  let open!: () => void;
+  const gate = new Promise<void>((resolve) => (open = resolve));
+  if (!opts.gate) open();
+  await page.route("**/api/ai/context", async (route: Route) => {
+    const body = route.request().postDataJSON() as { fr: string; meanings: string[] };
+    opts.onRequest?.(body);
+    await gate;
+    const answer = make(body);
+    if (typeof answer === "number") {
+      await route.fulfill({ status: answer, contentType: "application/json", body: JSON.stringify({ error: "failed" }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ examples: answer, sources: answer.length }) }).catch(() => undefined);
+  });
+  return { release: () => open() };
+}
+
 /** Detected fields with an example built from the French side. */
 export const enriched = (word: EnrichWordWire, fields: Partial<Omit<EnrichResultWire, "id">> = {}): Omit<EnrichResultWire, "id"> => ({
   pos: "noun",

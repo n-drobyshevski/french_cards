@@ -93,13 +93,14 @@ export async function loadShellData(now: Date = new Date()): Promise<ShellData> 
 }
 
 /** Nav item for a path: a section, «inbox», or `theme:<id>`. */
-export type NavKey = "review" | "library" | "import" | "settings" | "inbox" | `theme:${string}`;
+export type NavKey = "review" | "library" | "context" | "import" | "settings" | "inbox" | `theme:${string}`;
 
 /** Which nav item a path activates (exactly one; a shown theme instead of «Библиотека»). */
 export function navKeyForPath(pathname: string | null): NavKey | null {
   if (!pathname) return null;
   if (pathname === "/" || pathname.startsWith("/done")) return "review";
   if (pathname.startsWith("/import")) return "import";
+  if (pathname.startsWith("/context")) return "context";
   if (pathname.startsWith("/settings")) return "settings";
   const theme = /^\/library\/([^/]+)/.exec(pathname);
   if (theme) {

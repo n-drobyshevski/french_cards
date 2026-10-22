@@ -1,7 +1,7 @@
 "use client";
 
 import { useLiveQuery } from "dexie-react-hooks";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { ExampleError, MAX_EXAMPLES, requestExample, type ExampleCard } from "@/lib/examples";
@@ -35,6 +35,8 @@ export interface ExampleListProps {
   layout?: "stack" | "row";
   /** Text when there is no example yet (read-only). */
   emptyText?: string;
+  /** Beside «+ Ещё пример» (the word card's «Примеры из жизни ›»). */
+  aside?: ReactNode;
   className?: string;
 }
 
@@ -53,6 +55,7 @@ export function ExampleList({
   ruInputClass,
   layout = "stack",
   emptyText = "Нет примера",
+  aside,
   className,
 }: ExampleListProps) {
   const settings = useLiveQuery(getSettings);
@@ -171,24 +174,16 @@ export function ExampleList({
         </div>
       ))}
 
-      {canAdd && (
-        <button
-          type="button"
-          onClick={add}
-          disabled={busy !== null}
-          className={cx(
-            "relative mt-1 inline-flex items-center gap-1.5 self-start bg-transparent text-[13px] leading-5 font-medium text-ink disabled:opacity-50",
-            "h-9 before:absolute before:-inset-y-1 before:inset-x-0",
+      {(canAdd || aside) && (
+        <div className="flex flex-wrap items-center gap-x-3">
+          {canAdd && <AddExampleButton onClick={add} busy={busy} ready={ready} empty={list.length === 0} />}
+          {canAdd && aside && (
+            <span aria-hidden="true" className="mt-1 text-rule">
+              |
+            </span>
           )}
-        >
-          <Icon
-            name={busy?.kind === "add" ? "refresh" : ready ? "spark-plus" : "plus"}
-            size={ready && busy?.kind !== "add" ? 17 : 14}
-            strokeWidth={ready ? 1.5 : 1.75}
-            className={cx(busy?.kind === "add" && "animate-spin")}
-          />
-          {busy?.kind === "add" ? "Подбираем пример…" : list.length === 0 ? "Подобрать пример" : "Ещё пример"}
-        </button>
+          {aside}
+        </div>
       )}
       {error && (
         <p role="status" className="m-0 text-[12px] leading-4 text-muted">
@@ -196,5 +191,29 @@ export function ExampleList({
         </p>
       )}
     </div>
+  );
+}
+
+/** «+ Ещё пример» / «Подобрать пример» (spark when it asks Claude, a plain plus when it adds an empty row). */
+function AddExampleButton({ onClick, busy, ready, empty }: { onClick: () => void; busy: Busy; ready: boolean; empty: boolean }) {
+  const adding = busy?.kind === "add";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={busy !== null}
+      className={cx(
+        "relative mt-1 inline-flex items-center gap-1.5 self-start bg-transparent text-[13px] leading-5 font-medium text-ink disabled:opacity-50",
+        "h-9 before:absolute before:-inset-y-1 before:inset-x-0",
+      )}
+    >
+      <Icon
+        name={adding ? "refresh" : ready ? "spark-plus" : "plus"}
+        size={ready && !adding ? 17 : 14}
+        strokeWidth={ready ? 1.5 : 1.75}
+        className={cx(adding && "animate-spin")}
+      />
+      {adding ? "Подбираем пример…" : empty ? "Подобрать пример" : "Ещё пример"}
+    </button>
   );
 }

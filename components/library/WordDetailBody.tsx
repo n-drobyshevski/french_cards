@@ -60,6 +60,7 @@ import { folderOptions, TargetPickerSheet } from "./TargetPickerSheet";
 import { TextOptions } from "./TextOptions";
 import { useTranslationProposal, type TranslationProposal } from "./translation-proposal";
 import { useUndoSnackbar } from "./undo";
+import { LifeExamplesLink } from "@/components/context/ContextLink";
 import { ExampleList, toDrafts, type ExampleDraft } from "@/components/examples/ExampleList";
 import { examplesPatch, wordExamples } from "@/lib/examples";
 import { draftOf, isDirty, patchFor, undoFor, type Draft, type Editing } from "./word-editor";
@@ -535,7 +536,12 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             )
           }
         >
-          <ExampleList card={w} examples={toDrafts(wordExamples(w))} onChange={(next, change) => void saveExamples(next, change)} />
+          <ExampleList
+            card={w}
+            examples={toDrafts(wordExamples(w))}
+            onChange={(next, change) => void saveExamples(next, change)}
+            aside={<LifeExamplesLink fr={w.fr} onNavigate={onClose} />}
+          />
         </SheetField>
         <div data-edited="fields" className="flex items-start gap-2 border-t border-rule py-3">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -910,6 +916,7 @@ function PaneContent({
         card={w}
         examples={toDrafts(wordExamples(w))}
         onChange={(next, change) => void saveExamples(next, change)}
+        aside={<LifeExamplesLink fr={w.fr} />}
         className="min-w-0 flex-1"
       />
       {!editing && pencil("Изменить пример", () => editor.start("example"))}

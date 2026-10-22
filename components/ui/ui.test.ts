@@ -145,6 +145,7 @@ describe("TabBar routing", () => {
     expect(tabForPath("/library")).toBe("library");
     expect(tabForPath("/library/abc")).toBe("library");
     expect(tabForPath("/settings")).toBe("library");
+    expect(tabForPath("/context")).toBe("context");
     expect(tabForPath("/import")).toBeNull();
   });
 

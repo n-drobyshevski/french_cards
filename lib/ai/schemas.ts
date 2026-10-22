@@ -21,6 +21,13 @@ import {
   SLANG_CODES,
   SUGGEST_MAX,
   SUGGEST_REGISTERS,
+  CONTEXT_EXAMPLES_MAX,
+  CONTEXT_MEANINGS_MAX,
+  EXAMPLE_KINDS,
+  LOOKUP_SYNONYMS_MAX,
+  LOOKUP_TRANSLATIONS_MAX,
+  type ConjTense,
+  type ExampleKind,
   type Provenance,
   type SlangCode,
 } from "./constants";
@@ -572,4 +579,140 @@ export interface AnkiResponse {
 export interface AiErrorBody {
   error: string;
   details?: unknown;
+}
+
+// «Контекст»: a word looked up the way Reverso Context does it. /api/ai/lookup answers fast (the
+// dictionary part: translations by share, synonyms by register, conjugation); /api/ai/context
+// searches the web for real sentences that use the word, each tied to its source.
+
+
+/** POST /api/ai/lookup: a French or Russian word or phrase. */
+export const LookupRequestSchema = z.object({
+  model: z.enum(MODEL_TIERS).default("fast"),
+  q: shortText(80).min(1),
+});
+export type LookupRequest = z.input<typeof LookupRequestSchema>;
+
+const conjForms = () =>
+  z.array(z.string()).describe("Six forms in the order je, tu, il/elle, nous, vous, ils/elles, each with its pronoun: «je kiffe», «j'ai kiffé».");
+
+export const LookupModelSchema = z.object({
+  found: z.boolean().describe("false when the query is not French or Russian language at all (gibberish, a name, a URL); every other field is then empty."),
+  fr: z.string().describe("The French headword in dictionary form (see FORMS). For a Russian query: the most common spoken French equivalent."),
+  pos: posField(),
+  gender: genderField(),
+  slang_level: slangField(),
+  verlan: z.boolean().describe("true only for verlan forms."),
+  note: z.string().nullable().describe("Optional Russian note, at most about 120 characters: verlan origin, a neutral gloss, a typical construction. Null when nothing is worth saying."),
+  translations: z
+    .array(
+      z.object({
+        ru: z.string().describe("One Russian equivalent (a word or a short phrase), lowercase, in the same register."),
+        share: z.number().describe("Rough share of real usage this sense covers, a whole number of percent; all shares add up to about 100."),
+      }),
+    )
+    .describe(`Distinct senses, most frequent first, at most ${LOOKUP_TRANSLATIONS_MAX}.`),
+  synonyms: z
+    .array(
+      z.object({
+        fr: z.string().describe("A French synonym or near-synonym in dictionary form."),
+        ru: z.string().describe("Its Russian equivalent, one or two words."),
+        slang_level: slangField(),
+      }),
+    )
+    .describe(`Up to ${LOOKUP_SYNONYMS_MAX} synonyms across registers (neutral to vulg), never the headword itself.`),
+  conjugation: z
+    .object({
+      auxiliary: z.enum(["avoir", "être"]).describe("The auxiliary of the passé composé."),
+      remark: z.string().nullable().describe("One short Russian remark: the verb group or an irregularity («правильный на -er», «неправильный»). Null if none."),
+      present: conjForms(),
+      passe_compose: conjForms(),
+      imparfait: conjForms(),
+      futur: conjForms(),
+    })
+    .nullable()
+    .describe("Only when the headword is a verb (pronominal verbs with their pronoun: je me casse); null for every other part of speech and for expressions."),
+});
+export type LookupModel = z.infer<typeof LookupModelSchema>;
+
+export interface LookupTranslation {
+  ru: string;
+  /** Whole percent, 1–100. */
+  share: number;
+}
+
+export interface LookupSynonym {
+  fr: string;
+  ru: string;
+  slang_level: SlangLevel;
+}
+
+export interface Conjugation {
+  auxiliary: "avoir" | "être";
+  remark: string | null;
+  /** Six forms each, with their pronouns (je, tu, il/elle, nous, vous, ils/elles). */
+  tenses: Record<ConjTense, string[]>;
+}
+
+export interface LookupResponse {
+  /** false: not a word we can look up (the screen says so; nothing else is filled). */
+  found: boolean;
+  /** The query as sent, and the language it was typed in. */
+  q: string;
+  direction: "fr" | "ru";
+  fr: string;
+  pos: PartOfSpeech;
+  gender: Gender;
+  slang_level: SlangLevel;
+  verlan: boolean;
+  note: string | null;
+  translations: LookupTranslation[];
+  synonyms: LookupSynonym[];
+  conjugation: Conjugation | null;
+}
+
+/** POST /api/ai/context: real sentences from the web for a French headword. */
+export const ContextRequestSchema = z.object({
+  model: z.enum(MODEL_TIERS).default("fast"),
+  fr: shortText(120).min(1),
+  /** The lookup's translations, so each example can name the sense it shows. */
+  meanings: z.array(shortText(60)).max(CONTEXT_MEANINGS_MAX).default([]),
+});
+export type ContextRequest = z.input<typeof ContextRequestSchema>;
+
+/** The second (structuring) call: picks sentences out of the numbered web snippets. */
+export const ContextModelSchema = z.object({
+  examples: z
+    .array(
+      z.object({
+        snippet: z.number().describe("The number of the snippet the sentence comes from."),
+        fr: z.string().describe("ONE French sentence copied exactly, character for character, from that snippet. Never rewrite, shorten inside, fix or join sentences."),
+        hit: z.string().describe("The exact form of the headword as it appears in fr (kiffe, kiffé, s'est cassé, la thune), copied from fr."),
+        ru: z.string().describe("A natural Russian translation of the whole sentence in the same register."),
+        meaning: z.string().nullable().describe("Which of the listed senses the sentence shows, copied exactly from the list; null when none fits."),
+        kind: z.enum(EXAMPLE_KINDS).describe("What the source is: forum, song (lyrics), article (press, blog), subtitles (film or series), social (posts, comments), book, other."),
+      }),
+    )
+    .describe(`Up to ${CONTEXT_EXAMPLES_MAX} sentences, the most natural and varied first; empty when no snippet really uses the headword.`),
+});
+export type ContextModel = z.infer<typeof ContextModelSchema>;
+
+export interface ContextExample {
+  fr: string;
+  ru: string;
+  /** The headword's form inside `fr` (for highlighting); always a substring of `fr`. */
+  hit: string;
+  /** One of the request's meanings, or null. */
+  meaning: string | null;
+  kind: ExampleKind;
+  url: string;
+  /** Host without www., for the source line. */
+  domain: string;
+  title: string | null;
+}
+
+export interface ContextResponse {
+  examples: ContextExample[];
+  /** Distinct pages the search looked at. */
+  sources: number;
 }

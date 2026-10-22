@@ -22,6 +22,7 @@ describe("globalKeyAction", () => {
     expect(globalKeyAction(key("KeyR", "r"), true)).toEqual({ type: "go", href: "/" });
     expect(globalKeyAction(key("KeyL", "д"), true)).toEqual({ type: "go", href: "/library" });
     expect(globalKeyAction(key("KeyI", "i"), true)).toEqual({ type: "go", href: "/import" });
+    expect(globalKeyAction(key("KeyC", "с"), true)).toEqual({ type: "go", href: "/context" });
     expect(globalKeyAction(key("KeyN", "n"), true)).toBeNull();
     expect(globalKeyAction(key("KeyR", "r"))).toBeNull();
   });

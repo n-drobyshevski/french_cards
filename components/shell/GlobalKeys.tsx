@@ -16,7 +16,7 @@ import { useShell, useShortcutsEnabled } from "./ShellContext";
 import { isSidebarHidden, toggleSidebar } from "./sidebar-state";
 
 /**
- * Global keys from 768 up (phones keep today's behaviour): N, /, ?, G then R/L/I, [. Listens in the
+ * Global keys from 768 up (phones keep today's behaviour): N, /, ?, G then R/L/C/I, [. Listens in the
  * capture phase so the second key of a `G` sequence never reaches a screen's own handler (e.g. a
  * theme's `R`). Off while typing, while a dialog/menu is open, and when settings.shortcuts is off.
  */

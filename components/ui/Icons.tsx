@@ -212,6 +212,13 @@ const PATHS = {
       <path d="M9 4.5v15" />
     </>
   ),
+  /** A link that leaves the app (an example's source page). */
+  external: (
+    <>
+      <path d="M7 17 17 7" />
+      <path d="M8 7h9v9" />
+    </>
+  ),
   /** Fill the input with a suggestion. */
   "arrow-up-left": (
     <>
