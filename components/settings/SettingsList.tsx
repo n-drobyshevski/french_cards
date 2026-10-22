@@ -6,7 +6,8 @@ import { cx } from "@/components/ui/cx";
  * id, a link target («/settings#set-data» from the library's sync mark, T7).
  */
 export function SettingsSection({ title, children, footer, anchor }: { title: string; children: ReactNode; footer?: ReactNode; anchor?: string }) {
-  const id = `settings-${title}`;
+  // No spaces: aria-labelledby takes a space-separated list of ids («Свои поля»).
+  const id = `settings-${title.replace(/\s+/g, "-")}`;
   return (
     <section id={anchor} aria-labelledby={id} className="mt-4 shrink-0">
       <h2

@@ -1,8 +1,9 @@
 // The filled form's state: built from a picked suggestion or empty for manual entry, then
 // turned into a save request. Pure (no Dexie), so it is unit-tested.
 import type { EnrichResult, Suggestion } from "@/lib/ai/schemas";
+import { cleanCustomFields } from "@/lib/core/custom-fields";
 import { cleanExamples } from "@/lib/examples";
-import type { Confidence, Folder, Gender, PartOfSpeech, SlangLevel, WordSource } from "@/lib/types";
+import type { Confidence, CustomFieldValue, FieldDef, Folder, Gender, PartOfSpeech, SlangLevel, WordSource } from "@/lib/types";
 import { choiceKey, folderSource, foldersForSuggestion, INBOX_CHOICE, type FolderChoice, type SuggestionFolders } from "./folder-choice";
 import type { SaveRequest } from "./save";
 
@@ -14,6 +15,8 @@ export interface WordDraft {
   example_ru: string;
   /** Examples after the first («+ Ещё пример»). */
   extra_examples: { fr: string; ru: string }[];
+  /** «Свои поля» typed in the form (shared fields only), as typed; cleaned when saved. */
+  customFields: CustomFieldValue[];
   pos: PartOfSpeech;
   gender: Gender;
   slang_level: SlangLevel;
@@ -62,6 +65,7 @@ export function draftFromSuggestion(
     example_auto: false,
     example_touched: false,
     extra_examples: [],
+    customFields: [],
     both_directions: true,
     folder: autoSort ? picks.auto : INBOX_CHOICE,
     folder_touched: false,
@@ -86,6 +90,7 @@ export function manualDraft(init: { fr?: string; ru?: string; folder?: FolderCho
     example_auto: false,
     example_touched: false,
     extra_examples: [],
+    customFields: [],
     both_directions: true,
     folder: init.folder ?? INBOX_CHOICE,
     folder_touched: init.folder !== undefined && init.folder.kind !== "inbox",
@@ -174,6 +179,27 @@ export function filledByDetection(before: WordDraft, after: WordDraft): SpotFiel
   return fields;
 }
 
+/** The draft's value of a shared field, as typed ("" when none). */
+export const draftFieldValue = (d: Pick<WordDraft, "customFields">, def: Pick<FieldDef, "id">) =>
+  d.customFields.find((f) => f.field_id === def.id)?.value ?? "";
+
+/**
+ * The draft's fields with one shared field set as typed (not trimmed while typing; empty drops it).
+ * The label is the definition's name, kept so the value outlives a deleted definition.
+ */
+export function withDraftField(list: readonly CustomFieldValue[], def: Pick<FieldDef, "id" | "name">, value: string): CustomFieldValue[] {
+  const at = list.findIndex((f) => f.field_id === def.id);
+  if (!value) return at < 0 ? [...list] : list.filter((_, i) => i !== at);
+  const entry: CustomFieldValue = { field_id: def.id, label: def.name, value };
+  return at < 0 ? [...list, entry] : list.map((f, i) => (i === at ? entry : f));
+}
+
+/** The form's collapsed «Свои поля» row: the fields' names, or how many are filled. */
+export function draftFieldsSummary(d: Pick<WordDraft, "customFields">, defs: readonly Pick<FieldDef, "id" | "name">[]): string {
+  const filled = defs.filter((def) => draftFieldValue(d, def).trim()).length;
+  return filled ? `заполнено ${filled} из ${defs.length}` : defs.map((def) => def.name).join(", ");
+}
+
 export interface DraftErrors {
   fr?: string;
   ru?: string;
@@ -200,6 +226,7 @@ export function draftToSaveRequest(d: WordDraft): SaveRequest {
         example_fr: d.example_fr,
         example_ru: d.example_fr.trim() ? d.example_ru : null,
         extra_examples: cleanExamples(d.extra_examples),
+        custom_fields: cleanCustomFields(d.customFields),
         pos: d.pos,
         gender: d.pos === "noun" ? d.gender : "none",
         slang_level: d.slang_level,

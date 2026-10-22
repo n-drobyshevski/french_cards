@@ -12,6 +12,7 @@ import { bottomBarRef } from "@/components/ui/bottom-clearance";
 import { Icon } from "@/components/ui/Icons";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { cardNumber } from "@/components/add/match";
+import { useFieldDefs } from "@/lib/custom-fields";
 import { listFolders } from "@/lib/folders";
 import { haptic, type HapticKind } from "@/lib/haptics";
 import { tokenMs } from "@/lib/motion";
@@ -136,6 +137,8 @@ export function ReviewScreen() {
 
   const settings = useLiveQuery(() => getSettings(), []);
   const folders = useLiveQuery(() => listFolders(), []);
+  // «Свои поля» on the answer side (shared fields under their current names).
+  const fieldDefs = useFieldDefs();
   const [tick, setTick] = useState(0);
   const [pickerOpen, setPickerOpen] = useState(false);
   /** «Изменить карточку»: the word whose sheet is open over the card. */
@@ -327,7 +330,7 @@ export function ReviewScreen() {
   const wordOf = (item: QueueItem) => (storedWord?.id === item.word.id ? storedWord : item.word);
   const faceOf = (item: QueueItem): CardFace => {
     const ordinal = ordinals?.get(item.word.id);
-    return { word: wordOf(item), direction: item.direction, number: ordinal ? cardNumber(ordinal) : undefined };
+    return { word: wordOf(item), direction: item.direction, number: ordinal ? cardNumber(ordinal) : undefined, fieldDefs };
   };
   const folderOf = (item: QueueItem) => {
     const word = wordOf(item);

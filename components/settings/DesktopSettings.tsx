@@ -7,6 +7,7 @@ import { useShell } from "@/components/shell/ShellContext";
 import { cx } from "@/components/ui/cx";
 import { FlatKey } from "@/components/ui/Kbd";
 import type { Direction, Settings } from "@/lib/types";
+import { DeskCustomFieldsSection } from "./CustomFieldsSection";
 import { DataSection } from "./DataSection";
 import { CheckboxRow, DeskRow, DeskSection, DeskStepper, DirectionSelect, TextOptions } from "./DesktopControls";
 import { NEW_PER_DAY_MAX, stepNewPerDay } from "./format";
@@ -17,6 +18,7 @@ export const DESK_SECTIONS = [
   { id: "set-review", title: "Повторение" },
   { id: "set-look", title: "Оформление" },
   { id: "set-hints", title: "ИИ" },
+  { id: "set-fields", title: "Свои поля" },
   { id: "set-keys", title: "Клавиши" },
   { id: "set-data", title: "Данные" },
 ] as const;
@@ -217,7 +219,12 @@ export function DesktopSettings({ settings, known, save, onTheme, onDirection }:
                 Слова и скриншоты отправляются в Anthropic (Claude) для подсказок и не хранятся там.
               </p>
             </DeskSection>
+          </Valued>
 
+          {/* Not a setting of this device: synced rows of their own, shown as soon as they are read. */}
+          <DeskCustomFieldsSection />
+
+          <Valued known={known}>
             <DeskSection id="set-keys" title="Клавиши">
               <CheckboxRow
                 label="Однобуквенные сочетания"
