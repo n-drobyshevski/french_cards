@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Suggestion } from "@/lib/ai/schemas";
-import { draftFromSuggestion, draftToSaveRequest, manualDraft, validateDraft } from "./draft";
+import type { EnrichResult, Suggestion } from "@/lib/ai/schemas";
+import { applyEnrichment, draftFromSuggestion, draftToSaveRequest, enrichKey, enrichScope, manualDraft, validateDraft } from "./draft";
 import { choiceKey, choiceName, folderSource, foldersForSuggestion, INBOX_CHOICE } from "./folder-choice";
 import { cardNumber, nWords, posAbbr, splitTypedPrefix } from "./match";
 import { parseWordList } from "./parse-list";
@@ -139,6 +139,45 @@ describe("draft", () => {
   it("validates both sides", () => {
     expect(validateDraft({ fr: " ", ru: "" })).toEqual({ fr: "Нужно французское слово", ru: "Нужен перевод" });
     expect(validateDraft({ fr: "kiffer", ru: "тащиться" })).toEqual({});
+  });
+});
+
+describe("applyEnrichment", () => {
+  const result: EnrichResult = {
+    id: "w1",
+    pos: "noun",
+    gender: "f",
+    slang_level: 1,
+    verlan: false,
+    example_fr: "Il a garé sa caisse.",
+    example_ru: "Он припарковал тачку.",
+    confidence: "high",
+  };
+
+  it("waits for both sides of a manual draft", () => {
+    expect(enrichKey(manualDraft({ fr: " la caisse " }))).toBeNull();
+    expect(enrichKey(manualDraft({ fr: "la  caisse", ru: "тачка " }))).toBe("la caisse\u0001тачка");
+    expect(enrichKey(draftFromSuggestion(sug(), FOLDERS))).toBeNull();
+  });
+
+  it("fills level, part of speech and example of an untouched draft", () => {
+    const d = applyEnrichment(manualDraft({ fr: "la caisse", ru: "тачка" }), result);
+    expect(d).toMatchObject({ slang_level: 1, slang_auto: true, pos: "noun", gender: "f", example_fr: "Il a garé sa caisse.", example_auto: true });
+    expect(draftToSaveRequest(d).words[0]).toMatchObject({ slang_level: 1, example_fr: "Il a garé sa caisse.", example_ru: "Он припарковал тачку." });
+  });
+
+  it("leaves what the user set by hand", () => {
+    const touched = { ...manualDraft({ fr: "la caisse", ru: "тачка" }), slang_level: 3 as const, slang_touched: true, example_fr: "Ma caisse.", example_touched: true };
+    expect(enrichScope(touched)).toEqual({ slang: false, example: false, pos: true });
+    const d = applyEnrichment(touched, result);
+    expect(d).toMatchObject({ slang_level: 3, slang_auto: false, example_fr: "Ma caisse.", example_auto: false, pos: "noun" });
+  });
+
+  it("replaces its own example when the word changes, and clears it when there is none", () => {
+    const first = applyEnrichment(manualDraft({ fr: "la caisse", ru: "тачка" }), result);
+    const next = applyEnrichment(first, { ...result, example_fr: "Je vous attends à la caisse.", example_ru: "Жду у кассы.", slang_level: 0 });
+    expect(next).toMatchObject({ example_fr: "Je vous attends à la caisse.", slang_level: 0 });
+    expect(applyEnrichment(first, { ...result, example_fr: null, example_ru: null })).toMatchObject({ example_fr: "", example_auto: false });
   });
 });
 

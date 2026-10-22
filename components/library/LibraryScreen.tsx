@@ -9,6 +9,7 @@ import { Button, IconButton } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { Icon } from "@/components/ui/Icons";
 import { useSnackbar } from "@/components/ui/Snackbar";
+import { countEnrichCandidates } from "@/lib/enrich";
 import { getLibraryStats } from "@/lib/folders";
 import { getUndoableRun, undoReorgRun } from "@/lib/reorg";
 import { matchesSearch } from "@/lib/text";
@@ -16,6 +17,7 @@ import { FolderFormSheet } from "./FolderFormSheet";
 import { FolderTile, InboxTile, NewFolderTile, TileSkeleton } from "./FolderTile";
 import { nWords, plural } from "./format";
 import { matchesSlang, SlangFilterChip, SlangFilterPanel, type SlangKey } from "./SlangFilter";
+import { EnrichPlanSheet } from "./EnrichPlanSheet";
 import { SortPlanSheet } from "./SortPlanSheet";
 import { useLibraryWords } from "./useLibraryWords";
 import { WordList } from "./WordList";
@@ -33,6 +35,7 @@ export function LibraryScreen() {
   const slangPanelId = useId();
   const stats = useLiveQuery(() => getLibraryStats(), []);
   const lastRun = useLiveQuery(() => getUndoableRun(), []);
+  const toEnrich = useLiveQuery(() => countEnrichCandidates(), []);
 
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query);
@@ -41,6 +44,7 @@ export function LibraryScreen() {
   const [slangOpen, setSlangOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
+  const [enrichOpen, setEnrichOpen] = useState(false);
 
   const listMode = query.trim() !== "" || status !== "all" || slang.length > 0;
   const words = useLibraryWords(undefined, listMode);
@@ -200,6 +204,21 @@ export function LibraryScreen() {
               <Icon name="chevron-right" size={18} />
             </button>
           )}
+          {toEnrich && toEnrich.total > 0 && (
+            <button
+              type="button"
+              onClick={() => setEnrichOpen(true)}
+              className="mt-2 flex h-14 shrink-0 items-center gap-3 rounded-card border border-rule bg-surface pr-3 pl-4 text-left text-ink active:bg-surface-2"
+            >
+              <span className="flex min-w-0 flex-1 flex-col">
+                <span className="text-[15px] leading-5 font-medium">Дополнить карточки</span>
+                <span className="text-[12px] leading-4 text-muted">
+                  {toEnrich.noExample > 0 ? `${nWords(toEnrich.noExample)} без примера` : `Уровень сленга для ${nWords(toEnrich.total)}`}
+                </span>
+              </span>
+              <Icon name="chevron-right" size={18} />
+            </button>
+          )}
           {lastRun && (
             <p className="m-0 mt-2 flex items-center justify-between gap-2 text-[12px] leading-4 text-muted">
               <span>
@@ -244,6 +263,7 @@ export function LibraryScreen() {
         onSaved={(folder) => snackbar.show({ message: `Тема «${folder.name}» создана` })}
       />
       <SortPlanSheet open={sortOpen} onOpenChange={setSortOpen} />
+      <EnrichPlanSheet open={enrichOpen} onOpenChange={setEnrichOpen} />
     </main>
   );
 }

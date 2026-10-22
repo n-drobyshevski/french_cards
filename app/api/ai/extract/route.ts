@@ -80,7 +80,7 @@ export async function POST(req: Request): Promise<Response> {
     messages: [{ role: "user", content }],
     output: Output.array({ element: buildVocabItemSchema(folders.map((f) => f.slug)), name: "vocabulary" }),
     providerOptions,
-    maxOutputTokens: 12000,
+    maxOutputTokens: 16000,
     abortSignal: AbortSignal.any([req.signal, stop.signal]),
     onError({ error }) {
       failure = error;

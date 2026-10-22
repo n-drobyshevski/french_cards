@@ -141,6 +141,22 @@ export async function updateWord(id: string, patch: WordPatch, now: Date = new D
   });
 }
 
+/** Patches several words in one transaction; words deleted meanwhile are skipped. */
+export async function updateWords(
+  patches: readonly { id: string; patch: WordPatch }[],
+  now: Date = new Date(),
+): Promise<Word[]> {
+  return db.transaction("rw", WRITE_TABLES(), async () => {
+    const out: Word[] = [];
+    for (const { id, patch } of patches) {
+      const current = await db.words.get(id);
+      if (!current || current.deleted_at !== null) continue;
+      out.push(await updateWord(id, patch, now));
+    }
+    return out;
+  });
+}
+
 export async function softDeleteWord(id: string, now: Date = new Date()): Promise<void> {
   await softDeleteWords([id], now);
 }

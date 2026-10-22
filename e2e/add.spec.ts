@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { addSheet, LA_THUNE, mockSuggest, openReview, questionCard, SE_CASSER_LA_TETE, tabBar } from "./fixtures";
+import { addSheet, enriched, LA_THUNE, mockEnrich, mockSuggest, openReview, questionCard, SE_CASSER_LA_TETE, tabBar } from "./fixtures";
 
 test("add a word from a suggestion and find it in its theme", async ({ page }) => {
   const requests: unknown[] = [];
@@ -109,4 +109,57 @@ test("with automatic sorting off, a picked suggestion starts in «Входящи
   await expect(sheet.getByRole("radio", { name: "Входящие" })).toBeChecked();
   await expect(sheet.getByRole("radio", { name: "Деньги" })).not.toBeChecked();
   await expect(sheet.getByText("подобрано автоматически")).toHaveCount(0);
+});
+
+test("a word typed by hand gets its slang level and an example before saving", async ({ page }) => {
+  const sent: string[] = [];
+  await mockSuggest(page, []);
+  await mockEnrich(
+    page,
+    (w) => enriched(w, { example_fr: "Il a garé sa caisse devant chez moi.", example_ru: "Он припарковал тачку у моего дома." }),
+    (words) => sent.push(...words.map((w) => `${w.fr}|${w.ru}`)),
+  );
+  await openReview(page);
+  await tabBar(page).getByRole("button", { name: "Добавить" }).click();
+  const sheet = addSheet(page);
+  await sheet.getByPlaceholder("Слово или выражение — FR или RU").fill("la caisse");
+  await sheet.getByRole("button", { name: "Заполнить вручную" }).click();
+  await sheet.getByRole("textbox", { name: "Русский", exact: true }).fill("тачка");
+
+  await expect(sheet.getByText("определён автоматически")).toBeVisible();
+  await expect(sheet.getByRole("radio", { name: "фамильярный" })).toBeChecked();
+  await expect(sheet.getByRole("textbox", { name: "Пример по-французски" })).toHaveValue("Il a garé sa caisse devant chez moi.");
+  await expect(sheet.getByText("подобран автоматически")).toBeVisible();
+  expect(sent).toEqual(["la caisse|тачка"]);
+
+  // A level picked by hand is what gets saved.
+  await sheet.getByRole("radio", { name: "арго" }).click();
+  await sheet.getByRole("button", { name: "Добавить", exact: true }).click();
+  await expect(sheet).toBeHidden();
+
+  await tabBar(page).getByRole("link", { name: "Библиотека" }).click();
+  await page.getByRole("searchbox", { name: "Поиск по FR и RU" }).or(page.getByRole("textbox", { name: "Поиск по FR и RU" })).fill("caisse");
+  await page.getByText("la caisse", { exact: true }).click();
+  const card = page.getByRole("dialog", { name: "Карточка слова" });
+  await expect(card.getByText("Il a garé sa caisse devant chez moi.")).toBeVisible();
+  await expect(card.getByRole("img", { name: /арго/ }).first()).toBeVisible();
+});
+
+test("pasted rows show their slang level and example and are saved with them", async ({ page }) => {
+  await mockSuggest(page, []);
+  await mockEnrich(page, (w) => (w.fr === "chelou" ? enriched(w, { pos: "adj", gender: "none", slang_level: 2, verlan: true }) : enriched(w)));
+  await openReview(page);
+  await tabBar(page).getByRole("button", { name: "Добавить" }).click();
+  await addSheet(page).getByRole("button", { name: "Список" }).click();
+  const sheet = page.getByRole("dialog", { name: /Несколько слов/ });
+  await sheet.getByRole("textbox", { name: "Список слов" }).fill("la caisse — тачка\nchelou — стрёмный");
+  await expect(sheet.getByText("Exemple avec chelou.")).toBeVisible();
+  await expect(sheet.getByText("Exemple avec la caisse.")).toBeVisible();
+  await sheet.getByRole("button", { name: "Добавить 2 слова" }).click();
+  await expect(sheet).toBeHidden();
+
+  await tabBar(page).getByRole("link", { name: "Библиотека" }).click();
+  await page.getByRole("searchbox", { name: "Поиск по FR и RU" }).or(page.getByRole("textbox", { name: "Поиск по FR и RU" })).fill("chelou");
+  await page.getByText("chelou", { exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Карточка слова" }).getByText("Exemple avec chelou.")).toBeVisible();
 });
