@@ -6,7 +6,9 @@ import { cx } from "@/components/ui/cx";
 import type { Folder } from "@/lib/types";
 import { choiceName } from "./folder-choice";
 import { CheckBox, DeskFrame, DeskSection, FIELD_LABEL, HIDDEN_CONTROL_FOCUS, HintLine, KeyButton, ThemeSelect, type Hint } from "./desk-parts";
-import type { ListPanelProps, ListRow } from "./ListPanel";
+import { ListStatusSlot, useListStatus, type ListPanelProps, type ListRow } from "./ListPanel";
+import { UnknownMeter } from "./parts";
+import { useSpotlight } from "@/lib/motion";
 import { cardNumber, nWords } from "./match";
 
 export interface DeskListPanelProps extends ListPanelProps {
@@ -39,6 +41,7 @@ export function DeskListPanel({
   auto,
   folders,
   show = { slang: true, examples: true },
+  detection,
   onSave,
   saving,
   saveError,
@@ -47,6 +50,7 @@ export function DeskListPanel({
   const themeId = useId();
   const headingId = useId();
   const selected = rows.filter((r) => r.checked).length;
+  const detecting = useListStatus(detection);
 
   const footer = (
     <>
@@ -94,10 +98,19 @@ export function DeskListPanel({
       {rows.length > 0 && (
         <section aria-labelledby={headingId} className="mt-6">
           <DeskSection id={headingId} title="Разбор" aside={<span className="font-mono">{`${selected} из ${rows.length}`}</span>} />
+          {detection && <ListStatusSlot status={detecting} />}
           <ul className="m-0 list-none p-0">
             {rows.map((row, i) => (
               <li key={row.key}>
-                <ParseRow row={row} folders={folders} showSlang={show.slang} last={i === rows.length - 1} onToggle={() => onToggle(row.key)} />
+                <ParseRow
+                  row={row}
+                  folders={folders}
+                  showSlang={show.slang}
+                  pending={!!detection?.waiting && !row.enrich}
+                  showExample={show.examples}
+                  last={i === rows.length - 1}
+                  onToggle={() => onToggle(row.key)}
+                />
               </li>
             ))}
           </ul>
@@ -111,20 +124,28 @@ function ParseRow({
   row,
   folders,
   showSlang,
+  pending,
+  showExample,
   last,
   onToggle,
 }: {
   row: ListRow;
   folders: readonly Folder[];
   showSlang: boolean;
+  /** Detection still on its way (A10): the meter's unknown state. */
+  pending: boolean;
+  /** The example found for the row, after the translation on the same line (rows keep their 40px). */
+  showExample: boolean;
   last: boolean;
   onToggle: () => void;
 }) {
   const invalid = row.status === "invalid";
+  const ref = useSpotlight<HTMLLabelElement>(row.enrich);
   const tag = invalid ? (row.problem === "no_french" ? "Нет французского" : "Нет перевода") : row.status === "ok" ? null : TAGS[row.status];
   const existing = row.status === "duplicate" ? row.existing : null;
   return (
     <label
+      ref={ref}
       className={cx(
         "relative grid h-10 grid-cols-[32px_168px_minmax(0,1fr)_auto] items-start gap-x-2",
         !last && "border-b border-rule",
@@ -161,6 +182,14 @@ function ParseRow({
             · {existing.folderName ?? "Входящие"}, <span className="font-mono text-[11px] tabular-nums">{cardNumber(existing.ordinal)}</span>
           </span>
         )}
+        {!existing && showExample && row.enrich?.example_fr && (
+          <>
+            {" · "}
+            <span lang="fr" className="font-serif text-[14px] italic">
+              {row.enrich.example_fr}
+            </span>
+          </>
+        )}
       </span>
       <span className="flex items-center gap-3 self-center justify-self-end">
         {tag ? (
@@ -175,6 +204,7 @@ function ParseRow({
               </span>
             )}
             {showSlang && row.enrich && <SlangMeter level={row.enrich.slang_level} verlan={row.enrich.verlan} size="sm" />}
+            {showSlang && !invalid && pending && <UnknownMeter size="sm" />}
           </>
         )}
       </span>

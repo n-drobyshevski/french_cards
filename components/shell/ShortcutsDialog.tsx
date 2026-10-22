@@ -51,6 +51,7 @@ export const SHORTCUT_COLUMNS: ShortcutGroup[][] = [
         { label: "Не знаю / Сложно / Знаю", keys: ["1", "2", "3"] },
         { label: "Не знаю / Знаю", keys: ["Left", "Right"] },
         { label: "Отменить ответ", keys: ["Z"] },
+        { label: "Изменить карточку", keys: ["E"] },
         { label: "Ещё практика", keys: ["P"] },
         { label: "Закончить практику", keys: ["Escape"] },
       ],

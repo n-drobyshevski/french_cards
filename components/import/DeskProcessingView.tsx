@@ -7,22 +7,41 @@ import { SlangMeter } from "@/components/ui/SlangMeter";
 import { StatusLine } from "@/components/ui/StatusLine";
 import { cx } from "@/components/ui/cx";
 import type { SlangLevel } from "@/lib/types";
+import { formatElapsed } from "@/lib/use-delayed-flag";
 import { deskButton, ROW_GRID, WIDE_ONLY } from "./desk";
+import { arrivalStyle, useArrivals, useCountdown } from "@/lib/stream-motion";
 import {
-  arrivalStyle,
+  continueLabel,
   IMPORT_FOOTNOTE,
   IMPORT_STEPS,
+  ImportNotice,
   importStage,
-  stackStyle,
-  useArrivals,
+  noticeFor,
+  SkeletonStack,
   type ProcessingViewProps,
   type StepState,
 } from "./ProcessingView";
 import { ProcessingShotPane } from "./ShotPane";
+import { StackedLabels } from "./SwapLabel";
 
-const STEP_STATE_RU: Record<StepState, string> = { done: "готово", active: "идёт", pending: "впереди" };
+const STEP_STATE_RU: Record<StepState, string> = {
+  done: "готово",
+  active: "идёт",
+  pending: "впереди",
+  failed: "не удалось",
+  stopped: "остановлено",
+  waiting: "ждём",
+};
+
+const STEP_NOTE: Partial<Record<StepState, { text: string; className: string }>> = {
+  active: { text: "ИДЁТ", className: "text-red" },
+  failed: { text: "НЕ УДАЛОСЬ", className: "text-again" },
+  stopped: { text: "СТОП", className: "text-muted" },
+  waiting: { text: "ЖДЁМ", className: "text-muted" },
+};
 
 function Step({ n, label, state }: { n: string; label: string; state: StepState }) {
+  const note = STEP_NOTE[state];
   return (
     <li
       aria-current={state === "active" ? "step" : undefined}
@@ -34,8 +53,10 @@ function Step({ n, label, state }: { n: string; label: string; state: StepState 
         {label}
       </span>
       {state === "done" && <Icon name="check" size={14} strokeWidth={2} />}
-      {state === "active" && (
-        <span className="relative top-px font-mono text-[11px] leading-4 font-medium tracking-[.06em] text-red">ИДЁТ</span>
+      {note && (
+        <span className={cx("relative top-px font-mono text-[11px] leading-4 font-medium tracking-[.06em] whitespace-nowrap", note.className)}>
+          {note.text}
+        </span>
       )}
     </li>
   );
@@ -74,17 +95,41 @@ const SKELETON_WIDTHS = [
   [80, 96],
 ];
 
-/** Desktop processing (D-Import-Processing): screenshot column, steps, rows as they stream in, «Стоп». */
-export function DeskProcessingView({ phase, items, tiles, thumbs, checking, onStop }: ProcessingViewProps) {
-  const stage = importStage(phase, items.length, checking);
+type SlotLabel = "Стоп" | "Повторить";
+const SLOT_LABELS: readonly SlotLabel[] = ["Стоп", "Повторить"];
+
+/**
+ * Desktop processing (D-Import-Processing): screenshot column, steps, rows as they stream in,
+ * «Стоп». Stopped, failed and finished are states of this screen, as on the phone.
+ */
+export function DeskProcessingView({
+  phase,
+  items,
+  tiles,
+  thumbs,
+  checking,
+  complete = false,
+  incomplete = false,
+  error = null,
+  onStop,
+  onRetry,
+  onContinue,
+  onPickOther,
+  onCancelRetry,
+}: ProcessingViewProps) {
+  const stage = importStage({ phase, rows: items.length, checking, complete, incomplete, error, tiles });
   const percent = Math.round(stage.progress * 100);
   const base = useArrivals(items.length);
+  const left = useCountdown(error?.retryAt);
+  const notice = noticeFor(stage, error, onCancelRetry);
+  const kind = stage.kind;
+  const retryable = kind === "error" && !!error?.retryable;
 
   return (
     <div data-wide="" className="flex h-dvh min-h-0 flex-none">
-      <ProcessingShotPane thumbs={thumbs} tiles={tiles} percent={percent} travel={stage.waitingFirst} />
+      <ProcessingShotPane thumbs={thumbs} tiles={tiles} percent={percent} travel={stage.waitingFirst} muted={stage.frozen} />
       <div className="@container flex min-w-0 flex-1 flex-col">
-        <main aria-labelledby="import-processing-title" aria-busy={!checking} className="min-h-0 flex-1 overflow-y-auto px-6 pt-5 pb-6 xl:px-8">
+        <main aria-labelledby="import-processing-title" aria-busy={kind === "running"} className="min-h-0 flex-1 overflow-y-auto px-6 pt-5 pb-6 xl:px-8">
           <h1 id="import-processing-title" className="m-0 font-serif text-[28px] leading-9 font-medium tracking-[-0.015em] text-ink">
             {stage.title}
           </h1>
@@ -98,12 +143,22 @@ export function DeskProcessingView({ phase, items, tiles, thumbs, checking, onSt
           >
             <span className="absolute inset-x-0 top-0 h-px bg-rule" />
             <span
-              className="absolute top-0 left-0 h-0.5 w-full origin-left bg-ink transition-transform duration-(--dur-move) ease-standard"
+              className={cx(
+                "absolute top-0 left-0 h-0.5 w-full origin-left transition-[transform,background-color] duration-(--dur-move) ease-standard",
+                stage.frozen ? "bg-muted" : "bg-ink",
+              )}
               style={{ transform: `scaleX(${stage.progress})` }}
             />
           </div>
           {/* No ink run: the scan line over the screenshot is the screen's one loop. */}
-          <StatusLine className="mt-3" text={stage.status} count={stage.count} active={!checking} announce={stage.announce} noRun />
+          <StatusLine
+            className="mt-3"
+            text={stage.status}
+            count={kind === "waiting" ? (left === null ? undefined : formatElapsed(left)) : stage.count}
+            active={stage.active}
+            announce={stage.announce}
+            noRun
+          />
 
           <ol aria-label="Этапы" className="m-0 mt-6 list-none border-t border-rule p-0">
             {IMPORT_STEPS.map((label, i) => (
@@ -111,56 +166,88 @@ export function DeskProcessingView({ phase, items, tiles, thumbs, checking, onSt
             ))}
           </ol>
 
-          <section aria-labelledby="import-found-title" className="mt-6">
-            <div className="flex h-7 items-center justify-between border-b border-ink">
-              <h2 id="import-found-title" className="m-0 text-[13px] leading-5 font-medium text-ink">
-                Найдено
-              </h2>
-              <span className="text-[12px] leading-4 text-muted">По мере распознавания</span>
-            </div>
-            <ul aria-label="Распознанные слова" className="m-0 list-none p-0">
-              {items.map((it, i) => (
-                <li key={i} className={cx(ROW_GRID, "h-[52px] items-start border-b border-rule")} style={arrivalStyle(i, base)}>
-                  <span />
-                  <span className="min-w-0 px-2 pt-[15px]">
-                    <FrCell fr={it.fr} verlan={it.verlan} />
-                  </span>
-                  <span
-                    className={cx(
-                      "min-w-0 truncate px-2 pt-4 text-[14px] leading-5 text-muted",
-                      it.ru_suggested && "italic",
-                    )}
-                  >
-                    {it.ru}
-                  </span>
-                  <span className="flex pt-[18px] pl-2">
-                    <LevelCell level={it.slang_level} />
-                  </span>
-                  <span />
-                </li>
-              ))}
-              <li key={`stack-${items.length}`} aria-hidden="true" style={stackStyle(items.length, 52, checking)}>
-                {SKELETON_WIDTHS.map(([a, b], i) => (
-                  <div key={i} className={cx(ROW_GRID, "h-[52px] items-center border-b border-rule")} style={{ opacity: SKELETON_FADE[i] }}>
+          {notice && items.length === 0 ? (
+            <ImportNotice {...notice} className="mt-6 max-w-[640px]" />
+          ) : (
+            <section aria-labelledby="import-found-title" className="mt-6">
+              <div className="flex h-7 items-center justify-between border-b border-ink">
+                <h2 id="import-found-title" className="m-0 text-[13px] leading-5 font-medium text-ink">
+                  Найдено
+                </h2>
+                <span className="text-[12px] leading-4 text-muted">По мере распознавания</span>
+              </div>
+              <ul aria-label="Распознанные слова" className="m-0 list-none p-0">
+                {items.map((it, i) => (
+                  <li key={i} className={cx(ROW_GRID, "h-[52px] items-start border-b border-rule")} style={arrivalStyle(i, base)}>
                     <span />
-                    <span className="ml-2 h-2 max-w-[calc(100%-16px)] rounded-[2px] bg-surface-2" style={{ width: a }} />
-                    <span className="ml-2 h-1.5 max-w-[calc(100%-16px)] rounded-[2px] bg-surface-2" style={{ width: b }} />
-                    <SkeletonMeter className="ml-2" />
+                    <span className="min-w-0 px-2 pt-[15px]">
+                      <FrCell fr={it.fr} verlan={it.verlan} />
+                    </span>
+                    <span
+                      className={cx(
+                        "min-w-0 truncate px-2 pt-4 text-[14px] leading-5 text-muted",
+                        it.ru_suggested && "italic",
+                      )}
+                    >
+                      {it.ru}
+                    </span>
+                    <span className="flex pt-[18px] pl-2">
+                      <LevelCell level={it.slang_level} />
+                    </span>
                     <span />
-                  </div>
+                  </li>
                 ))}
-              </li>
-            </ul>
-          </section>
+                <SkeletonStack rows={items.length} rowHeight={52} leaving={kind !== "running"}>
+                  {SKELETON_WIDTHS.map(([a, b], i) => (
+                    <div key={i} className={cx(ROW_GRID, "h-[52px] items-center border-b border-rule")} style={{ opacity: SKELETON_FADE[i] }}>
+                      <span />
+                      <span className="ml-2 h-2 max-w-[calc(100%-16px)] rounded-[2px] bg-surface-2" style={{ width: a }} />
+                      <span className="ml-2 h-1.5 max-w-[calc(100%-16px)] rounded-[2px] bg-surface-2" style={{ width: b }} />
+                      <SkeletonMeter className="ml-2" />
+                      <span />
+                    </div>
+                  ))}
+                </SkeletonStack>
+              </ul>
+              {notice && <ImportNotice {...notice} className="mt-6 max-w-[640px]" />}
+            </section>
+          )}
         </main>
 
-        <footer ref={bottomBarRef} className="flex h-16 shrink-0 items-center gap-4 border-t border-rule px-6 xl:px-8">
-          <p className="m-0 min-w-0 flex-1 text-[12px] leading-4 text-muted">
+        <footer ref={bottomBarRef} className="flex h-16 shrink-0 items-center gap-2 border-t border-rule px-6 xl:px-8">
+          <p className="m-0 mr-2 min-w-0 flex-1 text-[12px] leading-4 text-muted">
             <span className={WIDE_ONLY}>{IMPORT_FOOTNOTE}</span>
           </p>
-          <button type="button" onClick={onStop} disabled={checking} className={deskButton("secondary")}>
-            Стоп
-          </button>
+          {kind === "error" || kind === "empty" || kind === "waiting" ? (
+            <>
+              <button type="button" onClick={onPickOther} className={deskButton(retryable || kind === "waiting" ? "secondary" : "primary")}>
+                Выбрать другой скриншот
+              </button>
+              {retryable && (
+                <button type="button" onClick={onRetry} className={deskButton("primary")}>
+                  <Icon name="refresh" size={16} />
+                  Повторить
+                </button>
+              )}
+            </>
+          ) : (
+            <>
+              {kind === "stopped" && (
+                <button type="button" onClick={onContinue} className={deskButton("primary", "animate-[enter-rise_var(--dur-enter)_var(--ease-enter)]")}>
+                  {continueLabel(items.length)}
+                </button>
+              )}
+              {/* One button, its label changing in place and width-locked: «Стоп» → «Повторить» (§3.9). */}
+              <button
+                type="button"
+                onClick={kind === "stopped" ? onRetry : onStop}
+                disabled={kind !== "running" && kind !== "stopped"}
+                className={deskButton("secondary")}
+              >
+                <StackedLabels labels={SLOT_LABELS} current={kind === "stopped" ? "Повторить" : "Стоп"} />
+              </button>
+            </>
+          )}
         </footer>
       </div>
     </div>

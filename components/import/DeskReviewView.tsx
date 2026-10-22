@@ -118,6 +118,12 @@ function DeskRow({ row, folders, current, menuOpen, onFocusRow, onToggle, onEdit
             {ru || "нет перевода"}
           </span>
           {row.ruGuess && ru && !dup && <DeskTag title="Перевода не было на скриншоте">ДОГАДКА</DeskTag>}
+          {/* The example the row will be saved with, as on phones; the row keeps its height. */}
+          {row.exampleFr && !dup && (
+            <span lang="fr" className="min-w-0 truncate font-serif text-[14px] leading-5 text-muted italic">
+              {row.exampleFr}
+            </span>
+          )}
           {dup && <DeskTag>УЖЕ ЕСТЬ</DeskTag>}
         </span>
         <span className="sr-only">, изменить</span>

@@ -26,8 +26,9 @@ import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { Kbd } from "@/components/ui/Kbd";
 import { useSnackbar } from "@/components/ui/Snackbar";
-import { countEnrichCandidates } from "@/lib/enrich";
-import { deleteFolder, getFolder, getLibraryStats, restoreFolder, updateFolder } from "@/lib/folders";
+import { countEnrichCandidates, enrichPreferences } from "@/lib/enrich";
+import { getSettings } from "@/lib/settings";
+import { deleteFolder, getFolder, getLibraryStats, restoreFolder } from "@/lib/folders";
 import { useFormatKeys } from "@/lib/key-names";
 import { getUndoableRun, undoReorgRun } from "@/lib/reorg";
 import { getSessionCounts } from "@/lib/session";
@@ -43,7 +44,8 @@ import { cachedFolder, rememberLibrary } from "./first-paint";
 import { FolderFormSheet } from "./FolderFormSheet";
 import { nWords, plural, practiceHref, reviewHref } from "./format";
 import { markLeaving, markReturning } from "./leaving";
-import { Menu, MenuCheckboxItem, MenuItem, MenuSeparator, type MenuAnchor } from "./Menu";
+import { Menu, MenuItem, MenuSeparator, type MenuAnchor } from "./Menu";
+import { ThemeMenuItems } from "./ThemeActions";
 import { INBOX_KEY, MoveMenu, ThemeSquare } from "./MoveMenu";
 import { matchesSlang, type SlangKey } from "./SlangFilter";
 import { SortPlanSheet } from "./SortPlanSheet";
@@ -56,6 +58,7 @@ import {
   nextSort,
   rangeIds,
   sortWords,
+  SORT_KEYS,
   tableColumns,
   type SortKey,
   type SortState,
@@ -80,7 +83,7 @@ const EMPTY_SET: ReadonlySet<string> = new Set();
 function readSort(): SortState {
   try {
     const raw = JSON.parse(localStorage.getItem(SORT_STORE) ?? "null") as SortState | null;
-    if (raw && ["fr", "ru", "level", "theme", "due"].includes(raw.key) && (raw.dir === 1 || raw.dir === -1)) return raw;
+    if (raw && SORT_KEYS.includes(raw.key) && (raw.dir === 1 || raw.dir === -1)) return raw;
   } catch {
     // storage blocked or junk
   }
@@ -130,7 +133,12 @@ function Desk({ scope }: { scope: LibraryScope }) {
   const words = useLibraryWords(folderId);
   const stats = useLiveQuery(() => getLibraryStats(), []);
   const lastRun = useLiveQuery(() => getUndoableRun(), []);
-  const toEnrich = useLiveQuery(() => (scope.kind === "all" ? countEnrichCandidates() : null), [scope.kind]);
+  // Counted with Settings «ИИ» (what the plan may fill in), as on phones: otherwise the row could
+  // offer a plan that turns out empty.
+  const toEnrich = useLiveQuery(
+    async () => (scope.kind === "all" ? countEnrichCandidates(enrichPreferences(await getSettings())) : null),
+    [scope.kind],
+  );
   const theme = useLiveQuery(async () => {
     if (folderId === undefined) return null;
     const [folder, counts] = await Promise.all([folderId === null ? Promise.resolve(null) : getFolder(folderId), getSessionCounts({ folderId })]);
@@ -149,8 +157,9 @@ function Desk({ scope }: { scope: LibraryScope }) {
   const [status, setStatus] = useState<StatusFilter>("all");
   const [slang, setSlang] = useState<SlangKey[]>([]);
   const [sort, setSortState] = useState<SortState>(readSort);
-  const setSort = (key: SortKey) => {
-    const next = nextSort(sort, key);
+  const setSort = (key: SortKey, fromMenu = false) => {
+    // A column head flips its direction; «Порядок ▾» always picks the order as named.
+    const next = fromMenu ? { key, dir: 1 as const } : nextSort(sort, key);
     setSortState(next);
     try {
       localStorage.setItem(SORT_STORE, JSON.stringify(next));
@@ -169,6 +178,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
       (item) =>
         (status !== "due" || item.schedule.due) &&
         (status !== "difficult" || item.schedule.status === "difficult") &&
+        (status !== "new" || item.schedule.tone === "new") &&
         matchesSlang(item.word, slang) &&
         (!q || matchesSearch(item.word, q)),
     );
@@ -181,11 +191,13 @@ function Desk({ scope }: { scope: LibraryScope }) {
   const counts = useMemo(() => {
     let due = 0;
     let difficult = 0;
+    let fresh = 0;
     for (const r of scopeRows ?? []) {
       if (r.schedule.due) due++;
       if (r.schedule.status === "difficult") difficult++;
+      if (r.schedule.tone === "new") fresh++;
     }
-    return { due, difficult };
+    return { due, difficult, fresh };
   }, [scopeRows]);
 
   // ----- Cursor (the current row) and selection
@@ -586,7 +598,8 @@ function Desk({ scope }: { scope: LibraryScope }) {
   const targets = summaryTargets(folders, placeCounts, scope.kind === "inbox" ? INBOX_KEY : scope.kind === "folder" ? scope.id : null);
   const currentKey = scope.kind === "inbox" ? INBOX_KEY : scope.kind === "folder" ? scope.id : undefined;
   const deleteKey = keys("Mod+Backspace");
-  const searchWidth = layout === "expanded" ? "w-[300px]" : coarse ? "w-[208px]" : "w-[240px]";
+  // Expanded: up to 300px, down to 220 so the filter strip keeps the search's row while it fits.
+  const searchWidth = layout === "expanded" ? "basis-[220px] grow max-w-[300px]" : coarse ? "w-[208px]" : "w-[240px]";
   const mastery = Math.round((scopeStats?.mastery ?? 0) * 100);
 
   // ----- Subline (replaced by the result count while searching or filtering)
@@ -728,7 +741,20 @@ function Desk({ scope }: { scope: LibraryScope }) {
                 {guide}
               </span>
             )}
-            {scope.kind !== "all" && hasWords && theme && (
+            {/* Nothing due: a practice round over the whole theme instead, as on phones. */}
+            {scope.kind !== "all" && hasWords && theme && theme.cards === 0 && (
+              <Link
+                href={practiceHref(folderId ?? null)}
+                className={cx(
+                  "inline-flex shrink-0 items-center gap-2 rounded-[6px] border border-ink bg-surface px-4 text-[14px] font-medium text-ink no-underline hoverable:bg-hover-surface",
+                  coarse ? "h-11" : "h-9",
+                )}
+              >
+                Тренировка всей темы
+                <span className="font-mono text-[13px] tabular-nums">{scopeRows?.length}</span>
+              </Link>
+            )}
+            {scope.kind !== "all" && hasWords && theme && theme.cards > 0 && (
               <Link
                 href={reviewHref(folderId ?? null)}
                 aria-keyshortcuts={shortcuts ? "R" : undefined}
@@ -767,9 +793,10 @@ function Desk({ scope }: { scope: LibraryScope }) {
           <div className="mt-1 flex h-4 items-center text-[12px] leading-4">{line2}</div>
 
           {/* Toolbar: theme filter (medium), search, filter strip — there while the words load too,
-              so nothing below it moves when they arrive (D4) */}
+              so nothing below it moves when they arrive (D4). A list too narrow for one row puts the
+              strip on a second row (the placeholder wraps the same way). */}
           {(scopeRows === undefined || hasWords || listMode) && (
-            <div className="mt-3 flex h-9 items-center gap-6 pointer-coarse:gap-5">
+            <div className="mt-3 flex min-h-9 flex-wrap items-center gap-x-6 gap-y-1 pointer-coarse:gap-x-5">
               {layout !== "expanded" && (
                 <button
                   type="button"
@@ -818,14 +845,24 @@ function Desk({ scope }: { scope: LibraryScope }) {
                   className="h-8 min-w-0 flex-1 border-0 bg-transparent p-0 text-[14px] text-ink outline-none placeholder:text-muted [&::-webkit-search-cancel-button]:hidden"
                 />
                 {query ? (
-                  <button type="button" aria-label="Очистить поиск" onClick={() => setQuery("")} className="inline-flex size-6 items-center justify-center rounded-[4px] bg-transparent text-muted hoverable:text-ink">
+                  <button type="button" aria-label="Очистить поиск" title="Очистить поиск (Esc)" onClick={() => setQuery("")} className="inline-flex size-6 items-center justify-center rounded-[4px] bg-transparent text-muted hoverable:text-ink">
                     <Icon name="close" size={14} />
                   </button>
                 ) : (
                   shortcuts && <Kbd aria-hidden="true">/</Kbd>
                 )}
               </label>
-              <FilterStrip status={status} onStatus={setStatus} slang={slang} onSlang={setSlang} dueCount={counts.due} difficultCount={counts.difficult} />
+              <FilterStrip
+                status={status}
+                onStatus={setStatus}
+                slang={slang}
+                onSlang={setSlang}
+                dueCount={counts.due}
+                difficultCount={counts.difficult}
+                newCount={counts.fresh}
+                sort={sort}
+                onOrder={(key) => setSort(key, true)}
+              />
             </div>
           )}
         </header>
@@ -833,11 +870,9 @@ function Desk({ scope }: { scope: LibraryScope }) {
         {emptyText ? (
           <div className="mx-6 mt-6 flex flex-col items-start gap-4 border-t border-rule pt-6">
             <p className="m-0 text-[15px] leading-[22px] text-muted">{emptyText}</p>
-            {scope.kind !== "inbox" && (
-              <Button variant="secondary" size="sm" className="h-9 px-4 text-[14px]" icon="plus" onClick={() => addSheet.open()}>
-                Добавить слово
-              </Button>
-            )}
+            <Button variant="secondary" size="sm" className="h-9 px-4 text-[14px]" icon="plus" onClick={() => addSheet.open()}>
+              Добавить слово
+            </Button>
           </div>
         ) : (
           <div
@@ -882,6 +917,8 @@ function Desk({ scope }: { scope: LibraryScope }) {
                           ? "Сегодня повторять нечего."
                           : status === "difficult"
                             ? "Трудных слов нет."
+                            : status === "new"
+                              ? "Новых слов нет."
                             : "С таким уровнем сленга слов нет."}
                     </p>
                     {query.trim() && (
@@ -1009,30 +1046,14 @@ function Desk({ scope }: { scope: LibraryScope }) {
 
       {folder && (
         <Menu open={!!themeMenu} anchor={themeMenu ? { element: themeMenu, align: "end" } : null} onClose={() => setThemeMenu(null)} label="Действия с темой" width={320} exactWidth>
-          {(stats?.folders.find((f) => f.id === folder.id)?.stats.total ?? 0) > 0 && (
-            <MenuItem icon="refresh" caption="Все слова вперемешку, не влияет на расписание." onSelect={() => router.push(practiceHref(folder.id))}>
-              Тренировка всей темы
-            </MenuItem>
-          )}
-          <MenuItem icon="pencil" shortcut="F2" onSelect={() => setFolderForm({ mode: "edit" })}>
-            Название, описание и цвет
-          </MenuItem>
-          <MenuCheckboxItem
-            checked={folder.locked}
-            onCheckedChange={(locked) => void updateFolder(folder.id, { locked })}
-            caption="Раскладка по темам не переименует её и не будет забирать из неё слова."
-          >
-            Закрепить тему
-          </MenuCheckboxItem>
-          <MenuSeparator />
-          {(stats?.folders.find((f) => f.id === folder.id)?.stats.total ?? 0) > 0 && (
-            <MenuItem icon="spark" caption="Удалить тему, а слова разложить по другим темам." onSelect={() => setDisbandOpen(true)}>
-              Расформировать…
-            </MenuItem>
-          )}
-          <MenuItem icon="trash" danger caption="Слова из удалённой темы попадут во «Входящие»." onSelect={() => void removeTheme(folder)}>
-            Удалить тему
-          </MenuItem>
+          <ThemeMenuItems
+            folder={folder}
+            words={stats?.folders.find((f) => f.id === folder.id)?.stats.total ?? 0}
+            onNavigate={(href) => router.push(href)}
+            onEdit={() => setFolderForm({ mode: "edit" })}
+            onDisband={() => setDisbandOpen(true)}
+            onDelete={() => void removeTheme(folder)}
+          />
         </Menu>
       )}
 
@@ -1055,6 +1076,11 @@ function Desk({ scope }: { scope: LibraryScope }) {
               {f.name}
             </MenuItem>
           ))}
+          {/* No sidebar at this width: «Новая тема» lives here (the sidebar has «+» next to «Темы»). */}
+          <MenuSeparator />
+          <MenuItem icon="plus" onSelect={() => setFolderForm({ mode: "new" })}>
+            Новая тема…
+          </MenuItem>
         </Menu>
       )}
 

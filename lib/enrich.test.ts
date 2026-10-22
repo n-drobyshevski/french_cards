@@ -9,14 +9,17 @@ import {
   buildEnrichPlan,
   countEnrichCandidates,
   EnrichError,
+  enrichFraction,
   enrichmentPatch,
   enrichWords,
+  type EnrichProgress,
   fillSavedWords,
   folderPatch,
   loadEnrichCandidates,
   mergeChanges,
   planChanges,
   postEnrich,
+  runEnrichPlan,
   toEnrichWords,
 } from "./enrich";
 import { updateSettings } from "./settings";
@@ -74,6 +77,27 @@ describe("network", () => {
     expect(out.size).toBe(words.length - 1);
     expect(out.has("w3")).toBe(false);
     expect(progress.at(-1)).toBe(words.length);
+  });
+
+  it("reports the opening 0 / n and every batch through onStage, keeping onProgress", async () => {
+    const fetchImpl = fakeFetch();
+    const words = Array.from({ length: ENRICH_CHUNK_MAX * 2 + 3 }, (_, i) => ({ id: `w${i}`, fr: `mot${i}`, ru: `слово${i}` }));
+    const stages: EnrichProgress[] = [];
+    const progress: [number, number][] = [];
+    await enrichWords(words, { fetchImpl, onStage: (p) => stages.push(p), onProgress: (d, t) => progress.push([d, t]) });
+    expect(stages[0]).toEqual({ words: words.length, wordsDone: 0, done: 0, total: 3, batch: [] });
+    expect(stages).toHaveLength(4);
+    expect(stages.slice(1).map((p) => p.done)).toEqual([1, 2, 3]);
+    expect(stages.at(-1)).toMatchObject({ wordsDone: words.length, done: 3, total: 3 });
+    // Each batch carries its own results; together they are every word once.
+    const ids = stages.flatMap((p) => p.batch.map((r) => r.id));
+    expect(new Set(ids).size).toBe(words.length);
+    // The bar only moves forward.
+    const fractions = stages.map(enrichFraction);
+    expect(fractions).toEqual([...fractions].sort((a, b) => a - b));
+    expect(fractions.at(-1)).toBe(1);
+    expect(progress.at(-1)).toEqual([words.length, words.length]);
+    expect(enrichFraction({ done: 0, total: 0 })).toBe(1);
   });
 
   it("retries after 429 and maps errors", async () => {
@@ -210,6 +234,28 @@ describe("«Дополнить карточки»", () => {
     expect(plan.examples).toEqual([]);
     expect(plan.slang.map((c) => c.word.id)).toEqual([manual.id]);
     expect(await countEnrichCandidates({ slang: false, examples: false })).toEqual({ total: 0, noExample: 0 });
+  });
+
+  it("runEnrichPlan: candidates, batches through onStage, then the plan", async () => {
+    const manual = await addWord({ fr: "la caisse", ru: "тачка", source: "manual" }, NOW);
+    await addWord({ fr: "chelou", ru: "стрёмный", source: "suggest", slang_level: 2, example_fr: "Il est chelou." }, NOW);
+    const fetchImpl = fakeFetch((id) => result(id, { slang_level: 1 }));
+    const stages: EnrichProgress[] = [];
+    const run = await runEnrichPlan({ fetchImpl, model: "fast", prefs: { slang: true, examples: true }, onStage: (p) => stages.push(p) });
+    expect(stages.map((p) => [p.wordsDone, p.words, p.done, p.total])).toEqual([
+      [0, 1, 0, 1],
+      [1, 1, 1, 1],
+    ]);
+    expect(run.more).toBe(0);
+    expect(run.plan.examples.map((c) => c.word.id)).toEqual([manual.id]);
+    expect(run.plan.slang.map((c) => c.word.id)).toEqual([manual.id]);
+    expect(JSON.parse(String(fetchImpl.mock.calls[0][1]?.body))).toMatchObject({ model: "fast" });
+
+    // Nothing to look at: no request, an empty plan.
+    const none = vi.fn();
+    const empty = await runEnrichPlan({ fetchImpl: none, prefs: { slang: false, examples: false }, model: "fast" });
+    expect(none).not.toHaveBeenCalled();
+    expect(planChanges(empty.plan)).toEqual([]);
   });
 
   it("plans examples and levels, applies the picked ones and undoes them", async () => {

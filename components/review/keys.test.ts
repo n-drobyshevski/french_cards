@@ -38,6 +38,14 @@ describe("reviewKeyAction", () => {
     expect(reviewKeyAction(key("я", "KeyZ"), back)).toEqual({ type: "undo" });
   });
 
+  it("opens the card for editing with E on the answer side only", () => {
+    expect(reviewKeyAction(key("e", "KeyE"), back)).toEqual({ type: "edit" });
+    expect(reviewKeyAction(key("у", "KeyE"), back)).toEqual({ type: "edit" });
+    expect(reviewKeyAction(key("e", "KeyE"), front)).toBeNull();
+    expect(reviewKeyAction(key("e", "KeyE"), { ...back, letters: false })).toBeNull();
+    expect(reviewKeyAction(key("e", "KeyE"), { ...back, done: true })).toBeNull();
+  });
+
   it("ignores modified and repeated keys", () => {
     expect(reviewKeyAction(key("z", "KeyZ", { metaKey: true }), back)).toBeNull();
     expect(reviewKeyAction(key("1", "Digit1", { ctrlKey: true }), back)).toBeNull();

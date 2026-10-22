@@ -531,6 +531,24 @@
    "h": 920,
    "title": "Десктоп: перенос и диалоги",
    "is_interactive": true
+  },
+  "Review-Edit.dc.html": {
+   "x": 0,
+   "y": 21616,
+   "w": 390,
+   "h": 844,
+   "title": "Повторение · изменить карточку",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Review-Edit-Sheet.dc.html": {
+   "x": 470,
+   "y": 21616,
+   "w": 390,
+   "h": 844,
+   "title": "Повторение · карточка слова, «Вариант»",
+   "is_interactive": true,
+   "radius": 28
   }
  },
  "order": [
@@ -596,7 +614,9 @@
   "M-Kit.dc.html",
   "M-D-Review-Keys.dc.html",
   "M-D-Library-Pane.dc.html",
-  "M-D-Dialogs-Drop.dc.html"
+  "M-D-Dialogs-Drop.dc.html",
+  "Review-Edit.dc.html",
+  "Review-Edit-Sheet.dc.html"
  ],
  "notes": {
   "row1": {
@@ -710,6 +730,13 @@
    "text": "16 · Движение · Десктоп и кит",
    "kind": "title1",
    "maxW": 6000
+  },
+  "row17": {
+   "x": 0,
+   "y": 21366,
+   "text": "17 · Повторение · правка карточки",
+   "kind": "title1",
+   "maxW": 860
   }
  },
  "designSystems": []
