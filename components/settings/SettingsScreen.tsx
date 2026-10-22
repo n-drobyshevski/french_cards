@@ -6,11 +6,13 @@ import { InstallHint } from "@/components/pwa/InstallHint";
 import { applyTheme } from "@/components/providers/theme";
 import { clearReviewDirection } from "@/components/review/filter";
 import { DIRECTION_LABELS } from "@/components/review/format";
+import { Button } from "@/components/ui/Button";
 import { Header } from "@/components/ui/Header";
 import { Icon } from "@/components/ui/Icons";
 import { Segmented } from "@/components/ui/Segmented";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { Toggle } from "@/components/ui/Toggle";
+import { haptic, hapticSupport } from "@/lib/haptics";
 import { getSettings, updateSettings } from "@/lib/settings";
 import { DEFAULT_SETTINGS, type Direction, type Settings } from "@/lib/types";
 import { useLayoutClass } from "@/lib/use-media";
@@ -138,6 +140,18 @@ function PhoneSettings({ settings, loading, save, onTheme, onDirection }: Screen
             />
           </SettingsRow>
           <SettingsRow label="Вибрация при свайпах" labelId="haptics-label">
+            <Button
+              variant="tertiary"
+              size="sm"
+              className="text-[13px]"
+              disabled={!settings.haptics || !settings.swipe_grading}
+              onClick={() => {
+                if (hapticSupport() === "none") toast.show({ message: "Этот браузер не умеет вибрировать" });
+                else haptic("again");
+              }}
+            >
+              Проверить
+            </Button>
             <Toggle
               aria-labelledby="haptics-label"
               checked={settings.haptics}

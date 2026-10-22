@@ -66,3 +66,19 @@ test("Settings «ИИ» shape the variants and what is filled in automatically",
   await expect(sheet.getByRole("textbox", { name: "Пример по-французски" })).toHaveValue("");
   expect(enrichBodies.at(-1)).toMatchObject({ model: "accurate" });
 });
+
+test("«Проверить» next to the vibration switch plays a test pulse", async ({ page }) => {
+  await page.addInitScript(() => {
+    const calls: unknown[] = [];
+    (window as unknown as { __vibrations: unknown[] }).__vibrations = calls;
+    Object.defineProperty(navigator, "vibrate", { configurable: true, value: (p: unknown) => (calls.push(p), true) });
+  });
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "Проверить" }).click();
+  expect(await page.evaluate(() => (window as unknown as { __vibrations: unknown[] }).__vibrations)).toEqual([[35, 80, 35]]);
+
+  // Without any way to vibrate, it says so.
+  await page.evaluate(() => Object.defineProperty(navigator, "vibrate", { configurable: true, value: undefined }));
+  await page.getByRole("button", { name: "Проверить" }).click();
+  await expect(page.getByText("Этот браузер не умеет вибрировать")).toBeVisible();
+});
