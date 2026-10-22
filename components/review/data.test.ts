@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { createFolder, deleteFolder } from "@/lib/folders";
 import { addWord, gradeCard } from "@/lib/words";
-import { loadDoneScreen, loadReviewScreen } from "./data";
+import { loadDoneScreen, loadReviewScreen, wordOrdinals } from "./data";
 
 const DAY = 86_400_000;
 /** Local noon, 21 Oct 2026. */
@@ -33,6 +33,26 @@ describe("loadReviewScreen", () => {
     const folder = await loadReviewScreen({ folderId: money.id, direction: "fr_ru" }, NOON);
     expect(folder.filterWords).toBe(1);
     expect(folder.session.queue.map((i) => i.word.fr)).toEqual(["la thune"]);
+  });
+
+  it("numbers live words by creation order, like the add sheet", async () => {
+    const a = await addWord({ fr: "la thune", ru: "бабки" }, new Date(NOON.getTime() - 2 * DAY));
+    const b = await addWord({ fr: "chelou", ru: "стрёмный" }, new Date(NOON.getTime() - DAY));
+    const c = await addWord({ fr: "bouffer", ru: "жрать" }, NOON);
+    const data = await loadReviewScreen({}, NOON);
+    expect([a, b, c].map((w) => data.ordinals.get(w.id))).toEqual([1, 2, 3]);
+  });
+});
+
+describe("wordOrdinals", () => {
+  it("gives words with the same timestamp the same number", () => {
+    const map = wordOrdinals([
+      { id: "c", created_at: "2026-10-03" },
+      { id: "a", created_at: "2026-10-01" },
+      { id: "b1", created_at: "2026-10-02" },
+      { id: "b2", created_at: "2026-10-02" },
+    ]);
+    expect(Object.fromEntries(map)).toEqual({ a: 1, b1: 2, b2: 2, c: 4 });
   });
 });
 

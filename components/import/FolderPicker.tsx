@@ -21,12 +21,24 @@ export interface FolderPickerProps {
   onPick: (choice: FolderChoice) => void;
 }
 
-interface Option {
+export interface ThemeOption {
   key: string;
   label: string;
   caption?: string;
   color?: string;
   dashed?: boolean;
+}
+
+/** «Входящие», the library's themes in their order, then the proposed new ones not taken yet. */
+export function themeOptions(folders: readonly Folder[], proposals: readonly NewFolderProposal[]): ThemeOption[] {
+  const taken = new Set(folders.map((f) => f.name.trim().toLocaleLowerCase("ru")));
+  return [
+    { key: "inbox", label: "Входящие", caption: "без темы", dashed: true },
+    ...folders.map((f) => ({ key: `f:${f.id}`, label: f.name, color: f.color })),
+    ...proposals
+      .filter((p) => !taken.has(p.name.trim().toLocaleLowerCase("ru")))
+      .map((p) => ({ key: `n:${p.slug}`, label: `+ ${p.name}`, caption: "новая тема", dashed: true })),
+  ];
 }
 
 /** Theme list: «Входящие», the library's themes, then the proposed new ones. Picking closes it. */
@@ -41,14 +53,7 @@ export function FolderPicker({
   selected,
   onPick,
 }: FolderPickerProps) {
-  const taken = new Set(folders.map((f) => f.name.trim().toLocaleLowerCase("ru")));
-  const options: Option[] = [
-    { key: "inbox", label: "Входящие", caption: "без темы", dashed: true },
-    ...folders.map((f) => ({ key: `f:${f.id}`, label: f.name, color: f.color })),
-    ...proposals
-      .filter((p) => !taken.has(p.name.trim().toLocaleLowerCase("ru")))
-      .map((p) => ({ key: `n:${p.slug}`, label: `+ ${p.name}`, caption: "новая тема", dashed: true })),
-  ];
+  const options = themeOptions(folders, proposals);
   const selectedKey = selected ? choiceKey(selected) : null;
 
   return (
