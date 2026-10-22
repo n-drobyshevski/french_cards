@@ -18,7 +18,10 @@ import { toFolderInputs } from "./use-suggest";
 import { updateWords, type WordPatch } from "./words";
 
 export const ENRICH_URL = "/api/ai/enrich";
-export const ENRICH_CONCURRENCY = 3;
+// Smaller requests than the server cap, more at once: each finishes sooner and the bar moves in
+// finer steps. 6 in flight stays well inside the enrich rate-limit bucket.
+export const ENRICH_REQUEST_SIZE = Math.min(20, ENRICH_CHUNK_MAX);
+export const ENRICH_CONCURRENCY = 6;
 /** Words looked at per «Дополнить карточки» run. */
 export const ENRICH_RUN_MAX = 300;
 
@@ -162,7 +165,7 @@ export function chunk<T>(items: readonly T[], size: number): T[][] {
 
 /** All words in chunks, a few requests at a time. Results by word id (skipped words are missing). */
 export async function enrichWords(words: readonly EnrichInput[], opts: EnrichOptions = {}): Promise<Map<string, EnrichResult>> {
-  const chunks = chunk(toEnrichWords(words), ENRICH_CHUNK_MAX);
+  const chunks = chunk(toEnrichWords(words), ENRICH_REQUEST_SIZE);
   const total = chunks.reduce((n, c) => n + c.length, 0);
   const out = new Map<string, EnrichResult>();
   let next = 0;
