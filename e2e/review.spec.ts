@@ -109,6 +109,19 @@ test("a tap on an abbreviation on the answer explains it instead of flipping the
   await expect(answer).toHaveCount(0);
 });
 
+test("the slang hint wraps its text inside the bubble", async ({ page }) => {
+  await openReview(page);
+  await questionCard(page).click();
+  const answer = page.locator("[data-review-answer]");
+  // The slang meter sits in a no-wrap row; the hint must not inherit it.
+  await answer.getByRole("button", { name: /^(нейтр\.|fam\.|arg\.|vulg\.) — / }).first().click();
+  const hint = answer.getByRole("tooltip");
+  await expect(hint).toBeVisible();
+  const fits = await hint.evaluate((el) => el.scrollWidth <= el.clientWidth);
+  expect(fits).toBe(true);
+  expect((await hint.boundingBox())!.height).toBeGreaterThan(60);
+});
+
 test.describe("loading and moving on (MOTION-SPEC R1, R2, R9)", () => {
   test("the loading placeholder has the card's final geometry; bars only after 300 ms; nothing shifts", async ({ page }) => {
     await slowDatabase(page, 1500);
