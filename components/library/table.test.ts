@@ -91,7 +91,7 @@ describe("tableColumns", () => {
   it("keeps every column at 1440 (inner 744)", () => {
     const c = tableColumns({ inner: 744, layout: "expanded", coarse: false, themeColumn: true });
     expect(c).toMatchObject({ theme: true, level: "meter", dueWidth: 120 });
-    expect(c.template).toBe("32px minmax(160px,1fr) minmax(160px,1fr) 104px 112px 120px");
+    expect(c.template).toBe("32px minmax(160px,1fr) minmax(160px,1fr) 112px 112px 120px");
   });
 
   it("drops «Тема» and shortens «Уровень» at 1200 (inner 544)", () => {

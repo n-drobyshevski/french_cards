@@ -138,6 +138,19 @@ body {
   font-size: 15px;
 }
 
+/* Top safe area, only for the installed app: there the page runs up under the status bar. In a
+   browser tab the browser keeps the page below its own bars, yet some (DuckDuckGo on Android)
+   still report the status bar as an inset, which doubled the gap above the header. */
+:root {
+  --safe-top: 0px;
+}
+
+@media (display-mode: standalone), (display-mode: fullscreen) {
+  :root {
+    --safe-top: env(safe-area-inset-top);
+  }
+}
+
 /* App shell (components/shell): width of the nav column at the left, for fixed UI that centres in
    the content area (snackbar, install hint). 0 on phones and while the sidebar is hidden with `[`;
    <html data-sidebar="hidden"> is set before first paint (SIDEBAR_INIT_SCRIPT). */

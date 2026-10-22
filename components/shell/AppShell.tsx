@@ -25,7 +25,7 @@ function RevealButton() {
         setSidebarHidden(false);
         requestAnimationFrame(() => document.querySelector<HTMLElement>("[data-shell-nav] a, [data-shell-nav] button")?.focus());
       }}
-      className="fixed top-[calc(12px+env(safe-area-inset-top))] left-3 z-30 hidden size-8 items-center justify-center rounded-[4px] bg-transparent text-ink hover-fade hoverable:bg-hover"
+      className="fixed top-[calc(12px+var(--safe-top))] left-3 z-30 hidden size-8 items-center justify-center rounded-[4px] bg-transparent text-ink hover-fade hoverable:bg-hover"
     >
       <Icon name="sidebar" size={20} strokeWidth={1.5} />
     </button>
@@ -45,7 +45,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <ShellProvider>
       <Sidebar data={data} />
       <Rail data={data} />
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col md:pt-[env(safe-area-inset-top)]">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col md:pt-(--safe-top)">
         <RevealButton />
         <div className="flex min-h-0 flex-1 flex-col md:mx-auto md:w-full md:max-w-[560px] md:has-[[data-wide]]:max-w-none">
           {children}

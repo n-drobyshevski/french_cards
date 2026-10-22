@@ -188,7 +188,7 @@ export function AbbrHint({ abbr, className, lang = "fr", align = "start" }: Abbr
           id={id}
           role="tooltip"
           className={cx(
-            "absolute top-full z-40 mt-2 flex w-max max-w-[min(280px,calc(100vw-32px))] flex-col gap-0.5 rounded-[4px] border border-ink bg-surface px-3 py-2 text-left font-sans text-[13px] leading-5 font-normal text-ink not-italic shadow-[0_4px_16px_rgb(0_0_0/0.12)]",
+            "absolute top-full z-40 mt-2 flex w-max max-w-[min(280px,calc(100vw-32px))] flex-col whitespace-normal break-words gap-0.5 rounded-[4px] border border-ink bg-surface px-3 py-2 text-left font-sans text-[13px] leading-5 font-normal text-ink not-italic shadow-[0_4px_16px_rgb(0_0_0/0.12)]",
             align === "end" ? "right-0" : "left-0",
             fade && "animate-[fade-in_var(--dur-quick)_var(--ease-enter)]",
           )}

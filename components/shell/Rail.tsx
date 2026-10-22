@@ -130,7 +130,7 @@ function RailView({ data, active }: { data: ShellData | undefined; active: NavKe
     <nav
       data-shell-nav=""
       aria-label="Разделы"
-      className="sticky top-0 hidden h-dvh w-[72px] shrink-0 flex-col overflow-y-auto border-r border-rule bg-paper pt-[calc(16px+env(safe-area-inset-top))] pb-3 md:flex xl:hidden"
+      className="sticky top-0 hidden h-dvh w-[72px] shrink-0 flex-col overflow-y-auto border-r border-rule bg-paper pt-[calc(16px+var(--safe-top))] pb-3 md:flex xl:hidden"
     >
       <div className="flex h-5 shrink-0 justify-center">
         <CardGlyph size="rail" />
