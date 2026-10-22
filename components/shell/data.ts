@@ -1,9 +1,9 @@
 // Data for the desktop sidebar and rail: counts, themes with guide words, the active item and the
 // sync line. Pure builders are unit-tested; loadShellData runs inside useLiveQuery.
 import type { SyncLine, SyncLineInput } from "@/components/settings/format";
-import { db } from "@/lib/db";
-import { getLibraryStats, type LibraryStats } from "@/lib/folders";
-import { compareFr } from "@/lib/text";
+import { db, liveRows } from "@/lib/db";
+import { libraryStatsFrom, listFolders, type LibraryStats } from "@/lib/folders";
+import { compareFrKeyed, frSortKey } from "@/lib/text";
 import type { Word } from "@/lib/types";
 
 export interface ShellTheme {
@@ -37,9 +37,19 @@ export function guideWords(frs: readonly string[]): string | null {
   if (frs.length === 0) return null;
   let first = frs[0];
   let last = frs[0];
+  let firstKey = frSortKey(first);
+  let lastKey = firstKey;
+  // One key per word; same comparisons as compareFr.
   for (const fr of frs) {
-    if (compareFr(fr, first) < 0) first = fr;
-    if (compareFr(fr, last) > 0) last = fr;
+    const key = frSortKey(fr);
+    if (compareFrKeyed(key, fr, firstKey, first) < 0) {
+      first = fr;
+      firstKey = key;
+    }
+    if (compareFrKeyed(key, fr, lastKey, last) > 0) {
+      last = fr;
+      lastKey = key;
+    }
   }
   return first === last ? first : `${first} – ${last}`;
 }
@@ -77,8 +87,9 @@ export function buildShellData(stats: LibraryStats, words: readonly Pick<Word, "
 }
 
 export async function loadShellData(now: Date = new Date()): Promise<ShellData> {
-  const [stats, words] = await Promise.all([getLibraryStats(now), db.words.filter((w) => w.deleted_at === null).toArray()]);
-  return buildShellData(stats, words);
+  // One read of each table; the stats and the guide words share the words.
+  const [folders, words, states] = await Promise.all([listFolders(), liveRows(db.words), liveRows(db.review_state)]);
+  return buildShellData(libraryStatsFrom(folders, words, states, now), words);
 }
 
 /** Nav item for a path: a section, «inbox», or `theme:<id>`. */

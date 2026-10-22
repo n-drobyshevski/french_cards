@@ -1,8 +1,8 @@
 // «Мои наборы»: named card sets for Повторение, built from filters (themes, word status, slang
 // level, age) and reviewed either on the schedule or as a practice round. Rows of the synced
 // `review_sets` table, so every device sees the same sets; deletes are soft, like other rows.
-import { db, newId } from "./db";
-import { buildPracticeQueue, getSessionCounts, PRACTICE_ALL_MAX, type SessionFilter } from "./session";
+import { db, liveRows, newId } from "./db";
+import { buildPracticeQueue, getSessionCounts, PRACTICE_ALL_MAX, type SessionData, type SessionFilter } from "./session";
 import { SLANG_LABELS, type Direction, type Folder, type ReviewSet, type ReviewSetStatus, type SlangLevel } from "./types";
 
 const DAY_MS = 86_400_000;
@@ -33,7 +33,7 @@ const cleanName = (name: string) => name.replace(/\s+/g, " ").trim().slice(0, RE
 
 /** Live sets, oldest first (use inside useLiveQuery). */
 export async function listReviewSets(): Promise<ReviewSet[]> {
-  const rows = await db.review_sets.filter((s) => s.deleted_at === null).toArray();
+  const rows = await liveRows(db.review_sets);
   return rows.sort((a, b) => a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
 }
 
@@ -96,9 +96,14 @@ export function setSessionFilter(
  * What «Повторять» would give now: due + new cards for a schedule set, every card (capped like a
  * practice round) for a practice set.
  */
-export async function countSetCards(filter: SessionFilter, mode: ReviewSet["mode"], now: Date = new Date()): Promise<number> {
-  if (mode === "practice") return (await buildPracticeQueue({ ...filter, scope: "all", limit: PRACTICE_ALL_MAX, random: () => 0 }, now)).length;
-  const c = await getSessionCounts(filter, now);
+export async function countSetCards(
+  filter: SessionFilter,
+  mode: ReviewSet["mode"],
+  now: Date = new Date(),
+  pre?: SessionData,
+): Promise<number> {
+  if (mode === "practice") return (await buildPracticeQueue({ ...filter, scope: "all", limit: PRACTICE_ALL_MAX, random: () => 0 }, now, pre)).length;
+  const c = await getSessionCounts(filter, now, pre);
   return c.due + c.new;
 }
 

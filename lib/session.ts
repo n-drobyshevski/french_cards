@@ -1,6 +1,6 @@
 // Daily review sessions: today's queue (due first, then new up to the daily limit), header counts,
 // the end-of-session summary and practice rounds that never touch scheduling.
-import { db } from "./db";
+import { db, liveRows } from "./db";
 import { reviewStateId, wordStatus, type Rating } from "./scheduler";
 import { getSettings } from "./settings";
 import type { Direction, ReviewLog, ReviewSetStatus, ReviewState, SlangLevel, Word } from "./types";
@@ -77,14 +77,40 @@ export function endOfStudyDay(now: Date = new Date()): Date {
 
 const ms = (iso: string) => Date.parse(iso);
 
+/** The whole library as read once, so one live query can derive several sessions from it. */
+export interface SessionData {
+  /** Live words. */
+  words: readonly Word[];
+  /** Live review cards. */
+  states: readonly ReviewState[];
+  /** Live folder ids (a word in any other folder counts as «Входящие»). */
+  liveFolderIds: ReadonlySet<string>;
+}
+
+export async function liveFolderIds(): Promise<Set<string>> {
+  return new Set((await liveRows(db.folders)).map((f) => f.id));
+}
+
+/** Reads every live word, card and folder id once (pass it to loadSession and friends). */
+export async function loadSessionData(): Promise<SessionData> {
+  const [words, states, folders] = await Promise.all([liveRows(db.words), liveRows(db.review_state), liveFolderIds()]);
+  return { words, states, liveFolderIds: folders };
+}
+
+const needsLiveFolders = (filter: SessionFilter) => filter.folderId === null || (filter.folderIds?.includes(null) ?? false);
+
 /**
- * Live words matching the filter: folder (or a set's folders), slang, statuses and age. Words
- * whose folder is gone count as «Входящие».
+ * Words among `all` (live words) matching the filter: folder (or a set's folders), slang, statuses
+ * and age. Words whose folder is not in `liveFolderIds` count as «Входящие». `states` (live cards)
+ * is only read for a statuses filter.
  */
-export async function liveWords(filter: SessionFilter): Promise<Map<string, Word>> {
-  const needsLive = filter.folderId === null || (filter.folderIds?.includes(null) ?? false);
-  const live = needsLive ? new Set((await db.folders.filter((f) => f.deleted_at === null).toArray()).map((f) => f.id)) : null;
-  const inInbox = (w: Word) => w.folder_id === null || !live!.has(w.folder_id);
+export function matchWords(
+  all: readonly Word[],
+  states: readonly ReviewState[],
+  liveFolderIds: ReadonlySet<string> | null,
+  filter: SessionFilter,
+): Map<string, Word> {
+  const inInbox = (w: Word) => w.folder_id === null || !liveFolderIds!.has(w.folder_id);
   let inFolder: (w: Word) => boolean = () => true;
   if (filter.folderIds && filter.folderIds.length > 0) {
     const ids = new Set(filter.folderIds.filter((id): id is string => id !== null));
@@ -97,15 +123,13 @@ export async function liveWords(filter: SessionFilter): Promise<Map<string, Word
   }
   const slang = filter.slang ?? [];
   const since = filter.addedSince;
-  let words = await db.words
-    .filter((w) => w.deleted_at === null && inFolder(w) && matchesSlangKeys(w, slang) && (!since || w.created_at >= since))
-    .toArray();
+  let words = all.filter((w) => w.deleted_at === null && inFolder(w) && matchesSlangKeys(w, slang) && (!since || w.created_at >= since));
   if (filter.statuses && filter.statuses.length > 0) {
     const wanted = new Set(filter.statuses);
     const ids = new Set(words.map((w) => w.id));
-    const states = await db.review_state.filter((s) => s.deleted_at === null && ids.has(s.word_id)).toArray();
     const byWord = new Map<string, ReviewState[]>();
     for (const st of states) {
+      if (st.deleted_at !== null || !ids.has(st.word_id)) continue;
       const list = byWord.get(st.word_id);
       if (list) list.push(st);
       else byWord.set(st.word_id, [st]);
@@ -113,6 +137,37 @@ export async function liveWords(filter: SessionFilter): Promise<Map<string, Word
     words = words.filter((w) => wanted.has(wordStatus(byWord.get(w.id) ?? [])));
   }
   return new Map(words.map((w) => [w.id, w]));
+}
+
+/** Words a filter can match: a single theme from its folder_id index (still a plain range), else all. */
+function candidateWords(filter: SessionFilter): Promise<Word[]> {
+  const one = typeof filter.folderId === "string" && !filter.folderIds?.length ? filter.folderId : null;
+  return one !== null ? db.words.where("folder_id").equals(one).toArray() : liveRows(db.words);
+}
+
+/** Live words matching the filter (see `matchWords`); derived from `pre` when given. */
+export async function liveWords(filter: SessionFilter, pre?: SessionData): Promise<Map<string, Word>> {
+  if (pre) return matchWords(pre.words, pre.states, pre.liveFolderIds, filter);
+  const [words, states, live] = await Promise.all([
+    candidateWords(filter),
+    filter.statuses && filter.statuses.length > 0 ? liveRows(db.review_state) : [],
+    needsLiveFolders(filter) ? liveFolderIds() : null,
+  ]);
+  return matchWords(words, states, live, filter);
+}
+
+/** Matching words plus every live card, reading each table once. */
+async function wordsWithStates(
+  filter: SessionFilter,
+  pre?: SessionData,
+): Promise<{ words: Map<string, Word>; states: readonly ReviewState[] }> {
+  if (pre) return { words: matchWords(pre.words, pre.states, pre.liveFolderIds, filter), states: pre.states };
+  const [words, states, live] = await Promise.all([
+    candidateWords(filter),
+    liveRows(db.review_state),
+    needsLiveFolders(filter) ? liveFolderIds() : null,
+  ]);
+  return { words: matchWords(words, states, live, filter), states };
 }
 
 /** Live review-log rows reviewed in [from, to). */
@@ -135,15 +190,14 @@ function newIntroduced(logs: readonly ReviewLog[]): Set<string> {
  * A new ru_fr card is held back until the word's fr_ru card has been learned on an earlier day,
  * unless the session is filtered to ru_fr only.
  */
-export async function loadSession(filter: SessionFilter = {}, now: Date = new Date()): Promise<Session> {
-  const settings = await getSettings();
+export async function loadSession(filter: SessionFilter = {}, now: Date = new Date(), pre?: SessionData): Promise<Session> {
   const dayStart = startOfStudyDay(now);
   const dayEnd = endOfStudyDay(now);
   const t = now.getTime();
 
-  const [words, states, todayLogs] = await Promise.all([
-    liveWords(filter),
-    db.review_state.filter((s) => s.deleted_at === null).toArray(),
+  const [settings, { words, states }, todayLogs] = await Promise.all([
+    getSettings(),
+    wordsWithStates(filter, pre),
     logsBetween(dayStart, dayEnd),
   ]);
 
@@ -201,8 +255,8 @@ export async function buildQueue(filter: SessionFilter = {}, now: Date = new Dat
   return (await loadSession(filter, now)).queue;
 }
 
-export async function getSessionCounts(filter: SessionFilter = {}, now: Date = new Date()): Promise<SessionCounts> {
-  return (await loadSession(filter, now)).counts;
+export async function getSessionCounts(filter: SessionFilter = {}, now: Date = new Date(), pre?: SessionData): Promise<SessionCounts> {
+  return (await loadSession(filter, now, pre)).counts;
 }
 
 export interface DaySummary {
@@ -221,15 +275,12 @@ export interface DaySummary {
 }
 
 /** Numbers for the «Готово на сегодня» screen. */
-export async function getDaySummary(filter: SessionFilter = {}, now: Date = new Date()): Promise<DaySummary> {
+export async function getDaySummary(filter: SessionFilter = {}, now: Date = new Date(), pre?: SessionData): Promise<DaySummary> {
   const dayEnd = endOfStudyDay(now);
   const nextEnd = new Date(dayEnd);
   nextEnd.setDate(nextEnd.getDate() + 1);
-  const [words, logs, states] = await Promise.all([
-    liveWords(filter),
-    logsBetween(startOfStudyDay(now), dayEnd),
-    db.review_state.filter((s) => s.deleted_at === null && s.state !== 0).toArray(),
-  ]);
+  const [{ words, states: live }, logs] = await Promise.all([wordsWithStates(filter, pre), logsBetween(startOfStudyDay(now), dayEnd)]);
+  const states = live.filter((s) => s.state !== 0);
   const mine = logs
     .filter((l) => words.has(l.word_id) && (!filter.direction || l.direction === filter.direction))
     .sort((a, b) => b.review.localeCompare(a.review));
@@ -272,17 +323,13 @@ export const PRACTICE_ALL_MAX = 200;
  * Practice queue. Grading in practice must NOT call gradeCard — keep the queue in memory and
  * advance it with `advancePractice`.
  */
-export async function buildPracticeQueue(opts: PracticeOptions = {}, now: Date = new Date()): Promise<QueueItem[]> {
+export async function buildPracticeQueue(opts: PracticeOptions = {}, now: Date = new Date(), pre?: SessionData): Promise<QueueItem[]> {
   const scope = opts.scope ?? "recent";
-  if (scope === "all") return allCardsQueue(opts);
+  if (scope === "all") return allCardsQueue(opts, pre);
   const limit = opts.limit ?? 20;
   const days = opts.days ?? 7;
   const from = scope === "today" ? startOfStudyDay(now) : new Date(now.getTime() - days * 86_400_000);
-  const [words, states, logs] = await Promise.all([
-    liveWords(opts),
-    db.review_state.filter((s) => s.deleted_at === null).toArray(),
-    logsBetween(from, new Date(now.getTime() + 1)),
-  ]);
+  const [{ words, states }, logs] = await Promise.all([wordsWithStates(opts, pre), logsBetween(from, new Date(now.getTime() + 1))]);
   const byKey = new Map(states.map((s) => [s.id, s]));
   const items: QueueItem[] = [];
   const seen = new Set<string>();
@@ -308,8 +355,8 @@ export async function buildPracticeQueue(opts: PracticeOptions = {}, now: Date =
 }
 
 /** Every card of the filtered words, shuffled (Fisher–Yates), capped. */
-async function allCardsQueue(opts: PracticeOptions): Promise<QueueItem[]> {
-  const [words, states] = await Promise.all([liveWords(opts), db.review_state.filter((s) => s.deleted_at === null).toArray()]);
+async function allCardsQueue(opts: PracticeOptions, pre?: SessionData): Promise<QueueItem[]> {
+  const { words, states } = await wordsWithStates(opts, pre);
   const items: QueueItem[] = states
     .filter((s) => words.has(s.word_id) && (!opts.direction || s.direction === opts.direction))
     .map((state) => ({ key: state.id, word: words.get(state.word_id)!, state, direction: state.direction, isNew: state.state === 0 }));

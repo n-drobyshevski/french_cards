@@ -16,7 +16,7 @@ import {
   type TaxonomyResponse,
   type ModelTierInput,
 } from "./ai/schemas";
-import { db, newId } from "./db";
+import { db, liveRows, newId } from "./db";
 import { createFolder, disbandFolder, FOLDER_COLORS, listFolders } from "./folders";
 import { getSettings } from "./settings";
 import type { Confidence, Folder, ReorgRun, Word } from "./types";
@@ -54,7 +54,7 @@ export interface ReorgSnapshot {
 }
 
 export async function loadReorgSnapshot(): Promise<ReorgSnapshot> {
-  const [folders, words] = await Promise.all([listFolders(), db.words.filter((w) => w.deleted_at === null).toArray()]);
+  const [folders, words] = await Promise.all([listFolders(), liveRows(db.words)]);
   return { folders, words };
 }
 

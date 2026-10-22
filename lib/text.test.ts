@@ -1,7 +1,21 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "./db";
-import { compareFr, findDuplicate, findDuplicates, foldAccents, frSortKey, matchesSearch, normalizeLemma, searchKey, slugify } from "./text";
+import {
+  compareFr,
+  compareFrKeyed,
+  findDuplicate,
+  findDuplicates,
+  foldAccents,
+  frSortKey,
+  matchesSearch,
+  matchesTerms,
+  normalizeLemma,
+  searchHaystack,
+  searchKey,
+  searchTerms,
+  slugify,
+} from "./text";
 import { addWord, softDeleteWord } from "./words";
 
 beforeEach(async () => {
@@ -95,6 +109,36 @@ describe("frSortKey / compareFr", () => {
       "la thune",
       "vas-y",
     ]);
+  });
+
+  it("gives the same key on repeated calls and compareFrKeyed matches compareFr, ties included", () => {
+    const words = ["Été", "été", "la thune", "thune", "Thune", "se casser", "casser", "10 balles", "2 balles"];
+    for (const w of words) expect(frSortKey(w)).toBe(frSortKey(w));
+    for (const a of words) {
+      for (const b of words) expect(compareFrKeyed(frSortKey(a), a, frSortKey(b), b)).toBe(compareFr(a, b));
+    }
+    expect(compareFr("2 balles", "10 balles")).toBeLessThan(0);
+  });
+});
+
+describe("searchTerms / matchesTerms", () => {
+  const w = { fr: "être fauché", ru: "быть на мели", note: null, tags: ["argent"] };
+
+  it("folds the query once into terms and matches like matchesSearch", () => {
+    expect(searchTerms("  Fauché   МЕЛИ ")).toEqual(["fauche", "мели"]);
+    expect(searchTerms("   ")).toEqual([]);
+    expect(matchesTerms(w, [])).toBe(true);
+    for (const q of ["fauche", "ARGENT", "fauche кошка", "etre мели", ""]) {
+      expect(matchesTerms(w, searchTerms(q))).toBe(matchesSearch(w, q));
+    }
+  });
+
+  it("refolds a word changed in place", () => {
+    const row = { fr: "la thune", ru: "бабки", note: null, tags: [] as string[] };
+    expect(searchHaystack(row)).toContain("thune");
+    row.fr = "le fric";
+    expect(matchesSearch(row, "thune")).toBe(false);
+    expect(matchesSearch(row, "fric")).toBe(true);
   });
 });
 
