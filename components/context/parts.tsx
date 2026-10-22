@@ -308,6 +308,7 @@ export function MeaningChips({
   value,
   onChange,
   loading,
+  keepEmpty = false,
   className,
 }: {
   chips: readonly MeaningChip[];
@@ -316,9 +317,11 @@ export function MeaningChips({
   onChange: (meaning: string | null) => void;
   /** Still searching: the senses show (desktop), but cannot filter yet. */
   loading: boolean;
+  /** Desktop: the chips are also the translations, so a sense with no example stays (disabled). */
+  keepEmpty?: boolean;
   className?: string;
 }) {
-  const shown = loading ? chips : chips.filter((c) => c.count > 0);
+  const shown = loading || keepEmpty ? chips : chips.filter((c) => c.count > 0);
   return (
     <div role="group" aria-label="Значения" className={cx("flex gap-1.5", className)}>
       <Chip selected={value === null} onClick={() => onChange(null)} disabled={loading}>
@@ -648,8 +651,9 @@ function Forms({ forms, order }: { forms: readonly string[]; order?: readonly nu
       {list.map((form, i) => {
         const [pronoun, verb] = splitPronoun(form);
         return (
-          <li key={i} className="flex min-h-7 items-center gap-1.5 border-b border-surface-2 py-0.5 font-serif text-[16px] leading-5">
-            {pronoun && <span className="text-muted">{pronoun.trim()}</span>}
+          <li key={i} className="flex min-h-7 items-center border-b border-surface-2 py-0.5 font-serif text-[16px] leading-5">
+            {/* «j'ai» stays together; other pronouns keep their space. */}
+            {pronoun && <span className={cx("text-muted", !/['’]$/.test(pronoun) && "mr-1.5")}>{pronoun.trim()}</span>}
             <span className="font-medium">{verb}</span>
           </li>
         );

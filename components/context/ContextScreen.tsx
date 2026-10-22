@@ -319,7 +319,7 @@ function Results(props: ResultsProps) {
   const countLine = phase === "done" && web.length > 0 ? `${nExamples(web.length)} из веба` : undefined;
   const chipRow = (className: string) =>
     (wide ? lookup.translations.length > 0 : web.length > 0 && chips.some((c) => c.count > 0)) && (
-      <MeaningChips chips={chips} total={web.length} value={props.meaning} onChange={props.onMeaning} loading={phase !== "done" || web.length === 0} className={className} />
+      <MeaningChips chips={chips} total={web.length} value={props.meaning} onChange={props.onMeaning} loading={phase !== "done" || web.length === 0} keepEmpty={wide} className={className} />
     );
 
   const conj = lookup.conjugation;
