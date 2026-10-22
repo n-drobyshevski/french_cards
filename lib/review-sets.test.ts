@@ -90,7 +90,7 @@ describe("stored sets", () => {
     const b = await createReviewSet({ ...EMPTY_SET_DRAFT, name: "Трудные", statuses: ["difficult"] }, new Date(NOON.getTime() + 1000));
     await updateReviewSet(a.id, { ...a, name: "Арго" }, new Date(NOON.getTime() + 2000));
     expect((await listReviewSets()).map((s) => s.name)).toEqual(["Арго", "Трудные"]);
-    expect((await db.outbox.toArray()).map((o) => o.key).sort()).toEqual([`review_sets:${a.id}`, `review_sets:${b.id}`]);
+    expect((await db.outbox.toArray()).map((o) => o.key).sort()).toEqual([`review_sets:${a.id}`, `review_sets:${b.id}`].sort());
 
     const removed = await deleteReviewSet(a.id, new Date(NOON.getTime() + 3000));
     expect((await listReviewSets()).map((s) => s.id)).toEqual([b.id]);
