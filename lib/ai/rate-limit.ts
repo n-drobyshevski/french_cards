@@ -17,6 +17,8 @@ export const RATE_LIMITS = {
   classify: { capacity: 20, refillPerSec: 1 / 3 },
   // Manual cards one by one, pasted lists and the library backfill in parallel chunks.
   enrich: { capacity: 30, refillPerSec: 1 / 2 },
+  // Claude connector write tools (lib/mcp/tools.ts), taken inside tools/call only.
+  mcp: { capacity: 20, refillPerSec: 1 / 3 },
 } satisfies Record<string, BucketConfig>;
 
 export type RateLimitedRoute = keyof typeof RATE_LIMITS;
@@ -82,9 +84,14 @@ export function clientKey(req: Request, userId: string | null): string {
   return `ip:${ip || "unknown"}`;
 }
 
+/** Takes `cost` tokens from the caller's bucket for `route`. */
+export function takeToken(route: RateLimitedRoute, key: string, cost = 1): ReturnType<TokenBucketLimiter["take"]> {
+  return limiterFor(route).take(key, cost);
+}
+
 /** Returns a 429 Response when the caller is over the limit, otherwise null. */
 export function rateLimit(route: RateLimitedRoute, key: string, cost = 1): Response | null {
-  const result = limiterFor(route).take(key, cost);
+  const result = takeToken(route, key, cost);
   if (result.ok) return null;
   return Response.json(
     { error: "rate_limited" },

@@ -77,6 +77,7 @@ export const SOURCE_LABELS: Record<WordSource, string> = {
   suggest: "из подсказок",
   screenshot: "со скриншота",
   import: "из импорта",
+  chat: "из чата",
 };
 
 /** 12.09.2026 */
