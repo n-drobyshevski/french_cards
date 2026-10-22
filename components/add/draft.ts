@@ -99,6 +99,37 @@ export function manualDraft(init: { fr?: string; ru?: string; folder?: FolderCho
   };
 }
 
+/** Fields another screen hands the add form («Контекст»: a looked-up word, a synonym, an example). */
+export interface DraftPrefill {
+  fr: string;
+  ru: string;
+  note?: string;
+  pos?: PartOfSpeech;
+  gender?: Gender;
+  slang_level?: SlangLevel;
+  verlan?: boolean;
+  example_fr?: string;
+  example_ru?: string;
+}
+
+/**
+ * The form opened already filled. It stays a manual draft, so detection still picks the theme
+ * (and an example when none came); a level and an example that came along count as set, so
+ * detection leaves them alone.
+ */
+export function prefilledDraft(p: DraftPrefill, init: { folder?: FolderChoice } = {}): WordDraft {
+  const base = manualDraft({ fr: p.fr, ru: p.ru, folder: init.folder });
+  const example = (p.example_fr ?? "").trim();
+  return {
+    ...base,
+    note: p.note ?? "",
+    pos: p.pos ?? base.pos,
+    gender: p.gender ?? base.gender,
+    ...(p.slang_level !== undefined && { slang_level: p.slang_level, verlan: p.verlan ?? false, slang_auto: true, slang_touched: true }),
+    ...(example && { example_fr: example, example_ru: (p.example_ru ?? "").trim(), example_touched: true }),
+  };
+}
+
 /** A manual draft waits for detection while both sides are filled. Key = what was asked for. */
 export function enrichKey(d: Pick<WordDraft, "fr" | "ru" | "source">): string | null {
   if (d.source !== "manual") return null;

@@ -1,10 +1,13 @@
 "use client";
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import type { DraftPrefill } from "@/components/add/draft";
 
 export interface AddSheetInitial {
   /** Prefill for the headword input (FR or RU text). */
   fr?: string;
+  /** Opens straight into the filled form («Контекст»: «+ В карточки», an example, a synonym). */
+  draft?: DraftPrefill;
 }
 
 export interface AddSheetApi {
