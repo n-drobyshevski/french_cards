@@ -112,3 +112,43 @@ test("swiping the answer down flips the card back to the question", async ({ pag
   await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
   await expect(page).toHaveURL(/\/$/);
 });
+
+test("swipes vibrate: a tick at the threshold, then a pattern for the grade or flip", async ({ page }) => {
+  await page.addInitScript(() => {
+    const calls: unknown[] = [];
+    (window as unknown as { __vibrations: unknown[] }).__vibrations = calls;
+    Object.defineProperty(navigator, "vibrate", { configurable: true, value: (p: unknown) => (calls.push(p), true) });
+  });
+  const vibrations = () => page.evaluate(() => (window as unknown as { __vibrations: unknown[] }).__vibrations.slice());
+  await openReview(page);
+
+  await touchDrag(page, "main button[aria-label^='Карточка']", 4, -160);
+  await expect(page.locator("[data-review-answer]")).toBeVisible();
+  await expect(page.locator("[data-review-answer]")).toHaveClass(/card-turn-up/);
+  expect(await vibrations()).toEqual([8, 10]);
+
+  const first = await page.locator("[data-review-answer] h2").innerText();
+  await touchSwipe(page, 1);
+  await expect(page.getByText(`Знаю · ${first}`)).toBeVisible();
+  expect(await vibrations()).toEqual([8, 10, 8, 14]);
+
+  // The flip and fly-out transforms must not widen the page: a mobile browser then widens its
+  // layout viewport to fit (zooming out), which pushes the tab bar off screen.
+  await page.waitForTimeout(400);
+  expect(await page.evaluate(() => window.innerWidth)).toBe(390);
+});
+
+test("no vibration when it is turned off in settings", async ({ page }) => {
+  await page.addInitScript(() => {
+    const calls: unknown[] = [];
+    (window as unknown as { __vibrations: unknown[] }).__vibrations = calls;
+    Object.defineProperty(navigator, "vibrate", { configurable: true, value: (p: unknown) => (calls.push(p), true) });
+  });
+  await page.goto("/settings");
+  await page.getByRole("switch", { name: "Вибрация при свайпах" }).click();
+  await expect(page.getByRole("switch", { name: "Вибрация при свайпах" })).not.toBeChecked();
+  await openReview(page);
+  await touchDrag(page, "main button[aria-label^='Карточка']", 4, -160);
+  await expect(page.locator("[data-review-answer]")).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { __vibrations: unknown[] }).__vibrations.length)).toBe(0);
+});

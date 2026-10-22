@@ -87,6 +87,14 @@ export function SettingsScreen() {
               onCheckedChange={(checked) => save({ swipe_grading: checked })}
             />
           </SettingsRow>
+          <SettingsRow label="Вибрация при свайпах" labelId="haptics-label">
+            <Toggle
+              aria-labelledby="haptics-label"
+              checked={settings.haptics}
+              disabled={loading || !settings.swipe_grading}
+              onCheckedChange={(checked) => save({ haptics: checked })}
+            />
+          </SettingsRow>
         </SettingsSection>
 
         <SettingsSection title="Оформление">

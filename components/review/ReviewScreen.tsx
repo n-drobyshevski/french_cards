@@ -35,6 +35,8 @@ interface Pinned {
   revealed: boolean;
   /** When the answer was shown (ms); grade-button intervals are previewed at this instant. */
   revealedAt: number;
+  /** Set by a flip on this card, so the side that appears turns in (up to the answer, down back). */
+  flip?: "up" | "down";
 }
 
 /** Data that was current when a grade/undo started; the screen waits for a newer read. */
@@ -151,6 +153,7 @@ export function ReviewScreen() {
   const hasNext = !!queue && queue.some((i) => i.key !== current?.key);
   const gradeButtons = settings?.grade_buttons ?? 3;
   const swipeEnabled = settings?.swipe_grading ?? true;
+  const hapticsEnabled = settings?.haptics ?? true;
   const canUndo = practice ? practice.history.length > 0 : !!lastToday;
 
   const revealedAt = revealed && pinned ? pinned.revealedAt : 0;
@@ -171,14 +174,14 @@ export function ReviewScreen() {
   const reveal = () => {
     if (!current) return;
     if (focusInCard()) refocus.current = "answer";
-    setPinned({ key: current.key, revealed: true, revealedAt: Date.now() });
+    setPinned({ key: current.key, revealed: true, revealedAt: Date.now(), flip: "up" });
   };
 
   /** Back to the question side; the answer can be flipped again with fresh intervals. */
   const hide = () => {
     if (!current) return;
     if (focusInCard()) refocus.current = "reveal";
-    setPinned({ key: current.key, revealed: false, revealedAt: 0 });
+    setPinned({ key: current.key, revealed: false, revealedAt: 0, flip: "down" });
   };
 
   const undo = async (target?: { wordId: string; direction: Direction }) => {
@@ -369,8 +372,10 @@ export function ReviewScreen() {
     };
   }
 
+  // overflow-clip: the flip and fly-out transforms must never widen the page (mobile browsers
+  // zoom out to fit and stay zoomed). clip, unlike hidden, does not create a scroll container.
   return (
-    <main ref={mainRef} className="flex flex-1 flex-col px-4 pb-4">
+    <main ref={mainRef} className="flex flex-1 flex-col overflow-clip px-4 pb-4">
       <ReviewTopBar canUndo={canUndo} onUndo={() => void undo()}>
         {practice ? (
           <Chip icon="close" onClick={endPractice}>
@@ -428,6 +433,8 @@ export function ReviewScreen() {
               revealed={revealed}
               onReveal={reveal}
               onHide={hide}
+              flip={pinned?.key === current.key ? pinned.flip : undefined}
+              haptics={hapticsEnabled}
               folderName={(current.word.folder_id && folderNames.get(current.word.folder_id)) || "Входящие"}
               swipeEnabled={swipeEnabled}
               onSwipe={(outcome) => void grade(outcome === "good" ? 3 : 1)}

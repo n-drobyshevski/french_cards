@@ -40,15 +40,31 @@ export interface ReviewCardProps {
   onSwipe: (outcome: SwipeOutcome) => void;
   /** Flip back to the question (tap on the answer side). */
   onHide: () => void;
+  /** The side just turned to by a flip on this card; it animates in. */
+  flip?: "up" | "down";
+  /** Vibrate on swipes. */
+  haptics: boolean;
   /** Show the next card peeking behind while dragging. */
   hasNext: boolean;
 }
 
 /** The review card: question side (tap or swipe up to flip) or answer side (swipe sideways to grade, tap or swipe down to flip back). */
-export function ReviewCard({ word, direction, revealed, onReveal, onHide, folderName, swipeEnabled, onSwipe, hasNext }: ReviewCardProps) {
-  const swipe = useSwipe({ enabled: revealed && swipeEnabled, onDecide: onSwipe });
-  const swipeUp = useSwipeUp({ enabled: !revealed && swipeEnabled, onFlip: onReveal });
-  const swipeDown = useSwipeDown({ enabled: revealed && swipeEnabled, onFlipBack: onHide });
+export function ReviewCard({
+  word,
+  direction,
+  revealed,
+  onReveal,
+  onHide,
+  flip,
+  haptics,
+  folderName,
+  swipeEnabled,
+  onSwipe,
+  hasNext,
+}: ReviewCardProps) {
+  const swipe = useSwipe({ enabled: revealed && swipeEnabled, haptics, onDecide: onSwipe });
+  const swipeUp = useSwipeUp({ enabled: !revealed && swipeEnabled, haptics, onFlip: onReveal });
+  const swipeDown = useSwipeDown({ enabled: revealed && swipeEnabled, haptics, onFlipBack: onHide });
   const { dx, width, mode } = swipe.view;
   const visual = swipeVisual(dx, width || 1);
   const moving = mode !== "idle" || dx !== 0;
@@ -96,7 +112,12 @@ export function ReviewCard({ word, direction, revealed, onReveal, onHide, folder
                 }
               : undefined
           }
-          className={cx(cardShell, "absolute inset-0 text-left", swipeEnabled && "touch-none select-none")}
+          className={cx(
+            cardShell,
+            "absolute inset-0 text-left",
+            swipeEnabled && "touch-none select-none",
+            flip === "down" && "animate-[card-turn-down_220ms_ease-out]",
+          )}
         >
           <CardHeader label={label} />
           <span className="flex min-h-0 flex-1 flex-col justify-center px-6 pb-6">
@@ -132,6 +153,7 @@ export function ReviewCard({ word, direction, revealed, onReveal, onHide, folder
             cardShell,
             "absolute inset-0 outline-none will-change-transform",
             swipeEnabled && "touch-pan-y select-none",
+            flip === "up" && "animate-[card-turn-up_220ms_ease-out]",
           )}
         >
           <CardHeader label={label}>

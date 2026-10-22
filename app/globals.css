@@ -121,6 +121,30 @@ body {
   }
 }
 
+/* Card flip: the side that appears turns in over the horizontal axis, matching the swipe
+   (up to the answer, down back to the question). Disabled by prefers-reduced-motion below. */
+@keyframes card-turn-up {
+  from {
+    transform: perspective(1000px) rotateX(-45deg);
+    opacity: 0.4;
+  }
+  to {
+    transform: perspective(1000px) rotateX(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes card-turn-down {
+  from {
+    transform: perspective(1000px) rotateX(45deg);
+    opacity: 0.4;
+  }
+  to {
+    transform: perspective(1000px) rotateX(0deg);
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

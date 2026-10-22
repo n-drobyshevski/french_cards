@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, type PointerEvent as ReactPointerEvent, type TouchEvent as ReactTouchEvent } from "react";
+import { haptic, thresholdNotifier } from "@/lib/haptics";
 import {
   canFlipBackFrom,
   FLIP_DAMPING,
@@ -8,6 +9,7 @@ import {
   flipDecision,
   flipVelocity,
   IDLE_SWIPE,
+  swipeDecision,
   SWIPE_SLOP,
   swipeReducer,
   VELOCITY_WINDOW_MS,
@@ -34,11 +36,20 @@ const reducedMotion = () =>
  * Pointer handlers for swipe-to-grade. The element should have `touch-action: pan-y` so vertical
  * scrolling stays native. Calls `onDecide` once the card has flown out.
  */
-export function useSwipe({ enabled, onDecide }: { enabled: boolean; onDecide: (outcome: SwipeOutcome) => void }) {
+export function useSwipe({
+  enabled,
+  haptics = false,
+  onDecide,
+}: {
+  enabled: boolean;
+  haptics?: boolean;
+  onDecide: (outcome: SwipeOutcome) => void;
+}) {
   const state = useRef<SwipeState>(IDLE_SWIPE);
   const [view, setView] = useState<SwipeView>({ dx: 0, width: 0, mode: "idle" });
   /** Set when a pointer-up ends a drag, so the click that follows is not taken as a tap. */
   const dragged = useRef(false);
+  const [threshold] = useState(thresholdNotifier);
 
   const dispatch = (action: SwipeAction) => {
     const prev = state.current;
@@ -56,6 +67,7 @@ export function useSwipe({ enabled, onDecide }: { enabled: boolean; onDecide: (o
 
   const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
     if (!enabled || view.mode === "flying" || event.button !== 0 || !event.isPrimary) return;
+    threshold.reset();
     const width = event.currentTarget.getBoundingClientRect().width;
     dispatch({ type: "down", pointerId: event.pointerId, x: event.clientX, y: event.clientY, t: event.timeStamp, width });
   };
@@ -77,6 +89,7 @@ export function useSwipe({ enabled, onDecide }: { enabled: boolean; onDecide: (o
         // The pointer may already be gone; the drag still works without capture.
       }
     }
+    threshold.update(swipeDecision(next.dx, next.width, 0) !== null, haptics);
     setView({ dx: next.dx, width: next.width, mode: "dragging" });
   };
 
@@ -86,6 +99,7 @@ export function useSwipe({ enabled, onDecide }: { enabled: boolean; onDecide: (o
     dragged.current = prev.phase === "dragging";
     if (next.phase === "released" && next.outcome) {
       const outcome = next.outcome;
+      if (haptics) haptic(outcome);
       const off = Math.sign(next.dx) * next.width * 1.4;
       setView({ dx: off, width: next.width, mode: "flying" });
       window.setTimeout(() => onDecide(outcome), reducedMotion() ? 0 : FLY_OUT_MS);
@@ -133,7 +147,7 @@ export function useSwipe({ enabled, onDecide }: { enabled: boolean; onDecide: (o
  * browser does not scroll or pull-to-refresh instead. `consumeClick()` tells the element's
  * onClick to skip the click that follows a flip gesture.
  */
-export function useSwipeUp({ enabled, onFlip }: { enabled: boolean; onFlip: () => void }) {
+export function useSwipeUp({ enabled, haptics = false, onFlip }: { enabled: boolean; haptics?: boolean; onFlip: () => void }) {
   const gesture = useRef<{
     id: number;
     x: number;
@@ -143,6 +157,7 @@ export function useSwipeUp({ enabled, onFlip }: { enabled: boolean; onFlip: () =
     samples: FlipSample[];
   } | null>(null);
   const flipped = useRef(false);
+  const [threshold] = useState(thresholdNotifier);
   const [lift, setLift] = useState(0);
   const [settling, setSettling] = useState(false);
 
@@ -155,6 +170,7 @@ export function useSwipeUp({ enabled, onFlip }: { enabled: boolean; onFlip: () =
   const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
     if (!enabled || event.button !== 0 || !event.isPrimary) return;
     flipped.current = false;
+    threshold.reset();
     gesture.current = {
       id: event.pointerId,
       x: event.clientX,
@@ -176,6 +192,7 @@ export function useSwipeUp({ enabled, onFlip }: { enabled: boolean; onFlip: () =
       g.phase = dy < 0 && Math.abs(dy) > Math.abs(dx) ? "dragging" : "ignored";
       if (g.phase === "ignored") return;
     }
+    threshold.update(flipDecision(dx, dy, g.height, 0), haptics);
     setSettling(false);
     setLift(Math.min(0, dy) * FLIP_DAMPING);
   };
@@ -189,7 +206,10 @@ export function useSwipeUp({ enabled, onFlip }: { enabled: boolean; onFlip: () =
     const flip = g.phase === "dragging" && flipDecision(dx, dy, g.height, flipVelocity(samples, event.timeStamp));
     if (g.phase !== "pending") flipped.current = true; // a drag is never also a tap
     end();
-    if (flip) onFlip();
+    if (flip) {
+      if (haptics) haptic("flip");
+      onFlip();
+    }
   };
 
   const onPointerCancel = (event: ReactPointerEvent<HTMLElement>) => {
@@ -215,8 +235,17 @@ export function useSwipeUp({ enabled, onFlip }: { enabled: boolean; onFlip: () =
  * events, but touch events keep arriving. Only counts when the answer text is scrolled to the
  * top (the scroller is marked with `data-answer-scroll`); otherwise the drag just scrolls.
  */
-export function useSwipeDown({ enabled, onFlipBack }: { enabled: boolean; onFlipBack: () => void }) {
+export function useSwipeDown({
+  enabled,
+  haptics = false,
+  onFlipBack,
+}: {
+  enabled: boolean;
+  haptics?: boolean;
+  onFlipBack: () => void;
+}) {
   const gesture = useRef<{ x: number; y: number; height: number; armed: boolean; samples: FlipSample[] } | null>(null);
+  const [threshold] = useState(thresholdNotifier);
   const [pull, setPull] = useState(0);
   const [settling, setSettling] = useState(false);
 
@@ -231,6 +260,7 @@ export function useSwipeDown({ enabled, onFlipBack }: { enabled: boolean; onFlip
       gesture.current = null;
       return;
     }
+    threshold.reset();
     const touch = event.touches[0];
     const scroller = (event.target as Element).closest?.("[data-answer-scroll]");
     gesture.current = {
@@ -250,6 +280,7 @@ export function useSwipeDown({ enabled, onFlipBack }: { enabled: boolean; onFlip
     const dx = touch.clientX - g.x;
     const dy = touch.clientY - g.y;
     g.samples = [...g.samples.filter((s) => event.timeStamp - s.t <= VELOCITY_WINDOW_MS), { y: touch.clientY, t: event.timeStamp }];
+    threshold.update(flipBackDecision(dx, dy, g.height, 0), haptics);
     if (dy > 0 && dy > Math.abs(dx)) {
       setSettling(false);
       setPull(dy * FLIP_DAMPING);
@@ -271,7 +302,10 @@ export function useSwipeDown({ enabled, onFlipBack }: { enabled: boolean; onFlip
     const samples = [...g.samples, { y: touch.clientY, t: event.timeStamp }];
     const flip = flipBackDecision(dx, dy, g.height, flipVelocity(samples, event.timeStamp));
     end();
-    if (flip) onFlipBack();
+    if (flip) {
+      if (haptics) haptic("flip");
+      onFlipBack();
+    }
   };
 
   return {

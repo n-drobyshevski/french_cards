@@ -106,6 +106,8 @@ export interface Settings {
   new_per_day: number;
   grade_buttons: 2 | 3;
   swipe_grading: boolean;
+  /** Vibrate on card swipes (Android; system haptic on iOS 18+). */
+  haptics: boolean;
   theme: "system" | "light" | "dark";
   suggestions_enabled: boolean;
   auto_sort_enabled: boolean;
@@ -120,6 +122,7 @@ export const DEFAULT_SETTINGS: Settings = {
   new_per_day: 15,
   grade_buttons: 3,
   swipe_grading: true,
+  haptics: true,
   theme: "system",
   suggestions_enabled: true,
   auto_sort_enabled: true,
