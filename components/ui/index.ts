@@ -1,6 +1,7 @@
 export { AbbrHint, type AbbrHintProps } from "./AbbrHint";
 export { AppMark, CardGlyph, type AppMarkProps } from "./AppMark";
-export { Button, IconButton, buttonClasses, type ButtonProps, type ButtonSize, type ButtonVariant, type IconButtonProps } from "./Button";
+export { Button, IconButton, type ButtonProps, type IconButtonProps } from "./Button";
+export { buttonClasses, type ButtonSize, type ButtonStyleOptions, type ButtonVariant } from "./button-classes";
 export { Chip, type ChipProps } from "./Chip";
 export { cx } from "./cx";
 export { Header, type HeaderProps } from "./Header";

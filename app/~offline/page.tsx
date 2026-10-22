@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { OfflineRetry } from "@/components/pwa/OfflineRetry";
 import { AppMark } from "@/components/ui/AppMark";
-import { buttonClasses } from "@/components/ui/Button";
+import { buttonClasses } from "@/components/ui/button-classes";
 import { Icon } from "@/components/ui/Icons";
 import { APP_NAME } from "@/lib/brand";
 

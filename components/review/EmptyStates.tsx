@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Button, buttonClasses } from "@/components/ui/Button";
+import { Button } from "@/components/ui/Button";
+import { buttonClasses } from "@/components/ui/button-classes";
 
 /** From 768 up the empty states sit in the review column, top 64, actions in one row. */
 const DESK_COLUMN = "md:mx-auto md:w-(--col-w) md:max-w-[calc(100%-48px)] md:flex-none md:pt-16";
