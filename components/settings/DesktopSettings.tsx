@@ -15,7 +15,7 @@ import { useSectionSpy } from "./useSectionSpy";
 export const DESK_SECTIONS = [
   { id: "set-review", title: "Повторение" },
   { id: "set-look", title: "Оформление" },
-  { id: "set-hints", title: "Подсказки" },
+  { id: "set-hints", title: "ИИ" },
   { id: "set-keys", title: "Клавиши" },
   { id: "set-data", title: "Данные" },
 ] as const;
@@ -31,6 +31,23 @@ const THEME_OPTIONS = [
 const GRADE_OPTIONS = [
   { value: 2, label: "2", ariaLabel: "Две кнопки: Не знаю и Знаю" },
   { value: 3, label: "3", ariaLabel: "Три кнопки: Не знаю, Сложно и Знаю" },
+] as const;
+
+const COUNT_OPTIONS = [
+  { value: 1, label: "1", ariaLabel: "Один вариант" },
+  { value: 2, label: "2", ariaLabel: "Два варианта" },
+  { value: 3, label: "3", ariaLabel: "Три варианта" },
+] as const;
+
+const REGISTER_OPTIONS = [
+  { value: "slang", label: "Сленг", ariaLabel: "Сначала сленг" },
+  { value: "any", label: "Любой", ariaLabel: "Разные регистры" },
+  { value: "neutral", label: "Нейтр.", ariaLabel: "Сначала нейтральное слово" },
+] as const;
+
+const MODEL_OPTIONS = [
+  { value: "fast", label: "Быстрее" },
+  { value: "accurate", label: "Точнее" },
 ] as const;
 
 const SINGLE_KEYS = ["N", "/", "J", "K", "X", "M"];
@@ -123,7 +140,7 @@ export function DesktopSettings({ settings, loading, save, onTheme, onDirection 
             </DeskRow>
           </DeskSection>
 
-          <DeskSection id="set-hints" title="Подсказки">
+          <DeskSection id="set-hints" title="ИИ">
             <CheckboxRow
               label="Автоподсказки при вводе"
               checked={settings.suggestions_enabled}
@@ -131,12 +148,69 @@ export function DesktopSettings({ settings, loading, save, onTheme, onDirection 
               onCheckedChange={(checked) => save({ suggestions_enabled: checked })}
             />
             <CheckboxRow
+              label="Определять уровень сленга"
+              checked={settings.slang_detect_enabled}
+              disabled={loading}
+              onCheckedChange={(checked) => save({ slang_detect_enabled: checked })}
+            />
+            <CheckboxRow
+              label="Подбирать примеры"
+              checked={settings.examples_enabled}
+              disabled={loading}
+              onCheckedChange={(checked) => save({ examples_enabled: checked })}
+            />
+            <CheckboxRow
               label="Раскладывать по темам автоматически"
               checked={settings.auto_sort_enabled}
               disabled={loading}
               onCheckedChange={(checked) => save({ auto_sort_enabled: checked })}
             />
+            <CheckboxRow
+              label="Писать заметки"
+              checked={settings.notes_enabled}
+              disabled={loading}
+              onCheckedChange={(checked) => save({ notes_enabled: checked })}
+            />
+            <DeskRow label="Вариантов" labelId="set-count-label">
+              <TextOptions
+                ariaLabelledby="set-count-label"
+                options={COUNT_OPTIONS}
+                value={settings.suggest_count}
+                disabled={loading}
+                onChange={(suggest_count) => save({ suggest_count })}
+              />
+            </DeskRow>
+            <DeskRow label="Регистр вариантов" labelId="set-register-label">
+              <TextOptions
+                ariaLabelledby="set-register-label"
+                options={REGISTER_OPTIONS}
+                value={settings.suggest_register}
+                disabled={loading}
+                onChange={(suggest_register) => save({ suggest_register })}
+              />
+            </DeskRow>
+            <DeskRow label="Модель: подсказки" labelId="set-model-label">
+              <TextOptions
+                ariaLabelledby="set-model-label"
+                options={MODEL_OPTIONS}
+                value={settings.ai_model}
+                disabled={loading}
+                onChange={(ai_model) => save({ ai_model })}
+              />
+            </DeskRow>
+            <DeskRow label="Модель: скриншоты" labelId="set-model-extract-label">
+              <TextOptions
+                ariaLabelledby="set-model-extract-label"
+                options={MODEL_OPTIONS}
+                value={settings.ai_model_extract}
+                disabled={loading}
+                onChange={(ai_model_extract) => save({ ai_model_extract })}
+              />
+            </DeskRow>
             <p className="mt-3 mb-0 text-[12px] leading-4 text-muted">
+              «Точнее» отвечает медленнее, зато реже ошибается с переводом и уровнем сленга.
+            </p>
+            <p className="mt-1 mb-0 text-[12px] leading-4 text-muted">
               Слова и скриншоты отправляются в Anthropic (Claude) для подсказок и не хранятся там.
             </p>
           </DeskSection>

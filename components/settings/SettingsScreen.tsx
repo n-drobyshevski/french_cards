@@ -93,6 +93,7 @@ interface ScreenProps {
 /** The phone list (< 768), unchanged from before the desktop layout. */
 function PhoneSettings({ settings, loading, save, onTheme, onDirection }: ScreenProps) {
   const [directionOpen, setDirectionOpen] = useState(false);
+  const toast = useSnackbar();
 
   return (
     <div className="contents md:hidden">
