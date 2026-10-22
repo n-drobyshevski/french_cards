@@ -115,6 +115,8 @@ export interface Settings {
   shortcuts: boolean;
   /** Desktop review: the hint line of keys under the card («Пробел вопрос · Z отменить»). */
   key_hints: boolean;
+  /** Библиотека opens on the theme tiles or on the list of all words. */
+  library_view: "themes" | "words";
   last_sync_at: string | null;
   /** Pull cursors per synced table: the server `synced_at` of the last row received. Owned by lib/sync.ts. */
   sync_cursors?: Partial<Record<SyncTable, string>>;
@@ -132,6 +134,7 @@ export const DEFAULT_SETTINGS: Settings = {
   auto_sort_enabled: true,
   shortcuts: true,
   key_hints: true,
+  library_view: "themes",
   last_sync_at: null,
 };
 

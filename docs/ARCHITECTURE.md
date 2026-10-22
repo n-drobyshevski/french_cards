@@ -28,6 +28,7 @@ Read with `docs/plan.md` (scope and phases), `mockups/SPEC.md` (the v3 visual de
   - Themes follow «Раскладывать по темам автоматически». In the form the pick works like a suggestion's (alternatives, «+ новая тема»). «Список» defaults to «По темам автоматически»: each row goes to its own theme, a new theme only when ≥3 rows share it, low confidence stays in «Входящие». After a quick save the word only moves from «Входящие» into an existing theme, never a new one.
   - «Дополнить карточки» in the library proposes examples for words without one and levels for hand-typed words still at the default, applied only after review, with undo.
 - Folders («темы») hold words. `folder_id = null` means «Входящие» (Inbox).
+  - Библиотека has two views, remembered per device (`settings.library_view`): «Темы» (tiles) and «Все слова» (one list, newest first, «Показать ещё» per 200). A search or filter always shows the matching words.
   - Automatic sorting never moves a word whose `folder_source = 'user'`, and never renames or deletes a `locked` or user-created folder.
   - A new automatic folder needs ≥3 words.
   - Slang level is never a folder.

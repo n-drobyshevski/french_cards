@@ -69,3 +69,31 @@ test("«Дополнить карточки» proposes examples, applies the che
   await page.getByText("les flics", { exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Карточка слова" }).getByText("Exemple avec les flics.")).toHaveCount(0);
 });
+
+test("the library shows theme tiles or every word, and remembers the choice", async ({ page }) => {
+  await page.goto("/library");
+  const view = page.getByRole("radiogroup", { name: "Показывать" });
+  await expect(view.getByRole("radio", { name: "Темы" })).toBeChecked();
+  await expect(page.getByRole("link", { name: /^Эмоции:/ })).toBeVisible();
+
+  await view.getByRole("radio", { name: "Все слова" }).click();
+  await expect(page.getByText("Все слова · 11")).toBeVisible();
+  const list = page.getByRole("list", { name: "Все слова" });
+  await expect(list.getByText("les flics", { exact: true })).toBeVisible();
+  await expect(list.getByText("dépêche-toi", { exact: true })).toBeVisible();
+  await expect(list.getByRole("listitem")).toHaveCount(11);
+  await expect(page.getByRole("link", { name: /^Эмоции:/ })).toHaveCount(0);
+
+  // Remembered on this device.
+  await page.reload();
+  await expect(page.getByText("Все слова · 11")).toBeVisible();
+
+  // A search narrows the list; the view switch steps aside while it is active.
+  await page.getByRole("searchbox", { name: "Поиск по FR и RU" }).or(page.getByRole("textbox", { name: "Поиск по FR и RU" })).fill("flics");
+  await expect(page.getByText("Найдено 1 слово")).toBeVisible();
+  await expect(view).toHaveCount(0);
+  await page.getByRole("button", { name: "Очистить поиск" }).click();
+
+  await view.getByRole("radio", { name: "Темы" }).click();
+  await expect(page.getByRole("link", { name: /^Эмоции:/ })).toBeVisible();
+});
