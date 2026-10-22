@@ -1,6 +1,7 @@
 "use client";
 
 import { useLiveQuery } from "dexie-react-hooks";
+import { cx } from "@/components/ui/cx";
 import { useEffect, useEffectEvent, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAddSheet } from "@/components/providers/AddSheetContext";
 import { useAppReady } from "@/components/providers/AppProviders";
@@ -443,20 +444,28 @@ export function ReviewScreen() {
           ) : (
             <ReviewCardPlaceholder />
           )}
-          {revealed && swipeEnabled && (
-            <p aria-hidden="true" className="meta mt-4 mb-0 flex h-4 shrink-0 justify-between leading-4">
+          {/* The hint and grade bar keep their space on the question side too (invisible and inert),
+              so the card does not change size when it flips. */}
+          {swipeEnabled && (
+            <p
+              aria-hidden="true"
+              className={cx("meta mt-4 mb-0 flex h-4 shrink-0 justify-between leading-4", !revealed && "invisible")}
+            >
               <span>← {GRADE_LABELS[1]}</span>
               <span>тап — вопрос</span>
               <span>{GRADE_LABELS[3]} →</span>
             </p>
           )}
           {snackbar.render()}
-          {/* The question side flips by tap, so only the answer side has a bottom bar. */}
-          {revealed && (
-            <div ref={bottomBarRef} data-review-focus="" className="mt-4 shrink-0">
-              <GradeBar buttons={gradeButtons} intervals={intervals} onGrade={(r) => void grade(r)} />
-            </div>
-          )}
+          <div
+            ref={bottomBarRef}
+            data-review-focus=""
+            inert={!revealed}
+            aria-hidden={revealed ? undefined : true}
+            className={cx("mt-4 shrink-0", !revealed && "invisible")}
+          >
+            <GradeBar buttons={gradeButtons} intervals={intervals} onGrade={(r) => void grade(r)} />
+          </div>
         </>
       )}
 

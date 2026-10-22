@@ -75,3 +75,17 @@ test.describe("review focus", () => {
     await expect(questionCard(page)).toBeFocused();
   });
 });
+
+test("flipping does not move or resize the card; hidden grade buttons are unreachable before it", async ({ page }) => {
+  await openReview(page);
+  const before = await questionCard(page).boundingBox();
+  await expect(page.getByRole("group", { name: "Оценка" })).toHaveCount(0);
+  await expect(page.locator("[data-review-focus][inert]")).toHaveCount(1);
+
+  await questionCard(page).click();
+  const answer = page.locator("[data-review-answer]");
+  await expect(page.getByRole("group", { name: "Оценка" })).toBeVisible();
+  await page.waitForTimeout(300); // let the turn animation finish before measuring
+  const after = await answer.boundingBox();
+  expect(after).toEqual(before);
+});
