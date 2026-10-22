@@ -13,17 +13,16 @@ import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { FlatKey } from "@/components/ui/Kbd";
 import { useSnackbar } from "@/components/ui/Snackbar";
-import { syncNow } from "@/lib/sync";
 import { useLayoutClass } from "@/lib/use-media";
 import { navKeyForPath, resolveNavKey, type NavKey, type ShellData, type ShellTheme } from "./data";
 import { useThemeDrop } from "./dnd";
-import { ActiveBar, dropClasses, useSidebarSyncLine } from "./NavParts";
+import { ActiveBar, DropLight, dropClasses, PendingTick, useSidebarSyncLine } from "./NavParts";
 import { useShortcutsEnabled } from "./ShellContext";
 
 // Expanded sidebar (≥ 1200, DESKTOP-SPEC §2 «Expanded sidebar»): text only, paper, 1px right rule.
 
 const rowClass =
-  "relative flex shrink-0 items-center rounded-[4px] pr-2 pl-3 text-ink no-underline hoverable:bg-hover focus-visible:outline-offset-[-2px]";
+  "hover-fade relative flex shrink-0 items-center rounded-[4px] pr-2 pl-3 text-ink no-underline hoverable:bg-hover focus-visible:outline-offset-[-2px]";
 
 function NavLink({
   href,
@@ -45,6 +44,7 @@ function NavLink({
       className={cx(rowClass, "h-9 text-[14px]", active ? "font-semibold" : "font-medium")}
     >
       {active && <ActiveBar edge="sidebar" />}
+      <PendingTick />
       <span className="flex-1">{label}</span>
       {count != null && (
         <span
@@ -75,11 +75,14 @@ function ThemeRow({ theme, active, onMenu }: { theme: ShellTheme; active: boolea
       aria-current={active ? "page" : undefined}
       aria-label={`${theme.name}, ${nWords(theme.count)}`}
       aria-haspopup={onMenu ? "menu" : undefined}
+      data-theme-target={theme.id ?? "inbox"}
       {...drop.dropProps}
       {...(onMenu ? press : {})}
-      className={cx(rowClass, "h-11 gap-2.5", onMenu && "select-none [-webkit-touch-callout:none]", dropClasses(drop.dragging, drop.over))}
+      className={cx(rowClass, "isolate h-11 gap-2.5", onMenu && "select-none [-webkit-touch-callout:none]", dropClasses(drop.dragging, drop.over))}
     >
+      <DropLight />
       {active && <ActiveBar edge="sidebar" />}
+      <PendingTick />
       <span
         aria-hidden="true"
         className={cx("size-2 shrink-0 rounded-[1px]", inbox && "border border-dashed border-muted")}
@@ -107,21 +110,22 @@ function ThemeRow({ theme, active, onMenu }: { theme: ShellTheme; active: boolea
 }
 
 function SyncButton() {
-  const line = useSidebarSyncLine();
+  const { line, busy, sync } = useSidebarSyncLine();
   if (!line) return null;
   return (
     <button
       type="button"
-      disabled={!line.canSync}
-      aria-label={`${line.text}. Синхронизировать сейчас`}
-      title="Синхронизировать сейчас"
-      onClick={() => void syncNow()}
-      className="flex h-6 shrink-0 items-center gap-1.5 rounded-[4px] bg-transparent pr-2 pl-3 text-left text-[12px] text-muted hoverable:bg-hover focus-visible:outline-offset-[-2px] disabled:cursor-default"
+      disabled={!line.canSync && !busy}
+      aria-busy={busy || undefined}
+      aria-label={`${line.text}${line.detail ? `. ${line.detail}` : ""}. Синхронизировать сейчас`}
+      title={line.detail ?? "Синхронизировать сейчас"}
+      onClick={sync}
+      className="hover-fade flex h-6 shrink-0 items-center gap-1.5 rounded-[4px] bg-transparent pr-2 pl-3 text-left text-[12px] text-muted hoverable:bg-hover focus-visible:outline-offset-[-2px] disabled:cursor-default"
     >
       {line.dot && (
         <span aria-hidden="true" className={cx("size-1.5 shrink-0 rounded-full", line.dot === "again" ? "bg-again" : "bg-muted")} />
       )}
-      <span className="truncate">{line.text}</span>
+      <span className={cx("truncate", line.dot === "again" && "text-again")}>{line.text}</span>
     </button>
   );
 }
@@ -174,7 +178,7 @@ function SidebarView({ data, active }: { data: ShellData | undefined; active: Na
           title="Новая тема"
           aria-haspopup="dialog"
           onClick={() => setNewTheme(true)}
-          className="inline-flex size-6 items-center justify-center rounded-[4px] bg-transparent text-ink hoverable:bg-hover"
+          className="hover-fade inline-flex size-6 items-center justify-center rounded-[4px] bg-transparent text-ink hoverable:bg-hover"
         >
           <Icon name="plus" size={16} />
         </button>

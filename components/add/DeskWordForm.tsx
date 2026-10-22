@@ -7,7 +7,8 @@ import { Icon } from "@/components/ui/Icons";
 import { ExampleList } from "@/components/examples/ExampleList";
 import { SLANG_LABELS, type Folder, type SlangLevel } from "@/lib/types";
 import type { DuplicateInfo } from "./data";
-import type { WordFormProps } from "./WordForm";
+import { DuplicateReveal, PendingDots, UnknownMeter, useFieldSpotlight } from "./parts";
+import { detectionStates, type WordFormProps } from "./WordForm";
 import { CheckBox, DESK_INPUT, DeskFieldError, DeskFrame, FIELD_LABEL, HIDDEN_CONTROL_FOCUS, HintLine, KeyButton, ThemeSquare, type Hint } from "./desk-parts";
 import { choiceKey, choiceName, INBOX_CHOICE, sameChoice, type FolderChoice } from "./folder-choice";
 import { AbbrHint } from "@/components/ui/AbbrHint";
@@ -46,7 +47,8 @@ export function DeskWordForm({
   ruRef,
   duplicate,
   onOpenWord,
-  enriching = false,
+  detection,
+  spot,
   onSave,
   saving,
   leaving = false,
@@ -54,6 +56,9 @@ export function DeskWordForm({
   status,
 }: DeskWordFormProps) {
   const id = useId();
+  const root = useRef<HTMLFormElement>(null);
+  const states = detectionStates(draft, detection);
+  useFieldSpotlight(root, spot);
   const ids = {
     fr: `${id}-fr`,
     ru: `${id}-ru`,
@@ -67,7 +72,13 @@ export function DeskWordForm({
   };
   const hasExample = Boolean(draft.example_fr.trim() || draft.example_ru.trim());
   const abbr = draft.fr.trim() ? posAbbr(draft) : null;
-  const slangCaption = enriching && !draft.slang_touched ? "определяется…" : draft.slang_auto ? "определён автоматически" : null;
+  const slangCaption = states.slangPending
+    ? "определяется…"
+    : states.slangFailed
+      ? "не определилось"
+      : draft.slang_auto
+        ? "определён автоматически"
+        : null;
 
   const footer = (
     <>
@@ -100,7 +111,7 @@ export function DeskWordForm({
       tall
       bodyClassName={cx("pb-3", leaving && "pointer-events-none opacity-0 transition-opacity duration-(--dur-exit) ease-exit")}
     >
-      <form aria-label="Новое слово" onSubmit={(e) => e.preventDefault()} className="m-0 flex flex-col">
+      <form ref={root} aria-label="Новое слово" onSubmit={(e) => e.preventDefault()} className="m-0 flex flex-col">
         <div className="grid grid-cols-2 gap-x-4">
           <div className="min-w-0">
             {/* The part of speech sits on the label row and explains itself, as on the phone form. */}
@@ -127,10 +138,13 @@ export function DeskWordForm({
               spellCheck={false}
               aria-invalid={errors.fr ? true : undefined}
               aria-describedby={[errors.fr && ids.frError, duplicate && ids.dup].filter(Boolean).join(" ") || undefined}
+              data-spot="fr"
               className={cx(DESK_INPUT, "font-serif text-[20px] font-medium placeholder:font-sans placeholder:text-[15px] placeholder:font-normal")}
             />
             <DeskFieldError id={ids.frError}>{errors.fr}</DeskFieldError>
-            {duplicate && <DuplicateLine id={ids.dup} info={duplicate} onOpen={() => onOpenWord(duplicate.word.id)} />}
+            <DuplicateReveal info={duplicate}>
+              {(info) => <DuplicateLine id={ids.dup} info={info} onOpen={() => onOpenWord(info.word.id)} />}
+            </DuplicateReveal>
           </div>
           <div className="min-w-0">
             <label htmlFor={ids.ru} className={FIELD_LABEL}>
@@ -152,6 +166,7 @@ export function DeskWordForm({
               autoComplete="off"
               aria-invalid={errors.ru ? true : undefined}
               aria-describedby={errors.ru ? ids.ruError : undefined}
+              data-spot="ru"
               className={DESK_INPUT}
             />
             <DeskFieldError id={ids.ruError}>{errors.ru}</DeskFieldError>
@@ -168,13 +183,14 @@ export function DeskWordForm({
           value={draft.note}
           onChange={(e) => onChange({ note: e.target.value })}
           placeholder="Оттенок, синонимы, происхождение"
+          data-spot="note"
           className={cx(DESK_INPUT, "h-16 resize-none py-[9px] leading-[22px]")}
         />
 
         <span id={ids.example} className={cx(FIELD_LABEL, "mt-4")}>
           Пример
         </span>
-        <div role="group" aria-labelledby={ids.example}>
+        <div role="group" aria-labelledby={ids.example} data-spot="example" data-spot-target="inputs" className="relative">
           <ExampleList
             editable
             layout="row"
@@ -191,19 +207,28 @@ export function DeskWordForm({
                 ...(firstChanged && { example_touched: true, example_auto: change.kind === "retry" }),
               });
             }}
-            frInputClass={cx(DESK_INPUT, "font-serif text-[17px] italic placeholder:font-sans placeholder:text-[15px] placeholder:not-italic")}
+            frInputClass={cx(
+              states.examplePending ? DESK_INPUT.replace("placeholder:text-muted", "placeholder:text-transparent") : DESK_INPUT,
+              "font-serif text-[17px] italic placeholder:font-sans placeholder:text-[15px] placeholder:not-italic",
+            )}
             ruInputClass={DESK_INPUT}
           />
+          {/* The example on its way: a mono «…» in the placeholder's slot (A6). */}
+          {states.examplePending && (
+            <span data-example-pending="" className="pointer-events-none absolute top-0 left-3 flex h-11 items-center">
+              <PendingDots />
+            </span>
+          )}
         </div>
         {draft.example_auto && hasExample && <span className="mt-1 text-[12px] leading-4 text-muted">подобран автоматически</span>}
 
         <span id={ids.level} className={cx(FIELD_LABEL, "mt-4")}>
           Уровень сленга
         </span>
-        <div className="flex h-8 items-center">
+        <div data-spot="slang" className="flex h-8 items-center">
           <LevelOptions
             labelledBy={ids.level}
-            value={draft.slang_level}
+            value={states.slangPending ? null : draft.slang_level}
             onChange={(slang_level) => onChange({ slang_level, slang_auto: false, slang_touched: true })}
           />
           <label className={cx("relative ml-1 inline-flex h-8 cursor-pointer items-center gap-2 rounded-[4px] px-1", HIDDEN_CONTROL_FOCUS)}>
@@ -220,24 +245,34 @@ export function DeskWordForm({
             </span>
           </label>
           {slangCaption && (
-            <span role={enriching ? "status" : undefined} className="ml-4 text-[12px] leading-4 text-muted">
+            <span role={states.slangPending || states.slangFailed ? "status" : undefined} className="ml-4 flex items-center gap-2 text-[12px] leading-4 text-muted">
+              {states.slangPending && <UnknownMeter />}
               {slangCaption}
             </span>
           )}
         </div>
 
-        <span id={ids.theme} className={cx(FIELD_LABEL, "mt-4")}>
-          Тема
-        </span>
-        <ThemeChips
-          labelledBy={ids.theme}
-          value={draft.folder}
-          onChange={(folder) => onChange({ folder, folder_touched: true })}
-          folders={folders}
-          auto={draft.auto?.auto ?? null}
-          alternatives={draft.auto?.alternatives ?? []}
-          proposal={draft.auto?.proposal ?? null}
-        />
+        <div data-spot="theme" className="mt-4">
+          <span className="flex items-baseline gap-3">
+            <span id={ids.theme} className={FIELD_LABEL}>
+              Тема
+            </span>
+            {(states.themePending || states.themeFailed) && (
+              <span role="status" className="text-[12px] leading-4 text-muted">
+                {states.themePending ? "подбираем тему…" : "не определилась"}
+              </span>
+            )}
+          </span>
+          <ThemeChips
+            labelledBy={ids.theme}
+            value={draft.folder}
+            onChange={(folder) => onChange({ folder, folder_touched: true })}
+            folders={folders}
+            auto={draft.auto?.auto ?? null}
+            alternatives={draft.auto?.alternatives ?? []}
+            proposal={draft.auto?.proposal ?? null}
+          />
+        </div>
 
         <label className={cx("relative -mx-2 mt-1 flex min-h-11 cursor-pointer items-start gap-3 rounded-[4px] px-2 py-3", HIDDEN_CONTROL_FOCUS)}>
           <input
@@ -289,7 +324,8 @@ const focusRadio = (group: HTMLElement | null, index: number) =>
   requestAnimationFrame(() => group?.querySelectorAll<HTMLElement>('[role="radio"]')[index]?.focus());
 
 /** нейтр. | fam. | arg. | vulg. — text options with hairline separators. */
-function LevelOptions({ labelledBy, value, onChange }: { labelledBy: string; value: SlangLevel; onChange: (v: SlangLevel) => void }) {
+/** `value` null: the level is still being detected, nothing is selected (A6). */
+function LevelOptions({ labelledBy, value, onChange }: { labelledBy: string; value: SlangLevel | null; onChange: (v: SlangLevel) => void }) {
   const group = useRef<HTMLDivElement>(null);
   const levels = [0, 1, 2, 3] as const;
   return (
@@ -299,7 +335,7 @@ function LevelOptions({ labelledBy, value, onChange }: { labelledBy: string; val
       aria-labelledby={labelledBy}
       className="-ml-3 flex items-center"
       onKeyDown={(e) =>
-        onRadioKeys(e, levels, value, (v, i) => {
+        onRadioKeys(e, levels, value ?? -1, (v, i) => {
           onChange(v);
           focusRadio(group.current, i);
         })
@@ -313,7 +349,7 @@ function LevelOptions({ labelledBy, value, onChange }: { labelledBy: string; val
             role="radio"
             aria-checked={value === l}
             aria-label={SLANG_NAMES_RU[l]}
-            tabIndex={value === l ? 0 : -1}
+            tabIndex={value === l || (value === null && l === 0) ? 0 : -1}
             lang={l === 0 ? undefined : "fr"}
             onClick={() => onChange(l)}
             className={cx(

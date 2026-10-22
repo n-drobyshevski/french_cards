@@ -11,13 +11,13 @@ import { Icon, type IconName } from "@/components/ui/Icons";
 import { useLayoutClass } from "@/lib/use-media";
 import { INBOX_NAME, navKeyForPath, themeHref, type NavKey, type ShellData } from "./data";
 import { useThemeDrop } from "./dnd";
-import { ActiveBar, dropClasses, useSidebarSyncLine } from "./NavParts";
+import { ActiveBar, DropLight, dropClasses, PendingTick, useSidebarSyncLine } from "./NavParts";
 import { useShortcutsEnabled } from "./ShellContext";
 
 // Medium rail (768–1199, DESKTOP-SPEC §2 «Medium rail»): 72px, icons with 11px labels.
 
 const itemClass =
-  "relative mx-1 flex shrink-0 flex-col items-center justify-center gap-1 rounded-[4px] text-[11px] leading-4 whitespace-nowrap text-ink no-underline hoverable:bg-hover focus-visible:outline-offset-[-2px]";
+  "hover-fade relative mx-1 flex shrink-0 flex-col items-center justify-center gap-1 rounded-[4px] text-[11px] leading-4 whitespace-nowrap text-ink no-underline hoverable:bg-hover focus-visible:outline-offset-[-2px]";
 
 function RailIcon({ icon, count, countTone = "ink", dot }: { icon: IconName; count?: number | null; countTone?: "ink" | "red"; dot?: "muted" | "again" | null }) {
   return (
@@ -67,6 +67,7 @@ function RailLink({
       className={cx(itemClass, "h-16", active ? "font-semibold" : "font-medium")}
     >
       {active && <ActiveBar edge="rail" />}
+      <PendingTick edge="rail" />
       <RailIcon icon={icon} count={count} />
       <span>{label}</span>
     </Link>
@@ -80,10 +81,13 @@ function InboxLink({ count, active }: { count: number | null; active: boolean })
       href={themeHref(null)}
       aria-current={active ? "page" : undefined}
       aria-label={count == null ? INBOX_NAME : `${INBOX_NAME}, ${nWords(count)}`}
+      data-theme-target="inbox"
       {...drop.dropProps}
-      className={cx(itemClass, "h-16", active ? "font-semibold" : "font-medium", dropClasses(drop.dragging, drop.over))}
+      className={cx(itemClass, "isolate h-16", active ? "font-semibold" : "font-medium", dropClasses(drop.dragging, drop.over))}
     >
+      <DropLight />
       {active && <ActiveBar edge="rail" />}
+      <PendingTick edge="rail" />
       {drop.over ? (
         <span className="flex h-5 items-center font-mono text-[12px] text-ink">+{drop.count || ""}</span>
       ) : (
@@ -103,6 +107,7 @@ function SettingsLink({ active, dot = null, status }: { active: boolean; dot?: "
       className={cx(itemClass, "h-12", active ? "font-semibold" : "font-medium")}
     >
       {active && <ActiveBar edge="rail" />}
+      <PendingTick edge="rail" />
       <RailIcon icon="gear" dot={dot} />
       <span>Настройки</span>
     </Link>
@@ -111,8 +116,8 @@ function SettingsLink({ active, dot = null, status }: { active: boolean; dot?: "
 
 /** «Настройки» with a 6px dot over the gear for «нет сети» / «ошибка» (nothing at rest). */
 function SyncedSettingsLink({ active }: { active: boolean }) {
-  const line = useSidebarSyncLine();
-  return <SettingsLink active={active} dot={line?.dot} status={line?.text} />;
+  const { line } = useSidebarSyncLine();
+  return <SettingsLink active={active} dot={line?.dot} status={line ? [line.text, line.detail].filter(Boolean).join(". ") : undefined} />;
 }
 
 function RailView({ data, active }: { data: ShellData | undefined; active: NavKey | null }) {
@@ -139,7 +144,7 @@ function RailView({ data, active }: { data: ShellData | undefined; active: NavKe
         onClick={() => addSheet.open()}
         className="group mx-auto mt-3.5 -mb-0.5 flex size-11 shrink-0 items-center justify-center rounded-btn bg-transparent text-ink"
       >
-        <span className="flex size-10 items-center justify-center rounded-btn border border-boundary pointer-fine:group-hover:bg-hover">
+        <span className="hover-fade flex size-10 items-center justify-center rounded-btn border border-boundary pointer-fine:group-hover:bg-hover">
           <Icon name="plus" size={20} strokeWidth={1.5} />
         </span>
       </button>

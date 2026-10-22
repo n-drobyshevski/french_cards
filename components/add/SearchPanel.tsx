@@ -13,14 +13,19 @@ import type { SuggestApi } from "@/lib/use-suggest";
 import type { AddContext, DuplicateInfo } from "./data";
 import { choiceName, foldersForSuggestion, type FolderChoice } from "./folder-choice";
 import { posAbbr, splitTypedPrefix } from "./match";
+import { Collapse } from "@/components/ui/Collapse";
 import {
+  DICTIONARY_ROWS,
+  DictionarySlot,
   DuplicateNotice,
+  DuplicateReveal,
   FIELD_INPUT,
   FieldError,
   FieldRow,
   FolderSelect,
   HeadwordInput,
   SectionHeader,
+  useDictionaryReserved,
   useVariantsRegion,
   VARIANT_ENTER,
   VARIANT_ROW_HEIGHT,
@@ -54,8 +59,12 @@ export interface SearchPanelProps {
   folders: readonly Folder[];
   context: AddContext | undefined;
   dictionary: readonly LexiqueHit[];
+  /** The lexique is still loading for this headword: «Словарь» holds its slots (A4). */
+  dictionaryLoading?: boolean;
   onPickHit: (hit: LexiqueHit) => void;
   onPickSuggestion: (s: Suggestion) => void;
+  /** The «Вариант» just picked: ink-filled until the form replaces it (A5). */
+  pickedKey?: string | null;
   /** «Заполнить вручную» / «Все поля»: open the full form. */
   onManual: () => void;
   duplicate: DuplicateInfo | null;
@@ -108,13 +117,9 @@ export function SearchPanel(props: SearchPanelProps) {
         <EmptyState {...props} />
       ) : (
         <>
-          {props.duplicate && (
-            <DuplicateNotice
-              info={props.duplicate}
-              onOpen={() => props.onOpenWord(props.duplicate!.word.id)}
-              onAddAnyway={props.onAddAnyway}
-            />
-          )}
+          <DuplicateReveal info={props.duplicate}>
+            {(info) => <DuplicateNotice info={info} onOpen={() => props.onOpenWord(info.word.id)} onAddAnyway={props.onAddAnyway} />}
+          </DuplicateReveal>
 
           {/* Fixed order (A3): «Словарь», «Варианты», then the manual way in. An error stays inside
               «Варианты», and the quick form opens below it, so nothing above moves. */}
@@ -194,44 +199,60 @@ function RecentRow({ word, folders, onOpen }: { word: Word; folders: readonly Fo
 
 function Dictionary({
   dictionary,
+  dictionaryLoading = false,
   query,
   hidden,
   onPickHit,
-}: Pick<SearchPanelProps, "dictionary" | "onPickHit"> & { query: string; hidden: boolean }) {
+}: Pick<SearchPanelProps, "dictionary" | "dictionaryLoading" | "onPickHit"> & { query: string; hidden: boolean }) {
   const headingId = useId();
-  if (hidden || dictionary.length === 0) return null;
+  const reserved = useDictionaryReserved(dictionaryLoading && !hidden);
+  if (hidden || (!reserved && dictionary.length === 0)) return null;
+  // Reserved (A4): the header and 3 × 44px from the first letter; once loaded, the words take the
+  // slots in place and the spare slots close; with no word at all the section closes.
   return (
-    <section aria-labelledby={headingId}>
-      <SectionHeader id={headingId} title="Словарь" aside="работает без сети" />
-      <ul className="m-0 mx-4 flex list-none flex-col p-0">
-        {dictionary.map((hit) => {
-          const [typed, rest] = splitTypedPrefix(hit.fr, query);
-          const abbr = posAbbr({ pos: hit.pos, gender: hit.gender, fr: hit.fr });
-          return (
+    <Collapse open={dictionaryLoading || dictionary.length > 0}>
+      <section aria-labelledby={headingId} aria-busy={dictionaryLoading || undefined} data-dictionary="">
+        <SectionHeader id={headingId} title="Словарь" aside="работает без сети" />
+        <ul className="m-0 mx-4 flex list-none flex-col p-0">
+          {dictionary.map((hit) => (
             <li key={hit.fr}>
-              <button
-                type="button"
-                aria-label={`Подставить: ${hit.fr}`}
-                onClick={() => onPickHit(hit)}
-                className="flex h-11 w-full items-center gap-2 border-b border-rule bg-transparent p-0 text-left text-ink active:bg-surface-2"
-              >
-                <span lang="fr" className="min-w-0 truncate font-serif text-[19px] leading-6 font-medium whitespace-nowrap">
-                  {typed || rest}
-                  {typed && <span className="font-normal text-muted">{rest}</span>}
-                </span>
-                {abbr && (
-                  <span lang="fr" className="abbr shrink-0 text-[15px] leading-5 whitespace-nowrap">
-                    {abbr}
-                  </span>
-                )}
-                <span className="flex-1" />
-                <Icon name="arrow-up-left" size={16} className="shrink-0 text-muted" />
-              </button>
+              <DictionaryRow hit={hit} query={query} onPick={() => onPickHit(hit)} />
             </li>
-          );
-        })}
-      </ul>
-    </section>
+          ))}
+          {reserved &&
+            Array.from({ length: Math.max(0, DICTIONARY_ROWS - dictionary.length) }, (_, i) => (
+              <li key={`slot-${dictionary.length + i}`}>
+                <DictionarySlot height={44} index={dictionary.length + i} loaded={!dictionaryLoading} />
+              </li>
+            ))}
+        </ul>
+      </section>
+    </Collapse>
+  );
+}
+
+function DictionaryRow({ hit, query, onPick }: { hit: LexiqueHit; query: string; onPick: () => void }) {
+  const [typed, rest] = splitTypedPrefix(hit.fr, query);
+  const abbr = posAbbr({ pos: hit.pos, gender: hit.gender, fr: hit.fr });
+  return (
+    <button
+      type="button"
+      aria-label={`Подставить: ${hit.fr}`}
+      onClick={onPick}
+      className="flex h-11 w-full items-center gap-2 border-b border-rule bg-transparent p-0 text-left text-ink active:bg-surface-2"
+    >
+      <span lang="fr" className="min-w-0 truncate font-serif text-[19px] leading-6 font-medium whitespace-nowrap">
+        {typed || rest}
+        {typed && <span className="font-normal text-muted">{rest}</span>}
+      </span>
+      {abbr && (
+        <span lang="fr" className="abbr shrink-0 text-[15px] leading-5 whitespace-nowrap">
+          {abbr}
+        </span>
+      )}
+      <span className="flex-1" />
+      <Icon name="arrow-up-left" size={16} className="shrink-0 text-muted" />
+    </button>
   );
 }
 
@@ -241,8 +262,9 @@ function Variants({
   showSlang = true,
   folders,
   onPickSuggestion,
+  pickedKey = null,
   direction,
-}: Pick<SearchPanelProps, "suggest" | "autoSort" | "showSlang" | "folders" | "onPickSuggestion"> & {
+}: Pick<SearchPanelProps, "suggest" | "autoSort" | "showSlang" | "folders" | "onPickSuggestion" | "pickedKey"> & {
   direction: "fr" | "ru";
 }) {
   const headingId = useId();
@@ -265,6 +287,7 @@ function Variants({
                   folders={folders}
                   autoSort={autoSort}
                   showSlang={showSlang}
+                  picked={slot.key === pickedKey}
                   onPick={() => onPickSuggestion(slot.suggestion)}
                 />
               </li>
@@ -297,12 +320,14 @@ function VariantRow({
   folders,
   autoSort,
   showSlang,
+  picked,
   onPick,
 }: {
   suggestion: Suggestion;
   folders: readonly Folder[];
   autoSort: boolean;
   showSlang: boolean;
+  picked: boolean;
   onPick: () => void;
 }) {
   const abbr = posAbbr(s);
@@ -312,7 +337,14 @@ function VariantRow({
       type="button"
       onClick={onPick}
       aria-label={`Выбрать: ${s.fr} — ${s.ru}`}
-      className="flex h-[72px] w-full items-center gap-3 border-b border-rule bg-transparent py-2 text-left text-ink active:bg-surface-2"
+      aria-pressed={picked || undefined}
+      data-picked={picked ? "" : undefined}
+      // Picked (A5): the row ink-fills in --dur-instant, every line of it on ink.
+      style={picked ? { transitionDuration: "var(--dur-instant)" } : undefined}
+      className={cx(
+        "press-tint flex h-[72px] w-full items-center gap-3 border-b border-rule py-2 text-left",
+        picked ? "bg-ink text-on-ink [&_.abbr]:text-on-ink [&_.bg-ink]:bg-on-ink [&_.text-muted]:text-on-ink" : "bg-transparent text-ink",
+      )}
     >
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex min-w-0 items-baseline gap-2 whitespace-nowrap">

@@ -18,7 +18,7 @@ import {
   type UIEvent,
 } from "react";
 import { useAddSheet } from "@/components/providers/AddSheetContext";
-import { setDraggedWords } from "@/components/shell/dnd";
+import { setDraggedWords, spotlightTheme } from "@/components/shell/dnd";
 import { blocksGlobalKeys, FOCUS_SEARCH_EVENT, OPEN_LAYER_SELECTOR } from "@/components/shell/keys";
 import { useShortcutsEnabled } from "@/components/shell/ShellContext";
 import { Button } from "@/components/ui/Button";
@@ -40,9 +40,10 @@ import { takeSkeletonHandoff } from "./DeskPlaceholder";
 import { BulkBar, EmptyPane, FilterStrip, SelectionSummary, summaryTargets, TextLink, type StatusFilter } from "./DeskParts";
 import { DisbandSheet, disbandMessage } from "./DisbandSheet";
 import { EnrichPlanSheet } from "./EnrichPlanSheet";
-import { cachedFolder, rememberLibrary } from "./first-paint";
+import { cachedFolder, rememberLibrary, useSearchWait } from "./first-paint";
 import { FolderFormSheet } from "./FolderFormSheet";
 import { nWords, plural, practiceHref, reviewHref } from "./format";
+import { markLeaving, markReturning } from "./leaving";
 import { Menu, MenuItem, MenuSeparator, type MenuAnchor } from "./Menu";
 import { ThemeMenuItems } from "./ThemeActions";
 import { INBOX_KEY, MoveMenu, ThemeSquare } from "./MoveMenu";
@@ -184,6 +185,9 @@ function Desk({ scope }: { scope: LibraryScope }) {
     return sortWords(list, sort, folderOrder);
   }, [scopeRows, status, slang, deferredQuery, sort, folderOrder]);
   const capped = useMemo(() => (filtered && deferredQuery.trim() ? filtered.slice(0, RESULTS_MAX) : filtered), [filtered, deferredQuery]);
+  // L5: while the deferred query lags, the old rows stay (dimmed after 150 ms); «Ищем…» after 300 ms.
+  const stale = query !== deferredQuery;
+  const wait = useSearchWait(stale, listMode && (capped === undefined || stale));
   const rows = capped ?? EMPTY_ROWS;
   const ids = useMemo(() => rows.map((r) => r.word.id), [rows]);
   const byId = useMemo(() => new Map(rows.map((r) => [r.word.id, r])), [rows]);
@@ -281,11 +285,21 @@ function Desk({ scope }: { scope: LibraryScope }) {
   // ----- Actions with undo
   const moveIds = async (list: readonly string[], key: string) => {
     const to = key === INBOX_KEY ? null : key;
+    // Rows that leave a filtered table close instead of vanishing (D8).
+    markLeaving(list);
     try {
       const records = await moveWords(list, to);
       if (records.length === 0) return;
       const name = to === null ? "Входящие" : (folders.find((f) => f.id === to)?.name ?? "тему");
-      showUndo({ message: `${to === null ? "Перемещено во" : "Перемещено в"} «${name}»`, undo: () => void restoreMoves(records) });
+      // The target theme in the sidebar acknowledges the move (L10), as a drop does (D8).
+      spotlightTheme(to);
+      showUndo({
+        message: `${to === null ? "Перемещено во" : "Перемещено в"} «${name}»`,
+        undo: () => {
+          markReturning(records.map((r) => r.word_id));
+          void restoreMoves(records);
+        },
+      });
     } catch (e) {
       snackbar.show({ message: e instanceof Error ? e.message : "Не получилось переместить" });
     }
@@ -293,6 +307,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
   const deleteIds = async (list: readonly string[]) => {
     if (list.length === 0) return;
     const first = byId.get(list[0])?.word.fr;
+    markLeaving(list);
     try {
       await softDeleteWords(list);
       const ids = [...list];
@@ -305,7 +320,10 @@ function Desk({ scope }: { scope: LibraryScope }) {
           ) : (
             `Удалено ${nWords(ids.length)}`
           ),
-        undo: () => void restoreWords(ids),
+        undo: () => {
+          markReturning(ids);
+          void restoreWords(ids);
+        },
       });
     } catch (e) {
       snackbar.show({ message: e instanceof Error ? e.message : "Не получилось удалить" });
@@ -592,7 +610,13 @@ function Desk({ scope }: { scope: LibraryScope }) {
   if (listMode) {
     subline = (
       <span role="status" className="font-medium text-ink">
-        {capped === undefined || query !== deferredQuery ? "Ищем…" : filtered && filtered.length ? `Найдено ${nWords(filtered.length)}` : "Ничего не найдено"}
+        {wait.searching
+          ? "Ищем…"
+          : capped === undefined
+            ? ""
+            : filtered && filtered.length
+              ? `Найдено ${nWords(filtered.length)}`
+              : "Ничего не найдено"}
       </span>
     );
   } else if (scopeStats) {
@@ -669,7 +693,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
           ? "В этой теме пока нет слов."
           : "В библиотеке пока нет слов."
       : null;
-  const noResults = hasWords && capped && capped.length === 0 && query === deferredQuery;
+  const noResults = hasWords && capped && capped.length === 0;
 
   // ----- Detail pane content
   const pane: ReactNode =
@@ -882,6 +906,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
               fine={fine}
               label={`Слова: ${title}`}
               loading={capped === undefined}
+              stale={wait.dim}
               skeletonStyle={skeletonStyle}
               handlers={handlers}
               onSelectAll={(all) => {

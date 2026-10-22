@@ -4,33 +4,26 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { useRouter } from "next/navigation";
 import { startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSnackbar } from "@/components/ui/Snackbar";
+import { markFoldersChanged } from "@/lib/folder-spotlight";
 import { listFolders } from "@/lib/folders";
+import { tokenMs } from "@/lib/motion";
 import { getSettings } from "@/lib/settings";
 import { IMAGE_ACCEPT, ImagePrepError, MAX_TILES, partitionImages } from "@/lib/image-prep";
 import { findDuplicates } from "@/lib/text";
 import type { Folder } from "@/lib/types";
-import { foldersForExtract, useExtract, type ExtractError } from "@/lib/use-extract";
+import { foldersForExtract, useExtract } from "@/lib/use-extract";
 import { commitImport, undoImport } from "./commit";
 import { useDeskLayout } from "./desk";
 import { DeskPickView } from "./DeskPickView";
 import { DeskProcessingView } from "./DeskProcessingView";
 import { DeskReviewView } from "./DeskReviewView";
-import { DeskStatusView } from "./DeskStatusView";
 import { PickView } from "./PickView";
 import { ProcessingView } from "./ProcessingView";
 import { ReviewView } from "./ReviewView";
 import { buildRows, proposalsOf, wordsRu, type ImportRow } from "./rows";
 import { SharedImages } from "./SharedImages";
-import { StatusView } from "./StatusView";
 
 const NO_FOLDERS: Folder[] = [];
-
-function errorTitle(error: ExtractError): string {
-  if (error.code === "offline") return "Нет сети";
-  if (error.code === "rate_limited") return "Подождите немного";
-  if (error.code === "unauthenticated" || error.code === "forbidden") return "Нужен вход";
-  return "Не получилось";
-}
 
 /** Keeps object URLs for the picked screenshots and revokes them when replaced or unmounted. */
 function usePickedFiles() {
@@ -69,24 +62,35 @@ function byLayout(desk: boolean | null, phone: ReactNode, wide: ReactNode): Reac
 /**
  * Screenshot import: pick/paste/drop/share → processing (rows stream in, «Стоп») → review
  * («Найдено N слов», edit, themes) → «Добавить N слов» with an undo snackbar.
- * Nothing is saved before the user confirms.
+ * Nothing is saved before the user confirms. Stop, failure, a rate-limit wait and the finished
+ * hold are states of the processing screen (MOTION-SPEC I3–I5), never a cut to another layout.
  */
 export function ImportScreen() {
   const router = useRouter();
   const snackbar = useSnackbar();
   const desk = useDeskLayout();
-  const { state, start, stop, reset } = useExtract();
+  const { state, start, stop, cancelRetry, reset } = useExtract();
   const liveFolders = useLiveQuery(() => listFolders(), []);
   const folders = liveFolders ?? NO_FOLDERS;
   const [picked, setPicked] = usePickedFiles();
   const [pickError, setPickError] = useState<string | null>(null);
   const [rows, setRows] = useState<ImportRow[] | null>(null);
+  // The finished state is held before the review takes over (I3).
+  const [reviewing, setReviewing] = useState(false);
+  // Stopped: «Дальше с N словами» was pressed (I4).
+  const [proceed, setProceed] = useState(false);
   const [saving, setSaving] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const foldersRef = useRef<Folder[] | undefined>(liveFolders);
   useEffect(() => {
     foldersRef.current = liveFolders;
   }, [liveFolders]);
+
+  const clearRows = useCallback(() => {
+    setRows(null);
+    setReviewing(false);
+    setProceed(false);
+  }, []);
 
   const begin = useCallback(
     async (chosen: File[]) => {
@@ -97,12 +101,12 @@ export function ImportScreen() {
       }
       if (accepted.length > MAX_TILES) {
         reset();
-        setRows(null);
+        clearRows();
         setPickError(new ImagePrepError("too_many").message);
         return;
       }
       reset();
-      setRows(null);
+      clearRows();
       setPickError(null);
       setPicked(accepted);
       const [list, settings] = await Promise.all([
@@ -111,7 +115,7 @@ export function ImportScreen() {
       ]);
       await start(accepted, foldersForExtract(list), { model: settings.ai_model_extract, notes: settings.notes_enabled });
     },
-    [reset, start, setPicked],
+    [reset, start, setPicked, clearRows],
   );
 
   const choose = useCallback(() => input.current?.click(), []);
@@ -132,13 +136,14 @@ export function ImportScreen() {
 
   const restart = useCallback(() => {
     reset();
-    setRows(null);
+    clearRows();
     setPickError(null);
     setPicked([]);
-  }, [reset, setPicked]);
+  }, [reset, setPicked, clearRows]);
 
-  // Rows are in: look for words already in the library, then show the review list.
-  const finished = (state.phase === "done" || state.phase === "stopped") && state.items.length > 0;
+  // Rows are in (or the user goes on with what arrived before «Стоп»): look for words already in
+  // the library, then show the review list.
+  const finished = state.items.length > 0 && (state.phase === "done" || (state.phase === "stopped" && proceed));
   useEffect(() => {
     if (!finished || rows) return;
     let cancelled = false;
@@ -163,6 +168,14 @@ export function ImportScreen() {
     };
   }, [finished, rows, state.items]);
 
+  // Done: step 03 ✓ and the full bar hold --dur-done-hold, then the review replaces the stream row
+  // for row (I3). After «Дальше» the user asked for it, so it comes at once.
+  useEffect(() => {
+    if (!rows || reviewing) return;
+    const timer = window.setTimeout(() => setReviewing(true), state.phase === "done" ? tokenMs("--dur-done-hold", 400) : 0);
+    return () => window.clearTimeout(timer);
+  }, [rows, reviewing, state.phase]);
+
   const proposals = useMemo(() => proposalsOf(state.items), [state.items]);
 
   const add = async () => {
@@ -181,6 +194,8 @@ export function ImportScreen() {
       snackbar.show({ message: result.skipped > 0 ? "Эти слова уже есть в библиотеке" : "Нечего добавить" });
       return;
     }
+    // The themes that received words are lit once in the library (§5.10: containers, not rows).
+    markFoldersChanged(result.words.map((w) => w.folder_id));
     snackbar.show({
       message: `Добавлено ${wordsRu(result.words.length)}`,
       actionLabel: "Отменить",
@@ -200,13 +215,14 @@ export function ImportScreen() {
   };
 
   let view: ReactNode;
-  if (rows) {
+  if (rows && reviewing) {
     const props = {
       rows,
       onRowsChange: (update: (rows: ImportRow[]) => ImportRow[]) => setRows((rs) => (rs ? update(rs) : rs)),
       folders,
       proposals,
       thumbs: picked.urls,
+      images: state.images,
       tiles: state.tiles,
       incomplete: state.phase === "stopped" ? ("stopped" as const) : state.incomplete ? ("cut" as const) : null,
       saving,
@@ -220,24 +236,6 @@ export function ImportScreen() {
       <PickView onChoose={choose} onFiles={onFiles} error={pickError} />,
       <DeskPickView onChoose={choose} onFiles={onFiles} error={pickError} />,
     );
-  } else if (state.phase === "error" && state.error) {
-    const error = state.error;
-    const props = {
-      icon: error.code === "offline" ? ("cloud-off" as const) : ("alert" as const),
-      title: errorTitle(error),
-      message: error.message,
-      onRetry: error.retryable && picked.files.length > 0 ? () => void begin(picked.files) : undefined,
-      onPickOther: choose,
-    };
-    view = byLayout(desk, <StatusView {...props} />, <DeskStatusView {...props} />);
-  } else if (state.phase === "done" && state.items.length === 0) {
-    const props = {
-      icon: "search" as const,
-      title: "Слов не найдено",
-      message: "На скриншоте не нашлось французских слов. Попробуйте другой скриншот или обрежьте лишнее.",
-      onPickOther: choose,
-    };
-    view = byLayout(desk, <StatusView {...props} />, <DeskStatusView {...props} />);
   } else {
     const props = {
       phase: state.phase,
@@ -245,8 +243,15 @@ export function ImportScreen() {
       images: state.images,
       tiles: state.tiles,
       thumbs: picked.urls,
-      checking: finished,
+      checking: finished && !rows,
+      complete: !!rows,
+      incomplete: state.incomplete,
+      error: state.error,
       onStop: stop,
+      onRetry: () => void begin(picked.files),
+      onContinue: () => setProceed(true),
+      onPickOther: choose,
+      onCancelRetry: cancelRetry,
     };
     view = byLayout(desk, <ProcessingView {...props} />, <DeskProcessingView {...props} />);
   }

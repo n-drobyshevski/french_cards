@@ -6,9 +6,21 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
+import { Button } from "@/components/ui/Button";
+import { Collapse } from "@/components/ui/Collapse";
+import { cx } from "@/components/ui/cx";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured, normalizeEmail, prefillEmail, publicAllowedEmail } from "@/lib/supabase/config";
-import { authErrorMessage, EMAIL_RE, EXISTING_ACCOUNT, MIN_PASSWORD_LENGTH, NOT_ALLOWED, newPasswordProblem } from "./messages";
+import {
+  authErrorField,
+  authErrorMessage,
+  EMAIL_RE,
+  EXISTING_ACCOUNT,
+  MIN_PASSWORD_LENGTH,
+  NOT_ALLOWED,
+  newPasswordProblem,
+  type AuthField,
+} from "./messages";
 import { PasswordField } from "./PasswordField";
 import { checkSession, passesEmailHint, rememberSignedIn } from "./session";
 import {
@@ -22,6 +34,7 @@ import {
   AUTH_PANEL_HEAD,
   AUTH_PANEL_TEXT,
   AUTH_PRIMARY,
+  AUTH_PRIMARY_BUTTON,
   AuthMark,
 } from "./AuthFrame";
 
@@ -41,6 +54,28 @@ const NOTICES: Record<string, string> = {
 
 const online = () => typeof navigator === "undefined" || navigator.onLine !== false;
 
+interface FieldErrorState {
+  text: string;
+  field: AuthField;
+}
+
+const FIELD_IDS: Record<AuthField, string> = { email: "login-email", password: "login-password", repeat: "login-repeat" };
+const errorId = (field: AuthField) => `login-error-${field}`;
+
+/**
+ * The error under its field (MOTION-SPEC U2): opens with Collapse (height --dur-move, fade
+ * --dur-enter) and keeps its words while it closes. No shake, no red flood.
+ */
+function FieldError({ field, error, last }: { field: AuthField; error: FieldErrorState | null; last: FieldErrorState | null }) {
+  return (
+    <Collapse open={error?.field === field}>
+      <p id={errorId(field)} role="alert" className="m-0 pt-2 text-[13px] leading-[18px] text-again">
+        {last?.field === field ? last.text : ""}
+      </p>
+    </Collapse>
+  );
+}
+
 export function LoginScreen() {
   const router = useRouter();
   const configured = isSupabaseConfigured();
@@ -50,8 +85,12 @@ export function LoginScreen() {
   const [password, setPassword] = useState("");
   const [repeat, setRepeat] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setFieldError] = useState<FieldErrorState | null>(null);
+  // The last error, so a closing one keeps its words.
+  const [lastError, setLastError] = useState<FieldErrorState | null>(null);
+  if (error && error !== lastError) setLastError(error);
   const [notice, setNotice] = useState<string | null>(null);
+  const setError = (text: string | null, field: AuthField = "email") => setFieldError(text === null ? null : { text, field });
 
   // Why /auth/confirm sent us back, if it did. Read after mount (the page is prerendered), but
   // without waiting for the session check, which can be slow while the service worker installs.
@@ -79,6 +118,11 @@ export function LoginScreen() {
     // Focus once per mode switch; typing must not move focus.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
+
+  // An error sends focus back to its field (U2); after the mode focus, so it wins.
+  useEffect(() => {
+    if (error) document.getElementById(FIELD_IDS[error.field])?.focus();
+  }, [error]);
 
   function switchMode(next: Mode) {
     setMode(next);
@@ -121,13 +165,13 @@ export function LoginScreen() {
     if (!address) return;
 
     if (mode === "signin" && !password) {
-      setError("Введите пароль.");
+      setError("Введите пароль.", "password");
       return;
     }
     if (mode === "signup") {
       const problem = newPasswordProblem(password, repeat);
       if (problem) {
-        setError(problem);
+        setError(problem, password.length < MIN_PASSWORD_LENGTH ? "password" : "repeat");
         return;
       }
     }
@@ -146,7 +190,7 @@ export function LoginScreen() {
         } else if (data.user && (data.user.identities?.length ?? 0) === 0) {
           // Supabase answers a sign-up for an existing email with a user without identities.
           switchMode("signin");
-          setError(EXISTING_ACCOUNT);
+          setError(EXISTING_ACCOUNT, "email");
         } else {
           switchMode("signin");
           setNotice("Аккаунт создан. Подтвердите почту по ссылке из письма, затем войдите.");
@@ -159,7 +203,9 @@ export function LoginScreen() {
         setNotice(`Письмо со ссылкой для сброса отправлено на ${address}. Откройте его на этом устройстве.`);
       }
     } catch (err) {
-      setError(authErrorMessage(err, mode === "reset" ? "reset" : mode, online()));
+      const phase = mode === "reset" ? "reset" : mode;
+      const text = authErrorMessage(err, phase, online());
+      setError(text, authErrorField(text, phase));
     } finally {
       setBusy(false);
     }
@@ -170,15 +216,9 @@ export function LoginScreen() {
     void submit();
   }
 
-  const primaryLabel = busy
-    ? mode === "reset"
-      ? "Отправляем…"
-      : "Входим…"
-    : mode === "signin"
-      ? "Войти"
-      : mode === "signup"
-        ? "Создать аккаунт"
-        : "Отправить ссылку";
+  const primaryLabel = mode === "signin" ? "Войти" : mode === "signup" ? "Создать аккаунт" : "Отправить ссылку";
+  // U1: the network is certain, so the label swaps at once; the button keeps the wider label's width.
+  const pendingLabel = mode === "reset" ? "Отправляем…" : "Входим…";
 
   const clearError = () => {
     if (error) setError(null);
@@ -235,10 +275,16 @@ export function LoginScreen() {
                     clearError();
                   }}
                   disabled={busy}
-                  aria-invalid={error ? true : undefined}
-                  aria-describedby={error ? "login-error" : undefined}
-                  className="mt-2 h-12 w-full rounded-[4px] border border-rule bg-surface px-3 text-[17px] text-ink caret-ink outline-none placeholder:text-muted/70 focus:border-ink focus:shadow-[inset_0_0_0_1px_var(--ink)] focus-visible:outline-none disabled:opacity-60 md:h-11 md:border-boundary md:px-[11px] md:text-[15px] md:placeholder:text-muted"
+                  aria-invalid={error?.field === "email" || undefined}
+                  aria-describedby={error?.field === "email" ? errorId("email") : undefined}
+                  className={cx(
+                    "mt-2 h-12 w-full rounded-[4px] border bg-surface px-3 text-[17px] text-ink caret-ink outline-none placeholder:text-muted/70 focus-visible:outline-none disabled:opacity-60 md:h-11 md:px-[11px] md:text-[15px] md:placeholder:text-muted",
+                    error?.field === "email"
+                      ? "border-again focus:shadow-[inset_0_0_0_1px_var(--again)]"
+                      : "border-rule focus:border-ink focus:shadow-[inset_0_0_0_1px_var(--ink)] md:border-boundary",
+                  )}
                 />
+                <FieldError field="email" error={error} last={lastError} />
               </div>
 
               {mode !== "reset" && (
@@ -253,8 +299,11 @@ export function LoginScreen() {
                   autoComplete={mode === "signup" ? "new-password" : "current-password"}
                   enterKeyHint={mode === "signup" ? "next" : "go"}
                   disabled={busy}
-                  describedBy={error ? "login-error" : undefined}
-                />
+                  invalid={error?.field === "password"}
+                  describedBy={error?.field === "password" ? errorId("password") : undefined}
+                >
+                  <FieldError field="password" error={error} last={lastError} />
+                </PasswordField>
               )}
 
               {mode === "signup" && (
@@ -269,8 +318,11 @@ export function LoginScreen() {
                   autoComplete="new-password"
                   enterKeyHint="go"
                   disabled={busy}
-                  describedBy={error ? "login-error" : undefined}
-                />
+                  invalid={error?.field === "repeat"}
+                  describedBy={error?.field === "repeat" ? errorId("repeat") : undefined}
+                >
+                  <FieldError field="repeat" error={error} last={lastError} />
+                </PasswordField>
               )}
 
               {mode === "reset" && (
@@ -278,18 +330,12 @@ export function LoginScreen() {
                   Пришлём ссылку для нового пароля. Откройте её в этом же браузере.
                 </p>
               )}
-
-              {error && (
-                <p id="login-error" role="alert" className="m-0 text-[13px] leading-[18px] text-again">
-                  {error}
-                </p>
-              )}
             </div>
           </section>
 
-          <button type="submit" disabled={busy} aria-busy={busy || undefined} className={AUTH_PRIMARY}>
+          <Button type="submit" block pending={busy} pendingLabel={pendingLabel} pendingDelay={0} className={AUTH_PRIMARY_BUTTON}>
             {primaryLabel}
-          </button>
+          </Button>
 
           <div className={AUTH_LINKS}>
             {mode === "signin" ? (

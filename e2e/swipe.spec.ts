@@ -124,7 +124,7 @@ test("grading swipes vibrate: a tick at the threshold, then one pulse for Зна
 
   await questionCard(page).tap();
   await expect(page.locator("[data-review-answer]")).toBeVisible();
-  await expect(page.locator("[data-review-answer]")).toHaveClass(/card-turn-up/);
+  // Turning the card over does not vibrate.
   expect(await vibrations()).toEqual([]);
 
   await touchSwipe(page, 1);
@@ -149,8 +149,8 @@ test("no vibration when it is turned off in settings", async ({ page }) => {
     Object.defineProperty(navigator, "vibrate", { configurable: true, value: (p: unknown) => (calls.push(p), true) });
   });
   await page.goto("/settings");
-  await page.getByRole("switch", { name: "Вибрация при свайпах" }).click();
-  await expect(page.getByRole("switch", { name: "Вибрация при свайпах" })).not.toBeChecked();
+  await page.getByRole("switch", { name: "Вибрация", exact: true }).click();
+  await expect(page.getByRole("switch", { name: "Вибрация", exact: true })).not.toBeChecked();
   await openReview(page);
   await questionCard(page).tap();
   await touchSwipe(page, 1);

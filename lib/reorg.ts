@@ -16,11 +16,14 @@ import {
   type TaxonomyResponse,
   type ModelTierInput,
 } from "./ai/schemas";
+import { isMovable } from "./core/words";
 import { db, newId } from "./db";
 import { createFolder, disbandFolder, FOLDER_COLORS, listFolders } from "./folders";
 import { getSettings } from "./settings";
 import type { Confidence, Folder, ReorgRun, Word } from "./types";
 import { moveWords, type MoveRecord } from "./words";
+
+export { isMovable } from "./core/words";
 
 export const REORG_UNDO_DAYS = 7;
 export const TAXONOMY_WORDS_MAX = 4000;
@@ -61,11 +64,6 @@ export async function loadReorgSnapshot(): Promise<ReorgSnapshot> {
 /** The folder a word is really in: a missing or deleted folder counts as «Входящие» (null). */
 function liveFolderOf(word: Pick<Word, "folder_id">, liveIds: ReadonlySet<string>): string | null {
   return word.folder_id !== null && liveIds.has(word.folder_id) ? word.folder_id : null;
-}
-
-/** True when automatic sorting may move the word: not placed by hand and not in a locked folder. */
-export function isMovable(word: Word, lockedIds: ReadonlySet<string>): boolean {
-  return word.deleted_at === null && word.folder_source !== "user" && !(word.folder_id !== null && lockedIds.has(word.folder_id));
 }
 
 function partition(snap: ReorgSnapshot) {
@@ -324,6 +322,21 @@ export function planGroups(plan: ReorgPlan): PlanGroup[] {
   });
 }
 
+/**
+ * Groups in the order they first appeared (`seen`, new keys after it), so a plan that is written in
+ * batch by batch, or a group that grows, never reshuffles what is already on screen. Returns the
+ * groups to show and the updated order.
+ */
+export function keepGroupOrder(groups: readonly PlanGroup[], seen: readonly string[]): { groups: PlanGroup[]; seen: string[] } {
+  const known = new Set(seen);
+  const order = [...seen, ...groups.filter((g) => !known.has(g.target.key)).map((g) => g.target.key)];
+  const rank = new Map(order.map((key, i) => [key, i]));
+  return {
+    groups: [...groups].sort((a, b) => (rank.get(a.target.key) ?? 0) - (rank.get(b.target.key) ?? 0)),
+    seen: order.length === seen.length ? (seen as string[]) : order,
+  };
+}
+
 /** Moves that «Применить» would write. */
 export function effectiveMoves(plan: ReorgPlan): PlanMove[] {
   return planGroups(plan)
@@ -561,11 +574,19 @@ export class ReorgError extends Error {
 export interface ClassifyOptions {
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
-  /** Retries after a 429, waiting for Retry-After (capped). */
+  /**
+   * Retries after a 429, waiting for Retry-After (capped at RATE_LIMIT_WAIT_MAX s). One by
+   * default: the wait is shown (MOTION-SPEC §3.8 — no silent retries), then one automatic retry.
+   */
   retries?: number;
+  /** A 429 is being waited out: the screen counts down `seconds` to the automatic retry. */
+  onRateLimit?: (seconds: number) => void;
   /** Injected for tests. */
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
 }
+
+/** Longest Retry-After the automatic retry waits for (seconds). */
+export const RATE_LIMIT_WAIT_MAX = 60;
 
 const defaultSleep = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
@@ -583,7 +604,7 @@ const defaultSleep = (ms: number, signal?: AbortSignal) =>
 export async function postClassify<T>(body: TaxonomyRequest | AssignRequest, opts: ClassifyOptions = {}): Promise<T> {
   const fetchImpl = opts.fetchImpl ?? fetch;
   const sleep = opts.sleep ?? defaultSleep;
-  let retries = opts.retries ?? 3;
+  let retries = opts.retries ?? 1;
   for (;;) {
     if (opts.signal?.aborted) throw new ReorgError("aborted");
     let res: Response;
@@ -602,7 +623,9 @@ export async function postClassify<T>(body: TaxonomyRequest | AssignRequest, opt
     if (res.status === 429 && retries > 0) {
       retries--;
       const after = Number(res.headers.get("Retry-After"));
-      await sleep(Math.min(20, Number.isFinite(after) && after > 0 ? after : 3) * 1000, opts.signal);
+      const seconds = Math.min(RATE_LIMIT_WAIT_MAX, Number.isFinite(after) && after > 0 ? Math.ceil(after) : 3);
+      opts.onRateLimit?.(seconds);
+      await sleep(seconds * 1000, opts.signal);
       continue;
     }
     let error = "";
@@ -665,6 +688,11 @@ export interface RunReorgOptions extends ClassifyOptions {
   onProgress?: (done: number, total: number) => void;
   /** Called when the taxonomy pass starts, when it ends (assign 0 / n) and as each assign chunk finishes. */
   onStage?: (progress: ReorgProgress) => void;
+  /**
+   * Called as each assign chunk finishes with the plan so far (the words answered until now), so
+   * groups can be shown as they arrive (MOTION-SPEC S2). The returned plan is the final one.
+   */
+  onGroups?: (partial: ReorgPlan) => void;
   /** Injected for tests. */
   snapshot?: ReorgSnapshot;
   now?: Date;
@@ -677,6 +705,8 @@ export async function runReorg(opts: RunReorgOptions = {}): Promise<ReorgPlan> {
   const { movable } = partition(snap);
   if (movable.length === 0) return buildPlan(snap, [], [], now);
 
+  // Offline is decided before the wait (MOTION-SPEC B4): no request that would only time out.
+  if (typeof navigator !== "undefined" && navigator.onLine === false) throw new ReorgError("offline");
   const words = movable.length;
   opts.onStage?.({ stage: "taxonomy", words, wordsDone: 0, done: 0, total: 0 });
   const model = opts.model ?? (await getSettings()).ai_model;
@@ -687,6 +717,7 @@ export async function runReorg(opts: RunReorgOptions = {}): Promise<ReorgPlan> {
   let wordsDone = 0;
   opts.onProgress?.(0, requests.length);
   opts.onStage?.({ stage: "assign", words, wordsDone, done, total: requests.length });
+  const answered: AssignmentResult[] = [];
   const results = await pool(
     requests,
     ASSIGN_CONCURRENCY,
@@ -696,6 +727,10 @@ export async function runReorg(opts: RunReorgOptions = {}): Promise<ReorgPlan> {
       wordsDone += req.words.length;
       opts.onProgress?.(done, requests.length);
       opts.onStage?.({ stage: "assign", words, wordsDone, done, total: requests.length });
+      if (opts.onGroups) {
+        answered.push(...res.assignments);
+        opts.onGroups(buildPlan(snap, targets, answered, now));
+      }
       return res.assignments;
     },
     opts.signal,

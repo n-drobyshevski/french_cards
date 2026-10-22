@@ -13,7 +13,12 @@ import { dictionaryKey, MANUAL_KEY, moveActive, recentKey, resolveActive, varian
 import { cardNumber, posAbbr, splitTypedPrefix } from "./match";
 import { choiceName, foldersForSuggestion } from "./folder-choice";
 import { DESK_INPUT, DeskFieldError, DeskFrame, DeskSection, FIELD_LABEL, HintLine, KeyButton, ThemeSelect, type Hint } from "./desk-parts";
+import { Collapse } from "@/components/ui/Collapse";
 import {
+  DICTIONARY_ROWS,
+  DictionarySlot,
+  DuplicateReveal,
+  useDictionaryReserved,
   useVariantsRegion,
   VARIANT_ENTER,
   VARIANT_ROW_HEIGHT,
@@ -62,7 +67,10 @@ export function DeskSearchPanel({ inputRef, ...props }: DeskSearchPanelProps) {
   const base = useId();
   const trimmed = value.trim();
   const direction = detectDirection(trimmed);
-  const showDictionary = trimmed !== "" && direction === "fr" && dictionary.length > 0;
+  // While the lexique loads «Словарь» holds 3 row slots (A4); the words fill them in place.
+  const dictionaryLoading = !!props.dictionaryLoading && trimmed !== "" && direction === "fr";
+  const reserved = useDictionaryReserved(dictionaryLoading);
+  const showDictionary = trimmed !== "" && direction === "fr" && (dictionary.length > 0 || reserved);
   // «Варианты» keep their slots whenever there is a headword, also while failed (A2, A3).
   const showVariants = trimmed !== "" && suggestionsEnabled;
   const recent = trimmed ? [] : (context?.recent ?? []);
@@ -124,7 +132,7 @@ export function DeskSearchPanel({ inputRef, ...props }: DeskSearchPanelProps) {
 
   const listboxIds = [
     recent.length > 0 && `${base}-recent`,
-    showDictionary && `${base}-dict`,
+    showDictionary && dictionary.length > 0 && `${base}-dict`,
     results.length > 0 && `${base}-var`,
     trimmed && !quick && `${base}-manual`,
   ].filter(Boolean);
@@ -205,26 +213,32 @@ export function DeskSearchPanel({ inputRef, ...props }: DeskSearchPanelProps) {
       ) : (
         <>
           {showDictionary && (
-            <section aria-labelledby={`${base}-dict-title`} className="mt-4">
-              <DeskSection id={`${base}-dict-title`} title="Словарь" aside="работает без сети" />
-              <div role="listbox" id={`${base}-dict`} aria-labelledby={`${base}-dict-title`}>
-                {dictionary.map((hit, i) => (
-                  <DictionaryRow
-                    key={hit.fr}
-                    hit={hit}
-                    query={value}
-                    last={i === dictionary.length - 1}
-                    active={active === dictionaryKey(hit.fr)}
-                    optionProps={optionProps(dictionaryKey(hit.fr))}
-                    onPick={() => props.onPickHit(hit)}
-                  />
-                ))}
-              </div>
-            </section>
+            <Collapse open={dictionaryLoading || dictionary.length > 0}>
+              <section aria-labelledby={`${base}-dict-title`} aria-busy={dictionaryLoading || undefined} data-dictionary="" className="mt-4">
+                <DeskSection id={`${base}-dict-title`} title="Словарь" aside="работает без сети" />
+                <div role="listbox" id={`${base}-dict`} aria-labelledby={`${base}-dict-title`}>
+                  {dictionary.map((hit, i) => (
+                    <DictionaryRow
+                      key={hit.fr}
+                      hit={hit}
+                      query={value}
+                      last={i === dictionary.length - 1 && !dictionaryLoading}
+                      active={active === dictionaryKey(hit.fr)}
+                      optionProps={optionProps(dictionaryKey(hit.fr))}
+                      onPick={() => props.onPickHit(hit)}
+                    />
+                  ))}
+                </div>
+                {reserved &&
+                  Array.from({ length: Math.max(0, DICTIONARY_ROWS - dictionary.length) }, (_, i) => (
+                    <DictionarySlot key={`slot-${dictionary.length + i}`} height={40} index={dictionary.length + i} loaded={!dictionaryLoading} />
+                  ))}
+              </section>
+            </Collapse>
           )}
-          {props.duplicate && (
-            <DuplicateBox info={props.duplicate} onOpen={() => props.onOpenWord(props.duplicate!.word.id)} onAddAnyway={props.onAddAnyway} />
-          )}
+          <DuplicateReveal info={props.duplicate}>
+            {(info) => <DuplicateBox info={info} onOpen={() => props.onOpenWord(info.word.id)} onAddAnyway={props.onAddAnyway} />}
+          </DuplicateReveal>
           {showVariants && (
             <Variants {...props} direction={direction} listboxId={`${base}-var`} optionProps={optionProps} active={active} folders={folders} />
           )}

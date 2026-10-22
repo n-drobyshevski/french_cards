@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { mockSuggest, openReview, questionCard, tabBar, type SuggestionWire } from "./fixtures";
+import { mockSuggest, motionSettled, openReview, questionCard, tabBar, type SuggestionWire } from "./fixtures";
 import { slowDatabase, watchPlaceholder } from "./review-loading";
 
 test.describe("review", () => {
@@ -173,6 +173,7 @@ test.describe("loading and moving on (MOTION-SPEC R1, R2, R9)", () => {
     await page.keyboard.press("Space");
     await page.keyboard.press("3");
     await expect(page.getByText("01 / 11", { exact: true })).toBeVisible();
+    await motionSettled(page); // the next card settles out of the stack (R5)
     const before = (await questionCard(page).boundingBox())!;
 
     await page.keyboard.press("z");

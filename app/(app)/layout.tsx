@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
+import { AUTH_INIT_SCRIPT } from "@/components/auth/auth-init";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { AppProviders } from "@/components/providers/AppProviders";
 import { InstallHint } from "@/components/pwa/InstallHint";
 import { AppShell } from "@/components/shell/AppShell";
 import { TabBar } from "@/components/ui/TabBar";
+import { isSupabaseConfigured } from "@/lib/supabase/config";
 
 /**
  * App shell. Phones (< 768): a centered 440px column with safe-area paddings and the bottom tab bar.
@@ -15,6 +17,8 @@ import { TabBar } from "@/components/ui/TabBar";
 export default function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="mx-auto flex w-full max-w-[440px] flex-1 flex-col pt-(--safe-top) pb-(--shell-bottom) [--shell-bottom:env(safe-area-inset-bottom)] max-md:[&:has([data-tabbar])]:[--shell-bottom:calc(61px+env(safe-area-inset-bottom))] md:max-w-none md:flex-row md:pt-0">
+      {/* Signed out with no cached session: off to /login before the app paints (U3). */}
+      {isSupabaseConfigured() && <script dangerouslySetInnerHTML={{ __html: AUTH_INIT_SCRIPT }} />}
       <AppProviders>
         <AuthGate>
           <AppShell>{children}</AppShell>

@@ -56,6 +56,8 @@ export interface EnrichOptions {
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   /** Called as chunks finish: (words done, words total). */
   onProgress?: (done: number, total: number) => void;
+  /** Called before the first request (0 / n) and as each batch comes back, with that batch's results. */
+  onStage?: (progress: EnrichProgress) => void;
   /** The learner's themes: when set, each result also carries a theme pick. */
   folders?: readonly FolderInput[];
   /** Settings «Модель для подсказок». */
@@ -131,6 +133,27 @@ export async function postEnrich(words: readonly EnrichInput[], opts: EnrichOpti
   }
 }
 
+/**
+ * Where a detection run is (MOTION-SPEC E2, A10): «Подбираем примеры · 24 / 48» counts the words
+ * whose batch has come back; the determinate bar moves per batch, never backwards.
+ */
+export interface EnrichProgress {
+  /** Words sent (the «/ 48»). */
+  words: number;
+  /** Words whose batch has finished. */
+  wordsDone: number;
+  /** Batches finished / in total. */
+  done: number;
+  total: number;
+  /** The results of the batch that has just finished (empty for the opening 0 / n). */
+  batch: readonly EnrichResult[];
+}
+
+/** 0–1 for the 1px bar: finished batches over all of them (1 when there was nothing to send). */
+export function enrichFraction(p: Pick<EnrichProgress, "done" | "total">): number {
+  return p.total === 0 ? 1 : Math.min(1, p.done / p.total);
+}
+
 export function chunk<T>(items: readonly T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
@@ -144,14 +167,19 @@ export async function enrichWords(words: readonly EnrichInput[], opts: EnrichOpt
   const out = new Map<string, EnrichResult>();
   let next = 0;
   let done = 0;
+  let batches = 0;
   opts.onProgress?.(0, total);
+  opts.onStage?.({ words: total, wordsDone: 0, done: 0, total: chunks.length, batch: [] });
   const worker = async () => {
     while (next < chunks.length) {
       if (opts.signal?.aborted) throw new EnrichError("aborted");
       const part = chunks[next++];
-      for (const r of await postEnrich(part, opts)) out.set(r.id, r);
+      const batch = await postEnrich(part, opts);
+      for (const r of batch) out.set(r.id, r);
       done += part.length;
+      batches++;
       opts.onProgress?.(done, total);
+      opts.onStage?.({ words: total, wordsDone: done, done: batches, total: chunks.length, batch });
     }
   };
   await Promise.all(Array.from({ length: Math.min(ENRICH_CONCURRENCY, chunks.length) }, worker));
@@ -360,6 +388,30 @@ export function buildEnrichPlan(
     }
   }
   return plan;
+}
+
+export interface RunEnrichPlanOptions extends Omit<EnrichOptions, "folders" | "onProgress"> {
+  /** What Settings «ИИ» allow; read from Settings when omitted. */
+  prefs?: BackfillPreferences;
+}
+
+export interface EnrichPlanRun {
+  plan: EnrichPlan;
+  /** Candidates left for a later run (over ENRICH_RUN_MAX). */
+  more: number;
+}
+
+/**
+ * «Дополнить карточки»: the candidates (a local read), their detection in batches (`onStage` before
+ * the first request and after each batch) and the plan to review. Nothing is written.
+ */
+export async function runEnrichPlan(opts: RunEnrichPlanOptions = {}): Promise<EnrichPlanRun> {
+  const settings = opts.prefs && opts.model ? null : await getSettings();
+  const prefs = opts.prefs ?? enrichPreferences(settings!);
+  const candidates = await loadEnrichCandidates(prefs);
+  const batch = candidates.slice(0, ENRICH_RUN_MAX);
+  const results = batch.length > 0 ? await enrichWords(batch, { ...opts, model: opts.model ?? settings?.ai_model }) : new Map<string, EnrichResult>();
+  return { plan: buildEnrichPlan(batch, results, prefs), more: candidates.length - batch.length };
 }
 
 export const planChanges = (plan: EnrichPlan) => [...plan.examples, ...plan.slang];

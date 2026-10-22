@@ -1,10 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useId, useState, type ClipboardEventHandler, type InputHTMLAttributes, type KeyboardEventHandler, type ReactNode, type Ref } from "react";
+import {
+  useEffect,
+  useId,
+  useState,
+  type ClipboardEventHandler,
+  type InputHTMLAttributes,
+  type KeyboardEventHandler,
+  type ReactNode,
+  type Ref,
+  type RefObject,
+} from "react";
 import { Button, IconButton } from "@/components/ui/Button";
 import { AbbrHint } from "@/components/ui/AbbrHint";
 import { Chip } from "@/components/ui/Chip";
+import { Collapse } from "@/components/ui/Collapse";
 import { Icon, type IconName } from "@/components/ui/Icons";
 import { Segmented } from "@/components/ui/Segmented";
 import { SheetCloseButton, SheetTitle } from "@/components/ui/Sheet";
@@ -13,10 +24,12 @@ import { cx } from "@/components/ui/cx";
 import { SkeletonRow } from "@/components/ui/Skeleton";
 import { StatusLine } from "@/components/ui/StatusLine";
 import type { Suggestion } from "@/lib/ai/schemas";
+import { spotlight } from "@/lib/motion";
 import { useDelayedFlag } from "@/lib/use-delayed-flag";
 import type { SuggestApi, SuggestErrorKind } from "@/lib/use-suggest";
 import { SLANG_LABELS, type Folder, type SlangLevel } from "@/lib/types";
 import type { DuplicateInfo } from "./data";
+import type { SpotField } from "./draft";
 import { choiceKey, choiceName, INBOX_CHOICE, sameChoice, type FolderChoice } from "./folder-choice";
 import { variantKey } from "./combobox";
 import { cardNumber, plural } from "./match";
@@ -95,7 +108,10 @@ export function HeadwordInput({
   onPaste,
   enterKeyHint,
   autoFocus,
+  spot,
 }: {
+  /** Lit by a pick (useFieldSpotlight). */
+  spot?: SpotField;
   inputRef?: Ref<HTMLInputElement>;
   value: string;
   onValueChange: (value: string) => void;
@@ -116,6 +132,7 @@ export function HeadwordInput({
   const clearable = Boolean(onClear && value);
   return (
     <div
+      data-spot={spot}
       className={cx(
         "relative mx-4 mt-4 flex h-14 shrink-0 items-center rounded-[4px] border bg-surface focus-within:shadow-[inset_0_0_0_1px_var(--ink)]",
         invalid ? "border-again focus-within:shadow-[inset_0_0_0_1px_var(--again)]" : "border-ink",
@@ -190,16 +207,20 @@ export function FieldRow({
   align = "center",
   as = "label",
   className,
+  spot,
 }: {
   label: ReactNode;
   children: ReactNode;
   align?: "center" | "start";
   as?: "label" | "div";
   className?: string;
+  /** Lit by a pick or a detection (useFieldSpotlight). */
+  spot?: SpotField;
 }) {
   const Tag = as;
   return (
     <Tag
+      data-spot={spot}
       className={cx(
         "flex border-b border-rule focus-within:border-ink focus-within:shadow-[0_1px_0_0_var(--ink)]",
         align === "start" ? "items-start" : "min-h-12 items-center",
@@ -379,17 +400,22 @@ export function VariantSlotFrame({ slot, className }: { slot: Extract<VariantSlo
   );
 }
 
-/** The error in place of the first free slot, at row height: 1px --again rule on top, «Повторить» right. */
+/**
+ * The error in place of the first free slot, at row height: 1px --again rule on top, «Повторить» right.
+ * Offline is not an error (B4): decided before any wait, it reads as a muted notice with no rule,
+ * and the request goes out by itself when the network is back.
+ */
 export function VariantError({ kind, onRetry, className }: { kind: SuggestErrorKind; onRetry: () => void; className?: string }) {
   const e = VARIANT_ERRORS[kind];
+  const offline = kind === "offline";
   return (
     <div
       data-variant-error={kind}
       // -mt-px: the --again rule lies on the hairline above it (status line or last row).
-      className={cx("relative -mt-px flex items-center justify-between gap-3 border-t border-again", className)}
+      className={cx("relative flex items-center justify-between gap-3", !offline && "-mt-px border-t border-again", className)}
       style={{ height: VARIANT_ROW_HEIGHT }}
     >
-      <p className="m-0 min-w-0 text-[13px] leading-5 text-ink">{e.text}</p>
+      <p className={cx("m-0 min-w-0 text-[13px] leading-5", offline ? "text-muted" : "text-ink")}>{e.text}</p>
       {e.retry && (
         <Button variant="tertiary" size="sm" className="-mr-2.5" onClick={onRetry}>
           Повторить
@@ -403,7 +429,115 @@ export function VariantError({ kind, onRetry, className }: { kind: SuggestErrorK
 export const VARIANT_ENTER = "animate-[enter-rise_var(--dur-enter)_var(--ease-enter)_both]";
 
 // ---------------------------------------------------------------------------------------
+// «Словарь» while the lexique loads (MOTION-SPEC A4): the section keeps its header and 3 row slots
+// from the first letter; static bars fade in after --loading-delay (300 ms); the words fill the
+// slots in place, and the slots left over fade and close like the «Варианты» ones.
+
+export const DICTIONARY_ROWS = 3;
+
+/**
+ * Whether «Словарь» keeps its slots: once the lexique was still loading for a shown headword, the
+ * section stays reserved for the rest of the sheet's life, so its rows can fill in place.
+ */
+export function useDictionaryReserved(loading: boolean): boolean {
+  const [reserved, setReserved] = useState(loading);
+  if (loading && !reserved) setReserved(true);
+  return reserved || loading;
+}
+
+/** A reserved «Словарь» row: blank, then bars (CSS delay, so a fast load never paints them); closes once loaded. */
+export function DictionarySlot({ height, index, loaded, className }: { height: number; index: number; loaded: boolean; className?: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      data-dictionary-slot={loaded ? "collapsed" : "loading"}
+      className={cx("grid", loaded ? "grid-rows-[0fr] opacity-0" : "grid-rows-[1fr]", className)}
+      style={loaded ? { transition: SLOT_EXIT } : undefined}
+    >
+      <div className="min-h-0 overflow-hidden">
+        <SkeletonRow height={height} index={index} lines={1} fade className="delayed-in" />
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------------------
+// Detection in the forms (MOTION-SPEC A5, A6, §5.14): what is being detected shows its unknown
+// state after 300 ms; what a pick or a detection filled is lit with the spotlight.
+
+export type { SpotField };
+
+/** One pick or one detection result: the fields it filled, lit together. `seq` restarts the fade. */
+export interface FieldSpot {
+  seq: number;
+  fields: readonly SpotField[];
+}
+
+/**
+ * Lights the fields of `spot` inside `root` each time a new spot comes (also on mount: a pick opens
+ * the form). A field marked `data-spot-target="inputs"` lights its own inputs (opaque boxes).
+ */
+export function useFieldSpotlight(root: RefObject<HTMLElement | null>, spot: FieldSpot | null | undefined): void {
+  useEffect(() => {
+    if (!spot || !root.current) return;
+    for (const field of spot.fields) {
+      for (const el of root.current.querySelectorAll(`[data-spot~="${field}"]`)) {
+        if (el.getAttribute("data-spot-target") === "inputs") el.querySelectorAll("input, textarea").forEach((input) => spotlight(input));
+        else spotlight(el);
+      }
+    }
+  }, [root, spot]);
+}
+
+/** What detection is doing for an open form; each part only when its setting is on. */
+export interface FormDetection {
+  /** Pending for 300 ms: show the unknown states. */
+  waiting: boolean;
+  /** The request failed: «не определилось». */
+  failed: boolean;
+  slang: boolean;
+  examples: boolean;
+  themes: boolean;
+}
+
+/** The slang meter before the level is known: 4 segments in --rule. */
+export function UnknownMeter({ size = "md", className }: { size?: "sm" | "md"; className?: string }) {
+  return (
+    <span role="img" aria-label="Уровень сленга определяется" className={cx("inline-flex shrink-0 items-center gap-[2px]", className)}>
+      {[0, 1, 2, 3].map((i) => (
+        <span key={i} aria-hidden="true" className={cx("bg-rule", size === "sm" ? "h-[2px] w-2" : "h-[3px] w-2.5")} />
+      ))}
+    </span>
+  );
+}
+
+/** The mono «…» standing in for a value on its way (an example, a theme). */
+export function PendingDots({ className }: { className?: string }) {
+  return (
+    <span aria-hidden="true" className={cx("font-mono text-[13px] leading-5 tracking-[.06em] text-muted not-italic", className)}>
+      …
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------------------
 // Notices
+
+/**
+ * A9: the «Уже есть…» notice opens with Collapse (height --dur-move + fade) instead of appearing at
+ * once, and closes the same way, keeping the last duplicate on screen while it closes. No shake, no
+ * red: the notice's own warn colours carry it.
+ */
+export function DuplicateReveal({ info, children }: { info: DuplicateInfo | null; children: (info: DuplicateInfo) => ReactNode }) {
+  const [held, setHeld] = useState(info);
+  if (info && info !== held) setHeld(info);
+  const shown = info ?? held;
+  return (
+    <Collapse open={info != null} appear onClosed={() => setHeld(null)}>
+      {shown && children(shown)}
+    </Collapse>
+  );
+}
 
 export function DuplicateNotice({
   info,
@@ -604,14 +738,17 @@ export function SlangPicker({
   verlan,
   auto,
   pending = false,
+  failed = false,
   onChange,
 }: {
   level: SlangLevel;
   verlan: boolean;
   /** Show «определён автоматически». */
   auto: boolean;
-  /** Detection is running (shows «определяется…»). */
+  /** Detection has been running for 300 ms: the unknown state and «определяется…». */
   pending?: boolean;
+  /** Detection failed: «не определилось» (muted, no alert). */
+  failed?: boolean;
   onChange: (next: { slang_level?: SlangLevel; verlan?: boolean }) => void;
 }) {
   const labelId = useId();
@@ -621,32 +758,30 @@ export function SlangPicker({
     lang: l === 0 ? undefined : "fr",
     label: (
       <>
-        {l < level && (
+        {!pending && l < level && (
           <span aria-hidden="true" className={cx("absolute inset-x-0 top-0 h-[3px]", level === 3 ? "bg-red" : "bg-ink")} />
         )}
         {SLANG_LABELS[l]}
       </>
     ),
   }));
+  const caption = pending ? "определяется…" : failed ? "не определилось" : auto ? "определён автоматически" : null;
   return (
-    <div className="mx-4 mt-6">
+    <div data-spot="slang" className="mx-4 mt-6">
       <div className="flex items-baseline justify-between gap-3">
         <span id={labelId} className="meta font-medium">
           Уровень сленга
         </span>
-        {pending ? (
-          <span role="status" className="text-[12px] leading-4 text-muted">
-            определяется…
-          </span>
-        ) : (
-          auto && <span className="text-[12px] leading-4 text-muted">определён автоматически</span>
-        )}
+        <span role={pending || failed ? "status" : undefined} className="flex items-center gap-2 text-[12px] leading-4 text-muted">
+          {pending && <UnknownMeter />}
+          {caption}
+        </span>
       </div>
       <div className="mt-2 flex gap-2">
         <Segmented
           variant="block"
           options={options}
-          value={level}
+          value={pending ? null : level}
           onChange={(v) => onChange({ slang_level: v })}
           ariaLabelledby={labelId}
           className="min-w-0 flex-1"

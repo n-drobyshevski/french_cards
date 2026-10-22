@@ -4,8 +4,19 @@
 // session, so the user can set a new password here.
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
+import { Button } from "@/components/ui/Button";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { AUTH_CARD, AUTH_MAIN, AUTH_PANEL, AUTH_PANEL_BODY, AUTH_PANEL_HEAD, AUTH_PANEL_TEXT, AUTH_PRIMARY, AuthMark } from "./AuthFrame";
+import {
+  AUTH_CARD,
+  AUTH_MAIN,
+  AUTH_PANEL,
+  AUTH_PANEL_BODY,
+  AUTH_PANEL_HEAD,
+  AUTH_PANEL_TEXT,
+  AUTH_PRIMARY,
+  AUTH_PRIMARY_BUTTON,
+  AuthMark,
+} from "./AuthFrame";
 import { authErrorMessage, MIN_PASSWORD_LENGTH, newPasswordProblem } from "./messages";
 import { PasswordField } from "./PasswordField";
 import { checkSession, rememberSignedIn } from "./session";
@@ -114,9 +125,17 @@ export function ResetPasswordScreen() {
         </section>
 
         {state === "ready" ? (
-          <button type="submit" form="reset-form" disabled={busy} aria-busy={busy || undefined} className={`${AUTH_PRIMARY} md:mb-6`}>
-            {busy ? "Сохраняем…" : "Сохранить пароль"}
-          </button>
+          <Button
+            type="submit"
+            form="reset-form"
+            block
+            pending={busy}
+            pendingLabel="Сохраняем…"
+            pendingDelay={0}
+            className={`${AUTH_PRIMARY_BUTTON} md:mb-6`}
+          >
+            Сохранить пароль
+          </Button>
         ) : state !== "checking" ? (
           <Link href={state === "done" ? "/" : "/login"} className={`${AUTH_PRIMARY} md:mb-6`}>
             {state === "done" ? "Открыть карточки" : "Ко входу"}

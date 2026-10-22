@@ -47,12 +47,13 @@ export default function OfflinePage() {
       </section>
 
       <div className="mt-4 flex shrink-0 flex-col gap-2">
-        <OfflineRetry />
-        {/* A full navigation (not next/link), so the service worker can answer from its cache. */}
-        {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
-        <a href="/" className={buttonClasses({ variant: "secondary", block: true })}>
-          Открыть повторение
-        </a>
+        <OfflineRetry>
+          {/* A full navigation (not next/link), so the service worker can answer from its cache. */}
+          {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+          <a href="/" className={buttonClasses({ variant: "secondary", block: true })}>
+            Открыть повторение
+          </a>
+        </OfflineRetry>
       </div>
     </main>
   );

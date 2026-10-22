@@ -53,12 +53,13 @@ If `NEXT_PUBLIC_SUPABASE_URL` is unset, the app runs fully local: there is no lo
 - `ALLOWED_EMAIL`
 - `ANTHROPIC_API_KEY`
 - `CRON_SECRET`
+- `MCP_SECRET`, `SUPABASE_SECRET_KEY`, `MCP_USER_ID`, `MCP_TIMEZONE` (optional): the Claude connector (`docs/CONNECTOR.md`). Server-only. Without all three required values `/api/mcp/*` answers 404.
 - See `.env.example`.
 
 ## Module map (ownership during the parallel build)
 | Area | Files |
 |---|---|
-| Domain/data | `lib/types.ts`, `lib/db.ts` (shared, edit carefully), `lib/scheduler.ts`, `lib/session.ts`, `lib/words.ts`, `lib/folders.ts`, `lib/seed.ts`, `lib/backup.ts`, `lib/text.ts` (accent folding, normalization, duplicate detection) |
+| Domain/data | `lib/types.ts`, `lib/db.ts` (shared, edit carefully), `lib/scheduler.ts`, `lib/session.ts`, `lib/words.ts`, `lib/folders.ts`, `lib/seed.ts`, `lib/backup.ts`, `lib/text.ts` (accent folding, normalization, duplicate detection). Their Dexie-free parts live in `lib/core/*` and are re-exported. |
 | Sync/auth | `lib/supabase/{client,server}.ts`, `lib/sync.ts`, `proxy.ts`, `supabase/migrations/*`, `app/login/*`, `app/api/cron/ping/route.ts`, `vercel.json`, `.env.example`, `components/auth/*` |
 | UI kit + shell | `components/ui/*` (Button, Chip, SlangMeter, Sheet, Toggle, Segmented, Snackbar, Kbd, Icon set, AppMark, TabBar, Header), `app/(app)/layout.tsx`, `components/providers/*` (theme, db init, sync loop mount), `components/shell/*` (desktop sidebar/rail, global keys, «Клавиши», word drag-and-drop), `lib/use-media.ts`, `lib/key-names.ts` |
 | AI core | `lib/ai/{schemas,prompts,model,auth,rate-limit,enrich}.ts`, `app/api/ai/{suggest,extract,classify,enrich}/route.ts`, `scripts/build-lexique.*`, `public/lexique/*`, `lib/lexique.ts` |
@@ -70,6 +71,7 @@ If `NEXT_PUBLIC_SUPABASE_URL` is unset, the app runs fully local: there is no lo
 | Library screens | `app/(app)/library/page.tsx`, `app/(app)/library/[id]/page.tsx`, `components/library/*` (tiles, folder list, word detail sheet, sort plan sheet, phone filter: `phone-filter.ts` + `LibraryFilterSheet.tsx`, «Расформировать»: `DisbandSheet.tsx` + `runDisband` in `lib/reorg.ts`), `lib/reorg.ts` |
 | Add flow | `components/add/*` (QuickAddSheet, suggestion lists, filled form, duplicate/offline states), `lib/use-suggest.ts` |
 | Import flow | `app/(app)/import/page.tsx`, `components/import/*`, `lib/image-prep.ts`, `lib/use-extract.ts` |
+| Connector (Claude, remote MCP) | `app/api/mcp/[key]/route.ts`, `lib/mcp/{config,repo,tools,study-day}.ts`, `lib/core/*` (pure helpers shared with the app: text, folders, words, row mapping), `claude/skills/kartochki/SKILL.md`, `docs/CONNECTOR.md`. Server code never imports `lib/db.ts`; all Supabase access goes through `lib/mcp/repo.ts`, which filters every query on `MCP_USER_ID`. |
 
 ## Testing
 - Vitest unit tests sit next to the code as `*.test.ts`.

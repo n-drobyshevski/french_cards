@@ -10,11 +10,14 @@
 import { liveQuery, type Subscription } from "dexie";
 import { useSyncExternalStore } from "react";
 import { isAuthRetryableFetchError, type SupabaseClient } from "@supabase/supabase-js";
+import { fromRemoteRow, toRemoteRow, type Row } from "./core/rows";
 import { db as defaultDb, nowIso, type KartochkiDB, type Outbox } from "./db";
 import { isSyncTable, skipOutboxFor } from "./outbox";
 import { getSupabaseBrowserClient } from "./supabase/client";
 import { isSupabaseConfigured } from "./supabase/config";
 import { DEFAULT_SETTINGS, SYNC_TABLES, type Settings, type SyncTable } from "./types";
+
+export { fromRemoteRow, REMOTE_COLUMNS, toRemoteRow } from "./core/rows";
 
 export const PUSH_BATCH = 200;
 export const PULL_PAGE = 500;
@@ -24,37 +27,6 @@ export const WRITE_DEBOUNCE_MS = 3_000;
 const PERIODIC_MS = 5 * 60_000;
 const RETRY_BASE_MS = 15_000;
 const RETRY_MAX_MS = 5 * 60_000;
-
-type Row = Record<string, unknown> & { id: string; updated_at: string };
-
-/** Columns stored in Supabase, per table. Local-only fields never leave the device. */
-export const REMOTE_COLUMNS: Record<SyncTable, readonly string[]> = {
-  folders: ["id", "slug", "name", "description", "color", "created_by", "locked", "sort", "updated_at", "deleted_at"],
-  words: [
-    "id", "fr", "ru", "note", "example_fr", "example_ru", "extra_examples", "pos", "gender", "slang_level", "verlan", "tags",
-    "folder_id", "folder_source", "folder_confidence", "source", "both_directions", "created_at", "updated_at", "deleted_at",
-  ],
-  review_state: [
-    "id", "word_id", "direction", "due", "stability", "difficulty", "elapsed_days", "scheduled_days",
-    "learning_steps", "reps", "lapses", "state", "last_review", "updated_at", "deleted_at",
-  ],
-  review_log: [
-    "id", "word_id", "direction", "rating", "state", "due", "stability", "difficulty", "elapsed_days",
-    "scheduled_days", "review", "prev", "updated_at", "deleted_at",
-  ],
-  reorg_runs: ["id", "created_at", "applied_at", "moves", "created_folders", "updated_at", "deleted_at"],
-  review_sets: ["id", "name", "folders", "statuses", "slang", "added", "mode", "created_at", "updated_at", "deleted_at"],
-};
-
-/** Postgres returns `2026-10-21T08:00:00.123+00:00`; locally every timestamp is `toISOString()`. */
-const TIMESTAMP_COLUMNS: Record<SyncTable, readonly string[]> = {
-  folders: ["updated_at", "deleted_at"],
-  words: ["created_at", "updated_at", "deleted_at"],
-  review_state: ["due", "last_review", "updated_at", "deleted_at"],
-  review_log: ["due", "review", "updated_at", "deleted_at"],
-  reorg_runs: ["created_at", "applied_at", "updated_at", "deleted_at"],
-  review_sets: ["created_at", "updated_at", "deleted_at"],
-};
 
 // ---------------------------------------------------------------------------------------------
 // Row mapping and last-write-wins
@@ -68,31 +40,6 @@ const toMs = (iso: string | null | undefined): number => {
 export function remoteWins(remoteUpdatedAt: string, localUpdatedAt: string | null | undefined): boolean {
   if (localUpdatedAt == null) return true;
   return toMs(remoteUpdatedAt) > toMs(localUpdatedAt);
-}
-
-export function toRemoteRow(table: SyncTable, row: object): Record<string, unknown> {
-  const source = row as Record<string, unknown>;
-  const out: Record<string, unknown> = {};
-  for (const column of REMOTE_COLUMNS[table]) {
-    if (source[column] !== undefined) out[column] = source[column];
-  }
-  return out;
-}
-
-export function fromRemoteRow(table: SyncTable, row: object): Row {
-  const source = row as Record<string, unknown>;
-  const out: Record<string, unknown> = {};
-  for (const column of REMOTE_COLUMNS[table]) {
-    if (column in source) out[column] = source[column];
-  }
-  for (const column of TIMESTAMP_COLUMNS[table]) {
-    const value = out[column];
-    if (typeof value === "string") {
-      const ms = Date.parse(value);
-      if (!Number.isNaN(ms)) out[column] = new Date(ms).toISOString();
-    }
-  }
-  return out as Row;
 }
 
 /**
@@ -319,15 +266,33 @@ export interface SyncStatus {
   lastSyncAt: string | null;
   /** Short technical reason for `error` (not user copy). */
   error: string | null;
+  /** What failed last, for the line's second row («Сервер не ответил · 14:05»); null after a good cycle. */
+  errorKind: "server" | "auth" | "rejected" | null;
+  /** Client time of that failure. */
+  errorAt: string | null;
 }
 
-const SERVER_STATUS: SyncStatus = { state: "disabled", lastSyncAt: null, error: null };
-let status: SyncStatus = { state: isSupabaseConfigured() ? "idle" : "disabled", lastSyncAt: null, error: null };
+const SERVER_STATUS: SyncStatus = { state: "disabled", lastSyncAt: null, error: null, errorKind: null, errorAt: null };
+let status: SyncStatus = {
+  state: isSupabaseConfigured() ? "idle" : "disabled",
+  lastSyncAt: null,
+  error: null,
+  errorKind: null,
+  errorAt: null,
+};
 const listeners = new Set<() => void>();
 
 function setStatus(patch: Partial<SyncStatus>): void {
   const next = { ...status, ...patch };
-  if (next.state === status.state && next.lastSyncAt === status.lastSyncAt && next.error === status.error) return;
+  if (
+    next.state === status.state &&
+    next.lastSyncAt === status.lastSyncAt &&
+    next.error === status.error &&
+    next.errorKind === status.errorKind &&
+    next.errorAt === status.errorAt
+  ) {
+    return;
+  }
   status = next;
   for (const listener of listeners) listener();
 }
@@ -395,12 +360,22 @@ async function cycle(): Promise<SyncResult> {
     const result = await runSyncCycle(client);
     failures = 0;
     const state: SyncState = result.rejected > 0 ? "error" : "idle";
-    setStatus({ state, lastSyncAt: result.lastSyncAt, error: result.lastRejection });
+    setStatus({
+      state,
+      lastSyncAt: result.lastSyncAt,
+      error: result.lastRejection,
+      errorKind: state === "error" ? "rejected" : null,
+      errorAt: state === "error" ? nowIso() : null,
+    });
     return { ok: result.rejected === 0, state, pushed: result.pushed, pulled: result.pulled, rejected: result.rejected };
   } catch (err) {
     const offline = isOffline() || (err instanceof SyncAbort && err.kind === "offline");
     const state: SyncState = offline ? "offline" : "error";
-    setStatus({ state, error: err instanceof Error ? err.message : String(err) });
+    setStatus({
+      state,
+      error: err instanceof Error ? err.message : String(err),
+      ...(offline ? {} : { errorKind: err instanceof SyncAbort && err.kind === "auth" ? "auth" : "server", errorAt: nowIso() }),
+    });
     scheduleRetry();
     return { ok: false, state, ...empty };
   }

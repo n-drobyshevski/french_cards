@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { nextDirection, parseReviewFilter, toSessionFilter } from "./filter";
 import {
   callNumber,
+  formatDateStamp,
   formatPercent,
   formatProgress,
   headwordStep,
@@ -10,6 +11,13 @@ import {
   progressRatio,
   queueSummary,
 } from "./format";
+
+describe("formatDateStamp", () => {
+  it("prints day and month, two digits each", () => {
+    expect(formatDateStamp(new Date(2026, 9, 22))).toBe("22.10");
+    expect(formatDateStamp(new Date(2026, 0, 5))).toBe("05.01");
+  });
+});
 
 describe("pluralRu", () => {
   const forms = ["слово", "слова", "слов"] as const;

@@ -321,7 +321,7 @@ export function DialogCloseButton({ className, label = "Закрыть" }: { cla
         title={`${label} (Esc)`}
         aria-keyshortcuts="Escape"
         className={cx(
-          "inline-flex size-8 shrink-0 items-center justify-center rounded-[4px] bg-transparent text-ink hoverable:bg-hover-surface",
+          "hover-fade inline-flex size-8 shrink-0 items-center justify-center rounded-[4px] bg-transparent text-ink hoverable:bg-hover-surface",
           className,
         )}
       >

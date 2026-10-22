@@ -21,7 +21,7 @@ test("section nav with scroll-spy, form in a 640 column", async ({ page }) => {
   await expect(nav.getByRole("link", { name: "Повторение" })).toHaveAttribute("aria-current", "true");
   // No phone header (back arrow) and no phone-only rows on desktop.
   await expect(page.getByRole("button", { name: "Назад" })).toHaveCount(0);
-  await expect(page.getByText("Вибрация при свайпах")).toHaveCount(0);
+  await expect(page.getByText("Вибрация", { exact: true })).toHaveCount(0);
 
   const heading = page.getByRole("heading", { level: 2, name: "Повторение" });
   const box = await heading.boundingBox();

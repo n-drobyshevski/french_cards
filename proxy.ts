@@ -1,7 +1,8 @@
 // Sends stray hosts to the production domain and stray reset codes to /auth/confirm, refreshes
 // Supabase session cookies on navigation and guards /api/ai/*. Signed-out page visits are not
 // redirected here: the app shell is offline-first and AuthGate decides on the client, where a
-// cached session can keep working without a network.
+// cached session can keep working without a network. /api/mcp/* (the Claude connector) is not
+// matched: it checks its own secret, and a canonical-host 308 would break its POSTs.
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { canonicalRedirect, strayAuthCodeRedirect } from "@/lib/proxy-redirects";
@@ -77,6 +78,6 @@ export async function proxy(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|serwist/|sw\\.js|swe-worker|manifest\\.webmanifest|favicon\\.ico|icons/|lexique/|api/cron/|.*\\.(?:svg|png|jpe?g|gif|webp|avif|ico|txt|xml|json|webmanifest|woff2?|js|css|map)$).*)",
+    "/((?!_next/static|_next/image|serwist/|sw\\.js|swe-worker|manifest\\.webmanifest|favicon\\.ico|icons/|lexique/|api/cron/|api/mcp/|.*\\.(?:svg|png|jpe?g|gif|webp|avif|ico|txt|xml|json|webmanifest|woff2?|js|css|map)$).*)",
   ],
 };

@@ -4,12 +4,13 @@ import { Icon } from "@/components/ui/Icons";
 import { Kbd } from "@/components/ui/Kbd";
 import { cx } from "@/components/ui/cx";
 import { useFormatKeys } from "@/lib/key-names";
+import { useOnline } from "@/lib/use-online";
 import { useClipboardPaste, useImageDropAndPaste } from "./clipboard";
 import { DeskAlert, deskButton, DeskTag } from "./desk";
-import type { PickViewProps } from "./PickView";
+import { OFFLINE_REASON, type PickViewProps } from "./PickView";
 import { IMPORT_FOOTNOTE } from "./ProcessingView";
 
-/** Page title + intro shared by the desktop pick and status views. */
+/** Page title + intro of the desktop pick page. */
 export function DeskImportHeading() {
   return (
     <>
@@ -45,6 +46,7 @@ export function DeskPickView({ onChoose, onFiles, error }: PickViewProps) {
   const dragging = useImageDropAndPaste(onFiles);
   const clipboard = useClipboardPaste(onFiles);
   const keys = useFormatKeys();
+  const online = useOnline();
   const message = error ?? clipboard.error;
 
   return (
@@ -81,15 +83,22 @@ export function DeskPickView({ onChoose, onFiles, error }: PickViewProps) {
               <Kbd>{keys("Mod+V")}</Kbd>
             </p>
             <div className="mt-6 flex items-center gap-2">
-              <button type="button" onClick={onChoose} className={deskButton("primary")}>
-                Выбрать скриншот
+              {/* Offline is decided before the wait (B4): «Нужна сеть» with the reason, muted, not an error. */}
+              <button
+                type="button"
+                onClick={onChoose}
+                disabled={!online}
+                className={deskButton("primary", "disabled:border-rule disabled:bg-transparent disabled:text-boundary")}
+              >
+                {online ? "Выбрать скриншот" : "Нужна сеть"}
               </button>
               {clipboard.supported && (
-                <button type="button" onClick={() => void clipboard.paste()} className={deskButton("secondary")}>
+                <button type="button" onClick={() => void clipboard.paste()} disabled={!online} className={deskButton("secondary")}>
                   Вставить из буфера
                 </button>
               )}
             </div>
+            {!online && <p className="m-0 mt-3 max-w-[52ch] text-[13px] leading-5 text-muted">{OFFLINE_REASON}</p>}
             {message && (
               <div className="mt-4 max-w-[52ch]">
                 <DeskAlert>{message}</DeskAlert>

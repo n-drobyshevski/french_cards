@@ -6,7 +6,7 @@ import { GRADE_LABELS } from "./format";
 /**
  * Per grade: border/text at rest (phones keep the hairline on «Сложно»; desktop uses the 3:1
  * interactive boundary), the 2px hover border (an inset ring, so nothing moves), and the ink-filled
- * flash for a press or a key (DESKTOP-SPEC §3).
+ * flash for a press or a key (DESKTOP-SPEC §3; on phones «Сложно» fills with ink, MOTION-SPEC R6).
  */
 const TONES: Record<Rating, { box: string; sub: string; desk: string }> = {
   1: {
@@ -17,7 +17,7 @@ const TONES: Record<Rating, { box: string; sub: string; desk: string }> = {
   2: {
     box: "border-rule text-ink md:border-boundary",
     sub: "text-muted",
-    desk: "hoverable:ring-boundary md:active:bg-boundary data-flash:bg-boundary",
+    desk: "hoverable:ring-boundary md:active:bg-boundary max-md:data-flash:border-ink max-md:data-flash:bg-ink md:data-flash:bg-boundary",
   },
   3: {
     box: "border-good text-good",
@@ -32,7 +32,10 @@ export interface GradeBarProps {
   /** Sub-labels under each grade («<1 мин», «6 мин», «1 д»); omitted in practice. */
   intervals?: Partial<Record<Rating, string>>;
   onGrade: (rating: Rating) => void;
-  /** The grade just chosen with a key: its button flashes ink for 120ms (desktop). */
+  /**
+   * The grade just chosen (button or key): its button fills with its tone in --dur-instant and holds
+   * --dur-flash before the card moves on (MOTION-SPEC R6, D1).
+   */
   flash?: Rating | null;
   disabled?: boolean;
   className?: string;
@@ -74,8 +77,8 @@ export function GradeBar({ buttons, intervals, onGrade, flash, disabled, classNa
             }
             data-flash={flash === rating ? "" : undefined}
             className={cx(
-              "group relative flex h-14 flex-col items-center justify-center gap-0.5 rounded-btn border bg-surface active:bg-surface-2 disabled:opacity-40",
-              "md:ring-inset hoverable:ring-1 md:active:text-on-ink data-flash:text-on-ink",
+              "press group relative flex h-14 flex-col items-center justify-center gap-0.5 rounded-btn border bg-surface active:bg-surface-2 disabled:opacity-40",
+              "md:ring-inset hoverable:ring-1 md:active:text-on-ink data-flash:text-on-ink data-flash:duration-(--dur-instant)",
               TONES[rating].box,
               TONES[rating].desk,
             )}

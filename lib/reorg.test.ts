@@ -13,6 +13,7 @@ import {
   effectiveMoves,
   getUndoableRun,
   INBOX_KEY,
+  keepGroupOrder,
   loadReorgSnapshot,
   newTargetKey,
   pickableTargets,
@@ -27,6 +28,8 @@ import {
   setTargetEnabled,
   STAY_KEY,
   undoReorgRun,
+  type PlanGroup,
+  type ReorgPlan,
   type ReorgSnapshot,
 } from "./reorg";
 import type { Folder, Word } from "./types";
@@ -457,6 +460,48 @@ describe("network", () => {
     expect(fractions[3]).toBe(1);
   });
 
+  it("hands out the groups so far after every assign batch (onGroups)", async () => {
+    const f = await fixture();
+    await addWords(
+      Array.from({ length: 150 }, (_, i) => ({ fr: `mot ${i}`, ru: `слово ${i}` })),
+      T0,
+    );
+    const partials: ReorgPlan[] = [];
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as TaxonomyRequest | AssignRequest;
+      if (body.mode === "taxonomy") return json(taxonomyFor(f, [transport(f)]));
+      return json({
+        assignments: body.words.map((w) => ({
+          id: w.id,
+          folder: ["la caisse", "le tromé", "la bécane"].includes(w.fr) ? "transport" : w.fr.startsWith("mot ") ? f.money.slug : "INBOX",
+          confidence: "high",
+        })),
+      });
+    }) as unknown as typeof fetch;
+
+    const plan = await runReorg({ fetchImpl, now: T1, model: "fast", onGroups: (p) => partials.push(p) });
+
+    expect(partials).toHaveLength(2);
+    // Each partial holds only the words answered so far; the last one is the final plan.
+    expect(partials[0].moves.length).toBeLessThan(partials[1].moves.length);
+    expect(partials[1]).toEqual(plan);
+    expect(planSummary(plan)).toMatchObject({ total: 153, newFolders: 1 });
+  });
+
+  it("keepGroupOrder: groups keep the order they first appeared in", () => {
+    const group = (key: string, n: number) =>
+      ({ target: { key }, moves: Array.from({ length: n }), enabled: true, tooSmall: false }) as unknown as PlanGroup;
+    const first = keepGroupOrder([group("a", 2), group("b", 1)], []);
+    expect(first.groups.map((g) => g.target.key)).toEqual(["a", "b"]);
+    expect(first.seen).toEqual(["a", "b"]);
+    // «b» outgrew «a» and «c» is new: the known ones stay put, the new one goes last.
+    const second = keepGroupOrder([group("b", 5), group("c", 3), group("a", 2)], first.seen);
+    expect(second.groups.map((g) => g.target.key)).toEqual(["a", "b", "c"]);
+    expect(second.seen).toEqual(["a", "b", "c"]);
+    // Nothing new: the same order array comes back.
+    expect(keepGroupOrder([group("a", 2)], second.seen).seen).toBe(second.seen);
+  });
+
   it("reports nothing when no word can move", async () => {
     const f = await fixture();
     const snap: ReorgSnapshot = { folders: [f.money], words: [(await db.words.get(f.words["la thune"].id))!] };
@@ -491,6 +536,15 @@ describe("network", () => {
     const body = { mode: "taxonomy", words: [], folders: [] } as unknown as TaxonomyRequest;
     await expect(postClassify(body, { fetchImpl, sleep: async (ms) => void sleeps.push(ms) })).resolves.toEqual({ ok: 1 });
     expect(sleeps).toEqual([2000]);
+
+    // The wait is announced (no silent retries), and only one automatic retry is made.
+    const waits: number[] = [];
+    const always429 = vi.fn(async () => json({ error: "rate_limited" }, 429, { "Retry-After": "12" })) as unknown as typeof fetch;
+    await expect(
+      postClassify(body, { fetchImpl: always429, sleep: async () => undefined, onRateLimit: (s) => waits.push(s) }),
+    ).rejects.toMatchObject({ code: "rate_limited" });
+    expect(waits).toEqual([12]);
+    expect(always429).toHaveBeenCalledTimes(2);
 
     const fail = (status: number, error: string) => (async () => json({ error }, status)) as unknown as typeof fetch;
     await expect(postClassify(body, { fetchImpl: fail(401, "unauthenticated") })).rejects.toMatchObject({ code: "auth" });
