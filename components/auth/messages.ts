@@ -5,6 +5,7 @@ import { isAuthApiError, isAuthError, isAuthRetryableFetchError } from "@supabas
 export type AuthPhase = "signin" | "signup" | "reset" | "update";
 
 export const NOT_ALLOWED = "С этого адреса войти нельзя.";
+export const EXISTING_ACCOUNT = "Аккаунт с этой почтой уже есть. Войдите или нажмите «Забыли пароль?».";
 export const MIN_PASSWORD_LENGTH = 8;
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -17,7 +18,7 @@ export function authErrorMessage(error: unknown, phase: AuthPhase, online = true
   if (code === "signup_disabled" || code === "email_address_not_authorized" || code === "email_provider_disabled") return NOT_ALLOWED;
   if (code === "invalid_credentials") return "Неверная почта или пароль.";
   if (code === "email_not_confirmed") return "Почта не подтверждена. Откройте ссылку из письма и войдите снова.";
-  if (code === "user_already_exists" || code === "email_exists") return "Аккаунт уже есть. Войдите с паролем.";
+  if (code === "user_already_exists" || code === "email_exists") return EXISTING_ACCOUNT;
   if (code === "weak_password") return `Пароль слишком простой. Нужно не меньше ${MIN_PASSWORD_LENGTH} символов, лучше с цифрами.`;
   if (code === "same_password") return "Новый пароль совпадает со старым.";
   if (code === "email_address_invalid" || code === "validation_failed") return "Проверьте адрес почты.";
@@ -47,4 +48,12 @@ export function newPasswordProblem(password: string, repeat: string): string | n
 export function safeNextPath(next: string | null | undefined, fallback = "/"): string {
   if (!next || !next.startsWith("/") || next.startsWith("//") || next.startsWith("/\\")) return fallback;
   return next;
+}
+
+const RECOVERY_WINDOW_MS = 60 * 60_000;
+
+/** True when a session came from a password-reset email sent within the last hour. */
+export function isRecoverySession(user: { recovery_sent_at?: string } | null | undefined, now = Date.now()): boolean {
+  const sentAt = user?.recovery_sent_at ? Date.parse(user.recovery_sent_at) : NaN;
+  return Number.isFinite(sentAt) && now - sentAt >= 0 && now - sentAt < RECOVERY_WINDOW_MS;
 }

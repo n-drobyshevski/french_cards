@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured, normalizeEmail, publicAllowedEmail } from "@/lib/supabase/config";
-import { authErrorMessage, EMAIL_RE, MIN_PASSWORD_LENGTH, NOT_ALLOWED, newPasswordProblem } from "./messages";
+import { authErrorMessage, EMAIL_RE, EXISTING_ACCOUNT, MIN_PASSWORD_LENGTH, NOT_ALLOWED, newPasswordProblem } from "./messages";
 import { PasswordField } from "./PasswordField";
 import { checkSession, passesEmailHint, rememberSignedIn } from "./session";
 
@@ -137,6 +137,10 @@ export function LoginScreen() {
         if (signUpError) throw signUpError;
         if (data.session) {
           await finishSignIn(data.session.user.email);
+        } else if (data.user && (data.user.identities?.length ?? 0) === 0) {
+          // Supabase answers a sign-up for an existing email with a user without identities.
+          switchMode("signin");
+          setError(EXISTING_ACCOUNT);
         } else {
           switchMode("signin");
           setNotice("Аккаунт создан. Подтвердите почту по ссылке из письма, затем войдите.");

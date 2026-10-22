@@ -1,11 +1,18 @@
-// Refreshes Supabase session cookies on navigation and guards /api/ai/*.
-// Page routes are not redirected here: the app shell is offline-first and AuthGate
-// decides on the client, where a cached session can keep working without a network.
+// Sends stray hosts to the production domain and stray reset codes to /auth/confirm, refreshes
+// Supabase session cookies on navigation and guards /api/ai/*. Signed-out page visits are not
+// redirected here: the app shell is offline-first and AuthGate decides on the client, where a
+// cached session can keep working without a network.
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { canonicalRedirect, strayAuthCodeRedirect } from "@/lib/proxy-redirects";
 import { decideAiAccess, getSupabaseConfig } from "@/lib/supabase/config";
 
 export async function proxy(request: NextRequest) {
+  const canonical = canonicalRedirect(request);
+  if (canonical) return NextResponse.redirect(canonical, 308);
+  const strayCode = getSupabaseConfig() ? strayAuthCodeRedirect(request) : null;
+  if (strayCode) return NextResponse.redirect(strayCode);
+
   const isAi = request.nextUrl.pathname.startsWith("/api/ai/");
   const supabaseConfig = getSupabaseConfig();
 
