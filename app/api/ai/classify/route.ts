@@ -4,7 +4,7 @@
 import { generateText, Output } from "ai";
 import { guardAiRequest, jsonError, limitAiRequest, NO_STORE } from "@/lib/ai/auth";
 import { finalizeAssignments, finalizeTaxonomy, refFor } from "@/lib/ai/classify";
-import { cachedInstructions, modelFor, providerOptions } from "@/lib/ai/model";
+import { cachedInstructions, modelFor, modelIdFor, providerOptionsFor } from "@/lib/ai/model";
 import { ASSIGN_SYSTEM, assignUserPrompt, TAXONOMY_SYSTEM, taxonomyUserPrompt } from "@/lib/ai/prompts";
 import {
   buildAssignmentSchema,
@@ -42,7 +42,7 @@ export async function POST(req: Request): Promise<Response> {
           words: input.words.map((w, i) => ({ ref: refFor(i), fr: w.fr, ru: w.ru, folder: w.folder ?? null })),
         }),
         output: Output.object({ schema: buildTaxonomySchema(input.folders.map((f) => f.slug)), name: "taxonomy" }),
-        providerOptions,
+        providerOptions: providerOptionsFor(modelIdFor("classify", input.model)),
         maxOutputTokens: 6000,
         abortSignal: req.signal,
       });
@@ -61,7 +61,7 @@ export async function POST(req: Request): Promise<Response> {
         words: input.words.map((w, i) => ({ ref: refFor(i), fr: w.fr, ru: w.ru, note: w.note ?? null })),
       }),
       output: Output.object({ schema: buildAssignmentSchema(slugs), name: "assignments" }),
-      providerOptions,
+      providerOptions: providerOptionsFor(modelIdFor("classify", input.model)),
       maxOutputTokens: 8000,
       abortSignal: req.signal,
     });

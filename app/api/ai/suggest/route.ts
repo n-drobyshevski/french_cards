@@ -5,7 +5,7 @@
 // then {type:"done",count} or {type:"error",error}. See lib/ai/schemas.ts for the types.
 import { Output, streamText } from "ai";
 import { guardAiRequest, jsonError, limitAiRequest } from "@/lib/ai/auth";
-import { cachedInstructions, modelFor, providerOptions } from "@/lib/ai/model";
+import { cachedInstructions, modelFor, modelIdFor, providerOptionsFor } from "@/lib/ai/model";
 import { ndjsonResponse } from "@/lib/ai/ndjson";
 import { dedupeKey, detectDirection, normalizeSuggestion } from "@/lib/ai/normalize";
 import { SUGGEST_SYSTEM, suggestUserPrompt } from "@/lib/ai/prompts";
@@ -42,7 +42,7 @@ export async function POST(req: Request): Promise<Response> {
     instructions: cachedInstructions(SUGGEST_SYSTEM),
     prompt: suggestUserPrompt({ q, direction, folders, max, register, notes }),
     output: Output.array({ element: buildSuggestionSchema(folders.map((f) => f.slug)), name: "suggestions" }),
-    providerOptions,
+    providerOptions: providerOptionsFor(modelIdFor("suggest", model)),
     maxOutputTokens: 1500,
     abortSignal,
     onError({ error }) {
