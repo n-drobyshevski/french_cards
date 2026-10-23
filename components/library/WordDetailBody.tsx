@@ -783,12 +783,14 @@ function SheetField({
 
 /**
  * «Вариант» under «Русский»: the translation proposed for the French as it is now, with «Подставить».
- * Its row is kept while proposals are on, so the form does not move when one arrives; a request
- * that takes a while shows a static bar (MOTION-SPEC §3.1), never «думает…».
+ * The row shows only while there is something in it (a proposal, or a request on its way, a static
+ * bar per MOTION-SPEC §3.1, never «думает…»), so an untouched form has no gap above «Уровень сленга».
  */
 function ProposalLine({ proposal, onUse }: { proposal: TranslationProposal; onUse: (ru: string) => void }) {
-  if (!proposal.enabled) return null;
   const { ru } = proposal;
+  if (!proposal.enabled) return null;
+  // Empty, the live region stays (zero height) so a proposal that arrives is still announced.
+  if (!ru && !proposal.pending) return <div role="status" />;
   return (
     <div role="status" className="mt-2 flex min-h-8 items-center gap-3">
       {ru ? (
