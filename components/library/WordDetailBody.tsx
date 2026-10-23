@@ -746,13 +746,16 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
   );
 }
 
+/** A row of the word's actions (K1): phone sheet and touch panes 52 px, the desktop pane 40 px. */
 function SheetAction({
+  size = "sheet",
   icon,
   caption,
   danger,
   onClick,
   children,
 }: {
+  size?: "sheet" | "pane";
   icon: IconName;
   caption?: string;
   danger?: boolean;
@@ -764,13 +767,14 @@ function SheetAction({
       type="button"
       onClick={onClick}
       className={cx(
-        "flex h-[52px] items-center gap-3.5 border-b border-rule bg-transparent p-0 text-left text-[16px] hoverable:bg-hover active:bg-hover",
+        "flex items-center border-b border-rule bg-transparent p-0 text-left hoverable:bg-hover active:bg-hover",
+        size === "sheet" ? "h-[52px] gap-3.5 text-[16px]" : "h-10 gap-3 text-[14px]",
         danger ? "text-again" : "text-ink",
       )}
     >
-      <Icon name={icon} size={20} strokeWidth={1.5} />
+      <Icon name={icon} size={size === "sheet" ? 20 : 16} strokeWidth={1.5} />
       <span className="min-w-0 flex-1">{children}</span>
-      {caption && <span className="text-[13px] text-muted">{caption}</span>}
+      {caption && <span className={cx("text-muted", size === "sheet" ? "text-[13px]" : "text-[12px]")}>{caption}</span>}
     </button>
   );
 }
@@ -1453,21 +1457,19 @@ function PaneContent({
         </p>
       )}
 
-      {/* Actions */}
-      <div className="mt-5 flex items-center gap-5">
-        <button type="button" onClick={() => void actions.reset()} className={paneAction(coarse)}>
+      {/* Actions (K1, as on phones) */}
+      <div className="mt-5 flex flex-col border-t border-rule">
+        <SheetAction size={coarse ? "sheet" : "pane"} icon="reset" caption="начать заново" onClick={() => void actions.reset()}>
           Сбросить прогресс
-        </button>
+        </SheetAction>
         {!w.muted && (
-          <button type="button" onClick={() => void actions.setMuted(true)} className={paneAction(coarse)}>
-            <Icon name="mute" size={14} />
+          <SheetAction size={coarse ? "sheet" : "pane"} icon="mute" caption="не повторять" onClick={() => void actions.setMuted(true)}>
             На паузу
-          </button>
+          </SheetAction>
         )}
-        <button type="button" onClick={() => void actions.remove()} className={paneAction(coarse)}>
-          <Icon name="trash" size={14} />
+        <SheetAction size={coarse ? "sheet" : "pane"} icon="trash" danger onClick={() => void actions.remove()}>
           Удалить слово
-        </button>
+        </SheetAction>
       </div>
 
       <p className="m-0 mt-6 font-mono text-[11px] text-muted tabular-nums">
@@ -1503,12 +1505,6 @@ function SlangHints({ word }: { word: Pick<Word, "slang_level" | "verlan"> }) {
     </>
   );
 }
-
-const paneAction = (coarse: boolean) =>
-  cx(
-    "-mx-1 inline-flex items-center gap-2 rounded-[4px] bg-transparent px-1 text-[13px] font-medium text-ink hoverable:bg-hover",
-    coarse ? "h-11" : "h-8",
-  );
 
 function shortDate(iso: string): string {
   const d = new Date(iso);
