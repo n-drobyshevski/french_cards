@@ -1,6 +1,6 @@
 // Desktop keys of the exercise player (DESKTOP-SPEC §4 «Упражнения», D-Exercise-Player): 1–4 pick an
-// option (the tap equivalent: it answers at once), 0 «Не знаю», Enter «Дальше» (on a right answer it
-// skips the 1 s hairline; on a new word's card it is «Понятно»), Esc «Выйти» (the run is saved).
+// option (the tap equivalent: it answers at once), 0 «Не знаю», Enter «Дальше» (on a new word's card
+// it is «Понятно»), Esc «Выйти» (the run is saved).
 // On the done screen: C «Попросить следующий набор» (single-letter keys only), Esc «Готово».
 // Bound by `code`, so they work on the Russian layout. Pure mapping; ExercisePlayer wires it up and
 // applies the typing / open-layer / input-guard rules shared with the review screen.

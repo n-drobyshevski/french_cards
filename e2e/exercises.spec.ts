@@ -24,7 +24,6 @@ async function goOn(page: Page) {
   await page.waitForTimeout(300);
   await next(page).click();
 }
-const timer = (page: Page) => page.getByRole("button", { name: "Дальше через 1 с · нажмите, чтобы остаться" });
 const tile = (page: Page, title: string) => page.getByRole("link", { name: new RegExp(`^${title}:`) });
 /** Text the phone and desktop layouts both carry (one of them hidden). */
 const shown = (page: Page, text: string) => page.getByText(text, { exact: true }).filter({ visible: true });
@@ -77,7 +76,7 @@ test("the list: tiles with «Новый», the «Упражнения» tab is a
   await expect(shown(page, "Упражнение · не влияет на расписание")).toBeVisible();
 });
 
-test("a round: wrong → «ПОВТОР», right auto-advances, a tap holds it, «Не знаю», the new word's intro, the receipt", async ({ page }) => {
+test("a round: wrong → «ПОВТОР», right waits for «Дальше» too, «Не знаю», the new word's intro, the receipt", async ({ page }) => {
   await startSet(page);
   await expect(shown(page, "01 / 05")).toBeVisible();
 
@@ -91,25 +90,23 @@ test("a round: wrong → «ПОВТОР», right auto-advances, a tap holds it, 
   await expect(exerciseCard(page)).toContainText("les flics");
   await next(page).click();
 
-  // q2 cloze, right: ВЕРНО, the 1 s timer line, then the next card by itself.
+  // q2 cloze, right: ВЕРНО, and the card stays until «Дальше» (nothing moves on by itself).
   await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "cloze");
   await expect(shown(page, "02 / 05")).toBeVisible();
   await expect(shown(page, "+1")).toBeVisible();
   await optionTile(page, "vas-y").click();
   await expect(stamp(page, "right")).toHaveText("ВЕРНО");
-  await expect(timer(page)).toBeVisible();
-  await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "register", { timeout: 4000 });
+  await expect(next(page)).toBeVisible();
+  await expect(page.getByText(/Дальше через/)).toHaveCount(0);
+  await page.waitForTimeout(1600);
+  await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "cloze");
+  await next(page).click();
 
-  // q3 register, right, then a tap holds the advance: «Дальше» takes the timer's place.
+  // q3 register, right.
   await expect(exerciseCard(page)).toContainText("se casser");
   await page.locator('button[data-option="3"]').click(); // arg. (level 2)
   await expect(stamp(page, "right")).toBeVisible();
-  await timer(page).click();
-  await expect(timer(page)).toHaveCount(0);
-  await expect(next(page)).toBeVisible();
-  await page.waitForTimeout(1600);
-  await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "register");
-  await next(page).click();
+  await goOn(page);
 
   // q4 pairs: «Не знаю» shows the answers and waits.
   await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "pairs");
@@ -123,6 +120,7 @@ test("a round: wrong → «ПОВТОР», right auto-advances, a tap holds it, 
   await expect(exerciseCard(page)).toContainText("Ошиблись раньше — ещё раз");
   await optionTile(page, "копы").click();
   await expect(stamp(page, "right")).toBeVisible();
+  await goOn(page);
 
   // The web word's intro card comes before its first question.
   const intro = page.getByRole("article", { name: "Новое слово" });
@@ -135,12 +133,14 @@ test("a round: wrong → «ПОВТОР», right auto-advances, a tap holds it, 
   await expect(exerciseCard(page)).toContainText("avoir la flemme");
   await optionTile(page, "лениться, неохота").click();
   await expect(stamp(page, "right")).toBeVisible();
+  await goOn(page);
 
   // The pairs board again, solved without a miss.
   await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "pairs", { timeout: 4000 });
   await expect(exerciseCard(page)).toContainText("ПОВТОР");
   await matchAllPairs(page);
   await expect(stamp(page, "right")).toBeVisible();
+  await goOn(page);
 
   // Done: the receipt, the misses, the new word.
   await expect(page.getByRole("heading", { level: 1, name: "Готово" })).toBeVisible({ timeout: 4000 });
@@ -183,8 +183,10 @@ test("a new word's question comes right after its intro card, even when a miss c
   await wrongOption(page, "копы").click();
   await goOn(page);
   await optionTile(page, "vas-y").click();
-  await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "register", { timeout: 4000 });
+  await goOn(page);
+  await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "register");
   await page.locator('button[data-option="3"]').click();
+  await goOn(page);
   const intro = page.getByRole("article", { name: "Новое слово" });
   await expect(intro).toBeVisible({ timeout: 4000 });
   // The card promises it: «вопрос — следующим».
@@ -239,7 +241,6 @@ test("reduced motion: a right answer waits for «Дальше»", async ({ page 
   await startSet(page);
   await optionTile(page, "копы").click();
   await expect(stamp(page, "right")).toBeVisible();
-  await expect(timer(page)).toHaveCount(0);
   await expect(next(page)).toBeVisible();
   await page.waitForTimeout(2000);
   await expect(exerciseCard(page)).toContainText("les flics");
@@ -250,7 +251,8 @@ test("reduced motion: a right answer waits for «Дальше»", async ({ page 
 test("× mid-round saves and leaves; «Продолжить» picks the run up", async ({ page }) => {
   await startSet(page);
   await optionTile(page, "копы").click();
-  await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "cloze", { timeout: 4000 });
+  await goOn(page);
+  await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "cloze");
 
   await page.getByRole("button", { name: "Выйти" }).click();
   await expect(page).toHaveURL(/\/exercises$/);
@@ -273,17 +275,21 @@ test("× mid-round saves and leaves; «Продолжить» picks the run up",
 test("× on the last card, once answered, finishes the run", async ({ page }) => {
   await startSet(page);
   await optionTile(page, "копы").click();
-  await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "cloze", { timeout: 4000 });
+  await goOn(page);
+  await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "cloze");
   await optionTile(page, "vas-y").click();
-  await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "register", { timeout: 4000 });
+  await goOn(page);
+  await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "register");
   await page.locator('button[data-option="3"]').click();
-  await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "pairs", { timeout: 4000 });
+  await goOn(page);
+  await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "pairs");
   await matchAllPairs(page);
-  await page.getByRole("button", { name: "Понятно" }).click({ timeout: 4000 });
+  await goOn(page);
+  await page.getByRole("button", { name: "Понятно" }).click();
   await expect(exerciseCard(page)).toContainText("avoir la flemme");
   await optionTile(page, "лениться, неохота").click();
   await expect(stamp(page, "right")).toBeVisible();
-  // Leave before the hairline runs out: every item is settled, so the run is finished on the way out.
+  // Leave without «Дальше»: every item is settled, so the run is finished on the way out.
   await page.getByRole("button", { name: "Выйти" }).click();
   await expect(page).toHaveURL(/\/exercises$/);
   await expect(tile(page, SLANG_SET.title)).toContainText("5/5");
@@ -333,7 +339,8 @@ test.describe("offline", () => {
     await tile(page, SLANG_SET.title).click();
     await expect(exerciseCard(page)).toContainText("les flics");
     await optionTile(page, "копы").click();
-    await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "cloze", { timeout: 4000 });
+    await goOn(page);
+    await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "cloze");
 
     await context.setOffline(true);
     try {

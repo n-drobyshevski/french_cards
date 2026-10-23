@@ -67,20 +67,18 @@ import {
   tileWord,
   type PairsState,
 } from "./player-state";
-import { useAutoAdvance } from "./use-auto-advance";
 
 /**
  * The player's motion (MOTION-SPEC §5.15), on the global tokens: the stamp lands (1.15 → 1 + fade),
  * the tapped tile flashes its tone, the card leaves left / the next enters from the right (24px +
- * fade; a fade only under reduced motion, via --motion-scale), the hairline drains, a pairs miss
- * flashes the again tone.
+ * fade; a fade only under reduced motion, via --motion-scale), a pairs miss flashes the again
+ * tone. Every answer, right or wrong, waits for «Дальше».
  */
 export const EXERCISE_CSS = `
 @keyframes ex-stamp { from { opacity: 0; scale: calc(1 + 0.15 * var(--motion-scale)); } }
 @keyframes ex-fill { 0% { opacity: 0; } 40% { opacity: 1; } to { opacity: 0; } }
 @keyframes ex-enter { from { opacity: 0; translate: calc(24px * var(--motion-scale)) 0; } }
 @keyframes ex-exit { to { opacity: 0; translate: calc(-24px * var(--motion-scale)) 0; } }
-@keyframes ex-drain { from { scale: 1 1; } to { scale: 0 1; } }
 @keyframes ex-miss { from { border-color: var(--again); color: var(--again); } }
 `;
 
@@ -106,9 +104,6 @@ const INTRO_HINTS = [
   ["Enter", "понятно"],
   ["Esc", "выйти"],
 ] as const;
-
-/** After «Дальше через 1 с» is held by a tap, a click landing on «Дальше» in the same gesture is not a second tap. */
-const HOLD_CLICK_MS = 350;
 
 interface Boot {
   set: ExerciseSet;
@@ -198,7 +193,6 @@ function PlayerSession() {
   const answeredStep = useRef(-1);
   const lockUntil = useRef(0);
   const guardUntil = useRef(0);
-  const heldAt = useRef(-Infinity);
   const leavingRef = useRef(false);
   const focusByPointer = useRef(false);
   /** Where focus goes after this render: the result line's «Дальше» after an answer, the new card after «Дальше». */
@@ -339,7 +333,7 @@ function PlayerSession() {
     if (!head || leavingRef.current) return;
     if (head.kind === "item" && !state.result) return;
     const now = performance.now();
-    if (now < lockUntil.current || now - heldAt.current < HOLD_CLICK_MS) return;
+    if (now < lockUntil.current) return;
     refocus.current = focusInStage() ? "card" : null;
     // Keys (DESKTOP-SPEC §4) and reduced motion: the next card fades in place, no travel.
     if (viaKey || prefersReducedMotion()) {
@@ -356,28 +350,6 @@ function PlayerSession() {
       dispatch({ type: "next" });
     }, exitMs());
   };
-
-  const right = result?.outcome === "correct" && !result.misses;
-  const auto = useAutoAdvance(right ? state.step : null, () => next());
-
-  const hold = () => {
-    if (auto.phase !== "running") return;
-    heldAt.current = performance.now();
-    auto.hold();
-  };
-
-  // A tap anywhere holds the hairline (but «Дальше» itself goes on).
-  const onPointerHold = useEffectEvent((event: PointerEvent) => {
-    const target = event.target as Element | null;
-    if (target && typeof target.closest === "function" && target.closest("[data-advance]")) return;
-    hold();
-  });
-  useEffect(() => {
-    if (auto.phase !== "running") return;
-    const listener = (event: PointerEvent) => onPointerHold(event);
-    window.addEventListener("pointerdown", listener, true);
-    return () => window.removeEventListener("pointerdown", listener, true);
-  }, [auto.phase]);
 
   /**
    * × / Esc: every answer is already saved. A run left on its last card after answering it (every
@@ -412,7 +384,7 @@ function PlayerSession() {
     else if (action.type === "pick") pick(action.index, true);
     else if (action.type === "dont-know") dontKnow(true);
     else if (action.type === "next") {
-      // ↵ skips the hairline (DESKTOP-SPEC §4); keys during the stamp's landing are dropped.
+      // Keys during the stamp's landing are dropped (DESKTOP-SPEC §4).
       next(true);
     }
   });
@@ -446,9 +418,9 @@ function PlayerSession() {
     }
   }, [view, set, head, item, intro]);
 
-  // Focus follows the answer and the card (as the review screen): the visible «Дальше» once a miss
-  // waits for it (or the result line while the 1 s timer runs), then the new card itself — never an
-  // option, so a held ↵ cannot answer the next question.
+  // Focus follows the answer and the card (as the review screen): the visible «Дальше» once the
+  // answer is in, then the new card itself — never an option, so a held ↵ cannot answer the next
+  // question.
   useEffect(() => {
     const target = refocus.current;
     const root = stageRef.current;
@@ -458,7 +430,7 @@ function PlayerSession() {
     if (target === "advance") {
       if (!result) return;
       const line = root.querySelector<HTMLElement>("[data-exercise-result]");
-      el = auto.phase === "running" ? line : ([...root.querySelectorAll<HTMLElement>("[data-advance]")].find(visible) ?? line);
+      el = [...root.querySelectorAll<HTMLElement>("[data-advance]")].find(visible) ?? line;
     } else {
       if (result) return;
       el = root.querySelector<HTMLElement>("[data-exercise-focus]");
@@ -521,10 +493,7 @@ function PlayerSession() {
     const verdict = tone === "right" ? "right" : tone === "wrong" ? "wrong" : null;
     const onWord =
       item.type !== "pairs" && item.word_id && liveWords?.has(item.word_id)
-        ? () => {
-            hold();
-            setWordId(item.word_id);
-          }
+        ? () => setWordId(item.word_id)
         : null;
 
     card = (
@@ -563,8 +532,6 @@ function PlayerSession() {
               explain={item.explain_ru}
               misses={misses}
               onWord={onWord}
-              phase={auto.phase}
-              onHold={hold}
               onNext={() => next()}
             />
           ) : (

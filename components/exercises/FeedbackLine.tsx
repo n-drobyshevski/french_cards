@@ -4,10 +4,9 @@ import type { ReactNode } from "react";
 import { cx } from "@/components/ui/cx";
 import { Kbd } from "@/components/ui/Kbd";
 import { isRussian, resultAnnouncement, type ResultTone } from "./player-state";
-import type { AutoAdvancePhase } from "./use-auto-advance";
 
 export interface FeedbackLineProps {
-  /** right: auto-advance (unless held / reduced motion); wrong: the answer and «Дальше»; pairs: a pairs board with misses. */
+  /** right; wrong / «Не знаю»: the answer too; pairs: a pairs board with misses. Each waits for «Дальше». */
   tone: ResultTone;
   /** The right answer, shown on a wrong answer («ОТВЕТ femme»). */
   answer?: ReactNode;
@@ -19,9 +18,6 @@ export interface FeedbackLineProps {
   misses?: number;
   /** «Слово ›»: opens the library word (none for a new word). */
   onWord?: (() => void) | null;
-  /** The auto-advance on a right answer. */
-  phase: AutoAdvancePhase;
-  onHold: () => void;
   onNext: () => void;
 }
 
@@ -31,34 +27,19 @@ const nextButton =
 /**
  * The one result line under the grid (pick D5 C), inside the player's fixed action zone, so nothing
  * moves when the answer lands. Wrong / «Не знаю»: mono «ОТВЕТ» + the right answer in the good tone,
- * `explain_ru`, «Слово ›», and the black «Дальше» that waits. Right: `explain_ru` + «Слово ›», and
- * the auto-advance — a 2px good hairline draining over 1 s over «Дальше через 1 с · нажмите,
- * чтобы остаться»; a tap holds it: the hairline stops where it is and the label becomes «Дальше»
- * (MOTION-SPEC §5.15). Under reduced motion the black «Дальше» waits. On phones `explain_ru` takes
- * its own line under the answer. From 768: one 64px row ruled at the bottom, «Дальше ↵» at its
- * right, the hairline on the rule.
+ * `explain_ru`, «Слово ›», and the black «Дальше». Right: `explain_ru` + «Слово ›», and the same
+ * «Дальше» — nothing moves on by itself (changed from the 1 s auto-advance on 2026-10-23). On
+ * phones `explain_ru` takes its own line under the answer. From 768: one 64px row ruled at the
+ * bottom, «Дальше ↵» at its right.
  */
-export function FeedbackLine({ tone, answer, answerText, explain, misses = 0, onWord, phase, onHold, onNext }: FeedbackLineProps) {
-  const running = tone === "right" && (phase === "running" || phase === "held");
-  const held = phase === "held";
-  const timer = tone === "right" && phase === "running";
+export function FeedbackLine({ tone, answer, answerText, explain, misses = 0, onWord, onNext }: FeedbackLineProps) {
   const lang = answerText && !isRussian(answerText) ? "fr" : "ru";
-
-  const drain = (
-    <span
-      aria-hidden="true"
-      className={cx(
-        "absolute top-0 left-0 h-[2px] w-full origin-left bg-good animate-[ex-drain_1000ms_linear_230ms_both]",
-        held && "[animation-play-state:paused]",
-      )}
-    />
-  );
 
   return (
     <section
       aria-label="Результат ответа"
       data-exercise-result={tone}
-      // The player focuses the line while the 1 s timer runs (keyboard and screen-reader users).
+      // The player focuses «Дальше»; the line is the fallback when none is visible.
       tabIndex={-1}
       className="flex h-full flex-col outline-none animate-[fade-in_var(--dur-quick)_var(--ease-standard)] md:relative md:h-16 md:flex-row md:items-center md:gap-3 md:border-b md:border-rule"
     >
@@ -104,45 +85,12 @@ export function FeedbackLine({ tone, answer, answerText, explain, misses = 0, on
 
       {/* Phones: the bottom of the zone. */}
       <div className="flex min-h-0 flex-1 flex-col justify-end md:hidden">
-        {running ? (
-          <>
-            <div className="relative h-[2px] shrink-0">
-              <span aria-hidden="true" className="absolute inset-x-0 top-px h-px bg-rule" />
-              {drain}
-            </div>
-            {timer ? (
-              <button
-                type="button"
-                onClick={onHold}
-                className="mt-1 h-11 shrink-0 p-0 text-left font-mono text-[11px] leading-4 tracking-[.06em] text-muted uppercase"
-              >
-                Дальше через 1 с · нажмите, чтобы остаться
-              </button>
-            ) : (
-              <button
-                type="button"
-                data-advance=""
-                onClick={onNext}
-                className="press-sm mt-1 h-11 shrink-0 p-0 text-left font-mono text-[11px] leading-4 font-medium tracking-[.06em] text-ink uppercase"
-              >
-                Дальше
-              </button>
-            )}
-          </>
-        ) : (
-          <button type="button" data-advance="" onClick={onNext} className={cx(nextButton, "inline-flex h-[52px] w-full text-[15px]")}>
-            Дальше
-          </button>
-        )}
+        <button type="button" data-advance="" onClick={onNext} className={cx(nextButton, "inline-flex h-[52px] w-full text-[15px]")}>
+          Дальше
+        </button>
       </div>
 
-      {/* From 768: the end of the row; the hairline runs on the row's bottom rule. */}
-      {running && <div className="absolute inset-x-0 -bottom-px hidden h-[2px] max-md:hidden md:block">{drain}</div>}
-      {timer && (
-        <span className="hidden shrink-0 font-mono text-[11px] leading-4 tracking-[.06em] whitespace-nowrap text-muted uppercase xl:inline">
-          Дальше через 1 с · нажмите, чтобы остаться
-        </span>
-      )}
+      {/* From 768: the end of the row. */}
       <button
         type="button"
         data-advance=""

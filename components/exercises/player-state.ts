@@ -139,7 +139,7 @@ export function tileVerdict(index: number, correct: number, result: PlayerResult
   return "dim";
 }
 
-/** How the result reads: right (auto-advance), wrong / «Не знаю», or a pairs board finished with misses. */
+/** How the result reads: right, wrong / «Не знаю», or a pairs board finished with misses. */
 export type ResultTone = "right" | "wrong" | "pairs";
 
 /** The result's tone for the current card: a pairs board with misses is neither a stamp nor a miss. */

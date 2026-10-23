@@ -311,9 +311,7 @@ side); `Z` undo last answer. **Practice** (новое key): `Esc` «Законч
 400 ms input-guard rules as Review). List (D-Exercise-List): `J`/`K` move the selected tile, `↵` «Начать».
 Player (D-Exercise-Player): `1` `2` `3` `4` pick an option — the tap equivalent, it answers at once (`Digit1–4`
 and `Numpad1–4`; on a `register` item they pick нейтр. / fam. / arg. / vulg.); `0` «Не знаю»; `↵` «Дальше»
-after a wrong answer or «Не знаю», and on a right answer goes on at once instead of waiting out the 1 s
-hairline (a click on the line holds it, as a tap does on phones; with reduced motion nothing auto-advances
-and `↵` is the only way on); `Esc` «Выйти» (the run is saved, no confirm). Keys pressed before the result line
+after any answer (right ones wait too; nothing moves on by itself); `Esc` «Выйти» (the run is saved, no confirm). Keys pressed before the result line
 is in are ignored (no queueing). Shown as Kbd caps `1`–`4` on the tiles, `↵` on «Дальше», and the HintLine
 «1–4 ВЫБРАТЬ · 0 НЕ ЗНАЮ · ENTER ДАЛЬШЕ · ESC ВЫЙТИ»; the «Клавиши» overlay gets an «Упражнения» group and the
 row «G → E».
@@ -1008,8 +1006,8 @@ Everything phones can do, desktop can do too. Where the boards above differ, thi
   three to a row, with the phone's request sheet as the right column «Новый набор». The player keeps the
   phone's picks: options in the same 2×2 grid (64px tiles, Kbd caps 1–4), a tap / key answers at once, the
   «ВЕРНО» / «НЕВЕРНО» stamp on the card (on the `surface` token), one result line under the grid (the answer,
-  `explain_ru`, «Слово ›» → the word in Библиотека, «Дальше ↵»), and on a right answer the 1 s hairline before
-  it moves on (§4 «Упражнения»; none with reduced motion). The done screen has the phone's receipt, «Ошибки»,
+  `explain_ru`, «Слово ›» → the word in Библиотека, «Дальше ↵», which every answer waits for,
+  right ones too; §4 «Упражнения»). The done screen has the phone's receipt, «Ошибки»,
   «Новые слова» with checkboxes and undo, and its three actions. Контекст keeps its own sidebar item, rail item
   and `G C` on desktop; only phones moved it into Библиотека.
 - «Вибрация при свайпах» stays phone-only (§5 #20); the offline page is 560px wide from 768 and says

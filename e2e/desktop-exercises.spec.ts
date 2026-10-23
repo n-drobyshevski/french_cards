@@ -3,7 +3,7 @@ import { dbRows, exerciseCard, openReview, seedExerciseSets, SLANG_SET } from ".
 
 // «Упражнения» on desktop (DESKTOP-SPEC §2/§4/§8, D-Exercise-List, D-Exercise-Player): the sidebar
 // item (second), G E, and the player's keys — 1–4 answer at once, 0 «Не знаю», Enter «Дальше»
-// (skipping the 1 s hairline), Esc leaves and keeps the run. Desktop-chromium project, 1440×800.
+// (on a right answer too), Esc leaves and keeps the run. Desktop-chromium project, 1440×800.
 
 const sidebar = (page: Page) => page.getByRole("complementary", { name: "Разделы" });
 const stamp = (page: Page, verdict: "right" | "wrong") => page.locator(`[data-exercise-stamp="${verdict}"]`);
@@ -60,7 +60,7 @@ test("the sidebar item opens the list; the rail carries it at medium width", asy
   await expect(page).toHaveURL(/\/exercises$/);
 });
 
-test("player keys: 1–4 answer, Enter goes on (skipping the hairline), 0 is «Не знаю», Esc leaves and keeps the run", async ({ page }) => {
+test("player keys: 1–4 answer, Enter goes on, 0 is «Не знаю», Esc leaves and keeps the run", async ({ page }) => {
   await seeded(page);
   await page.goto("/exercises");
   await tile(page).click();
@@ -81,12 +81,14 @@ test("player keys: 1–4 answer, Enter goes on (skipping the hairline), 0 is «�
   // Focus follows to the new card, so Tab goes on from there (not from the top of the page).
   await expect(exerciseCard(page)).toBeFocused();
 
-  // A right pick by its key, then Enter at once: the next card comes before the 1 s hairline runs out.
+  // A right pick by its key waits too, with focus on «Дальше»; Enter goes on.
   await page.keyboard.press(await keyFor(page, "vas-y"));
   await expect(stamp(page, "right")).toBeVisible();
-  await settle(page, 300);
+  await expect(page.locator("button[data-advance]").filter({ visible: true })).toBeFocused();
+  await settle(page, 1600);
+  await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "cloze");
   await page.keyboard.press("Enter");
-  await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "register", { timeout: 700 });
+  await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "register");
 
   // 0: «Не знаю», with the right level on the line.
   await page.keyboard.press("0");
