@@ -14,7 +14,7 @@ import {
 } from "react";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
-import { Icon } from "@/components/ui/Icons";
+import { Icon, type IconName } from "@/components/ui/Icons";
 import { Kbd } from "@/components/ui/Kbd";
 import { Segmented } from "@/components/ui/Segmented";
 import { SheetCloseButton } from "@/components/ui/Sheet";
@@ -713,22 +713,22 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
 
       <HistoryStrip history={[...history].reverse()} />
 
-      {/* Actions */}
-      <div className="mt-6 flex flex-wrap justify-between gap-x-2">
-        <Button variant="tertiary" size="md" className="-ml-1 px-1 text-[14px] font-normal no-underline" onClick={() => void actions.reset()}>
+      {/* Actions (K1): ruled rows, an icon, the label and a muted caption; «Удалить» last, in red. */}
+      <div className="mt-6 flex flex-col border-t border-rule">
+        <SheetAction icon="reset" caption="начать заново" onClick={() => void actions.reset()}>
           Сбросить прогресс
-        </Button>
+        </SheetAction>
         {!w.muted && (
-          <Button variant="tertiary" size="md" className="px-1 text-[14px] font-normal no-underline" onClick={() => void actions.setMuted(true)}>
+          <SheetAction icon="mute" caption="не повторять" onClick={() => void actions.setMuted(true)}>
             На паузу
-          </Button>
+          </SheetAction>
         )}
-        <Button variant="danger" size="md" className="-mr-1 px-1 text-[14px]" onClick={() => void actions.remove()}>
+        <SheetAction icon="trash" danger onClick={() => void actions.remove()}>
           Удалить слово
-        </Button>
+        </SheetAction>
       </div>
 
-      <p className="meta m-0 mt-4 border-t border-rule pt-3">
+      <p className="meta m-0 mt-4">
         Добавлено {formatDate(w.created_at)} · {SOURCE_LABELS[w.source]}
       </p>
 
@@ -743,6 +743,35 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
         onPick={(key) => void actions.changeFolder(key)}
       />
     </div>
+  );
+}
+
+function SheetAction({
+  icon,
+  caption,
+  danger,
+  onClick,
+  children,
+}: {
+  icon: IconName;
+  caption?: string;
+  danger?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cx(
+        "flex h-[52px] items-center gap-3.5 border-b border-rule bg-transparent p-0 text-left text-[16px] hoverable:bg-hover active:bg-hover",
+        danger ? "text-again" : "text-ink",
+      )}
+    >
+      <Icon name={icon} size={20} strokeWidth={1.5} />
+      <span className="min-w-0 flex-1">{children}</span>
+      {caption && <span className="text-[13px] text-muted">{caption}</span>}
+    </button>
   );
 }
 

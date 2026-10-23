@@ -353,4 +353,7 @@ Pixel-careful, consistent spacing (8px grid), real hierarchy, nothing overlappin
 ### Раздать по полям (added 2026-10-23; no separate board)
 - «Обновить перевод и заметку» is gone from the word card (phone sheet and desktop pane), with its «Предлагаемые изменения» diff. Each part it rewrote now has its own control: the translation — «Вариант · Подставить» under «Русский» (already there); the example — ↻ / «Подобрать пример»; the note — «Заполнить автоматически» under the note box; slang level, verlan and part of speech — «Определить уровень и часть речи» under the slang row of the word-and-translation form.
 - Both are the same spark text button as under «Происхождение». They fill the open form only; ✓ / «Сохранить» saves. «Определить» sets the level and the verl. toggle; a part of speech that would change shows as a muted «Часть речи: *n. f.*» next to the button (the form has no control for it) and is saved with the form.
-- The actions row is now «Сбросить прогресс» · «На паузу» · «Удалить слово».
+- The actions are now «Сбросить прогресс» · «На паузу» · «Удалить слово».
+
+### Действия в карточке слова (added 2026-10-23; canvas «Действия в карточке — мокапы», chosen K1)
+- Phone word sheet, under the history strip: a ruled list (1px rule above and under each row), 52 px rows, a 20 px icon, the label in 16 px and a muted 13 px caption on the right: ↺ «Сбросить прогресс» · «начать заново»; struck bell «На паузу» · «не повторять» (hidden while the word is paused: «Вернуть» sits under «Повторение»); trash «Удалить слово» in red, last, no caption. Then «Добавлено …» without its own rule. Desktop pane keeps its text-button row.
