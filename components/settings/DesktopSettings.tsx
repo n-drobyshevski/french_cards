@@ -9,6 +9,7 @@ import { FlatKey } from "@/components/ui/Kbd";
 import type { Direction, Settings } from "@/lib/types";
 import { DeskCustomFieldsSection } from "./CustomFieldsSection";
 import { DataSection } from "./DataSection";
+import { DeskExerciseSection } from "./ExerciseFocusSection";
 import { CheckboxRow, DeskRow, DeskSection, DeskStepper, DirectionSelect, TextOptions } from "./DesktopControls";
 import { NEW_PER_DAY_MAX, stepNewPerDay } from "./format";
 import { useSectionSpy } from "./useSectionSpy";
@@ -16,6 +17,7 @@ import { Valued } from "./Valued";
 
 export const DESK_SECTIONS = [
   { id: "set-review", title: "Повторение" },
+  { id: "set-exercises", title: "Упражнения" },
   { id: "set-look", title: "Оформление" },
   { id: "set-hints", title: "ИИ" },
   { id: "set-fields", title: "Свои поля" },
@@ -138,7 +140,12 @@ export function DesktopSettings({ settings, known, save, onTheme, onDirection }:
                 onCheckedChange={(checked) => save({ swipe_grading: checked })}
               />
             </DeskSection>
+          </Valued>
 
+          {/* Synced with the account (user_prefs), read on its own. */}
+          <DeskExerciseSection />
+
+          <Valued known={known}>
             <DeskSection id="set-look" title="Оформление">
               <DeskRow label="Тема" labelId="set-theme-label">
                 <TextOptions ariaLabelledby="set-theme-label" options={THEME_OPTIONS} value={settings.theme} onChange={onTheme} />

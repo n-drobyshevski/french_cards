@@ -45,6 +45,14 @@ import {
   validateSet,
   warningsFor,
 } from "@/lib/core/exercises";
+import {
+  DEFAULT_EXERCISE_FOCUS,
+  EXERCISE_FOCUS_PREF,
+  FOCUS_SHARE_MIN,
+  focusMinItems,
+  matchesFocus,
+  parseExerciseFocus,
+} from "@/lib/core/exercise-focus";
 import { matchesSearch, normalizeLemma, searchHaystack, searchKey } from "@/lib/core/text";
 import { buildWord, cleanText, directionsOf, isMovable, isPaused, pausedFolderIds } from "@/lib/core/words";
 import { cleanConjugation, cleanOrigin, conjugate, ORIGIN_MAX, type ConjData } from "@/lib/core/conjugate";
@@ -56,6 +64,9 @@ import type {
   Conjugation,
   CustomFieldValue,
   Direction,
+  ExerciseFocus,
+  ExerciseFocusShare,
+  ExerciseFocusTarget,
   ExerciseItemType,
   ExerciseRun,
   ExerciseSet,
@@ -1426,6 +1437,50 @@ interface Signals {
   last_miss: string | null;
 }
 
+/**
+ * «Чаще в упражнениях» flags of a word from its live cards: `difficult` (a card the app rates
+ * «трудное», cardStatus) and `due` (a card due today), the same rules as the signals.
+ */
+function focusFlags(wordId: string, ctx: Pick<ViewContext, "statesByWord" | "dayEnd">): { difficult: boolean; due: boolean } {
+  const cards = ctx.statesByWord.get(wordId) ?? [];
+  return { difficult: cards.some((c) => cardStatus(c) === "difficult"), due: cards.some((c) => isDueToday(c, ctx.dayEnd)) };
+}
+
+/**
+ * The words an exercise draws on: live and not muted, in the named themes (a paused one is used as
+ * asked), else in every theme not «на паузе».
+ */
+function exerciseScope(words: readonly Word[], ctx: ViewContext, targetIds: ReadonlySet<string | null> | null): Word[] {
+  return words.filter((w) => w.deleted_at === null && !w.muted && (targetIds ? targetIds.has(placeOf(w, ctx.live)?.id ?? null) : !isPaused(w, ctx.paused)));
+}
+
+/** The saved «Чаще в упражнениях» (user_prefs `exercise_focus`); off without a live row. */
+async function savedExerciseFocus(deps: ToolDeps): Promise<ExerciseFocus> {
+  const row = (await deps.repo.userPrefs()).find((p) => p.id === EXERCISE_FOCUS_PREF && p.deleted_at === null);
+  return row ? parseExerciseFocus(row.value) : DEFAULT_EXERCISE_FOCUS;
+}
+
+const FOCUS_TARGET_VALUES = ["normal", "difficult", "due", "both"] as const satisfies readonly ExerciseFocusTarget[];
+const FOCUS_SHARE_VALUES = ["some", "half", "most"] as const satisfies readonly ExerciseFocusShare[];
+const FOCUS_WORDS_EN: Record<Exclude<ExerciseFocusTarget, "normal">, string> = {
+  difficult: "difficult",
+  due: "due today",
+  both: "difficult or due today",
+};
+const pct = (share: ExerciseFocusShare) => Math.round(FOCUS_SHARE_MIN[share] * 100);
+
+/**
+ * How many of a set's items are about focus words: an item with a word_id counts when that word is
+ * one; a pairs item counts when at least half of its words are (an item is one question either
+ * way). Items about new words never count.
+ */
+export function focusItemCount(items: ExerciseSet["items"], focusIds: ReadonlySet<string>): number {
+  return items.filter((item) => {
+    if (item.type === "pairs") return item.pairs.length > 0 && item.pairs.filter((k) => focusIds.has(k)).length * 2 >= item.pairs.length;
+    return !!item.word_id && focusIds.has(item.word_id);
+  }).length;
+}
+
 const noSignals = (): Signals => ({ lapses: 0, due: false, difficult: false, review_misses: 0, ex_attempts: 0, ex_misses: 0, confusions: [], last_miss: null });
 const later = (a: string | null, b: string) => (a === null || Date.parse(b) > Date.parse(a) ? b : a);
 const weakness = (s: Signals) => s.ex_misses * 3 + s.review_misses * 2 + s.lapses + (s.difficult ? 2 : 0) + (s.due ? 1 : 0);
@@ -1470,11 +1525,8 @@ function weaknessSignals(
   const savedRefs = savedRefIds(sets, words);
   for (const w of words) {
     const s = out.get(w.id)!;
-    for (const card of ctx.statesByWord.get(w.id) ?? []) {
-      s.lapses += card.lapses;
-      if (isDueToday(card, ctx.dayEnd)) s.due = true;
-      if (cardStatus(card) === "difficult") s.difficult = true;
-    }
+    for (const card of ctx.statesByWord.get(w.id) ?? []) s.lapses += card.lapses;
+    Object.assign(s, focusFlags(w.id, ctx));
   }
   for (const l of logs) {
     const s = out.get(l.word_id);
@@ -1557,47 +1609,81 @@ function topicMatches(topic: string, words: readonly Word[], live: ReadonlyMap<s
 /** The French of the words a set uses, for recent_sets. */
 const setWords = (s: ExerciseSet) => [...new Set(s.items.flatMap((i) => (i.type === "pairs" ? i.tiles.map((t) => t.fr) : i.word ? [i.word.fr] : [])))].slice(0, 20);
 
+/** exercise_material's `focus`: the focus in force and what it asks of the set. */
+function focusBlock(focus: ExerciseFocus, from: "settings" | "request", available: number) {
+  if (focus.target === "normal") return { target: "normal" as const };
+  const min = focusMinItems(focus, 12);
+  const what = FOCUS_WORDS_EN[focus.target];
+  const note =
+    available === 0
+      ? `No word in scope is ${what} now: build the set as usual.`
+      : `At least ${pct(focus.share)}% of the questions (${min} of 12; scale with the set's size) must be about the ${what} words, marked focus: true in words[] (listed first).` +
+        (available < min ? ` There are only ${available}: use each of them, the weakest twice.` : "");
+  return { target: focus.target, share: focus.share, from, min_items_for_12: min, available, note };
+}
+
 export const exerciseMaterial = tool({
   name: "exercise_material",
   title: "Material for an exercise",
   description:
-    `Read what an exercise set («Упражнения») should practise, before create_exercise_set. \`words\`: the live words of the given themes (all themes without \`folders\`), weakest first, each with \`signals\` merged from the last \`days\`: exercise answers (ex_attempts, ex_misses, confusions = wrong options the user picked), reviews graded «Снова»/«Трудно» (review_misses), lapses, due today and difficult cards. Words «на паузе» and deleted words are left out, and so are themes «на паузе» unless named in \`folders\`. With \`topic\` (a free-text subject like «вечеринка»), \`topic_matches\` lists saved words that fit it: use them by word_id and never put them in new_words (a muted one can't be used at all). \`recent_sets\` are the latest sets with their words, so the next one doesn't repeat them.`,
+    `Read what an exercise set («Упражнения») should practise, before create_exercise_set. \`words\`: the live words of the given themes (all themes without \`folders\`), weakest first, each with \`signals\` merged from the last \`days\`: exercise answers (ex_attempts, ex_misses, confusions = wrong options the user picked), reviews graded «Снова»/«Трудно» (review_misses), lapses, due today and difficult cards. Words «на паузе» and deleted words are left out, and so are themes «на паузе» unless named in \`folders\`. With \`topic\` (a free-text subject like «вечеринка»), \`topic_matches\` lists saved words that fit it: use them by word_id and never put them in new_words (a muted one can't be used at all). \`recent_sets\` are the latest sets with their words, so the next one doesn't repeat them. \`focus\` is the user's «Чаще в упражнениях» (from Settings, or \`focus\` in the input when the user asks otherwise in this chat): when it is on, the matching words (difficult and/or due today) come first and carry \`focus: true\`, and its \`note\` says how many of the questions must be about them; honour it.`,
   input: z.object({
     folders: jsonArray(z.array(folderSelector).max(10)).nullable().optional().describe(`Themes to draw words from (id, slug, name or "${INBOX_SELECTOR}"); default every theme.`),
     topic: z.string().trim().max(TOPIC_MAX).nullable().optional().describe("A free-text topic («вечеринка», «в баре»), when the user asked for one."),
     limit: z.number().int().min(1).max(60).default(30).describe("How many words to return (weakest first)."),
     days: z.number().int().min(1).max(60).default(14).describe("The window for exercise answers and reviews."),
+    focus: z
+      .object({
+        target: z.enum(FOCUS_TARGET_VALUES).describe("normal: no focus; difficult: cards rated «трудное»; due: words due today; both: either."),
+        share: z.enum(FOCUS_SHARE_VALUES).nullable().optional().describe(`At least this share of the questions: some ≥${pct("some")}%, half ≥${pct("half")}%, most ≥${pct("most")}%. Default: the saved one.`),
+      })
+      .nullable()
+      .optional()
+      .describe("Only when the user asks in this chat for a different focus than their saved «Чаще в упражнениях» («только трудные», «без упора на повторение»); otherwise leave it out and the saved one applies."),
   }),
   write: false,
   annotations: READ,
   async run(deps, args) {
     const now = deps.now();
     const from = new Date(now.getTime() - args.days * DAY_MS).toISOString();
-    const [folders, words, states, logs, runs, sets] = await Promise.all([
+    const [folders, words, states, logs, runs, sets, saved] = await Promise.all([
       deps.repo.folders(),
       deps.repo.words(),
       deps.repo.states(),
       deps.repo.logsSince(from),
       deps.repo.exerciseRunsSince(from),
       deps.repo.exerciseSets(),
+      savedExerciseFocus(deps),
     ]);
+    const focus: ExerciseFocus = args.focus ? { target: args.focus.target, share: args.focus.share ?? saved.share } : saved;
     const targets = args.folders?.length ? [...new Map(args.folders.map((s) => resolveFolder(s, folders)).map((f) => [f?.id ?? null, f])).values()] : null;
     const targetIds = targets ? new Set(targets.map((f) => f?.id ?? null)) : null;
     const ctx = viewContext(folders, states, [], deps);
     // A paused theme («на паузе») is left out of «all themes», but a theme named in `folders` is used as asked.
-    const inScope = words.filter((w) => w.deleted_at === null && !w.muted && (targetIds ? targetIds.has(placeOf(w, ctx.live)?.id ?? null) : !isPaused(w, ctx.paused)));
+    const inScope = exerciseScope(words, ctx, targetIds);
     const liveSets = sets.filter((s) => s.deleted_at === null);
     const signals = weaknessSignals(inScope, ctx, logs, runs, new Map(sets.map((s) => [s.id, s])));
+    // «Чаще в упражнениях»: the focus words first, then the weakness order.
     const ranked = inScope
       .map((w) => ({ w, s: signals.get(w.id)! }))
-      .sort((a, b) => weakness(b.s) - weakness(a.s) || a.s.ex_attempts - b.s.ex_attempts || b.w.created_at.localeCompare(a.w.created_at) || a.w.id.localeCompare(b.w.id));
+      .map((r) => ({ ...r, focus: matchesFocus(focus.target, r.s) }))
+      .sort(
+        (a, b) =>
+          Number(b.focus) - Number(a.focus) ||
+          weakness(b.s) - weakness(a.s) ||
+          a.s.ex_attempts - b.s.ex_attempts ||
+          b.w.created_at.localeCompare(a.w.created_at) ||
+          a.w.id.localeCompare(b.w.id),
+      );
     const topic = cleanText(args.topic ?? undefined);
     return {
       scope: { folders: targets ? targets.map(folderRef) : "all", ...(topic ? { topic } : {}), days: args.days },
       total: inScope.length,
-      words: ranked.slice(0, args.limit).map(({ w, s }) => ({
+      focus: focusBlock(focus, args.focus ? "request" : "settings", ranked.filter((r) => r.focus).length),
+      words: ranked.slice(0, args.limit).map(({ w, s, focus: on }) => ({
         ...materialWord(w, ctx.live),
         status: wordStatus(ctx.statesByWord.get(w.id) ?? []),
+        ...(on ? { focus: true } : {}),
         signals: s,
       })),
       ...(topic ? { topic_matches: topicMatches(topic, words, ctx.live) } : {}),
@@ -1646,11 +1732,31 @@ const exerciseNewWordSchema = newWordSchema.pick({ fr: true, ru: true, note: tru
   source_url: z.string().trim().max(500).nullable().optional().describe("The page you found the word and its meaning on (one of the two sources you checked)."),
 });
 
+/**
+ * create_exercise_set's `focus_share` warning (never blocking): the saved «Чаще в упражнениях» asks
+ * for more questions about focus words than the set has, although such words existed in its scope
+ * (its themes, else every unpaused one). With fewer focus words than the share asks for, one
+ * question per focus word is enough.
+ */
+async function focusShareWarning(deps: ToolDeps, set: ExerciseSet, focus: ExerciseFocus, folders: readonly Folder[], words: readonly Word[]) {
+  const ctx = viewContext(folders, await deps.repo.states(), [], deps);
+  const targetIds = set.folders.length ? new Set(set.folders.map((f) => (f === INBOX_SELECTOR ? null : f))) : null;
+  const focusIds = new Set(exerciseScope(words, ctx, targetIds).filter((w) => matchesFocus(focus.target, focusFlags(w.id, ctx))).map((w) => w.id));
+  const asked = focusMinItems(focus, set.items.length);
+  const expected = Math.min(asked, focusIds.size);
+  const has = focusItemCount(set.items, focusIds);
+  if (expected === 0 || has >= expected) return null;
+  return {
+    code: "focus_share" as const,
+    message: `the user's «Чаще в упражнениях» asks for at least ${pct(focus.share)}% of the questions about ${FOCUS_WORDS_EN[focus.target as Exclude<ExerciseFocusTarget, "normal">]} words (${asked} of ${set.items.length}); this set has ${has}, and ${focusIds.size} such words were available. Follow exercise_material's focus next time.`,
+  };
+}
+
 export const createExerciseSet = tool({
   name: "create_exercise_set",
   title: "Save an exercise set",
   description:
-    `Save one exercise set («Упражнения») that the app plays offline; it never changes the review schedule. Call exercise_material first, then send the whole set in one call: ${ITEMS_MIN}–${ITEMS_MAX} items (10–15 is best) of at least 3 types. Items are about library words (word_id) or new words (new_ref → new_words, at most ${NEW_WORDS_MAX}, found with your web search; the user adds them from the app, so never add_words them yourself). The server numbers the items, copies each word into the set, writes the meaning prompt and answer, the register answer and the pairs tiles, and checks every rule: a refusal names each problem by path (items[7].distractors …); fix them all and call again with the same client_ref. \`warnings\` never block. A retry with the same client_ref returns already_saved: true and writes nothing. The result is a short summary, not the set. Undo with delete_exercise_set.`,
+    `Save one exercise set («Упражнения») that the app plays offline; it never changes the review schedule. Call exercise_material first, then send the whole set in one call: ${ITEMS_MIN}–${ITEMS_MAX} items (10–15 is best) of at least 3 types. Items are about library words (word_id) or new words (new_ref → new_words, at most ${NEW_WORDS_MAX}, found with your web search; the user adds them from the app, so never add_words them yourself). The server numbers the items, copies each word into the set, writes the meaning prompt and answer, the register answer and the pairs tiles, and checks every rule: a refusal names each problem by path (items[7].distractors …); fix them all and call again with the same client_ref. \`warnings\` never block (focus_share: the set has fewer questions about the words of the user's saved «Чаще в упражнениях» than it asks for; follow exercise_material's \`focus\` next time). A retry with the same client_ref returns already_saved: true and writes nothing. The result is a short summary, not the set. Undo with delete_exercise_set.`,
   input: z.object({
     client_ref: z
       .string()
@@ -1675,7 +1781,7 @@ export const createExerciseSet = tool({
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   async run(deps, args) {
     const id = exerciseSetId(args.client_ref);
-    const [sets, folders] = await Promise.all([deps.repo.exerciseSets(), deps.repo.folders()]);
+    const [sets, folders, focus] = await Promise.all([deps.repo.exerciseSets(), deps.repo.folders(), savedExerciseFocus(deps)]);
     const stored = sets.find((s) => s.id === id);
     if (stored && stored.deleted_at === null) {
       return {
@@ -1691,7 +1797,8 @@ export const createExerciseSet = tool({
     }
     // Ids and order of themes as named; resolveFolder refuses unknown and deleted ones.
     const folderIds = [...new Set((args.folders ?? []).map((s) => resolveFolder(s, folders)?.id ?? INBOX_SELECTOR))];
-    const ctx = contextFromWords(await deps.repo.words());
+    const words = await deps.repo.words();
+    const ctx = contextFromWords(words);
     const content = completeSet(
       {
         title: args.title,
@@ -1716,10 +1823,11 @@ export const createExerciseSet = tool({
     const now = deps.now().toISOString();
     const row: ExerciseSet = { id, ...content, source: "chat", created_at: now, updated_at: now, deleted_at: null };
     const saved = await writeExerciseSet(deps, row, "A set with this client_ref was saved at the same time. Call list_exercise_sets to see it.");
+    const focusWarning = focus.target === "normal" ? null : await focusShareWarning(deps, saved, focus, folders, words);
     return {
       already_saved: false,
       set: setSummary(saved),
-      warnings: warningsFor(saved),
+      warnings: [...warningsFor(saved), ...(focusWarning ? [focusWarning] : [])],
       undo: { tool: "delete_exercise_set", id: saved.id },
       note: SYNC_NOTE,
     };
@@ -1929,6 +2037,7 @@ export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard
 - For a free-text topic, use the saved words in topic_matches by word_id. Words found with web search go in new_words (at most 8, each checked in at least 2 sources, slang_level by the rubric, source_url); never add_words them without the user's OK, since the user adds them from the app.
 - choice and cloze have 4 options: the answer plus 3 distractors of the same part of speech, gender, register and length, with exactly one best answer. A cloze's sentence_ru hints at the situation and never translates the gap.
 - Order the items recognise-before-produce (meaning fr→ru and pairs before ru→fr and cloze), put the weakest words (first in exercise_material) late and twice, keep the same word apart, and use 10–15 items of at least 3 types.
+- Honour exercise_material's \`focus\` (the user's «Чаще в упражнениях»): at least the share it names of the questions about the words marked focus: true, even for a plain «сделай упражнение»; pass \`focus\` to exercise_material only when the user asks otherwise in the chat.
 - «Работа над ошибками»: list_exercise_sets' last_run.missed and exercise_material's signals (ex_misses, confusions) say what to drill; reuse a confused option as a distractor only where it is in the item's options' language (a Russian one for meaning fr→ru, a French one for cloze and ru→fr).
 - After saving, give the set's title and number of questions and how to undo it; it shows in «Упражнения» after the app's next sync.
 - Make write calls one at a time, never in parallel: each reads the current rows first, and parallel writes to the same words conflict or slip past the duplicate check.

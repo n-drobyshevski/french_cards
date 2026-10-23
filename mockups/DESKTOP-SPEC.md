@@ -796,6 +796,8 @@ Red marks: bar, Входящие = 2.
     2 | 3 (3 selected); option row ☑ «Свайпы для оценки» (on: a mouse drags the card too: click and hold, then sideways past
     min(⅓ card, 200px) or a flick; a vertical drag still selects text; a short drag springs back, a click flips;
     «Вибрация при свайпах» hidden on desktop).
+  - Упражнения (added 2026-10-23, after Повторение; not drawn on the board): «Чаще в упражнениях» option rows with
+    a round radio mark, «Сколько в наборе» 3-stop slider, 12 muted footnote — see §8 «Чаще в упражнениях».
   - Оформление: «Тема» → text options Система | Светлая | Тёмная.
   - Подсказки: ☑ «Автоподсказки при вводе»; ☑ «Раскладывать по темам автоматически»; 12 muted «Слова и
     скриншоты отправляются в Anthropic (Claude) для подсказок и не хранятся там.»
@@ -1010,6 +1012,13 @@ Everything phones can do, desktop can do too. Where the boards above differ, thi
   right ones too; §4 «Упражнения»). The done screen has the phone's receipt, «Ошибки»,
   «Новые слова» with checkboxes and undo, and its three actions. Контекст keeps its own sidebar item, rail item
   and `G C` on desktop; only phones moved it into Библиотека.
+- **«Чаще в упражнениях»** (added 2026-10-23; SPEC.md «Упражнения», board `Exercise-S-Settings-Focus`): Settings
+  section «Упражнения» after «Повторение» (nav entry `set-exercises`, scroll-spy as the others). The label row
+  «Чаще в упражнениях», then the four choices as option rows like `CheckboxRow` (whole row the hit area, hover fill,
+  focus ring on the row) with a 14px round radio mark instead of the box — four labels of unequal length do not fit
+  text options beside the label in 640. «Сколько в наборе» keeps the phone's 3-stop slider (a 320px radiogroup at
+  the right of its row, ←/→ move), disabled with «Обычно»; the 12 muted footnote is the phone's. The «Новый набор»
+  panel shows the same muted line «Чаще трудные · половина набора · Настройки ›» under «Запрос».
 - «Вибрация при свайпах» stays phone-only (§5 #20); the offline page is 560px wide from 768 and says
   «…не сохранена на устройстве».
 

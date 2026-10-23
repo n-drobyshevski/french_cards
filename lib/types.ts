@@ -396,6 +396,23 @@ export interface ExerciseRun extends Syncable {
   first_try: number;
 }
 
+/** «Чаще в упражнениях»: which of the user's words Claude should favour in exercise sets. */
+export type ExerciseFocusTarget = "normal" | "difficult" | "due" | "both";
+/** How much of a set they should take: some ≈ a quarter, half ≥ half, most ≈ nearly all. */
+export type ExerciseFocusShare = "some" | "half" | "most";
+export interface ExerciseFocus {
+  target: ExerciseFocusTarget;
+  share: ExerciseFocusShare;
+}
+
+/**
+ * A preference that follows the account (synced table `user_prefs`, migration 0012), so the
+ * Claude connector can read it too. One row per key: `exercise_focus` → ExerciseFocus.
+ */
+export interface UserPref extends Syncable {
+  value: unknown;
+}
+
 export const SYNC_TABLES = [
   "folders",
   "words",
@@ -406,5 +423,6 @@ export const SYNC_TABLES = [
   "field_defs",
   "exercise_sets",
   "exercise_runs",
+  "user_prefs",
 ] as const;
 export type SyncTable = (typeof SYNC_TABLES)[number];

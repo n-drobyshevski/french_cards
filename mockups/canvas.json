@@ -914,6 +914,15 @@
    "h": 1044,
    "title": "Упражнения · ответ и переход — движение",
    "is_interactive": true
+  },
+  "Exercise-S-Settings-Focus.dc.html": {
+   "x": 6580,
+   "y": 25648,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · Настройки — чаще в упражнениях",
+   "is_interactive": true,
+   "radius": 28
   }
  },
  "order": [
@@ -1022,7 +1031,8 @@
   "D-Exercise-List.dc.html",
   "D-Exercise-Player.dc.html",
   "D-Exercise-Done.dc.html",
-  "M-Exercise-Answer.dc.html"
+  "M-Exercise-Answer.dc.html",
+  "Exercise-S-Settings-Focus.dc.html"
  ],
  "notes": {
   "row1": {

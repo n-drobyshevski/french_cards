@@ -99,6 +99,7 @@ describe("import summaries", () => {
     field_defs: empty,
     exercise_sets: empty,
     exercise_runs: empty,
+    user_prefs: empty,
     settings: "kept",
     ...patch,
   });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useLiveQuery } from "dexie-react-hooks";
+import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { CheckMark } from "@/components/library/Checkbox";
 import { Button } from "@/components/ui/Button";
@@ -10,10 +11,12 @@ import { Icon } from "@/components/ui/Icons";
 import { Segmented } from "@/components/ui/Segmented";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { Toggle } from "@/components/ui/Toggle";
+import { focusSummary } from "@/lib/core/exercise-focus";
 import { db, liveRows } from "@/lib/db";
 import { buildRequestText, NEW_WORDS_MAX, REQUEST_SIZES, TOPIC_MAX } from "@/lib/exercises";
 import { listFolders } from "@/lib/folders";
 import type { ExerciseSet } from "@/lib/types";
+import { useExerciseFocus } from "@/lib/user-prefs";
 import { CLAUDE_NEW_CHAT_URL, copyRequest } from "./clipboard";
 import { INBOX_KEY, INBOX_NAME, requestSummary, type RequestChoice } from "./list-format";
 
@@ -95,8 +98,9 @@ export interface RequestBuilderProps {
 /**
  * The request builder (SPEC «Упражнения», D7 A): theme chips (several, «Входящие» included), a
  * free-text «своя тема», 8 / 12 / 16 questions, «Можно новые слова», the request text built live,
- * «Скопировать запрос» and «Открыть Claude ↗» (copies first). No network call and no spark: Claude
- * writes the set in the chat through the connector.
+ * «Скопировать запрос» and «Открыть Claude ↗» (copies first), and while «Чаще в упражнениях» is on, a
+ * muted line saying so («Чаще трудные · половина набора · Настройки ›»). No network call and no
+ * spark: Claude writes the set in the chat through the connector.
  */
 export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp, className }: RequestBuilderProps) {
   const snackbar = useSnackbar();
@@ -131,6 +135,10 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
     allowNew,
   };
   const text = buildRequestText(choice);
+  // «Чаще в упражнениях» (Settings): the connector reads it itself, so the request text stays as is;
+  // the line only tells the user the set will lean that way.
+  const focus = useExerciseFocus();
+  const focusLine = focus ? focusSummary(focus) : null;
 
   const toggleTheme = (key: string) => setPicked((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
 
@@ -266,6 +274,18 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
         >
           {text}
         </p>
+        {focusLine && (
+          <p data-exercise-focus="" className="m-0 mt-1.5 flex items-center gap-1 text-[12px] leading-4 text-muted">
+            <span className="min-w-0 truncate">{focusLine}</span>
+            <span aria-hidden="true">·</span>
+            <Link
+              href="/settings#set-exercises"
+              className="-my-3.5 inline-flex h-11 shrink-0 items-center text-muted underline decoration-rule decoration-1 underline-offset-2 hoverable:text-ink active:text-ink"
+            >
+              Настройки ›
+            </Link>
+          </p>
+        )}
       </div>
 
       <Button block className="mt-3" onClick={() => void copy("copy")}>

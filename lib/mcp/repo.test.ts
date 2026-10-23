@@ -201,6 +201,18 @@ describe("createSupabaseRepo", () => {
     expect(options).toEqual({ onConflict: "user_id,id" });
   });
 
+  it("reads the user's preferences only, mapped to the app's shape", async () => {
+    const pages = [
+      [{ id: "exercise_focus", user_id: "user-1", value: { target: "difficult", share: "most" }, updated_at: "2026-10-22T10:00:00+00:00", deleted_at: null, synced_at: "x" }],
+      [],
+    ];
+    const { client, calls } = fakeClient(() => ({ data: pages.shift() ?? [], error: null }));
+    const prefs = await createSupabaseRepo(client, "user-1").userPrefs();
+    expect(prefs).toEqual([{ id: "exercise_focus", value: { target: "difficult", share: "most" }, updated_at: "2026-10-22T10:00:00.000Z", deleted_at: null }]);
+    expect(calls.map((c) => c.table)).toEqual(["user_prefs", "user_prefs"]);
+    for (const call of calls) expect(call.ops).toContainEqual(["eq", "user_id", "user-1"]);
+  });
+
   it("turns Supabase errors into RepoError", async () => {
     const { client } = fakeClient(() => ({ data: null, error: { message: "permission denied" } }));
     await expect(createSupabaseRepo(client, "user-1").folders()).rejects.toThrow(RepoError);

@@ -5,7 +5,7 @@
 // the stored row when a write's updated_at is not newer.
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { fromRemoteRow, toRemoteRow } from "@/lib/core/rows";
-import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ReviewLog, ReviewState, Word } from "@/lib/types";
+import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ReviewLog, ReviewState, UserPref, Word } from "@/lib/types";
 import type { McpConfig } from "./config";
 
 /** Keyset page size (the app's PULL_PAGE); a page is never trusted to be the last unless it is empty. */
@@ -26,6 +26,8 @@ export interface TableRows {
   exercise_sets: ExerciseSet;
   /** Read-only here: runs are written by the device that plays them. */
   exercise_runs: ExerciseRun;
+  /** Read-only here: preferences («Чаще в упражнениях») are set in the app. */
+  user_prefs: UserPref;
 }
 
 export type WritableTable = "folders" | "words" | "review_state" | "field_defs" | "exercise_sets";
@@ -47,6 +49,8 @@ export interface McpRepo {
   exerciseSets(): Promise<ExerciseSet[]>;
   /** Exercise runs with `started_at >= from`, tombstones included. Read-only. */
   exerciseRunsSince(from: string): Promise<ExerciseRun[]>;
+  /** Every preference row (`user_prefs`, e.g. `exercise_focus`), tombstones included. Read-only. */
+  userPrefs(): Promise<UserPref[]>;
   /** Inserts or replaces rows; returns them as stored (an older-than-stored write comes back unchanged). */
   upsert<T extends WritableTable>(table: T, rows: readonly TableRows[T][]): Promise<TableRows[T][]>;
   /**
@@ -134,6 +138,7 @@ export function createSupabaseRepo(client: SupabaseClient, userId: string): McpR
     logsSince: (from) => fetchAll("review_log", { column: "review", op: "gte", value: from }),
     exerciseSets: () => fetchAll("exercise_sets"),
     exerciseRunsSince: (from) => fetchAll("exercise_runs", { column: "started_at", op: "gte", value: from }),
+    userPrefs: () => fetchAll("user_prefs"),
     async upsert(table, rows) {
       if (rows.length === 0) return [];
       const body = rows.map((row) => ({ ...toRemoteRow(table, row), user_id: userId }));

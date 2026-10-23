@@ -119,7 +119,7 @@ export function describeBackupImport(result: ImportResult): string {
   const added = result.words.inserted;
   const updated = result.words.updated;
   const other = (
-    ["folders", "review_state", "review_log", "reorg_runs", "review_sets", "field_defs", "exercise_sets", "exercise_runs"] as const
+    ["folders", "review_state", "review_log", "reorg_runs", "review_sets", "field_defs", "exercise_sets", "exercise_runs", "user_prefs"] as const
   ).reduce(
     (sum, t) => sum + result[t].inserted + result[t].updated,
     0,

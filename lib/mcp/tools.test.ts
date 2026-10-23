@@ -20,6 +20,7 @@ import {
   deleteWords,
   exerciseMaterial,
   exerciseSetId,
+  focusItemCount,
   listExerciseSets,
   listFields,
   listFolders,
@@ -1298,6 +1299,94 @@ describe("exercises («Упражнения»)", () => {
     expect(match).toEqual({ id: "w-rade", fr: "le rade", ru: "бар, кабак", pos: "noun", gender: "m", slang_level: 1, verlan: false, example_fr: null, example_ru: null, folder: expect.anything() });
     // A null topic is "no topic", as on create_exercise_set.
     expect(await ok(exerciseMaterial, fake, { folders: null, topic: null })).not.toHaveProperty("topic_matches");
+  });
+
+  describe("«Чаще в упражнениях» (user_prefs exercise_focus)", () => {
+    const hard = (wordId: string): ReviewState => ({ ...cards(wordId, false)[0], state: 2, reps: 6, lapses: 3, stability: 2, difficulty: 6, due: "2026-10-30T00:00:00.000Z" });
+    const due = (wordId: string): ReviewState => ({ ...cards(wordId, false)[0], state: 2, reps: 2, lapses: 0, stability: 5, difficulty: 5, due: "2026-10-22T06:00:00.000Z" });
+    const pref = (value: unknown, deleted = false) => ({ id: "exercise_focus", value, updated_at: OLD.toISOString(), deleted_at: deleted ? OLD.toISOString() : null });
+    const lowLog: ReviewLog = {
+      id: "l-relou",
+      word_id: "w-relou",
+      direction: "fr_ru",
+      rating: 1,
+      state: 2,
+      due: NOW.toISOString(),
+      stability: 1,
+      difficulty: 5,
+      elapsed_days: 1,
+      scheduled_days: 1,
+      review: "2026-10-21T08:00:00.000Z",
+      prev: null,
+      updated_at: "2026-10-21T08:00:00.000Z",
+      deleted_at: null,
+    };
+    // Weakness alone: bagnole (difficult, 3 lapses) > relou (a «Снова») > ouf (due today).
+    const focusLib = (prefs: ReturnType<typeof pref>[] = []) => fakeLib({ review_state: [hard("w-bagnole"), due("w-ouf")], review_log: [lowLog], user_prefs: prefs });
+    const ids = (out: { words: { id: string }[] }) => out.words.map((w) => w.id);
+    const marked = (out: { words: { id: string; focus?: boolean }[] }) => out.words.filter((w) => w.focus).map((w) => w.id);
+
+    it("exercise_material puts the saved focus words first, marks them and says how many questions they need", async () => {
+      const out = await ok(exerciseMaterial, focusLib([pref({ target: "both", share: "half" })]), {});
+      expect(ids(out).slice(0, 3)).toEqual(["w-bagnole", "w-ouf", "w-relou"]);
+      expect(marked(out)).toEqual(["w-bagnole", "w-ouf"]);
+      expect(out.focus).toEqual({ target: "both", share: "half", from: "settings", min_items_for_12: 6, available: 2, note: expect.stringMatching(/At least 50% .*focus: true.*only 2/) });
+
+      const dueOnly = await ok(exerciseMaterial, focusLib([pref({ target: "due", share: "most" })]), {});
+      expect(ids(dueOnly).slice(0, 3)).toEqual(["w-ouf", "w-bagnole", "w-relou"]);
+      expect(dueOnly.focus).toMatchObject({ target: "due", share: "most", from: "settings", min_items_for_12: 10, available: 1 });
+    });
+
+    it("exercise_material takes a focus from the request over the saved one, keeping the saved share when none is given", async () => {
+      const fake = focusLib([pref({ target: "both", share: "some" })]);
+      const out = await ok(exerciseMaterial, fake, { focus: { target: "due" } });
+      expect(ids(out)[0]).toBe("w-ouf");
+      expect(marked(out)).toEqual(["w-ouf"]);
+      expect(out.focus).toMatchObject({ target: "due", share: "some", from: "request", min_items_for_12: 3, available: 1 });
+
+      const off = await ok(exerciseMaterial, fake, { focus: { target: "normal", share: null } });
+      expect(off.focus).toEqual({ target: "normal" });
+      expect(marked(off)).toEqual([]);
+
+      const scoped = await ok(exerciseMaterial, focusLib(), { folders: ["Эмоции"], focus: { target: "difficult", share: "most" } });
+      expect(scoped.focus).toMatchObject({ target: "difficult", from: "request", available: 0, note: expect.stringMatching(/as usual/) });
+    });
+
+    it("exercise_material leaves the ranking alone without a focus (no row, a deleted row, or normal)", async () => {
+      for (const prefs of [[], [pref({ target: "due", share: "most" }, true)], [pref({ target: "normal", share: "most" })], [pref("garbage")]]) {
+        const out = await ok(exerciseMaterial, focusLib(prefs), {});
+        expect(ids(out).slice(0, 3)).toEqual(["w-bagnole", "w-relou", "w-ouf"]);
+        expect(out.focus).toEqual({ target: "normal" });
+        expect(marked(out)).toEqual([]);
+      }
+    });
+
+    it("create_exercise_set warns (and still saves) when the set ignores the saved focus", async () => {
+      // In the set's themes (Эмоции + inbox), w-chelou is the one difficult word; ITEMS[6] is about it.
+      const seed = { review_state: [hard("w-chelou"), hard("w-bagnole")], user_prefs: [pref({ target: "difficult", share: "half" })] };
+      const fake = fakeLib(seed);
+      const out = await ok(createExerciseSet, fake, set({ items: ITEMS.slice(0, 6) }));
+      expect(stored(fake)).toHaveLength(1);
+      const warning = out.warnings!.find((w: { code: string }) => w.code === "focus_share");
+      expect(warning?.message).toMatch(/at least 50% .*difficult words \(3 of 6\); this set has 0, and 1 such words/);
+
+      const followed = await ok(createExerciseSet, fakeLib(seed), set());
+      expect(followed.warnings!.map((w: { code: string }) => w.code)).not.toContain("focus_share");
+      const off = await ok(createExerciseSet, fakeLib({ ...seed, user_prefs: [] }), set({ items: ITEMS.slice(0, 6) }));
+      expect(off.warnings!.map((w: { code: string }) => w.code)).not.toContain("focus_share");
+    });
+
+    it("counts an item about a focus word, and a pairs board when at least half its words are", () => {
+      const items = [
+        { type: "choice", word_id: "a", pairs: [] },
+        { type: "cloze", word_id: "z", pairs: [] },
+        { type: "pairs", word_id: null, pairs: ["a", "b", "y", "z"] },
+        { type: "pairs", word_id: null, pairs: ["a", "x", "y", "z"] },
+        { type: "choice", word_id: null, new_ref: "n1", pairs: [] },
+      ] as unknown as ExerciseSet["items"];
+      expect(focusItemCount(items, new Set(["a", "b"]))).toBe(2);
+      expect(focusItemCount(items, new Set())).toBe(0);
+    });
   });
 
   it("takes a rate-limit token for create_exercise_set but not for the read tools", async () => {

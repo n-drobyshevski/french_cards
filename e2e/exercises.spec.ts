@@ -323,6 +323,29 @@ test("the empty state builds the request and copies it", async ({ page, context 
   await expect(page.getByText("Ждём набор из чата").first()).toBeVisible();
 });
 
+test("«Чаще в упражнениях» on: the request builder says so and links to Settings; the request text stays", async ({ page }) => {
+  await openReview(page);
+  await page.goto("/exercises");
+  const card = page.getByRole("region", { name: "Запрос для Claude" });
+  await expect(card.locator("p", { hasText: /^Сделай упражнение/ })).toBeVisible();
+  // Off by default: no line.
+  await expect(card.getByText(/^Чаще /)).toHaveCount(0);
+
+  await page.goto("/settings");
+  await page.getByRole("radiogroup", { name: "Чаще в упражнениях" }).getByRole("radio", { name: "Трудные", exact: true }).click();
+  await page.getByRole("radiogroup", { name: "Сколько в наборе" }).getByRole("radio", { name: "Почти все" }).click();
+  await expect(page.getByRole("radiogroup", { name: "Сколько в наборе" }).getByRole("radio", { name: "Почти все" })).toBeChecked();
+
+  await page.goto("/exercises");
+  await expect(card.getByText("Чаще трудные · почти весь набор", { exact: true })).toBeVisible();
+  await expect(card.locator("p", { hasText: /^Сделай упражнение/ })).toHaveText("Сделай упражнение в Карточках по всем темам, 12 вопросов, можно новые слова.");
+  const link = card.getByRole("link", { name: "Настройки ›" });
+  await expect(link).toHaveAttribute("href", "/settings#set-exercises");
+  await link.click();
+  await expect(page).toHaveURL(/\/settings#set-exercises$/);
+  await expect(page.getByRole("radiogroup", { name: "Чаще в упражнениях" })).toBeInViewport();
+});
+
 test.describe("offline", () => {
   // The service worker serves the player's shell and chunks; e2e blocks it everywhere else.
   test.use({ serviceWorkers: "allow" });

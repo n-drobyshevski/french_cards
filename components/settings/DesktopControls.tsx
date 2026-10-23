@@ -141,6 +141,59 @@ export function CheckboxRow({
   );
 }
 
+/**
+ * A radio option row (§8 «Чаще в упражнениях»): CheckboxRow's look with a 14px round mark — for
+ * choices too long for text options. Rows sharing `name` form one native radio group (arrows move and
+ * pick); wrap them in a `role="radiogroup"` named by its label. `checked` false on every row while the
+ * value is unknown.
+ */
+export function RadioRow({
+  name,
+  label,
+  checked,
+  disabled,
+  onSelect,
+}: {
+  name: string;
+  label: ReactNode;
+  checked: boolean;
+  disabled?: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <label
+      className={cx(
+        "relative -mx-2 flex min-h-11 items-center gap-3 rounded-[4px] px-2 has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-ink",
+        disabled ? "cursor-default" : "cursor-pointer hoverable:bg-hover",
+      )}
+    >
+      <input
+        type="radio"
+        name={name}
+        checked={checked}
+        disabled={disabled}
+        onChange={onSelect}
+        className="absolute top-0 left-0 m-0 size-px opacity-0"
+      />
+      <span
+        aria-hidden="true"
+        data-radio-mark=""
+        className={cx(
+          "inline-flex size-3.5 shrink-0 items-center justify-center rounded-full border bg-surface transition-colors duration-(--dur-quick)",
+          checked ? "border-ink" : "border-muted",
+          disabled && "opacity-40",
+        )}
+      >
+        {checked && <span className="size-1.5 rounded-full bg-ink" />}
+      </span>
+      <span className={cx("min-w-0 flex-1 truncate text-[15px] leading-5", disabled ? "text-boundary" : "text-ink", checked && "font-medium")}>
+        {label}
+      </span>
+      <span aria-hidden="true" className="absolute inset-x-2 bottom-0 h-px bg-rule" />
+    </label>
+  );
+}
+
 export interface TextOption<T extends string | number> {
   value: T;
   label: string;

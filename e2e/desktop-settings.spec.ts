@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addSheet, openReview } from "./fixtures";
+import { addSheet, dbRows, openReview, seedExerciseSets, SLANG_SET } from "./fixtures";
 
 // Desktop Settings and Login (mockups/DESKTOP-SPEC.md §5 boards 20 and 21). Runs in the
 // desktop-chromium project (1440×800), local-only mode.
@@ -15,7 +15,7 @@ test("section nav with scroll-spy, form in a 640 column", async ({ page }) => {
   await openSettings(page);
   const nav = sectionNav(page);
   await expect(nav).toBeVisible();
-  for (const name of ["Повторение", "Оформление", "ИИ", "Клавиши", "Данные"]) {
+  for (const name of ["Повторение", "Упражнения", "Оформление", "ИИ", "Клавиши", "Данные"]) {
     await expect(nav.getByRole("link", { name })).toBeVisible();
   }
   await expect(nav.getByRole("link", { name: "Повторение" })).toHaveAttribute("aria-current", "true");
@@ -88,6 +88,46 @@ test("checkboxes, text options and the direction select", async ({ page }) => {
   await page.reload();
   await expect(page.getByRole("button", { name: /Направление по умолчанию/ })).toContainText("RU → FR");
   await expect(page.getByRole("radiogroup", { name: "Кнопки оценки" }).getByRole("radio", { name: /Две кнопки/ })).toBeChecked();
+});
+
+test("«Упражнения»: «Чаще в упражнениях» option rows and the 3-stop slider, shown in the «Новый набор» panel", async ({ page }) => {
+  const focusRow = async () => (await dbRows<{ id: string; value: unknown }>(page, "user_prefs")).find((r) => r.id === "exercise_focus");
+  // A set on the device, so «Упражнения» shows the «Новый набор» panel.
+  await openReview(page);
+  await seedExerciseSets(page, [SLANG_SET]);
+
+  await openSettings(page);
+  await sectionNav(page).getByRole("link", { name: "Упражнения" }).click();
+  await expect(page).toHaveURL(/#set-exercises$/);
+  const section = page.locator("#set-exercises");
+  await expect(section.getByRole("heading", { level: 2, name: "Упражнения" })).toBeInViewport();
+  await expect(section.getByText("Claude будет брать такие слова в упражнения — и когда просите в чате. Настройка общая для всех устройств.")).toBeVisible();
+
+  const target = section.getByRole("radiogroup", { name: "Чаще в упражнениях" });
+  const share = section.getByRole("radiogroup", { name: "Сколько в наборе" });
+  await expect(target.getByRole("radio", { name: "Обычно" })).toBeChecked();
+  await expect(share.getByRole("radio", { name: "Немного" })).toBeDisabled();
+
+  await target.getByRole("radio", { name: "Трудные", exact: true }).click();
+  await expect(target.getByRole("radio", { name: "Трудные", exact: true })).toBeChecked();
+  // The slider is a radio group: arrows move along the stops.
+  await share.getByRole("radio", { name: "Половина" }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(share.getByRole("radio", { name: "Почти все" })).toBeChecked();
+  await expect.poll(async () => (await focusRow())?.value).toEqual({ target: "difficult", share: "most" });
+
+  await page.goto("/exercises");
+  const panel = page.getByRole("complementary", { name: "Попросить набор" });
+  await expect(panel.getByText("Чаще трудные · почти весь набор", { exact: true })).toBeVisible();
+  await expect(panel.getByRole("link", { name: "Настройки ›" })).toHaveAttribute("href", "/settings#set-exercises");
+
+  await page.goto("/settings#set-exercises");
+  await page.getByRole("radiogroup", { name: "Чаще в упражнениях" }).getByRole("radio", { name: "Обычно" }).click();
+  await expect(page.getByRole("radiogroup", { name: "Сколько в наборе" }).getByRole("radio", { name: "Почти все" })).toBeDisabled();
+  await expect.poll(async () => (await focusRow())?.value).toEqual({ target: "normal", share: "most" });
+  await page.goto("/exercises");
+  await expect(page.getByRole("complementary", { name: "Попросить набор" })).toBeVisible();
+  await expect(page.getByText(/^Чаще /)).toHaveCount(0);
 });
 
 test("«Однобуквенные сочетания» off stops N; back on, N opens the add dialog", async ({ page }) => {

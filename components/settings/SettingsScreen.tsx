@@ -20,6 +20,7 @@ import { CustomFieldsSection } from "./CustomFieldsSection";
 import { DataSection } from "./DataSection";
 import { DesktopSettings } from "./DesktopSettings";
 import { DirectionSheet } from "./DirectionSheet";
+import { PhoneExerciseSection } from "./ExerciseFocusSection";
 import { NEW_PER_DAY_MAX, stepNewPerDay } from "./format";
 import { SettingsButtonRow, SettingsRow, SettingsSection } from "./SettingsList";
 import { Stepper } from "./Stepper";
@@ -54,7 +55,7 @@ const GRADE_OPTIONS = [
 ] as const;
 
 /**
- * «Настройки»: review preferences, theme, «ИИ» (what is filled in automatically, and how), «Свои поля» and data
+ * «Настройки»: review preferences, «Упражнения» («Чаще в упражнениях»), theme, «ИИ» (what is filled in automatically, and how), «Свои поля» and data
  * (sync, backup, sign-out). Phones get today's list; from 768 up the desktop layout
  * (DesktopSettings). The server and hydration render the phone list, hidden from 768 up by CSS,
  * so a wide window never flashes the phone layout.
@@ -167,7 +168,12 @@ function PhoneSettings({ settings, known, save, onTheme, onDirection }: ScreenPr
               />
             </SettingsRow>
           </SettingsSection>
+        </Valued>
 
+        {/* Synced with the account (user_prefs), read on its own: not a row of this device's settings. */}
+        <PhoneExerciseSection />
+
+        <Valued known={known}>
           <SettingsSection title="Оформление">
             <SettingsRow label="Тема" labelId="theme-label">
               <Segmented

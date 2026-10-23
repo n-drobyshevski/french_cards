@@ -12,7 +12,22 @@ How to write an exercise set for `create_exercise_set`. The app plays it offline
   2. Then judge: `register`, `situation`, `verlan`, `neutral`.
   3. Produce last: `choice` meaning with `ask: "ru"`, `form`, `cloze`.
   4. The weakest words (the top of `exercise_material`'s list, or last run's `missed`) appear late **and twice**, in two different types, with at least two other items between them.
+- **Focus («Чаще в упражнениях»):** see the next section.
 - **Title:** short Russian, at most 60 characters: «Еда · 12 вопросов», «Вечеринка · сленг», «Ошибки: meuf, relou».
+
+## «Чаще в упражнениях» (the focus)
+
+The user picks in the app's Settings which of their words exercises should favour: «Обычно» (off), «Трудные» (cards the app rates difficult), «К повторению» (due today) or both, and how much of a set: «Немного» (≥25 %), «Половина» (≥50 %), «Почти все» (≥80 %). `exercise_material` reads it and returns:
+
+- `focus: { target, share, from, min_items_for_12, available, note }` (`from`: `settings`, or `request` when you passed `focus`); `{ target: "normal" }` when it is off.
+- The matching words first in `words`, each with `focus: true` (then the usual weakest-first order).
+
+Rules:
+- At least the share of the **questions** is about focus words: `min_items_for_12` for 12 questions, scaled for another size (≥50 % of 15 = 8). An item counts when its `word_id` is a focus word; a `pairs` board counts when at least half its words are. New words never count.
+- With fewer focus words than that (`available`), use each of them at least once, the weakest twice.
+- It applies to every request, a plain «сделай упражнение» included, and to a theme or topic set (the focus words of that scope). The order rules still hold: recognise before produce, the same word apart.
+- Pass `focus: { target, share? }` to `exercise_material` only when the user asks otherwise in this chat («сегодня только трудные», «без упора на повторение» → `normal`); the saved setting stays as it is.
+- `create_exercise_set` adds the warning `focus_share` when the saved setting asked for more than the set has; the set is saved anyway, so get it right next time.
 
 ## Each item
 

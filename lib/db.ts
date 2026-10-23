@@ -3,7 +3,7 @@
 import Dexie, { type EntityTable, type Table } from "dexie";
 import { installOutboxTracking } from "./outbox";
 import type { ContextResponse, LookupResponse } from "./ai/schemas";
-import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ReorgRun, ReviewLog, ReviewSet, ReviewState, Settings, Word } from "./types";
+import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ReorgRun, ReviewLog, ReviewSet, ReviewState, Settings, UserPref, Word } from "./types";
 
 /** «Контекст»: one looked-up query (lib/context.ts). Device-local, not synced or backed up. */
 export interface LookupEntry {
@@ -40,6 +40,7 @@ export class KartochkiDB extends Dexie {
   field_defs!: EntityTable<FieldDef, "id">;
   exercise_sets!: EntityTable<ExerciseSet, "id">;
   exercise_runs!: EntityTable<ExerciseRun, "id">;
+  user_prefs!: EntityTable<UserPref, "id">;
   lookups!: EntityTable<LookupEntry, "key">;
   own_runs!: EntityTable<OwnRun, "id">;
   settings!: EntityTable<Settings, "id">;
@@ -78,6 +79,8 @@ export class KartochkiDB extends Dexie {
     // Runs this device started (device-local): a run is resumed only where it was started, so two
     // devices never write the same run row (its answers would be lost to last-write-wins).
     this.version(6).stores({ own_runs: "id" });
+    // Preferences that follow the account (synced, the connector reads them): «Чаще в упражнениях».
+    this.version(7).stores({ user_prefs: "id, updated_at" });
     // Every write to a synced table queues `${table}:${id}` in outbox, in the same transaction.
     installOutboxTracking(this);
   }

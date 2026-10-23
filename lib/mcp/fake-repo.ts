@@ -1,7 +1,7 @@
 // In-memory McpRepo for tests. Upserts behave like the kartochki_stamp_row trigger: a row whose
 // updated_at is not newer than the stored one is kept out and the stored row comes back. Replaces
 // write a row only while the stored updated_at is still the expected one.
-import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ReviewLog, ReviewState, Word } from "@/lib/types";
+import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ReviewLog, ReviewState, UserPref, Word } from "@/lib/types";
 import { PartialWriteError, type McpRepo, type Replacement, type TableRows, type WritableTable } from "./repo";
 
 type Tables = { [T in keyof TableRows]: Map<string, TableRows[T]> };
@@ -33,6 +33,7 @@ export function createFakeRepo(
     field_defs?: FieldDef[];
     exercise_sets?: ExerciseSet[];
     exercise_runs?: ExerciseRun[];
+    user_prefs?: UserPref[];
   } = {},
 ): FakeRepo {
   const tables: Tables = {
@@ -43,6 +44,7 @@ export function createFakeRepo(
     field_defs: new Map((seed.field_defs ?? []).map((r) => [r.id, clone(r)])),
     exercise_sets: new Map((seed.exercise_sets ?? []).map((r) => [r.id, clone(r)])),
     exercise_runs: new Map((seed.exercise_runs ?? []).map((r) => [r.id, clone(r)])),
+    user_prefs: new Map((seed.user_prefs ?? []).map((r) => [r.id, clone(r)])),
   };
   const failing = new Set<WritableTable>();
   const partial = new Map<WritableTable, { after: number; lostAnswers?: boolean }>();
@@ -61,6 +63,7 @@ export function createFakeRepo(
       logsSince: async (from) => clone([...tables.review_log.values()].filter((l) => Date.parse(l.review) >= Date.parse(from))),
       exerciseSets: async () => clone([...tables.exercise_sets.values()]),
       exerciseRunsSince: async (from) => clone([...tables.exercise_runs.values()].filter((r) => Date.parse(r.started_at) >= Date.parse(from))),
+      userPrefs: async () => clone([...tables.user_prefs.values()]),
       async upsert<T extends WritableTable>(table: T, rows: readonly TableRows[T][]): Promise<TableRows[T][]> {
         fake.writes.push({ table, rows: clone([...rows]) });
         if (failing.delete(table)) throw new Error(`${table}: simulated failure`);
