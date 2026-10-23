@@ -1,7 +1,7 @@
 // Daily review sessions: today's queue (due first, then new up to the daily limit), header counts,
 // the end-of-session summary and practice rounds that never touch scheduling.
 import { db, liveRows } from "./db";
-import { reviewStateId, wordStatus, type Rating } from "./scheduler";
+import { reviewStateId, wordStatus } from "./scheduler";
 import { getSettings } from "./settings";
 import type { Direction, ReviewLog, ReviewSetStatus, ReviewState, SlangLevel, Word } from "./types";
 
@@ -379,17 +379,5 @@ async function allCardsQueue(opts: PracticeOptions, pre?: SessionData): Promise<
   return items.slice(0, opts.limit ?? PRACTICE_ALL_MAX);
 }
 
-/**
- * Next practice queue after answering its head. «Не знаю» brings the card back after
- * 3 others, «Сложно» puts it at the end, «Знаю»/Easy drops it. Never writes to the db.
- */
-export function advancePractice<T>(queue: readonly T[], rating: Rating): T[] {
-  if (queue.length === 0) return [];
-  const [head, ...rest] = queue;
-  if (rating === 1) {
-    const at = Math.min(3, rest.length);
-    return [...rest.slice(0, at), head, ...rest.slice(at)];
-  }
-  if (rating === 2) return [...rest, head];
-  return rest;
-}
+/** Next practice queue after answering its head (lib/core/practice.ts). */
+export { advancePractice } from "./core/practice";

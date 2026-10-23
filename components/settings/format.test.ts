@@ -97,6 +97,8 @@ describe("import summaries", () => {
     reorg_runs: empty,
     review_sets: empty,
     field_defs: empty,
+    exercise_sets: empty,
+    exercise_runs: empty,
     settings: "kept",
     ...patch,
   });
@@ -110,6 +112,9 @@ describe("import summaries", () => {
       "Прогресс и темы обновлены",
     );
     expect(describeBackupImport(result({}))).toBe("Ничего нового — всё уже есть");
+    expect(describeBackupImport(result({ exercise_runs: { inserted: 3, updated: 0, skipped: 0, deleted: 0 } }))).toBe(
+      "Прогресс и темы обновлены",
+    );
   });
 
   it("lists what a backup import would change", () => {
@@ -120,6 +125,8 @@ describe("import summaries", () => {
           folders: { inserted: 1, updated: 0, skipped: 7, deleted: 0 },
           review_state: { inserted: 20, updated: 4, skipped: 0, deleted: 0 },
           review_log: { inserted: 31, updated: 0, skipped: 0, deleted: 0 },
+          exercise_sets: { inserted: 2, updated: 0, skipped: 0, deleted: 0 },
+          exercise_runs: { inserted: 5, updated: 0, skipped: 0, deleted: 0 },
         }),
       ),
     ).toEqual([
@@ -127,6 +134,7 @@ describe("import summaries", () => {
       { label: "Темы", text: "1 новая" },
       { label: "Прогресс", text: "24 карточки" },
       { label: "История", text: "31 ответ" },
+      { label: "Упражнения", text: "2 набора" },
     ]);
     expect(describeBackupPreview(result({}))).toEqual([]);
   });

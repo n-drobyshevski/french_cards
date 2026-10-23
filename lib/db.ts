@@ -3,7 +3,7 @@
 import Dexie, { type EntityTable, type Table } from "dexie";
 import { installOutboxTracking } from "./outbox";
 import type { ContextResponse, LookupResponse } from "./ai/schemas";
-import type { FieldDef, Folder, ReorgRun, ReviewLog, ReviewSet, ReviewState, Settings, Word } from "./types";
+import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ReorgRun, ReviewLog, ReviewSet, ReviewState, Settings, Word } from "./types";
 
 /** «Контекст»: one looked-up query (lib/context.ts). Device-local, not synced or backed up. */
 export interface LookupEntry {
@@ -33,6 +33,8 @@ export class KartochkiDB extends Dexie {
   reorg_runs!: EntityTable<ReorgRun, "id">;
   review_sets!: EntityTable<ReviewSet, "id">;
   field_defs!: EntityTable<FieldDef, "id">;
+  exercise_sets!: EntityTable<ExerciseSet, "id">;
+  exercise_runs!: EntityTable<ExerciseRun, "id">;
   lookups!: EntityTable<LookupEntry, "key">;
   settings!: EntityTable<Settings, "id">;
   outbox!: EntityTable<Outbox, "key">;
@@ -65,6 +67,8 @@ export class KartochkiDB extends Dexie {
     this.version(3).stores({ field_defs: "id, sort, updated_at" });
     // «Контекст»: looked-up words and their web examples, kept on this device only (never synced).
     this.version(4).stores({ lookups: "key, at" });
+    // «Упражнения»: sets written by the connector and the runs played on a device (both synced).
+    this.version(5).stores({ exercise_sets: "id, created_at, updated_at", exercise_runs: "id, set_id, started_at, updated_at" });
     // Every write to a synced table queues `${table}:${id}` in outbox, in the same transaction.
     installOutboxTracking(this);
   }

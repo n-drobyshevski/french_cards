@@ -118,7 +118,9 @@ const words = (n: number) => `${n} ${pluralRu(n, ["слово", "слова", "�
 export function describeBackupImport(result: ImportResult): string {
   const added = result.words.inserted;
   const updated = result.words.updated;
-  const other = (["folders", "review_state", "review_log", "reorg_runs", "review_sets", "field_defs"] as const).reduce(
+  const other = (
+    ["folders", "review_state", "review_log", "reorg_runs", "review_sets", "field_defs", "exercise_sets", "exercise_runs"] as const
+  ).reduce(
     (sum, t) => sum + result[t].inserted + result[t].updated,
     0,
   );
@@ -156,6 +158,8 @@ export function describeBackupPreview(result: ImportResult): BackupPreviewLine[]
   if (progress > 0) lines.push({ label: "Прогресс", text: `${progress} ${pluralRu(progress, ["карточка", "карточки", "карточек"])}` });
   const answers = result.review_log.inserted + result.review_log.updated;
   if (answers > 0) lines.push({ label: "История", text: `${answers} ${pluralRu(answers, ["ответ", "ответа", "ответов"])}` });
+  const exercises = result.exercise_sets.inserted + result.exercise_sets.updated;
+  if (exercises > 0) lines.push({ label: "Упражнения", text: `${exercises} ${pluralRu(exercises, ["набор", "набора", "наборов"])}` });
   return lines;
 }
 

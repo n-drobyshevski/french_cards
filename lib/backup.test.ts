@@ -211,6 +211,67 @@ describe("import", () => {
     expect(await db.words.count()).toBe(0);
   });
 
+  it("round-trips exercise sets and runs, and imports old backups without them", async () => {
+    const set = {
+      id: "x-1",
+      title: "Сленг",
+      topic: null,
+      folders: [],
+      items: [{ id: "q1", type: "register" }],
+      new_words: [],
+      source: "chat",
+      created_at: T0.toISOString(),
+      updated_at: T0.toISOString(),
+      deleted_at: null,
+    };
+    const run = {
+      id: "r-1",
+      set_id: "x-1",
+      kind: "set",
+      item_ids: [],
+      started_at: T0.toISOString(),
+      finished_at: null,
+      answers: [{ item_id: "q1", word_id: null, new_ref: null, attempt: 1, outcome: "correct", chosen: "fam.", ms: 800, at: T0.toISOString() }],
+      total: 1,
+      first_try: 1,
+      updated_at: T0.toISOString(),
+      deleted_at: null,
+    };
+    await db.exercise_sets.put(set as never);
+    await db.exercise_runs.put(run as never);
+    const json = await exportBackupJson(later(30));
+    await clearAll();
+    const res = await importBackup(json);
+    expect(res.exercise_sets).toEqual({ inserted: 1, updated: 0, skipped: 0, deleted: 0 });
+    expect(res.exercise_runs).toEqual({ inserted: 1, updated: 0, skipped: 0, deleted: 0 });
+    expect(await db.exercise_sets.get("x-1")).toEqual(set);
+    expect(await db.exercise_runs.get("r-1")).toEqual(run);
+    expect((await db.outbox.toArray()).map((o) => o.key)).toEqual(expect.arrayContaining(["exercise_sets:x-1", "exercise_runs:r-1"]));
+
+    const malformed = await importBackup({
+      format: "kartochki-backup",
+      version: 1,
+      exported_at: T0.toISOString(),
+      tables: {
+        exercise_sets: [
+          { ...set, id: "x-2", items: "nope" },
+          { ...set, id: "x-3", new_words: undefined },
+        ],
+        exercise_runs: [
+          { ...run, id: "r-2", answers: null },
+          { ...run, id: "r-3", item_ids: undefined },
+        ],
+      },
+    });
+    expect(malformed.exercise_sets.skipped).toBe(2);
+    expect(malformed.exercise_runs.skipped).toBe(2);
+
+    await clearAll();
+    const old = await importBackup({ format: "kartochki-backup", version: 1, exported_at: T0.toISOString(), tables: { words: [], folders: [] } });
+    expect(old.exercise_sets).toEqual({ inserted: 0, updated: 0, skipped: 0, deleted: 0 });
+    expect(await db.exercise_sets.count()).toBe(0);
+  });
+
   it("rejects files that are not backups", () => {
     expect(() => parseBackup("{oops")).toThrow(BackupError);
     expect(() => parseBackup({ format: "other", tables: {} })).toThrow(/не резервная копия/);
