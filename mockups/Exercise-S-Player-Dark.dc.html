@@ -19,7 +19,7 @@ button{font:inherit}
 <div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #121212; color: #ececea; font-family: 'IBM Plex Sans', system-ui, sans-serif; display: flex; flex-direction: column">
   <main style="flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 16px 0; box-sizing: border-box">
     <header style="height: 44px; flex-shrink: 0; display: flex; align-items: center; gap: 12px">
-      <a href="Exercise-List-A.dc.html" aria-label="Выйти" style="width: 44px; height: 44px; margin-left: -12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #ececea; text-decoration: none">
+      <a href="Exercise-List-B.dc.html" aria-label="Выйти" style="width: 44px; height: 44px; margin-left: -12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #ececea; text-decoration: none">
         <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
       </a>
       <div aria-hidden="true" style="flex: 1; position: relative; height: 5px">
@@ -44,37 +44,51 @@ button{font:inherit}
         <span style="margin-top: 8px; font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; line-height: 20px; color: #a3a39e">разг. — машина</span>
         <p style="margin: 20px 0 0; font-size: 15px; line-height: 20px; color: #a3a39e">Как сказать по-французски?</p>
       </div>
+      <span role="status" style="position: absolute; right: 22px; bottom: 58px; transform: rotate(-4deg); transform-origin: center; display: inline-flex; align-items: center; height: 40px; padding: 0 14px; box-sizing: border-box; border: 2px solid #ff7b70; border-radius: 4px; color: #ff7b70; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 17px; font-weight: 500; letter-spacing: .14em; background: #1b1b1a">НЕВЕРНО</span>
       <div style="height: 44px; flex-shrink: 0; box-sizing: border-box; margin: 0 20px; border-top: 1px solid #33332f; display: flex; align-items: center; gap: 8px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: #a3a39e">
         <span style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">набор: <span style="color: #ececea">Сленг на каждый день</span></span>
         <div style="flex: 1"></div>
         <span style="flex-shrink: 0">из чата</span>
       </div>
     </article>
-    <div role="group" aria-label="Варианты ответа" style="margin-top: 16px; flex-shrink: 0; display: flex; flex-direction: column; gap: 8px">
-      <button type="button" disabled style="height: 56px; box-sizing: border-box; padding: 0 15px; display: flex; align-items: center; gap: 14px; border-radius: 6px; background: #1b1b1a; border: 2px solid #5cc58f; color: #5cc58f; cursor: default; text-align: left">
-        <span aria-hidden="true" style="width: 12px; flex-shrink: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; font-weight: 500; color: #5cc58f">1</span>
-        <span lang="fr" style="flex: 1; min-width: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px">bagnole</span><span style="flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5cc58f">верный ответ<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7"></path></svg></span>
+    <div role="group" aria-label="Варианты ответа" style="margin-top: 16px; flex-shrink: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+      <button type="button" disabled style="position: relative; height: 88px; box-sizing: border-box; padding: 0 34px 0 13px; display: flex; align-items: center; border-radius: 6px; background: #1b1b1a; border: 2px solid #5cc58f; color: #5cc58f; cursor: default; text-align: left">
+        <span style="display: flex; align-items: baseline; gap: 12px; min-width: 0">
+          <span aria-hidden="true" style="width: 12px; flex-shrink: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; font-weight: 500; color: #5cc58f">1</span>
+          <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px">bagnole</span>
+        </span>
+        <span aria-hidden="true" style="position: absolute; top: 10px; right: 10px; display: inline-flex; color: #5cc58f"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12.5 4.5 4.5L19 7"></path></svg></span>
+        <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">верный ответ</span>
       </button>
-      <button type="button" disabled style="height: 56px; box-sizing: border-box; padding: 0 16px; display: flex; align-items: center; gap: 14px; border-radius: 6px; background: #1b1b1a; border: 1px solid #ff7b70; color: #ff7b70; cursor: default; text-align: left">
-        <span aria-hidden="true" style="width: 12px; flex-shrink: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; font-weight: 500; color: #ff7b70">2</span>
-        <span lang="fr" style="flex: 1; min-width: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px">baraque</span><span style="flex-shrink: 0; display: inline-flex; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #ff7b70">ваш ответ<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"></path></svg></span>
+      <button type="button" disabled style="position: relative; height: 88px; box-sizing: border-box; padding: 0 34px 0 14px; display: flex; align-items: center; border-radius: 6px; background: #1b1b1a; border: 1px solid #ff7b70; color: #ff7b70; cursor: default; text-align: left">
+        <span style="display: flex; align-items: baseline; gap: 12px; min-width: 0">
+          <span aria-hidden="true" style="width: 12px; flex-shrink: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; font-weight: 500; color: #ff7b70">2</span>
+          <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px">baraque</span>
+        </span>
+        <span aria-hidden="true" style="position: absolute; top: 10px; right: 10px; display: inline-flex; color: #ff7b70"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"></path></svg></span>
+        <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">ваш ответ</span>
       </button>
-      <button type="button" disabled style="height: 56px; box-sizing: border-box; padding: 0 16px; display: flex; align-items: center; gap: 14px; border-radius: 6px; background: #1b1b1a; border: 1px solid #33332f; color: #a3a39e; cursor: default; text-align: left">
-        <span aria-hidden="true" style="width: 12px; flex-shrink: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; font-weight: 500; color: #a3a39e">3</span>
-        <span lang="fr" style="flex: 1; min-width: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px">bécane</span>
+      <button type="button" disabled style="position: relative; height: 88px; box-sizing: border-box; padding: 0 14px 0 14px; display: flex; align-items: center; border-radius: 6px; background: #1b1b1a; border: 1px solid #33332f; color: #a3a39e; cursor: default; text-align: left">
+        <span style="display: flex; align-items: baseline; gap: 12px; min-width: 0">
+          <span aria-hidden="true" style="width: 12px; flex-shrink: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; font-weight: 500; color: #a3a39e">3</span>
+          <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px">bécane</span>
+        </span>
+      </button>
+      <button type="button" disabled style="position: relative; height: 88px; box-sizing: border-box; padding: 0 14px 0 14px; display: flex; align-items: center; border-radius: 6px; background: #1b1b1a; border: 1px solid #33332f; color: #a3a39e; cursor: default; text-align: left">
+        <span style="display: flex; align-items: baseline; gap: 12px; min-width: 0">
+          <span aria-hidden="true" style="width: 12px; flex-shrink: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; font-weight: 500; color: #a3a39e">4</span>
+          <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px">bicoque</span>
+        </span>
       </button>
     </div>
-    <section aria-label="Результат ответа" aria-live="polite" style="height: 200px; flex-shrink: 0; margin: 16px -16px 0; box-sizing: border-box; padding: 14px 16px 28px; display: flex; flex-direction: column; background: #1b1b1a; border-top: 2px solid #ff7b70">
-      <div style="height: 20px; flex-shrink: 0; display: flex; align-items: center; gap: 6px; color: #ff7b70">
-        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
-        <span role="status" style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 500; line-height: 16px; letter-spacing: .06em">НЕВЕРНО</span>
-      </div>
-      <div style="margin-top: 6px; display: flex; align-items: baseline; gap: 12px">
-        <span lang="fr" style="min-width: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 22px; line-height: 28px; color: #ececea">bagnole</span>
+    <section aria-label="Результат ответа" aria-live="polite" style="height: 200px; flex-shrink: 0; margin: 16px -16px 0; box-sizing: border-box; padding: 0 16px 28px; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; justify-content: flex-start; padding-top: 0">
+      <div style="height: 44px; flex-shrink: 0; display: flex; align-items: center; gap: 8px">
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #a3a39e">ответ</span>
+        <span lang="fr" style="flex-shrink: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; color: #5cc58f">bagnole</span>
+        <span style="min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; line-height: 20px; color: #a3a39e">· <span lang="fr">baraque</span> — «хата»</span>
         <div style="flex: 1"></div>
-        <a href="Word-Detail.dc.html" style="flex-shrink: 0; height: 28px; display: inline-flex; align-items: center; font-size: 13px; font-weight: 500; color: #ececea; text-decoration: none">Слово ›</a>
+        <a href="Word-Detail.dc.html" style="flex-shrink: 0; height: 44px; display: inline-flex; align-items: center; font-size: 13px; font-weight: 500; color: #ececea; text-decoration: none">Слово ›</a>
       </div>
-      <p style="margin: 2px 0 0; font-size: 13px; line-height: 20px; color: #a3a39e"><span lang="fr">baraque</span> — это «хата, дом», <span lang="fr">bécane</span> — «мотик».</p>
       <div style="flex: 1"></div>
       <button type="button" style="height: 52px; flex-shrink: 0; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 6px; background: #ececea; color: #121212; font-size: 15px; font-weight: 500; letter-spacing: .01em; text-decoration: none; cursor: pointer">Дальше</button>
     </section>

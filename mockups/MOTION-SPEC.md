@@ -174,6 +174,7 @@ change under reduce. Keyframes live in `globals.css` (move `snackbar-in` out of 
 | Ink run, scan-line travel | looping | off; the status text and elapsed counter carry "alive" |
 | Rule draw (done) | 400 ms | drawn at once |
 | Toggle thumb | slides 200 | jumps; colour fades 110 |
+| Exercise answer (§5.15) | fill 70, stamp 1.15→1 160, hairline 1000, card exit / settle | fill, stamp and card swap fade 110 in place; **no hairline, no auto-advance** — waits for «Дальше» |
 
 JS motion (swipe, fly-out duration, view transitions) reads `matchMedia('(prefers-reduced-motion: reduce)')`
 as `useSwipe.ts` does. Because durations shrink instead of becoming 0, `transitionend` still fires.
@@ -583,6 +584,28 @@ row, a drop target, theme tiles after «Разложить». Never pulsing, nev
 (a bulk change lights the containers, not each row). The fields of one form filled by one pick or one detection count as
 one region: lit together on a pick (A5), or each as it lands during detection (A6), where consecutive fades may overlap. Reduced motion: kept (colour only).
 
+### 5.15 Exercise answer (added 2026-10-23; picks D4 C, D5 C, D6 B in SPEC.md «Упражнения»; board M-Exercise-Answer)
+A tap on an option is the answer (no «Проверить»). Sequence on phones:
+
+| Step | Visual | Timing |
+|---|---|---|
+| Tap | the tapped tile ink-fills in the answer's tone (good `#1d6b45`, wrong `#b3261e`) and presses to .98; input closes; haptic `good` / `again` | `--dur-instant` 70 `--ease-press` |
+| Result | the fill turns into the verdict border (2px good on the right tile + check; 1px again + cross on a wrong pick), the other tiles dim to `#d6d6d1`; «Не знаю» fades out and the result line fades in, in the same reserved 200 px zone | `--dur-quick` 110 `--ease-standard` |
+| Stamp | «ВЕРНО» / «НЕВЕРНО» lands on the card: `scale 1.15→1` + opacity 0→1, rotation fixed at −4°. No spring, no overshoot — it settles from above the paper. Its background is the `surface` token, so nothing shows through | 160 ms `--ease-enter`, starts at 70 |
+| Right: auto-advance | a 2px good hairline under the line drains right-to-left (`scaleX 1→0`, origin left) under «Дальше через 1 с · нажмите, чтобы остаться». A tap anywhere on the screen holds it: the hairline stops where it is and the label becomes «Дальше» | 1000 ms `--ease-linear`, starts when the stamp has landed (230) |
+| Wrong / «Не знаю» | no hairline; the line shows the right answer and «Дальше» waits | — |
+| Next | card, grid and stamp leave together: translateX 0→−24 px + opacity→0; the result line fades. The next card enters from the right (24 px + fade) after the exit (§2.6); the progress line steps (§5.5), the counter swaps | exit `--dur-exit` 140 `--ease-exit`; enter `--dur-enter` 240 `--ease-enter` |
+
+- Totals: a right answer costs 70 + 160 + 1000 + 140 + 240 ≈ 1.6 s without a single extra tap; any tap after
+  the stamp has landed («Дальше» or a hold-then-«Дальше») goes on at once. Input during the 230 ms before the
+  line is in is ignored, never queued.
+- Desktop: keys `1`–`4` behave as the tap (fill + stamp, no press scale on a key, as D1); `↵` skips the
+  hairline; no travel on the card swap for keys — the next card fades in 110 in place.
+- Reduced motion: the fill, the verdict colours, the stamp (no scale) and the card swap all fade 110 ms in
+  place (`--dur-quick`); the hairline is not drawn and **nothing auto-advances** — every answer waits for
+  «Дальше» (`useAutoAdvance` is off under `prefers-reduced-motion: reduce`).
+- Never: confetti, combo counters, streak flames, sound, a shake on a wrong answer.
+
 ---
 
 ## 6. Mockup boards
@@ -650,6 +673,7 @@ one region: lit together on a pick (A5), or each as it lands during detection (A
 | Desktop & kit | M-D-Review-Keys | state + band | 1440×920 | D1, D2, R8 |
 | Desktop & kit | M-D-Library-Pane | state + band | 1440×920 | D3, D4, D6, D7, L5 |
 | Desktop & kit | M-D-Dialogs-Drop | state + band | 1440×920 | D5, D8, N2 |
+| Упражнения (added 2026-10-23, canvas row 21) | M-Exercise-Answer | storyboard 5 | 2190×1044 | 5.15, 2.6, 2.7, 5.1 |
 
 Detailed briefs for each board follow in §6.3 (frames, states, Russian copy, timings, tokens).
 

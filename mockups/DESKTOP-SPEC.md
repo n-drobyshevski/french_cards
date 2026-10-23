@@ -121,7 +121,12 @@ Full height, paper, 1px `#d6d6d1` right rule, padding 16 12 12, flex column. Tex
 3. **Nav** y 120, items 36px, gap 2, radius 4, padding 0 8 0 12: label 14px + right count mono 12 tabular:
    «Повторение» `23` ink 500 (no count on Session done) → D-Review-Question.dc.html; «Библиотека» `158` muted →
    D-Library.dc.html; «Импорт» (no count) → D-Import-Drop.dc.html.
-4. Hairline y 248 (margin 0 8).
+   **Order since 2026-10-23** (Упражнения, SPEC.md «Упражнения»): «Повторение» `23` · «Упражнения» `2` (count =
+   sets not played yet, ink 500 like Повторение; none when 0) → D-Exercise-List.dc.html · «Библиотека» `158` ·
+   «Контекст» (no count) · «Импорт». Five items end at y 300, so the hairline, «Темы» and the theme rows below
+   move down 76px (as drawn on the D-Exercise-* boards); the theme list scrolls inside the sidebar when it no
+   longer fits.
+4. Hairline y 248 (margin 0 8) — y 324 with the five items above.
 5. **«Темы»** header y 260, 24px: Plex 500 13 «Темы» + right 24×24 «+» icon button (aria «Новая тема»,
    link D-Theme-New.dc.html).
 6. **Theme rows** from y 288, **44px** each, padding 0 8 0 12, gap 10: 8×8 square (radius 1, theme colour) |
@@ -175,6 +180,9 @@ card glyph 14×20 at 16; «Добавить» 40×40 outlined icon button (1px `
 count `23` beside the icon), «Библиотека» 180, «Импорт» 244, «Входящие» 308 (inbox icon, mono 10 count `7`
 red); «Настройки» gear item 48px at bottom 12. Labels 11px 500 under icons. Active = 600 + 2px red bar on the
 rail's left edge. Sync: nothing at rest; a 6px dot over the gear for «нет сети» / «ошибка».
+Since 2026-10-23 the rail follows the sidebar order: «Повторение» 116, «Упражнения» 180 (the checklist glyph
+of the phone tab, mono 10 count of unplayed sets), «Библиотека» 244, «Контекст» 308 (search glyph), «Импорт»
+372, «Входящие» 436 — every item below «Упражнения» moves down 64px.
 
 ### Content area conventions (expanded)
 - Screen title: Newsreader 500 28/36 at the pane's left padding, top 20. Subline 13/20 Plex muted, 4px below,
@@ -289,6 +297,7 @@ selection. Clearing a selection never happens in the same press that dismissed a
 | `/` | go to Библиотека and focus search |
 | `?` (key «?» or ⇧ + code Slash) | open «Клавиши» overlay |
 | `G` затем `R` / `L` / `I` (1s window) | Повторение / Библиотека / Импорт |
+| `G` затем `E` / `C` (новое, 2026-10-23) | Упражнения / Контекст |
 | `[` | hide / show the sidebar |
 | `F6` / `⇧F6` | next / previous region: sidebar → toolbar → list → detail (Mail/Finder) |
 | `⌘V` with an image in the clipboard (focus not in a text field) | start screenshot import |
@@ -297,6 +306,17 @@ selection. Clearing a selection never happens in the same press that dismissed a
 **Review** (exists in `keys.ts`): `Пробел` / `↵` flip, and on the answer side flip back (never grades);
 `1` `2` `3` Не знаю / Сложно / Знаю (answer side; 2-button mode: `1`, `2`/`3`); `←` / `→` Не знаю / Знаю (answer
 side); `Z` undo last answer. **Practice** (новое key): `Esc` «Закончить практику».
+
+**Упражнения** (новое, 2026-10-23; `exerciseKeyAction` in `keys.ts`, bound by `code`, same scope, typing and
+400 ms input-guard rules as Review). List (D-Exercise-List): `J`/`K` move the selected tile, `↵` «Начать».
+Player (D-Exercise-Player): `1` `2` `3` `4` pick an option — the tap equivalent, it answers at once (`Digit1–4`
+and `Numpad1–4`; on a `register` item they pick нейтр. / fam. / arg. / vulg.); `0` «Не знаю»; `↵` «Дальше»
+after a wrong answer or «Не знаю», and on a right answer goes on at once instead of waiting out the 1 s
+hairline (a click on the line holds it, as a tap does on phones; with reduced motion nothing auto-advances
+and `↵` is the only way on); `Esc` «Выйти» (the run is saved, no confirm). Keys pressed before the result line
+is in are ignored (no queueing). Shown as Kbd caps `1`–`4` on the tiles, `↵` on «Дальше», and the HintLine
+«1–4 ВЫБРАТЬ · 0 НЕ ЗНАЮ · ENTER ДАЛЬШЕ · ESC ВЫЙТИ»; the «Клавиши» overlay gets an «Упражнения» group and the
+row «G → E».
 
 **Session done** (новое): focus lands ON «Повторить ошибки» (focus ring visible), so `↵`/`Пробел` press it
 natively — no global `↵`. `P` «Ещё практика», `N` add. With no mistakes the primary is absent, focus goes to
@@ -983,6 +1003,15 @@ Everything phones can do, desktop can do too. Where the boards above differ, thi
   search (the pasted text stays); «Скриншот · Список» stay in the chrome while the form is open; the duplicate
   notice also shows above the quick form; «Несколько слов» rows show the example found, after the translation.
 - **Import review**: rows show the example after the translation, as on phones.
+- **Упражнения** (added 2026-10-23; boards D-Exercise-List, D-Exercise-Player, D-Exercise-Done): the same sets,
+  runs and screens as on phones, from the sidebar item «Упражнения» (§2) or `G E`. The list is the phone's tiles
+  three to a row, with the phone's request sheet as the right column «Новый набор». The player keeps the
+  phone's picks: options in the same 2×2 grid (64px tiles, Kbd caps 1–4), a tap / key answers at once, the
+  «ВЕРНО» / «НЕВЕРНО» stamp on the card (on the `surface` token), one result line under the grid (the answer,
+  `explain_ru`, «Слово ›» → the word in Библиотека, «Дальше ↵»), and on a right answer the 1 s hairline before
+  it moves on (§4 «Упражнения»; none with reduced motion). The done screen has the phone's receipt, «Ошибки»,
+  «Новые слова» with checkboxes and undo, and its three actions. Контекст keeps its own sidebar item, rail item
+  and `G C` on desktop; only phones moved it into Библиотека.
 - «Вибрация при свайпах» stays phone-only (§5 #20); the offline page is 560px wide from 768 and says
   «…не сохранена на устройстве».
 
