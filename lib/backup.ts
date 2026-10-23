@@ -1,7 +1,7 @@
 // JSON export of every table, and import that merges by updated_at (newer row wins).
-import { EXERCISE_ITEM_TYPES } from "./core/exercises";
+import { EXERCISE_ITEM_TYPES, EXERCISE_SCOPES } from "./core/exercises";
 import { db, legacyReviewSets } from "./db";
-import { DEFAULT_SETTINGS, SYNC_TABLES, type ExerciseItemType, type Settings, type SyncTable, type Syncable } from "./types";
+import { DEFAULT_SETTINGS, SYNC_TABLES, type ExerciseItemType, type ExerciseScope, type ExerciseSet, type Settings, type SyncTable, type Syncable } from "./types";
 
 export const BACKUP_FORMAT = "kartochki-backup";
 export const BACKUP_VERSION = 1;
@@ -115,8 +115,15 @@ function isExerciseItem(v: unknown): boolean {
 /** Deeper checks for tables whose rows the UI reads inside (a set's items and new words). */
 const DEEP: Partial<Record<SyncTable, (row: Record<string, unknown>) => boolean>> = {
   exercise_sets: (row) =>
+    // `scope` came with migration 0013: older backups have none (read as null).
+    (row.scope === undefined || row.scope === null || EXERCISE_SCOPES.includes(row.scope as ExerciseScope)) &&
     (row.items as unknown[]).every(isExerciseItem) &&
     (row.new_words as unknown[]).every((w) => isRecord(w) && isText(w.ref) && isText(w.fr) && isText(w.ru)),
+};
+
+/** Fields a table gained later, filled in for rows of older backups. */
+const NORMALIZE: Partial<Record<SyncTable, (row: Syncable) => Record<string, unknown>>> = {
+  exercise_sets: (row) => ({ scope: (row as Partial<ExerciseSet>).scope ?? null }),
 };
 
 function hasFields(table: SyncTable, row: Record<string, unknown>): boolean {
@@ -175,7 +182,7 @@ async function planTable(file: BackupFile, t: SyncTable): Promise<TablePlan> {
   const plan: TablePlan = { result, writes: [], previous: [], inserted: [] };
   incoming.forEach((row, i) => {
     const mine = local[i];
-    const normalized = { ...row, deleted_at: row.deleted_at ?? null };
+    const normalized = { ...row, deleted_at: row.deleted_at ?? null, ...NORMALIZE[t]?.(row) };
     if (!mine) {
       plan.writes.push(normalized);
       plan.inserted.push(row.id);

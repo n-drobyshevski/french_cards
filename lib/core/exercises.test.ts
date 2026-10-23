@@ -19,6 +19,8 @@ import {
   missedWords,
   optionsFor,
   pairsBoard,
+  parseScope,
+  SCOPE_LABELS,
   playableItemIds,
   type QueueEntry,
   REGISTER_LEVELS,
@@ -621,6 +623,23 @@ describe("request texts", () => {
     expect(buildRequestText({ folders: [], topic: null, size: 3, allowNew: false })).toMatch(/3 вопроса\.$/);
   });
 
+  it("builds the scoped requests from every theme, ignoring themes, topic and new words", () => {
+    const base = { folders: ["Люди"], topic: "вечеринка", size: 12, allowNew: true };
+    expect(buildRequestText({ ...base, scope: "difficult" })).toBe("Сделай упражнение в Карточках по трудным словам из всех тем, 12 вопросов.");
+    expect(buildRequestText({ ...base, scope: "due" })).toBe("Сделай упражнение в Карточках по словам к повторению из всех тем, 12 вопросов.");
+    expect(buildRequestText({ ...base, scope: "both" })).toBe("Сделай упражнение в Карточках по трудным словам и словам к повторению из всех тем, 12 вопросов.");
+    expect(buildRequestText({ ...base, size: 8, scope: "due" })).toMatch(/из всех тем, 8 вопросов\.$/);
+    expect(buildRequestText({ ...base, scope: null })).toBe("Сделай упражнение в Карточках по теме «Люди» и на тему «вечеринка», 12 вопросов, можно новые слова.");
+    expect(SCOPE_LABELS).toEqual({ difficult: "Трудные", due: "К повторению", both: "Трудные и к повторению" });
+  });
+
+  it("keeps a set's scope, its size and a null scope from completeSet", () => {
+    expect(good().scope).toBeNull();
+    expect(completeSet({ ...goodInput(), scope: "due" }, ctx).scope).toBe("due");
+    expect(completeSet({ ...goodInput(), scope: "sometimes" as never }, ctx).scope).toBeNull();
+    expect([parseScope("both"), parseScope(undefined), parseScope(null), parseScope("x")]).toEqual(["both", null, null, null]);
+  });
+
   it("asks for the next set with the misses", () => {
     const set = { ...good(), title: "Вечеринка" };
     const missed = missedWords(run([answer("q5", 1, "wrong"), answer("q4", 1, "wrong", { word_id: "w-keuf" }), answer("q5", 2, "wrong")]), set);
@@ -628,6 +647,13 @@ describe("request texts", () => {
       "Сделай следующее упражнение в Карточках после «Вечеринка», 6 вопросов, с упором на ошибки: relou, le keuf, можно новые слова.",
     );
     expect(buildFollowUpText({ ...set, new_words: [] }, [])).toBe("Сделай следующее упражнение в Карточках после «Вечеринка», 6 вопросов.");
+    // A scoped set asks for the next one from the same words, never with new words.
+    expect(buildFollowUpText({ ...set, title: "Трудные слова", scope: "difficult" }, missed)).toBe(
+      "Сделай следующее упражнение в Карточках по трудным словам из всех тем после «Трудные слова», 6 вопросов, с упором на ошибки: relou, le keuf.",
+    );
+    expect(buildFollowUpText({ ...set, scope: "both" }, [])).toBe(
+      "Сделай следующее упражнение в Карточках по трудным словам и словам к повторению из всех тем после «Вечеринка», 6 вопросов.",
+    );
   });
 });
 

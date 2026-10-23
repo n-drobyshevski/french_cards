@@ -2,7 +2,7 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { CheckMark } from "@/components/library/Checkbox";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
@@ -13,9 +13,9 @@ import { useSnackbar } from "@/components/ui/Snackbar";
 import { Toggle } from "@/components/ui/Toggle";
 import { focusSummary } from "@/lib/core/exercise-focus";
 import { db, liveRows } from "@/lib/db";
-import { buildRequestText, NEW_WORDS_MAX, REQUEST_SIZES, TOPIC_MAX } from "@/lib/exercises";
+import { buildRequestText, NEW_WORDS_MAX, REQUEST_SIZES, SCOPE_LABELS, TOPIC_MAX, useScopeCounts } from "@/lib/exercises";
 import { listFolders } from "@/lib/folders";
-import type { ExerciseSet } from "@/lib/types";
+import type { ExerciseScope, ExerciseSet } from "@/lib/types";
 import { useExerciseFocus } from "@/lib/user-prefs";
 import { CLAUDE_NEW_CHAT_URL, copyRequest } from "./clipboard";
 import { INBOX_KEY, INBOX_NAME, requestSummary, type RequestChoice } from "./list-format";
@@ -96,7 +96,8 @@ export interface RequestBuilderProps {
 }
 
 /**
- * The request builder (SPEC «Упражнения», D7 A): theme chips (several, «Входящие» included), a
+ * The request builder (SPEC «Упражнения», D7 A): «Откуда слова» (themes, or only the difficult /
+ * due words of every theme: Exercise-S-Request-Scope), theme chips (several, «Входящие» included), a
  * free-text «своя тема», 8 / 12 / 16 questions, «Можно новые слова», the request text built live,
  * «Скопировать запрос» and «Открыть Claude ↗» (copies first), and while «Чаще в упражнениях» is on, a
  * muted line saying so («Чаще трудные · половина набора · Настройки ›»). No network call and no
@@ -110,6 +111,11 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
   const [topic, setTopic] = useState("");
   const [size, setSize] = useState<number>(12);
   const [allowNew, setAllowNew] = useState(true);
+  // «Откуда слова»: null = the themes below. A scope whose words are gone (all reviewed, paused)
+  // falls back to the themes.
+  const [scopePick, setScopePick] = useState<ExerciseScope | null>(null);
+  const counts = useScopeCounts();
+  const scope = scopePick && counts && counts[scopePick] > 0 ? scopePick : null;
   const [copiedAt, setCopiedAt] = useState(0);
   const topicRef = useRef<HTMLInputElement>(null);
   const focusTopic = useRef(false);
@@ -133,12 +139,14 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
     topic: topicOpen ? topic : null,
     size,
     allowNew,
+    scope,
   };
   const text = buildRequestText(choice);
   // «Чаще в упражнениях» (Settings): the connector reads it itself, so the request text stays as is;
   // the line only tells the user the set will lean that way.
   const focus = useExerciseFocus();
-  const focusLine = focus ? focusSummary(focus) : null;
+  // A scoped set takes only those words, so the focus setting has nothing to tilt.
+  const focusLine = focus && !scope ? focusSummary(focus) : null;
 
   const toggleTheme = (key: string) => setPicked((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
 
@@ -155,74 +163,88 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
 
   const body = (
     <>
-      <div className={label}>
-        <span id={`${ids}-themes`}>Темы</span>
-        {variant !== "page" && <span>можно несколько</span>}
-      </div>
-      <div role="group" aria-labelledby={`${ids}-themes`} className="mt-2 flex flex-wrap gap-1.5">
-        {themes.map((t) => {
-          const on = picked.includes(t.key);
-          return (
-            <Chip
-              key={t.key}
-              selected={on}
-              icon={on ? "check" : undefined}
-              count={variant === "page" ? undefined : t.count}
-              onClick={() => toggleTheme(t.key)}
-              className="!h-9 gap-1.5 px-3"
-            >
-              {t.name}
-            </Chip>
-          );
-        })}
-        <Chip
-          dashed
-          aria-pressed={topicOpen}
-          aria-controls={topicOpen ? `${ids}-topic` : undefined}
-          onClick={() => {
-            focusTopic.current = !topicOpen;
-            setTopicOpen((open) => !open);
-          }}
-          className="!h-9 px-3 aria-pressed:border-ink aria-pressed:font-medium"
-        >
-          + своя тема
-        </Chip>
-      </div>
-
-      {topicOpen && (
-        <div className="mt-3.5 flex flex-col">
-          <label htmlFor={`${ids}-topic`} className="meta leading-4">
-            Своя тема
-          </label>
-          <div className="mt-1.5 flex h-12 items-center gap-1 rounded-chip border-2 border-ink bg-surface pr-1 pl-3">
-            <input
-              ref={topicRef}
-              id={`${ids}-topic`}
-              type="text"
-              value={topic}
-              maxLength={TOPIC_MAX}
-              autoComplete="off"
-              enterKeyHint="done"
-              onChange={(e) => setTopic(e.target.value)}
-              className="h-11 min-w-0 flex-1 bg-transparent text-[16px] leading-5 text-ink outline-none placeholder:text-muted"
-            />
-            <button
-              type="button"
-              aria-label="Очистить тему"
-              onClick={() => {
-                setTopic("");
-                setTopicOpen(false);
-              }}
-              className="press-sm inline-flex size-10 shrink-0 items-center justify-center rounded-chip text-muted active:bg-surface-2"
-            >
-              <Icon name="close" size={16} strokeWidth={1.5} />
-            </button>
-          </div>
-          <p className="m-0 mt-1.5 text-[12px] leading-4 text-muted">Claude подберёт слова из библиотеки и, если можно, новые.</p>
-        </div>
+      <span id={`${ids}-from`} className="meta leading-4">
+        Откуда слова
+      </span>
+      <ScopeChips labelledBy={`${ids}-from`} value={scope} counts={counts} onChange={setScopePick} />
+      {scope && (
+        <p data-scope-caption="" className="m-0 mt-2 text-[12px] leading-4 text-muted">
+          {SCOPE_CAPTIONS[scope]}
+        </p>
       )}
 
-      <div className={cx("flex h-12 items-center gap-2 border-t border-rule", topicOpen ? "mt-3" : "mt-2.5")}>
+      {!scope && (
+        <>
+          <div className={cx(label, "mt-3.5")}>
+            <span id={`${ids}-themes`}>Темы</span>
+            {variant !== "page" && <span>можно несколько</span>}
+          </div>
+          <div role="group" aria-labelledby={`${ids}-themes`} className="mt-2 flex flex-wrap gap-1.5">
+            {themes.map((t) => {
+              const on = picked.includes(t.key);
+              return (
+                <Chip
+                  key={t.key}
+                  selected={on}
+                  icon={on ? "check" : undefined}
+                  count={variant === "page" ? undefined : t.count}
+                  onClick={() => toggleTheme(t.key)}
+                  className="!h-9 gap-1.5 px-3"
+                >
+                  {t.name}
+                </Chip>
+              );
+            })}
+            <Chip
+              dashed
+              aria-pressed={topicOpen}
+              aria-controls={topicOpen ? `${ids}-topic` : undefined}
+              onClick={() => {
+                focusTopic.current = !topicOpen;
+                setTopicOpen((open) => !open);
+              }}
+              className="!h-9 px-3 aria-pressed:border-ink aria-pressed:font-medium"
+            >
+              + своя тема
+            </Chip>
+          </div>
+
+          {topicOpen && (
+            <div className="mt-3.5 flex flex-col">
+              <label htmlFor={`${ids}-topic`} className="meta leading-4">
+                Своя тема
+              </label>
+              <div className="mt-1.5 flex h-12 items-center gap-1 rounded-chip border-2 border-ink bg-surface pr-1 pl-3">
+                <input
+                  ref={topicRef}
+                  id={`${ids}-topic`}
+                  type="text"
+                  value={topic}
+                  maxLength={TOPIC_MAX}
+                  autoComplete="off"
+                  enterKeyHint="done"
+                  onChange={(e) => setTopic(e.target.value)}
+                  className="h-11 min-w-0 flex-1 bg-transparent text-[16px] leading-5 text-ink outline-none placeholder:text-muted"
+                />
+                <button
+                  type="button"
+                  aria-label="Очистить тему"
+                  onClick={() => {
+                    setTopic("");
+                    setTopicOpen(false);
+                  }}
+                  className="press-sm inline-flex size-10 shrink-0 items-center justify-center rounded-chip text-muted active:bg-surface-2"
+                >
+                  <Icon name="close" size={16} strokeWidth={1.5} />
+                </button>
+              </div>
+              <p className="m-0 mt-1.5 text-[12px] leading-4 text-muted">Claude подберёт слова из библиотеки и, если можно, новые.</p>
+            </div>
+          )}
+        </>
+      )}
+
+      <div className={cx("flex h-12 items-center gap-2 border-t border-rule", scope || topicOpen ? "mt-3" : "mt-2.5")}>
         <span id={`${ids}-size`} className="flex-1 text-[15px] leading-5">
           Вопросов
         </span>
@@ -235,7 +257,7 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
         />
       </div>
 
-      {panel ? (
+      {scope ? null : panel ? (
         <button
           type="button"
           role="checkbox"
@@ -366,5 +388,88 @@ function OpenClaude({ online, onOpen, className }: { online: boolean; onOpen: ()
       Открыть Claude
       <Icon name="external" size={16} strokeWidth={1.5} />
     </a>
+  );
+}
+
+/** The caption under «Откуда слова» while a scope is chosen (Exercise-S-Request-Scope). */
+const SCOPE_CAPTIONS: Record<ExerciseScope, string> = {
+  difficult: "Только ваши трудные слова из всех тем. Если их мало, набор будет короче.",
+  due: "Только слова к повторению на сегодня, из всех тем. Если их мало, набор будет короче.",
+  both: "Трудные слова и слова к повторению из всех тем. Если их мало, набор будет короче.",
+};
+
+/** Short chip labels; the chips' accessible names use the full ones (SCOPE_LABELS). */
+const SCOPE_CHIPS: readonly { value: ExerciseScope; label: string; none: string }[] = [
+  { value: "difficult", label: "Трудные", none: "нет трудных слов" },
+  { value: "due", label: "К повторению", none: "нет слов к повторению" },
+  { value: "both", label: "Оба", none: "нет трудных слов и слов к повторению" },
+];
+
+/**
+ * «Откуда слова»: «Темы» · «Трудные 9» · «К повторению 23» · «Оба 28», one choice (a radiogroup
+ * with arrow keys). A scope with no words is disabled and says why in its name; until the counts
+ * are read only «Темы» can be picked.
+ */
+function ScopeChips({
+  labelledBy,
+  value,
+  counts,
+  onChange,
+}: {
+  labelledBy: string;
+  value: ExerciseScope | null;
+  counts: { difficult: number; due: number; both: number } | undefined;
+  onChange: (scope: ExerciseScope | null) => void;
+}) {
+  const options: { value: ExerciseScope | null; label: string; count?: number; name: string; disabled: boolean }[] = [
+    { value: null, label: "Темы", name: "Темы", disabled: false },
+    ...SCOPE_CHIPS.map((o) => {
+      const count = counts?.[o.value];
+      const disabled = !count;
+      return {
+        value: o.value,
+        label: o.label,
+        count,
+        name: count === undefined ? SCOPE_LABELS[o.value] : count === 0 ? `${SCOPE_LABELS[o.value]}: ${o.none}` : `${SCOPE_LABELS[o.value]}: ${count}`,
+        disabled,
+      };
+    }),
+  ];
+
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    const enabled = options.filter((o) => !o.disabled);
+    const at = enabled.findIndex((o) => o.value === value);
+    const next = enabled[(at + step + enabled.length) % enabled.length];
+    onChange(next.value);
+    const radios = e.currentTarget.querySelectorAll<HTMLButtonElement>("[role='radio']");
+    radios[options.indexOf(next)]?.focus();
+  };
+
+  return (
+    <div role="radiogroup" aria-labelledby={labelledBy} onKeyDown={onKeyDown} className="mt-2 flex flex-wrap gap-1.5">
+      {options.map((o) => {
+        const on = o.value === value;
+        return (
+          <Chip
+            key={o.value ?? "themes"}
+            role="radio"
+            selected={on}
+            count={o.count}
+            disabled={o.disabled}
+            aria-label={o.name}
+            title={o.disabled && o.count === 0 ? o.name : undefined}
+            tabIndex={on ? 0 : -1}
+            onClick={() => onChange(o.value)}
+            data-scope={o.value ?? "themes"}
+            className="!h-9 gap-1.5 px-2.5"
+          >
+            {o.label}
+          </Chip>
+        );
+      })}
+    </div>
   );
 }

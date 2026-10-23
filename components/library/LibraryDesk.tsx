@@ -18,6 +18,8 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { CopyGlyph } from "@/components/exercises/RequestBuilder";
+import { useCopyScopeRequest } from "@/components/exercises/scope-request";
 import { useAddSheetActions } from "@/components/providers/AddSheetContext";
 import { setDraggedWords, spotlightTheme } from "@/components/shell/dnd";
 import { blocksGlobalKeys, FOCUS_SEARCH_EVENT, OPEN_LAYER_SELECTOR } from "@/components/shell/keys";
@@ -332,6 +334,9 @@ function Desk({ scope }: { scope: LibraryScope }) {
   const [moveMenu, setMoveMenu] = useState<MoveTarget | null>(null);
   const [rowMenu, setRowMenu] = useState<{ id: string; anchor: MenuAnchor; el: HTMLElement | null } | null>(null);
   const [themeMenu, setThemeMenu] = useState<HTMLElement | null>(null);
+  // Right click / long press on «К повторению» / «Трудные» of the strip (the phone ledger's sheet).
+  const [statusMenu, setStatusMenu] = useState<{ status: "due" | "difficult"; el: HTMLElement } | null>(null);
+  const copyScope = useCopyScopeRequest((notice) => snackbar.show(notice));
   const [themeFilter, setThemeFilter] = useState<HTMLElement | null>(null);
   const [folderForm, setFolderForm] = useState<FolderForm>(null);
   const [disbandOpen, setDisbandOpen] = useState(false);
@@ -886,6 +891,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
                 pausedCount={counts.paused}
                 sort={sort}
                 onOrder={(key) => setSort(key, true)}
+                onStatusMenu={scope.kind === "all" ? (s, el) => setStatusMenu({ status: s, el }) : undefined}
               />
             </div>
           )}
@@ -1053,6 +1059,26 @@ function Desk({ scope }: { scope: LibraryScope }) {
         <MenuSeparator />
         <MenuItem danger onSelect={() => rowMenuItem && void deleteIds([rowMenuItem.word.id])} shortcut={coarse ? undefined : deleteKey}>
           Удалить слово
+        </MenuItem>
+      </Menu>
+
+      <Menu
+        open={!!statusMenu}
+        anchor={statusMenu ? { element: statusMenu.el, align: "start" } : null}
+        onClose={() => setStatusMenu(null)}
+        label={statusMenu?.status === "due" ? "К повторению" : "Трудные"}
+        width={300}
+        returnFocus={statusMenu?.el}
+      >
+        <MenuItem icon="sliders" onSelect={() => statusMenu && setStatus(statusMenu.status)}>
+          Показать в библиотеке
+        </MenuItem>
+        <MenuItem
+          lead={<CopyGlyph size={16} className="mt-0.5 shrink-0" />}
+          caption="Скопируем запрос — вставьте его в чат"
+          onSelect={() => statusMenu && void copyScope(statusMenu.status)}
+        >
+          Упражнение по ним в Claude
         </MenuItem>
       </Menu>
 

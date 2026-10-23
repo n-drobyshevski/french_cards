@@ -1,10 +1,13 @@
 "use client";
 
 import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
+import { useCopyScopeRequest, type ScopeCopyNotice } from "@/components/exercises/scope-request";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
+import { Icon } from "@/components/ui/Icons";
 import { Kbd } from "@/components/ui/Kbd";
 import { SlangMeter } from "@/components/ui/SlangMeter";
+import { useScopeCounts } from "@/lib/exercises";
 import { haptic } from "@/lib/haptics";
 import { prefersReducedMotion } from "@/lib/motion";
 import { formatInterval } from "@/lib/scheduler";
@@ -41,6 +44,11 @@ export interface SessionDoneProps {
   desktop?: boolean;
   /** Single-letter shortcuts are on (P and N caps). */
   letters?: boolean;
+  /**
+   * Shows «Упражнение по трудным словам · N ›» while the library has difficult words; a tap copies
+   * the request for a Claude chat and hands the snackbar's content here.
+   */
+  onExerciseNotice?: (notice: ScopeCopyNotice) => void;
 }
 
 /** A receipt row; the first and last carry the table's ink rules, so they rule in with their rows. */
@@ -96,6 +104,7 @@ export function SessionDone({
   snackbar,
   desktop = false,
   letters = true,
+  onExerciseNotice,
 }: SessionDoneProps) {
   const columnRef = useRef<HTMLDivElement>(null);
 
@@ -232,6 +241,8 @@ export function SessionDone({
           </section>
         )}
 
+        {onExerciseNotice && <DifficultExerciseRow notify={onExerciseNotice} spaced={hard.length === 0} style={fade(1400)} />}
+
         <div className="min-h-4 flex-1 md:hidden" />
         {snackbar}
 
@@ -315,5 +326,35 @@ export function SessionDone({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * «Упражнение по трудным словам · 9 ›» (Exercise-S-Entry-Library-Done): a quiet row under «Трудные»
+ * while the library has difficult words (from every theme, not only today's). The app does not call
+ * Claude: the tap copies a request for the chat («Ждём набор из чата» in «Упражнения»).
+ */
+function DifficultExerciseRow({ notify, spaced, style }: { notify: (notice: ScopeCopyNotice) => void; spaced: boolean; style?: CSSProperties }) {
+  const counts = useScopeCounts();
+  const copy = useCopyScopeRequest(notify);
+  const count = counts?.difficult ?? 0;
+  if (count === 0) return null;
+  return (
+    <button
+      type="button"
+      data-done-exercise=""
+      onClick={() => void copy("difficult")}
+      style={style}
+      className={cx(
+        "flex h-11 w-full shrink-0 items-center gap-1.5 bg-transparent p-0 text-left text-[15px] text-ink active:text-muted md:order-3 md:w-auto md:self-start md:rounded-chip md:px-2 md:-mx-2 hoverable:bg-hover",
+        spaced ? "mt-4 md:mt-8" : "mt-1 md:mt-3",
+      )}
+    >
+      <span className="min-w-0 flex-1 truncate">
+        Упражнение по трудным словам <span className="text-muted">·</span>{" "}
+        <span className="font-mono text-[13px] tabular-nums">{count}</span>
+      </span>
+      <Icon name="chevron-right" size={18} strokeWidth={1.5} className="shrink-0 text-muted" />
+    </button>
   );
 }

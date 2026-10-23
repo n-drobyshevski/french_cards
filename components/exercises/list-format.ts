@@ -1,6 +1,6 @@
 // Pure helpers for the «Упражнения» list (tiles, resume card, waiting line, request summaries).
-import { buildRequestText, runSettled, scoreRun } from "@/lib/core/exercises";
-import type { ExerciseRun, ExerciseSet } from "@/lib/types";
+import { buildRequestText, parseScope, runSettled, scoreRun } from "@/lib/core/exercises";
+import type { ExerciseRun, ExerciseScope, ExerciseSet } from "@/lib/types";
 
 /** Russian plural: [1, 2–4, 5+]. */
 export function plural(n: number, forms: readonly [string, string, string]): string {
@@ -36,8 +36,20 @@ export function setFolderNames(set: Pick<ExerciseSet, "folders">, names: Readonl
   return out;
 }
 
-/** The tile's second meta line: «Люди, Эмоции», «Своя тема · +3 слова», «Все темы». */
-export function setThemesLine(set: Pick<ExerciseSet, "folders" | "topic" | "new_words">, names: ReadonlyMap<string, string>): string {
+/** A scoped set's tile line (only the user's difficult and/or due words, from every theme). */
+const SCOPE_LINES: Record<ExerciseScope, string> = {
+  difficult: "Трудные · все темы",
+  due: "К повторению · все темы",
+  both: "Трудные и к повторению",
+};
+
+/** The tile's second meta line: «Люди, Эмоции», «Своя тема · +3 слова», «Все темы», «Трудные · все темы». */
+export function setThemesLine(
+  set: Pick<ExerciseSet, "folders" | "topic" | "new_words"> & Partial<Pick<ExerciseSet, "scope">>,
+  names: ReadonlyMap<string, string>,
+): string {
+  const scope = parseScope(set.scope);
+  if (scope) return SCOPE_LINES[scope];
   const themes = setFolderNames(set, names).join(", ");
   const topic = set.topic?.trim() ? "Своя тема" : "";
   const base = themes && topic ? `${themes} · своя тема` : themes || topic || "Все темы";
@@ -93,24 +105,40 @@ export interface RequestChoice {
   topic: string | null;
   size: number;
   allowNew: boolean;
+  /** Only the user's difficult and/or due words, from every theme (themes, topic and allowNew ignored). */
+  scope?: ExerciseScope | null;
 }
 
+/** A scoped request in the waiting line: «трудные слова, 12 вопросов». */
+const SCOPE_SUMMARIES: Record<ExerciseScope, string> = {
+  difficult: "трудные слова",
+  due: "слова к повторению",
+  both: "трудные и к повторению",
+};
+
 /** «вечеринка», 12 вопросов — the waiting line and the offline bar. */
-export function requestSummary({ folders, topic, size }: Pick<RequestChoice, "folders" | "topic" | "size">): string {
+export function requestSummary({ folders, topic, size, scope }: Pick<RequestChoice, "folders" | "topic" | "size" | "scope">): string {
+  if (scope) return `${SCOPE_SUMMARIES[scope]}, ${nQuestions(size)}`;
   const names = [...new Set(folders.map((f) => f.trim()).filter(Boolean))];
   const custom = topic?.replace(/\s+/g, " ").trim();
   const parts = [...names, ...(custom ? [custom] : [])].map((s) => `«${s}»`);
   return `${parts.length ? parts.join(", ") : "все темы"}, ${nQuestions(size)}`;
 }
 
-/** «Скопировать запрос на похожий»: the same themes or topic, size and new-word choice. */
-export function similarRequest(set: Pick<ExerciseSet, "folders" | "topic" | "items" | "new_words">, names: ReadonlyMap<string, string>): { text: string; summary: string } {
-  const choice: RequestChoice = {
-    folders: setFolderNames(set, names),
-    topic: set.topic,
-    size: set.items.length,
-    allowNew: set.new_words.length > 0,
-  };
+/** «Скопировать запрос на похожий»: the same themes or topic (or scope), size and new-word choice. */
+export function similarRequest(
+  set: Pick<ExerciseSet, "folders" | "topic" | "items" | "new_words"> & Partial<Pick<ExerciseSet, "scope">>,
+  names: ReadonlyMap<string, string>,
+): { text: string; summary: string } {
+  const scope = parseScope(set.scope);
+  const choice: RequestChoice = scope
+    ? { folders: [], topic: null, size: set.items.length, allowNew: false, scope }
+    : {
+        folders: setFolderNames(set, names),
+        topic: set.topic,
+        size: set.items.length,
+        allowNew: set.new_words.length > 0,
+      };
   return { text: buildRequestText(choice), summary: requestSummary(choice) };
 }
 

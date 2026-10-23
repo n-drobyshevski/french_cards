@@ -3,6 +3,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
 import { ContextRow } from "@/components/context/ContextLink";
+import { useCopyScopeRequest } from "@/components/exercises/scope-request";
 import { createElement, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAddSheetActions } from "@/components/providers/AddSheetContext";
 import { useAppReady, useBootFailure } from "@/components/providers/AppProviders";
@@ -28,6 +29,7 @@ import { EnrichPlanSheet } from "./EnrichPlanSheet";
 import { rememberLibrary, rememberLibraryShape, STALE_DIM, useLibraryShape, useRevealClass, useSearchWait, type LibraryShape } from "./first-paint";
 import { FolderFormSheet } from "./FolderFormSheet";
 import { FolderMenuSheet } from "./FolderMenuSheet";
+import { LedgerMenuSheet, type LedgerKind } from "./LedgerMenuSheet";
 import { FolderTile, NAV_FORWARD, NewFolderTile, TileSkeleton } from "./FolderTile";
 import { enrichCaption, folderHref, nWords, plural } from "./format";
 import { useLibraryDesk } from "./lazy-desk";
@@ -45,6 +47,7 @@ import {
 import { SortPlanSheet } from "./SortPlanSheet";
 import { SyncMark } from "./SyncMark";
 import { useLibraryWords } from "./useLibraryWords";
+import { useLongPress } from "./use-long-press";
 import { WordList } from "./WordList";
 
 /** Rows rendered at first and added per «Показать ещё», so a big library does not render thousands at once. */
@@ -114,6 +117,10 @@ function PhoneLibrary() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [disbandOpen, setDisbandOpen] = useState(false);
+  // Long press on «к повт.» / «трудных»: show them, or copy a request for an exercise made of them.
+  const [ledgerKind, setLedgerKind] = useState<LedgerKind | null>(null);
+  const [ledgerOpen, setLedgerOpen] = useState(false);
+  const copyScope = useCopyScopeRequest((notice) => snackbar.show(notice));
 
   const searching = query.trim() !== "";
   const filtered = searching || narrows(filter);
@@ -197,6 +204,10 @@ function PhoneLibrary() {
 
   const setView = (next: LibraryView) => void updateSettings({ library_view: next });
   const toggleStatus = (status: StatusFilter) => setFilter((f) => ({ ...f, status: f.status === status ? "all" : status }));
+  const openLedgerMenu = (kind: LedgerKind) => {
+    setLedgerKind(kind);
+    setLedgerOpen(true);
+  };
   const onAllWords = () => {
     if (filter.status !== "all") {
       setFilter((f) => ({ ...f, status: "all" }));
@@ -289,6 +300,7 @@ function PhoneLibrary() {
             attention={!!totals?.due}
             pressed={filter.status === "due"}
             onClick={() => toggleStatus("due")}
+            onMenu={totals?.due ? () => openLedgerMenu("due") : undefined}
           />
           <LedgerCell
             value={totals?.difficult}
@@ -296,6 +308,7 @@ function PhoneLibrary() {
             ariaLabel={`Трудные: ${totals?.difficult ?? 0}`}
             pressed={filter.status === "difficult"}
             onClick={() => toggleStatus("difficult")}
+            onMenu={totals?.difficult ? () => openLedgerMenu("difficult") : undefined}
           />
         </div>
         {/* Progress KPIs: counts only, not filters */}
@@ -521,6 +534,20 @@ function PhoneLibrary() {
         usedColors={stats?.folders.map((f) => f.color)}
         onSaved={(folder) => snackbar.show({ message: `Тема «${folder.name}» создана` })}
       />
+      <LedgerMenuSheet
+        open={ledgerOpen}
+        onOpenChange={setLedgerOpen}
+        kind={ledgerKind}
+        count={ledgerKind === "due" ? (totals?.due ?? 0) : (totals?.difficult ?? 0)}
+        onShow={() => {
+          setLedgerOpen(false);
+          if (ledgerKind) setFilter((f) => ({ ...f, status: ledgerKind }));
+        }}
+        onExercise={() => {
+          setLedgerOpen(false);
+          if (ledgerKind) void copyScope(ledgerKind);
+        }}
+      />
       <SortPlanSheet open={sortOpen} onOpenChange={setSortOpen} />
       <EnrichPlanSheet open={enrichOpen} onOpenChange={setEnrichOpen} />
     </main>
@@ -535,18 +562,22 @@ interface LedgerCellProps {
   /** Red number: something needs doing («к повт.»). */
   attention?: boolean;
   onClick: () => void;
+  /** Long press, right click or the menu key: «Показать в библиотеке» / «Упражнение по ним в Claude». */
+  onMenu?: () => void;
 }
 
-/** One count of the ledger strip; pressing it filters the list (ink when on). */
-function LedgerCell({ value, label, ariaLabel, pressed, attention = false, onClick }: LedgerCellProps) {
+/** One count of the ledger strip; pressing it filters the list (ink when on), holding it offers more. */
+function LedgerCell({ value, label, ariaLabel, pressed, attention = false, onClick, onMenu }: LedgerCellProps) {
+  const longPress = useLongPress(() => onMenu?.());
   return (
     <button
       type="button"
       aria-pressed={pressed}
       aria-label={ariaLabel}
       onClick={onClick}
+      {...(onMenu ? longPress : {})}
       className={cx(
-        "flex h-16 flex-col items-start justify-center gap-0.5 border-l border-rule px-3 text-left first:border-l-0",
+        "flex h-16 flex-col items-start justify-center gap-0.5 border-l border-rule px-3 text-left select-none first:border-l-0 [-webkit-touch-callout:none]",
         pressed ? "bg-ink text-on-ink" : "bg-transparent text-ink active:bg-surface-2",
       )}
     >

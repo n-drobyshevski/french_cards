@@ -624,6 +624,8 @@ export interface ExerciseSetSeed {
   created_at?: string;
   items: ExerciseItemSeed[];
   new_words?: ExerciseNewWordSeed[];
+  /** Only the user's difficult and/or due words, from every theme. */
+  scope?: "difficult" | "due" | "both" | null;
 }
 
 /**
@@ -703,6 +705,7 @@ export async function seedExerciseSets(page: Page, sets: readonly ExerciseSetSee
                 folders: (s.folders ?? []).map((f) => (f === "inbox" ? f : (bySlug.get(f) ?? f))),
                 items,
                 new_words: newWords,
+                scope: s.scope ?? null,
                 source: "chat",
                 created_at: s.created_at ?? now,
                 updated_at: s.created_at ?? now,
@@ -783,3 +786,73 @@ export const exerciseCard = (page: Page) => page.locator("[data-exercise-card]")
 /** An option tile by its text; `not` picks the first tile that is not it. */
 export const optionTile = (page: Page, text: string) => page.locator("button[data-option]", { hasText: text });
 export const wrongOption = (page: Page, right: string) => page.locator("button[data-option]").filter({ hasNotText: right }).first();
+
+// --- Card states --------------------------------------------------------------------------------
+
+/**
+ * Card states for seeded words, by their French form: «difficult» (lapsed three times, next due in
+ * 5 days), «due» (a plain review card due yesterday) or «known» (next due in a month). Both
+ * directions' cards change. Words not named keep their state (New after the first-run seed). Reload
+ * or navigate afterwards: the app's live queries do not see writes made outside Dexie.
+ */
+export async function seedCardStates(page: Page, states: Record<string, "difficult" | "due" | "known">) {
+  await page.evaluate(
+    (wanted) =>
+      new Promise<void>((resolve, reject) => {
+        const open = indexedDB.open("kartochki");
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const db = open.result;
+          const tx = db.transaction(["words", "review_state"], "readwrite");
+          const words = tx.objectStore("words").getAll();
+          const cards = tx.objectStore("review_state").getAll();
+          cards.onsuccess = () => {
+            const day = 24 * 60 * 60 * 1000;
+            const now = Date.now();
+            const iso = (ms: number) => new Date(ms).toISOString();
+            const idByFr = new Map((words.result as { id: string; fr: string; deleted_at: string | null }[]).filter((w) => !w.deleted_at).map((w) => [w.fr, w.id]));
+            const missing = Object.keys(wanted).filter((fr) => !idByFr.has(fr));
+            if (missing.length) {
+              reject(new Error(`seedCardStates: no word ${missing.join(", ")}`));
+              tx.abort();
+              return;
+            }
+            const kindById = new Map(Object.entries(wanted).map(([fr, kind]) => [idByFr.get(fr)!, kind]));
+            for (const card of cards.result as { word_id: string }[]) {
+              const kind = kindById.get(card.word_id);
+              if (!kind) continue;
+              const fields =
+                kind === "difficult"
+                  ? { state: 2, lapses: 3, reps: 6, difficulty: 8.5, stability: 2, due: iso(now + 5 * day), last_review: iso(now - 2 * day), scheduled_days: 5, elapsed_days: 2 }
+                  : kind === "due"
+                    ? { state: 2, lapses: 0, reps: 3, difficulty: 5, stability: 5, due: iso(now - day), last_review: iso(now - 6 * day), scheduled_days: 5, elapsed_days: 6 }
+                    : { state: 2, lapses: 0, reps: 4, difficulty: 4, stability: 40, due: iso(now + 30 * day), last_review: iso(now - 10 * day), scheduled_days: 40, elapsed_days: 10 };
+              tx.objectStore("review_state").put({ ...card, ...fields, learning_steps: 0, updated_at: iso(now) });
+            }
+          };
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => reject(tx.error);
+          tx.onabort = () => reject(tx.error ?? new Error("seedCardStates: aborted"));
+        };
+      }),
+    states,
+  );
+}
+
+/** The first-run seed's 11 words. */
+export const SEED_WORDS = [
+  "une blague",
+  "le gras",
+  "dépêche-toi",
+  "arrête",
+  "se casser",
+  "les flics",
+  "je vais me tuer",
+  "c'est dur",
+  "être dehors",
+  "qu'est-ce qui se passe ?",
+  "vas-y",
+] as const;

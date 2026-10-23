@@ -352,6 +352,11 @@ export interface ExerciseSet extends Syncable {
   new_words: ExerciseNewWord[];
   /** Who wrote it: "chat" (the connector). Later "quick" for sets built on the device. */
   source: string;
+  /**
+   * A set made only of the user's difficult and/or due words from every theme («по трудным словам»,
+   * migration 0013), null for a set built from themes or a topic. Older rows have no value: read as null.
+   */
+  scope: ExerciseScope | null;
   created_at: string;
 }
 
@@ -398,6 +403,8 @@ export interface ExerciseRun extends Syncable {
 
 /** «Чаще в упражнениях»: which of the user's words Claude should favour in exercise sets. */
 export type ExerciseFocusTarget = "normal" | "difficult" | "due" | "both";
+/** A set drawn only from these words, across every theme: difficult, due today, or both. */
+export type ExerciseScope = Exclude<ExerciseFocusTarget, "normal">;
 /** How much of a set they should take: some ≈ a quarter, half ≥ half, most ≈ nearly all. */
 export type ExerciseFocusShare = "some" | "half" | "most";
 export interface ExerciseFocus {

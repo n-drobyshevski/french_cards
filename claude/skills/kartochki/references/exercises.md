@@ -29,6 +29,17 @@ Rules:
 - Pass `focus: { target, share? }` to `exercise_material` only when the user asks otherwise in this chat («сегодня только трудные», «без упора на повторение» → `normal`); the saved setting stays as it is.
 - `create_exercise_set` adds the warning `focus_share` when the saved setting asked for more than the set has; the set is saved anyway, so get it right next time.
 
+## Only difficult / due words (`only` and `scope`)
+
+A set made **only** of the user's difficult words, the words due today, or both, from every theme. The app's request names it: «Сделай упражнение в Карточках по трудным словам из всех тем, 12 вопросов.» («по словам к повторению», «по трудным словам и словам к повторению»); a chat request like «упражнение по трудным словам» or «без тем, только то, что на повторении» means the same.
+
+- `exercise_material` with `only: "difficult" | "due" | "both"`: `words` are just those words (live, not «на паузе», from every theme; `folders` still narrows when the user named themes), weakest first. `topic` is ignored, and there is no `focus` block (every word is a focus word already). `scope` adds `{ only, available, suggested_items, note }`.
+- **Size:** `suggested_items` = available × 3, at least 6 and at most 12 (scale the 12 for another asked size). With few words make the **shorter** set: 3 difficult words → 9 questions, not 12 padded with other words.
+- **Each word in 2–3 different types:** e.g. meaning FR→RU, then register or cloze, then meaning RU→FR. `pairs` needs at least 4 words. The same word is never in two items in a row; the weakest come back late.
+- **Nothing else:** no other library words and no `new_words` (`create_exercise_set` refuses `new_words` with a `scope`).
+- **None available** (`available: 0`): don't save a set; tell the user there are no such words now (e.g. «Сейчас нет слов к повторению»).
+- **Saving:** `create_exercise_set` with `scope` = the same value (the app shows the set as «Трудные · все темы», «К повторению · все темы» or «Трудные и к повторению»). The warning `scope_words` lists items about words that are not difficult / due; the set is saved anyway. The saved «Чаще в упражнениях» share is not checked for a scoped set.
+
 ## Each item
 
 | Type | You send | The server fills |

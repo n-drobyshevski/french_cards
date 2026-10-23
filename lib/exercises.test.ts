@@ -8,6 +8,7 @@ import {
   deleteSet,
   finishRun,
   getResumableRun,
+  getScopeCounts,
   getRun,
   getSet,
   lastRunBySet,
@@ -19,13 +20,15 @@ import {
   resumableRunFor,
   restoreSet,
   savedNewWords,
+  scopeCounts,
   scoreRun,
   startRun,
   undoAddNewWords,
   unfinishedRun,
 } from "./exercises";
-import { createFolder } from "./folders";
-import type { ExerciseAnswer, ExerciseSet, Word } from "./types";
+import { createFolder, libraryStatsFrom } from "./folders";
+import { newReviewState } from "./scheduler";
+import type { ExerciseAnswer, ExerciseSet, Folder, ReviewState, Word } from "./types";
 import { addWord } from "./words";
 
 const NOON = new Date(2026, 9, 23, 12, 0, 0);
@@ -277,5 +280,81 @@ describe("new words", () => {
     const result = await addNewWords(twins, ["n2", "n4"], at(1));
     expect(result.added.map((w) => w.fr)).toEqual(["la teuf"]);
     expect(result.skipped).toEqual([{ ref: "n4", existing: null }]);
+  });
+});
+
+describe("scope counts («Трудные · 9», «К повторению · 23»)", () => {
+  const YESTERDAY = new Date(NOON.getTime() - 86_400_000).toISOString();
+  const NEXT_WEEK = new Date(NOON.getTime() + 7 * 86_400_000).toISOString();
+  const card = (word_id: string, kind: "new" | "difficult" | "due" | "both" | "fine", extra: Partial<ReviewState> = {}): ReviewState => {
+    const base = newReviewState(word_id, "fr_ru", NOON);
+    if (kind === "new") return { ...base, ...extra };
+    const difficult = kind === "difficult" || kind === "both";
+    const due = kind === "due" || kind === "both" ? YESTERDAY : NEXT_WEEK;
+    return { ...base, state: 2, reps: 5, lapses: difficult ? 3 : 0, stability: 10, difficulty: 5, due, ...extra };
+  };
+  const w = (id: string, extra: Partial<Word> = {}) => ({ id, fr: id, folder_id: null, muted: false, created_at: NOON.toISOString(), deleted_at: null, ...extra }) as Word;
+  const paused = { id: "f-later", muted: true, deleted_at: null } as Folder;
+  const live = { id: "f-now", muted: false, deleted_at: null } as Folder;
+
+  const words = [
+    w("hard", { folder_id: "f-now" }),
+    w("due"),
+    w("both"),
+    w("new"),
+    w("fine"),
+    w("muted-hard", { muted: true }),
+    w("paused-due", { folder_id: "f-later" }),
+    w("deleted-hard", { deleted_at: NOON.toISOString() }),
+    // Two cards: one due, one difficult — counted once in `both`.
+    w("split"),
+  ];
+  const states = [
+    card("hard", "difficult"),
+    card("due", "due"),
+    card("both", "both"),
+    card("new", "new"),
+    card("fine", "fine"),
+    card("muted-hard", "difficult"),
+    card("paused-due", "due"),
+    card("deleted-hard", "difficult"),
+    card("split", "due"),
+    { ...card("split", "difficult"), id: "split-ru", direction: "ru_fr" as const },
+    // A deleted card never counts.
+    { ...card("fine", "both"), id: "fine-old", deleted_at: NOON.toISOString() },
+  ];
+
+  it("counts live unpaused words: difficult, due today and either, like the library ledger", () => {
+    const counts = scopeCounts(words, states, [paused, live], NOON);
+    expect(counts).toEqual({ difficult: 3, due: 3, both: 4 });
+    const lib = libraryStatsFrom([live, paused], words.filter((x) => x.deleted_at === null), states.filter((x) => x.deleted_at === null), NOON);
+    expect({ difficult: lib.totals.difficult, due: lib.totals.due }).toEqual({ difficult: counts.difficult, due: counts.due });
+    expect(scopeCounts([], [], [], NOON)).toEqual({ difficult: 0, due: 0, both: 0 });
+  });
+
+  it("reads the device's rows", async () => {
+    const theme = await createFolder({ name: "Потом" }, NOON);
+    await db.folders.put({ ...theme, muted: true });
+    const [a, b, c] = await Promise.all(["la meuf", "le keuf", "la daronne"].map((fr) => addWord({ fr, ru: "x", both_directions: false }, NOON)));
+    await db.words.update(c.id, { folder_id: theme.id });
+    const put = async (word: Word, kind: "difficult" | "due") => {
+      const [s] = await db.review_state.where("word_id").equals(word.id).toArray();
+      await db.review_state.put({ ...s, ...card(word.id, kind), id: s.id });
+    };
+    await put(a, "difficult");
+    await put(b, "due");
+    await put(c, "difficult");
+    expect(await getScopeCounts(NOON)).toEqual({ difficult: 1, due: 1, both: 2 });
+  });
+
+  it("reads sets synced before the scope column as ordinary sets", async () => {
+    const { set } = await fixture();
+    const legacy: Partial<ExerciseSet> = { ...set };
+    delete legacy.scope;
+    await db.exercise_sets.put(legacy as ExerciseSet);
+    expect((await liveSets())[0].scope).toBeNull();
+    expect((await getSet(set.id))!.scope).toBeNull();
+    await db.exercise_sets.put({ ...set, scope: "due" });
+    expect((await getSet(set.id))!.scope).toBe("due");
   });
 });

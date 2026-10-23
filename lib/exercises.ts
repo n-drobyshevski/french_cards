@@ -6,10 +6,13 @@
 // another device show their result but are never written here.
 // Exercises never touch review_state or review_log. Pure rules live in lib/core/exercises.ts.
 import { useLiveQuery } from "dexie-react-hooks";
-import { countFirstTry, itemWordKeys, runItems, runSettled } from "./core/exercises";
+import { countFirstTry, itemWordKeys, parseScope, runItems, runSettled } from "./core/exercises";
+import { isPaused, pausedFolderIds } from "./core/words";
 import { db, liveRows, newId } from "./db";
+import { isDueToday } from "./folders";
+import { wordStatus } from "./scheduler";
 import { findDuplicates, normalizeLemma } from "./text";
-import type { ExerciseAnswer, ExerciseRun, ExerciseSet, Word } from "./types";
+import type { ExerciseAnswer, ExerciseRun, ExerciseSet, Folder, ReviewState, Word } from "./types";
 import { addWords, softDeleteWords, type NewWordInput } from "./words";
 
 export * from "./core/exercises";
@@ -17,9 +20,12 @@ export * from "./core/exercises";
 const byNewest = (a: ExerciseSet, b: ExerciseSet) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id);
 const runsByNewest = (a: ExerciseRun, b: ExerciseRun) => b.started_at.localeCompare(a.started_at) || b.id.localeCompare(a.id);
 
+/** A set as the app reads it: rows synced before migration 0013, or from an old backup, have no `scope`. */
+const withScope = (set: ExerciseSet): ExerciseSet => (set.scope === undefined || set.scope === null ? { ...set, scope: null } : { ...set, scope: parseScope(set.scope) });
+
 /** Live sets, newest first (use inside useLiveQuery). */
 export async function liveSets(): Promise<ExerciseSet[]> {
-  return (await liveRows(db.exercise_sets)).sort(byNewest);
+  return (await liveRows(db.exercise_sets)).map(withScope).sort(byNewest);
 }
 
 /** Live sets, newest first; undefined while loading (so the empty state does not flash). */
@@ -30,7 +36,7 @@ export function useExerciseSets(): ExerciseSet[] | undefined {
 /** A live set, or undefined when it is missing or deleted. */
 export async function getSet(id: string): Promise<ExerciseSet | undefined> {
   const set = await db.exercise_sets.get(id);
-  return set && set.deleted_at === null ? set : undefined;
+  return set && set.deleted_at === null ? withScope(set) : undefined;
 }
 
 export async function getRun(id: string): Promise<ExerciseRun | undefined> {
@@ -89,9 +95,60 @@ export function useOwnRunIds(): Set<string> | undefined {
  */
 export async function unfinishedRun(): Promise<{ run: ExerciseRun; set: ExerciseSet } | undefined> {
   const [runs, sets, own] = await Promise.all([liveRows(db.exercise_runs), liveRows(db.exercise_sets), ownRunIds()]);
-  const live = new Map(sets.map((s) => [s.id, s]));
+  const live = new Map(sets.map((s) => [s.id, withScope(s)]));
   const run = runs.filter((r) => r.set_id !== null && live.has(r.set_id) && resumable(r, live.get(r.set_id)!, own)).sort(runsByNewest)[0];
   return run ? { run, set: live.get(run.set_id!)! } : undefined;
+}
+
+/** How many words a scoped set («Трудные», «К повторению», «Трудные и к повторению») could draw on. */
+export interface ScopeCounts {
+  difficult: number;
+  due: number;
+  /** Words that are difficult or due (each counted once). */
+  both: number;
+}
+
+/**
+ * The words a scoped exercise set can use, counted like the library ledger («23 к повт. / 9
+ * трудных», libraryStatsFrom): live words not «на паузе» (the word or its theme, isPaused);
+ * difficult = wordStatus difficult, due = a non-new card due today (isDueToday); both = either.
+ */
+export function scopeCounts(
+  words: readonly Word[],
+  states: readonly ReviewState[],
+  folders: readonly Pick<Folder, "id" | "muted" | "deleted_at">[],
+  now: Date = new Date(),
+): ScopeCounts {
+  const statesByWord = new Map<string, ReviewState[]>();
+  for (const s of states) {
+    if (s.deleted_at !== null) continue;
+    const list = statesByWord.get(s.word_id);
+    if (list) list.push(s);
+    else statesByWord.set(s.word_id, [s]);
+  }
+  const paused = pausedFolderIds(folders);
+  const out: ScopeCounts = { difficult: 0, due: 0, both: 0 };
+  for (const w of words) {
+    if (w.deleted_at !== null || isPaused(w, paused)) continue;
+    const ws = statesByWord.get(w.id) ?? [];
+    const difficult = wordStatus(ws) === "difficult";
+    const due = ws.some((s) => isDueToday(s, now));
+    if (difficult) out.difficult++;
+    if (due) out.due++;
+    if (difficult || due) out.both++;
+  }
+  return out;
+}
+
+/** `scopeCounts` over the device's live rows (use inside useLiveQuery). */
+export async function getScopeCounts(now: Date = new Date()): Promise<ScopeCounts> {
+  const [folders, words, states] = await Promise.all([liveRows(db.folders), liveRows(db.words), liveRows(db.review_state)]);
+  return scopeCounts(words, states, folders, now);
+}
+
+/** Live counts for the scoped requests («Трудные · 9», «К повторению · 23»); undefined while loading. */
+export function useScopeCounts(): ScopeCounts | undefined {
+  return useLiveQuery(() => getScopeCounts(), []);
 }
 
 /** What playing a set needs from the library: its new words already saved, and its words deleted or paused since. */

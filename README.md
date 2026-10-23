@@ -27,7 +27,7 @@ The e2e suite starts `next start` on port 3100 and mocks `/api/ai/*`. It uses th
 
 ## Deploy (Vercel + Supabase)
 
-1. Apply the migrations in `supabase/migrations/` in order (`0001_init.sql`, `0002_user_keys_and_stale_writes.sql`, `0003_extra_examples.sql`, `0004_review_sets.sql`, `0005_connector_grants.sql`, `0006_custom_fields.sql`, `0007_connector_field_writes.sql`, `0008_word_origin_conjugation.sql`, `0009_word_muted.sql`, `0010_folder_muted.sql`, `0011_exercises.sql`, then `0012_user_prefs.sql`). Apply a new migration before deploying the app version that needs it.
+1. Apply the migrations in `supabase/migrations/` in order (`0001_init.sql`, `0002_user_keys_and_stale_writes.sql`, `0003_extra_examples.sql`, `0004_review_sets.sql`, `0005_connector_grants.sql`, `0006_custom_fields.sql`, `0007_connector_field_writes.sql`, `0008_word_origin_conjugation.sql`, `0009_word_muted.sql`, `0010_folder_muted.sql`, `0011_exercises.sql`, `0012_user_prefs.sql`, then `0013_exercise_scope.sql`). Apply a new migration before deploying the app version that needs it.
 2. Auth → Sign In / Providers → Email: keep the provider on and turn **Confirm email** off. Sign-in is email + password, so no custom SMTP is needed; email is only used for «Забыли пароль?» (the default reset template works: its link lands on `/auth/confirm`, then `/auth/reset`).
 3. Auth → URL Configuration: Site URL = the production URL, Redirect URLs = `<production URL>/**`.
 4. Create the account in the app («Создать аккаунт»), then turn off «Allow new users to sign up». RLS keeps other accounts' data apart and `ALLOWED_EMAIL` keeps them off the AI routes, but there is no reason to let them in.

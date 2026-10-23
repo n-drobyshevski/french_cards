@@ -14,7 +14,7 @@ import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { FlatKey } from "@/components/ui/Kbd";
 import { useSnackbar } from "@/components/ui/Snackbar";
-import { deleteSet, restoreSet, unfinishedRun, useExerciseSets, useLastRunBySet, useOwnRunIds } from "@/lib/exercises";
+import { deleteSet, restoreSet, unfinishedRun, useExerciseSets, useLastRunBySet, useOwnRunIds, useScopeCounts } from "@/lib/exercises";
 import { listFolders } from "@/lib/folders";
 import { syncNow } from "@/lib/sync";
 import type { ExerciseRun, ExerciseSet } from "@/lib/types";
@@ -27,7 +27,8 @@ import { isWaiting, nNew, nQuestions, nSets, resumeProgress, setThemesLine, shor
 import { CopyGlyph, RequestBuilder, useThemeChoices } from "./RequestBuilder";
 import { RequestSheet } from "./RequestSheet";
 import { SetMenuSheet } from "./SetMenuSheet";
-import { RequestTile, SetTile, SetTileSkeleton } from "./SetTile";
+import { useCopyScopeRequest } from "./scope-request";
+import { RequestTile, ScopeTile, SetTile, SetTileSkeleton } from "./SetTile";
 
 /** From here the request builder sits in a right-hand column next to the tiles (D-Exercise-List). */
 const SIDE_PANEL_QUERY = "(min-width: 1024px)";
@@ -36,8 +37,9 @@ const COPIED_MESSAGE = "Запрос скопирован — вставьте �
 
 /**
  * «Упражнения» (SPEC «Упражнения», boards Exercise-List-B, -Empty-A, -S-Resume, -S-Waiting,
- * -S-Offline, D-Exercise-List): the sets Claude wrote in the chat as two-column tiles (three from
- * 768), «Продолжить» for an unfinished run, the request builder (inline when there are no sets, a
+ * -S-Offline, -S-Quick-Tiles, D-Exercise-List): the sets Claude wrote in the chat as two-column tiles
+ * (three from 768), ready-made requests for the difficult / due words of every theme, «Продолжить»
+ * for an unfinished run, the request builder (inline when there are no sets, a
  * sheet from «Попросить набор», a right-hand column on wide screens), «Ждём набор из чата» after a
  * copy and the offline strip. Sets play offline; nothing here calls Claude, so no spark glyph.
  */
@@ -57,6 +59,9 @@ export function ExercisesScreen() {
   const wide = useMediaQuery(MEDIUM_QUERY);
   const side = useMediaQuery(SIDE_PANEL_QUERY);
   const shortcuts = useShortcutsEnabled();
+  const scopeCounts = useScopeCounts();
+  // The quick tiles copy like the builder: «Ждём набор из чата» follows from the copied request.
+  const copyScope = useCopyScopeRequest((notice) => snackbar.show(notice));
 
   const [sheetOpen, setSheetOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -261,6 +266,8 @@ export function ExercisesScreen() {
               />
             );
           })}
+          {!!scopeCounts?.difficult && <ScopeTile scope="difficult" count={scopeCounts.difficult} onClick={() => void copyScope("difficult")} />}
+          {!!scopeCounts?.due && <ScopeTile scope="due" count={scopeCounts.due} onClick={() => void copyScope("due")} />}
           <RequestTile onClick={openRequest} side={side} />
         </div>
         {shortcuts && (

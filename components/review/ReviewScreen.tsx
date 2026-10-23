@@ -819,6 +819,7 @@ export function ReviewScreen() {
             onPractice={() => void startPractice("extra")}
             onAddWords={() => addSheet.open()}
             snackbar={snackbar.render("mb-4", "done")}
+            onExerciseNotice={snackbar.show}
           />
         ) : (
           <div className="flex-1" />

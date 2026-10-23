@@ -244,7 +244,8 @@ describe("import", () => {
     const res = await importBackup(json);
     expect(res.exercise_sets).toEqual({ inserted: 1, updated: 0, skipped: 0, deleted: 0 });
     expect(res.exercise_runs).toEqual({ inserted: 1, updated: 0, skipped: 0, deleted: 0 });
-    expect(await db.exercise_sets.get("x-1")).toEqual(set);
+    // A set from before migration 0013 has no scope: it is imported as an ordinary set (null).
+    expect(await db.exercise_sets.get("x-1")).toEqual({ ...set, scope: null });
     expect(await db.exercise_runs.get("r-1")).toEqual(run);
     expect((await db.outbox.toArray()).map((o) => o.key)).toEqual(expect.arrayContaining(["exercise_sets:x-1", "exercise_runs:r-1"]));
 
@@ -261,6 +262,7 @@ describe("import", () => {
           { ...set, id: "x-5", items: [{ id: "q1", type: "choice", answer: "девушка" }] },
           { ...set, id: "x-6", items: [{ id: "q1", type: "typed" }] },
           { ...set, id: "x-7", new_words: [{ ref: "n1" }] },
+          { ...set, id: "x-8", scope: "sometimes" },
         ],
         exercise_runs: [
           { ...run, id: "r-2", answers: null },
@@ -268,9 +270,17 @@ describe("import", () => {
         ],
       },
     });
-    expect(malformed.exercise_sets.skipped).toBe(6);
+    expect(malformed.exercise_sets.skipped).toBe(7);
     expect(await db.exercise_sets.count()).toBe(1);
     expect(malformed.exercise_runs.skipped).toBe(2);
+
+    // A scoped set («Трудные · все темы») keeps its scope through export and import.
+    await clearAll();
+    await db.exercise_sets.put({ ...set, id: "x-9", scope: "difficult" } as never);
+    const scopedJson = await exportBackupJson(later(30));
+    await clearAll();
+    expect((await importBackup(scopedJson)).exercise_sets).toEqual({ inserted: 1, updated: 0, skipped: 0, deleted: 0 });
+    expect(await db.exercise_sets.get("x-9")).toEqual({ ...set, id: "x-9", scope: "difficult" });
 
     await clearAll();
     const old = await importBackup({ format: "kartochki-backup", version: 1, exported_at: T0.toISOString(), tables: { words: [], folders: [] } });

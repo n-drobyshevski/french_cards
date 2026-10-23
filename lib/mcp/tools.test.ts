@@ -23,6 +23,7 @@ import {
   focusItemCount,
   listExerciseSets,
   listFields,
+  scopeSuggestedItems,
   listFolders,
   moveWords,
   resolveFolder,
@@ -1103,6 +1104,7 @@ describe("exercises («Упражнения»)", () => {
       { ...blankItem("q2", "w-relou"), answer: "занудный", word: { fr: "relou", ru: "занудный", pos: "adj", gender: "none", slang_level: 1, verlan: true, example_fr: null, example_ru: null } },
     ],
     new_words: [],
+    scope: null,
     source: "chat",
     created_at: "2026-10-20T10:00:00.000Z",
     updated_at: "2026-10-20T10:00:00.000Z",
@@ -1386,6 +1388,102 @@ describe("exercises («Упражнения»)", () => {
       ] as unknown as ExerciseSet["items"];
       expect(focusItemCount(items, new Set(["a", "b"]))).toBe(2);
       expect(focusItemCount(items, new Set())).toBe(0);
+    });
+  });
+
+  describe("scoped sets: only the difficult / due words, from every theme", () => {
+    const hard = (wordId: string): ReviewState => ({ ...cards(wordId, false)[0], state: 2, reps: 6, lapses: 3, stability: 2, difficulty: 6, due: "2026-10-30T00:00:00.000Z" });
+    const due = (wordId: string): ReviewState => ({ ...cards(wordId, false)[0], state: 2, reps: 2, lapses: 0, stability: 5, difficulty: 5, due: "2026-10-22T06:00:00.000Z" });
+    const focusPref = { id: "exercise_focus", value: { target: "both", share: "most" }, updated_at: OLD.toISOString(), deleted_at: null };
+    // Difficult: bagnole (Деньги), chelou (Эмоции), thune (muted). Due today: ouf (Эмоции), keuf (inbox).
+    const scopeLib = () =>
+      fakeLib({ review_state: [hard("w-bagnole"), hard("w-chelou"), hard("w-thune"), due("w-ouf"), due("w-keuf")], user_prefs: [focusPref] });
+    const ids = (out: { words: { id: string }[] }) => out.words.map((w) => w.id).sort();
+
+    it("exercise_material `only` returns just those words across themes, without paused ones, the topic or the focus", async () => {
+      const fake = scopeLib();
+      const difficult = await ok(exerciseMaterial, fake, { only: "difficult", topic: "вечеринка" });
+      expect(ids(difficult)).toEqual(["w-bagnole", "w-chelou"]);
+      expect(difficult.total).toBe(2);
+      expect(difficult.scope).toEqual({
+        folders: "all",
+        days: 14,
+        only: "difficult",
+        available: 2,
+        suggested_items: 6,
+        note: expect.stringMatching(/only these 2 difficult words.*no new_words.*2–3 different question types.*scope: "difficult"/),
+      });
+      expect(difficult).not.toHaveProperty("focus");
+      expect(difficult).not.toHaveProperty("topic_matches");
+      expect(difficult.words.some((w: { focus?: boolean }) => w.focus)).toBe(false);
+      expect(difficult.note).toMatch(/scope/);
+
+      expect(ids(await ok(exerciseMaterial, fake, { only: "due" }))).toEqual(["w-keuf", "w-ouf"]);
+      const both = await ok(exerciseMaterial, fake, { only: "both" });
+      expect(ids(both)).toEqual(["w-bagnole", "w-chelou", "w-keuf", "w-ouf"]);
+      expect(both.scope).toMatchObject({ only: "both", available: 4, suggested_items: 12 });
+      // `folders` still narrows it.
+      expect(ids(await ok(exerciseMaterial, fake, { only: "both", folders: ["Деньги"] }))).toEqual(["w-bagnole"]);
+
+      // A paused theme's words are out, even when the theme is named.
+      const f = fake.tables.folders.get("f-emotsii")!;
+      fake.tables.folders.set(f.id, { ...f, muted: true });
+      expect(ids(await ok(exerciseMaterial, fake, { only: "both" }))).toEqual(["w-bagnole", "w-keuf"]);
+      const none = await ok(exerciseMaterial, fake, { only: "both", folders: ["Эмоции"] });
+      expect(none.words).toEqual([]);
+      expect(none.scope).toMatchObject({ only: "both", available: 0, suggested_items: 0, note: expect.stringMatching(/nothing to drill.*tell the user/) });
+
+      // Without `only`, nothing changes: the saved focus applies.
+      const plain = await ok(exerciseMaterial, fake, {});
+      expect(plain.focus).toMatchObject({ target: "both" });
+      expect(plain.scope).not.toHaveProperty("only");
+    });
+
+    it("suggests a shorter set for few words: each word up to 3 times, at least 6, at most 12", () => {
+      expect([0, 1, 2, 3, 4, 10].map(scopeSuggestedItems)).toEqual([0, 6, 6, 9, 12, 12]);
+    });
+
+    it("create_exercise_set stores the scope, refuses new_words with it, and warns about words off scope", async () => {
+      const seed = () => fakeLib({ review_state: ["w-meuf", "w-keuf", "w-bagnole", "w-ouf", "w-chelou"].map(hard), user_prefs: [focusPref] });
+      const newWords = [{ ref: "n1", fr: "la teuf", ru: "тусовка", pos: "noun", gender: "f", slang_level: 2, verlan: true, source_url: "https://example.org/teuf" }];
+      const withNew = seed();
+      const message = await refused(
+        createExerciseSet,
+        withNew,
+        set({ scope: "difficult", folders: null, new_words: newWords, items: [...ITEMS.slice(0, 6), { type: "choice", new_ref: "n1", distractors: ["тачка", "мент", "бабки"] }] }),
+      );
+      expect(message).toMatch(/not saved/);
+      expect(message).toContain('- new_words: must be empty in a set with scope "difficult"');
+      expect(withNew.writes).toEqual([]);
+
+      const fake = seed();
+      const out = await ok(createExerciseSet, fake, set({ scope: "difficult", folders: null }));
+      expect(stored(fake)[0]).toMatchObject({ scope: "difficult", folders: [], new_words: [] });
+      const codes = out.warnings!.map((w: { code: string }) => w.code);
+      expect(codes).toContain("scope_words");
+      // A scoped set is all focus words by design: the saved focus share is not checked.
+      expect(codes).not.toContain("focus_share");
+      const warning = out.warnings!.find((w: { code: string }) => w.code === "scope_words")!;
+      expect(warning.message).toMatch(/difficult words.*items\[2\] \(kiffer\); items\[3\] \(relou\)\./);
+
+      // Every word difficult: no warning. An ordinary set stores scope null.
+      const allHard = fakeLib({ review_state: ["w-meuf", "w-keuf", "w-bagnole", "w-ouf", "w-chelou", "w-kiffer", "w-relou"].map(hard) });
+      const clean = await ok(createExerciseSet, allHard, set({ scope: "both", client_ref: "s-2" }));
+      expect(clean.warnings!.map((w: { code: string }) => w.code)).not.toContain("scope_words");
+      await ok(createExerciseSet, allHard, set({ client_ref: "s-3" }));
+      expect(stored(allHard).map((r) => r.scope).sort()).toEqual(["both", null]);
+      expect(await refused(createExerciseSet, allHard, set({ scope: "sometimes", client_ref: "s-4" }))).toBeTruthy();
+    });
+
+    it("list_exercise_sets shows each set's scope (null for an ordinary set or a row from before 0013)", async () => {
+      const legacy = { ...SET, id: "x-legacy" } as Partial<ExerciseSet>;
+      delete legacy.scope;
+      const fake = fakeLib({ exercise_sets: [{ ...SET, id: "x-hard", scope: "difficult", created_at: "2026-10-21T10:00:00.000Z" }, legacy as ExerciseSet] });
+      const out = await ok(listExerciseSets, fake, {});
+      expect(out.sets.map((s: { id: string; scope: unknown }) => [s.id, s.scope])).toEqual([
+        ["x-hard", "difficult"],
+        ["x-legacy", null],
+      ]);
     });
   });
 

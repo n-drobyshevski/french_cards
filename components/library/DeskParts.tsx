@@ -9,6 +9,7 @@ import { FlatKey, Kbd } from "@/components/ui/Kbd";
 import type { Folder } from "@/lib/types";
 import { nWords } from "./format";
 import { Menu, MenuItem } from "./Menu";
+import { useLongPress } from "./use-long-press";
 import { INBOX_KEY, ThemeSquare } from "./MoveMenu";
 import { SLANG_KEYS, slangKeyLabel, slangChipLabel, type SlangKey } from "./SlangFilter";
 import { DEFAULT_SORT, ORDER_MENU, orderLabel, type SortKey, type SortState } from "./table";
@@ -38,12 +39,15 @@ export function TextLink({ onClick, children, className, ...rest }: { onClick: (
 function StripItem({
   active,
   onClick,
+  onMenu,
   count,
   children,
   ...rest
 }: {
   active: boolean;
   onClick: (event: MouseEvent<HTMLButtonElement>) => void;
+  /** Right click, long press or the menu key: more actions for this filter (anchored to the item). */
+  onMenu?: (anchor: HTMLElement) => void;
   count?: number;
   children: ReactNode;
   "aria-expanded"?: boolean;
@@ -51,14 +55,21 @@ function StripItem({
   "aria-controls"?: string;
 }) {
   const pressed = rest["aria-expanded"] === undefined ? active : undefined;
+  const ref = useRef<HTMLButtonElement>(null);
+  const longPress = useLongPress(() => {
+    if (onMenu && ref.current) onMenu(ref.current);
+  });
   return (
     <button
+      ref={ref}
       type="button"
       aria-pressed={pressed}
       onClick={onClick}
+      {...(onMenu ? longPress : {})}
       className={cx(
         "inline-flex h-9 shrink-0 items-center gap-1.5 bg-transparent px-0 text-[14px] whitespace-nowrap pointer-coarse:h-11",
         active ? "font-semibold text-ink" : "font-medium text-muted hoverable:text-ink",
+        onMenu && "select-none [-webkit-touch-callout:none]",
       )}
       {...rest}
     >
@@ -83,6 +94,7 @@ export function FilterStrip({
   pausedCount = 0,
   sort,
   onOrder,
+  onStatusMenu,
 }: {
   status: StatusFilter;
   onStatus: (s: StatusFilter) => void;
@@ -96,6 +108,11 @@ export function FilterStrip({
   /** null: not read yet (the first frame), the label keeps its place blank. */
   sort: SortState | null;
   onOrder: (key: SortKey) => void;
+  /**
+   * «К повторению» / «Трудные» take a right click, a long press or the menu key: «Показать в
+   * библиотеке» / «Упражнение по ним в Claude» (the phone ledger's long press). Only while they count.
+   */
+  onStatusMenu?: (status: "due" | "difficult", anchor: HTMLElement) => void;
 }) {
   const popId = useId();
   const wrap = useRef<HTMLDivElement>(null);
@@ -114,10 +131,20 @@ export function FilterStrip({
       >
         Все
       </StripItem>
-      <StripItem active={status === "due"} count={dueCount} onClick={() => onStatus(status === "due" ? "all" : "due")}>
+      <StripItem
+        active={status === "due"}
+        count={dueCount}
+        onClick={() => onStatus(status === "due" ? "all" : "due")}
+        onMenu={onStatusMenu && dueCount > 0 ? (el) => onStatusMenu("due", el) : undefined}
+      >
         К повторению
       </StripItem>
-      <StripItem active={status === "difficult"} count={difficultCount} onClick={() => onStatus(status === "difficult" ? "all" : "difficult")}>
+      <StripItem
+        active={status === "difficult"}
+        count={difficultCount}
+        onClick={() => onStatus(status === "difficult" ? "all" : "difficult")}
+        onMenu={onStatusMenu && difficultCount > 0 ? (el) => onStatusMenu("difficult", el) : undefined}
+      >
         Трудные
       </StripItem>
       <StripItem active={status === "new"} count={newCount} onClick={() => onStatus(status === "new" ? "all" : "new")}>

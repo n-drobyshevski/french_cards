@@ -41,6 +41,7 @@ const set = (over: Partial<ExerciseSet> = {}): ExerciseSet => ({
   folders: [],
   items: ["q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8"].map(item),
   new_words: [],
+  scope: null,
   source: "chat",
   created_at: "2026-10-22T10:00:00.000Z",
   updated_at: "2026-10-22T10:00:00.000Z",
@@ -122,6 +123,16 @@ describe("setThemesLine", () => {
     expect(setThemesLine(set({ topic: "вечеринка", folders: ["f-people"] }), names)).toBe("Люди · своя тема");
     expect(setThemesLine(set(), names)).toBe("Все темы");
   });
+
+  it("names a scoped set by its words, not its themes", () => {
+    expect(setThemesLine(set({ scope: "difficult", folders: ["f-people"] }), names)).toBe("Трудные · все темы");
+    expect(setThemesLine(set({ scope: "due" }), names)).toBe("К повторению · все темы");
+    expect(setThemesLine(set({ scope: "both" }), names)).toBe("Трудные и к повторению");
+    // A row synced before the column existed has no scope at all.
+    const { scope: _drop, ...legacy } = set();
+    void _drop;
+    expect(setThemesLine(legacy, names)).toBe("Все темы");
+  });
 });
 
 describe("tileState", () => {
@@ -166,6 +177,17 @@ describe("requests", () => {
       summary: "«Люди», 8 вопросов",
     });
     expect(similarRequest(set({ topic: "вечеринка" }), names).text).toBe("Сделай упражнение в Карточках на тему «вечеринка», 8 вопросов.");
+  });
+
+  it("summarises and repeats a scoped request", () => {
+    const names = new Map([["f-people", "Люди"]]);
+    expect(requestSummary({ folders: ["Люди"], topic: "x", size: 12, scope: "difficult" })).toBe("трудные слова, 12 вопросов");
+    expect(requestSummary({ folders: [], topic: null, size: 8, scope: "due" })).toBe("слова к повторению, 8 вопросов");
+    expect(requestSummary({ folders: [], topic: null, size: 12, scope: "both" })).toBe("трудные и к повторению, 12 вопросов");
+    expect(similarRequest(set({ scope: "due", folders: ["f-people"] }), names)).toEqual({
+      text: "Сделай упражнение в Карточках по словам к повторению из всех тем, 8 вопросов.",
+      summary: "слова к повторению, 8 вопросов",
+    });
   });
 });
 

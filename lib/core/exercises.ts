@@ -17,6 +17,7 @@ import {
   type ExerciseOutcome,
   type ExercisePairTile,
   type ExerciseRun,
+  type ExerciseScope,
   type ExerciseSet,
   type ExerciseSkill,
   type ExerciseWordSnapshot,
@@ -123,10 +124,27 @@ export interface ExerciseSetInput {
   folders?: readonly string[] | null;
   items: readonly ExerciseItemInput[];
   new_words?: readonly ExerciseNewWordInput[] | null;
+  /** A set made only of the user's difficult and/or due words, from every theme (null: an ordinary set). */
+  scope?: ExerciseScope | null;
 }
 
 /** The content columns of a set (what the connector writes, without id and timestamps). */
-export type ExerciseSetContent = Pick<ExerciseSet, "title" | "topic" | "folders" | "items" | "new_words">;
+export type ExerciseSetContent = Pick<ExerciseSet, "title" | "topic" | "folders" | "items" | "new_words" | "scope">;
+
+/** The scopes of a set made only of the user's own words, across every theme. */
+export const EXERCISE_SCOPES: readonly ExerciseScope[] = ["difficult", "due", "both"];
+
+/** Short labels of the scopes («Откуда слова», the quick tiles). */
+export const SCOPE_LABELS: Record<ExerciseScope, string> = {
+  difficult: "Трудные",
+  due: "К повторению",
+  both: "Трудные и к повторению",
+};
+
+/** A stored scope read back safely: anything unknown (an old row without the column) is null. */
+export function parseScope(value: unknown): ExerciseScope | null {
+  return EXERCISE_SCOPES.includes(value as ExerciseScope) ? (value as ExerciseScope) : null;
+}
 
 const clean = (s: unknown): string | null => {
   if (typeof s !== "string") return null;
@@ -244,6 +262,7 @@ export function completeSet(input: ExerciseSetInput, ctx: ExerciseContext): Exer
     folders: [...new Set(cleanList(input.folders).filter(Boolean))],
     items,
     new_words: newWords,
+    scope: parseScope(input.scope),
   };
 }
 
@@ -846,15 +865,26 @@ export interface RequestSpec {
   size: number;
   /** «можно новые слова»: Claude may bring words that are not in the library. */
   allowNew: boolean;
+  /** Only the user's difficult and/or due words, from every theme: themes, topic and new words are ignored. */
+  scope?: ExerciseScope | null;
 }
+
+/** «по трудным словам из всех тем»: where a scoped request takes its words from. */
+const SCOPE_WHERE: Record<ExerciseScope, string> = {
+  difficult: "по трудным словам из всех тем",
+  due: "по словам к повторению из всех тем",
+  both: "по трудным словам и словам к повторению из всех тем",
+};
 
 /**
  * «Сделай упражнение в Карточках по теме «Люди», 12 вопросов.»,
  * «Сделай упражнение в Карточках: темы «Люди», «Эмоции», 12 вопросов, можно новые слова.»,
  * «Сделай упражнение в Карточках на тему «вечеринка», 12 вопросов, можно новые слова.»,
- * «Сделай упражнение в Карточках по всем темам, 12 вопросов.»
+ * «Сделай упражнение в Карточках по всем темам, 12 вопросов.»,
+ * «Сделай упражнение в Карточках по трудным словам из всех тем, 12 вопросов.» (a scope: never new words).
  */
-export function buildRequestText({ folders, topic, size, allowNew }: RequestSpec): string {
+export function buildRequestText({ folders, topic, size, allowNew, scope }: RequestSpec): string {
+  if (scope) return `Сделай упражнение в Карточках ${SCOPE_WHERE[scope]}, ${questions(size)}.`;
   const names = [...new Set(folders.map((f) => f.trim()).filter(Boolean))];
   const custom = topic?.replace(/\s+/g, " ").trim() || null;
   let where: string;
@@ -866,14 +896,17 @@ export function buildRequestText({ folders, topic, size, allowNew }: RequestSpec
 
 /**
  * «Попросить следующий набор»: «Сделай следующее упражнение в Карточках после «Вечеринка»,
- * 12 вопросов, с упором на ошибки: relou, keuf, ouf.»
+ * 12 вопросов, с упором на ошибки: relou, keuf, ouf.» A scoped set keeps its scope: «… в Карточках
+ * по трудным словам из всех тем после «Трудные слова», …».
  */
 export function buildFollowUpText(
-  set: Pick<ExerciseSet, "title" | "items" | "new_words">,
+  set: Pick<ExerciseSet, "title" | "items" | "new_words"> & Partial<Pick<ExerciseSet, "scope">>,
   missed: readonly Pick<MissedWord, "fr">[],
 ): string {
+  const scope = parseScope(set.scope);
   const frs = [...new Set(missed.map((m) => m.fr))];
   const focus = frs.length ? `, с упором на ошибки: ${frs.join(", ")}` : "";
-  const fresh = set.new_words.length > 0 ? ", можно новые слова" : "";
-  return `Сделай следующее упражнение в Карточках после ${quoted(set.title)}, ${questions(set.items.length)}${focus}${fresh}.`;
+  const fresh = !scope && set.new_words.length > 0 ? ", можно новые слова" : "";
+  const where = scope ? ` ${SCOPE_WHERE[scope]}` : "";
+  return `Сделай следующее упражнение в Карточках${where} после ${quoted(set.title)}, ${questions(set.items.length)}${focus}${fresh}.`;
 }

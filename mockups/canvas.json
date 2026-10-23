@@ -923,6 +923,33 @@
    "title": "Упражнения · Настройки — чаще в упражнениях",
    "is_interactive": true,
    "radius": 28
+  },
+  "Exercise-S-Request-Scope.dc.html": {
+   "x": 7050,
+   "y": 25648,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · лист — попросить набор: откуда слова — трудные",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-S-Quick-Tiles.dc.html": {
+   "x": 7520,
+   "y": 25648,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения · состояние — готовые запросы: трудные и к повторению",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Exercise-S-Entry-Library-Done.dc.html": {
+   "x": 7990,
+   "y": 25648,
+   "w": 820,
+   "h": 844,
+   "title": "Упражнения · вход — из Библиотеки и после повторения",
+   "is_interactive": true,
+   "radius": 28
   }
  },
  "order": [
@@ -1032,7 +1059,10 @@
   "D-Exercise-Player.dc.html",
   "D-Exercise-Done.dc.html",
   "M-Exercise-Answer.dc.html",
-  "Exercise-S-Settings-Focus.dc.html"
+  "Exercise-S-Settings-Focus.dc.html",
+  "Exercise-S-Request-Scope.dc.html",
+  "Exercise-S-Quick-Tiles.dc.html",
+  "Exercise-S-Entry-Library-Done.dc.html"
  ],
  "notes": {
   "row1": {

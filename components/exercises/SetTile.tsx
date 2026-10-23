@@ -7,7 +7,8 @@ import { Icon } from "@/components/ui/Icons";
 import { SkeletonBar } from "@/components/ui/Skeleton";
 import type { ExerciseSet } from "@/lib/types";
 import { EXERCISE_PLAY_HREF } from "./exercise-request";
-import { nQuestions, shortDate, type TileState } from "./list-format";
+import { nQuestions, plural, shortDate, type TileState } from "./list-format";
+import { CopyGlyph } from "./RequestBuilder";
 
 const TILE = "relative flex h-[152px] flex-col overflow-hidden rounded-card px-3 pt-[15px] pb-3 text-ink no-underline";
 
@@ -89,6 +90,34 @@ export function RequestTile({ onClick, side = false }: { onClick: () => void; si
       <Icon name="plus" size={20} strokeWidth={1.5} />
       <span className="text-[15px] leading-5 font-medium">Попросить набор</span>
       <span className="meta leading-4">{side ? "в чате Claude · справа" : "в чате Claude"}</span>
+    </button>
+  );
+}
+
+const SCOPE_TILE_TITLES = { difficult: "Трудные слова", due: "К повторению" } as const;
+
+/**
+ * A ready-made request (Exercise-S-Quick-Tiles): «Трудные слова» / «К повторению», «9 слов · из всех
+ * тем», dashed like «+ Попросить набор». A tap copies the request for that scope; nothing is sent.
+ */
+export function ScopeTile({ scope, count, onClick }: { scope: keyof typeof SCOPE_TILE_TITLES; count: number; onClick: () => void }) {
+  const title = SCOPE_TILE_TITLES[scope];
+  const words = `${count} ${plural(count, ["слово", "слова", "слов"])}`;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-scope-tile={scope}
+      aria-label={`${title}: ${words} из всех тем. Скопировать запрос для Claude`}
+      className={cx(TILE, "border border-dashed border-boundary bg-transparent text-left active:bg-surface-2 hoverable:bg-hover-surface")}
+    >
+      <span className="line-clamp-2 min-h-12 font-serif text-[19px] leading-6 font-medium">{title}</span>
+      <span className="meta mt-1.5 leading-4 font-medium text-ink tabular-nums">{words}</span>
+      <span className="meta leading-4">из всех тем</span>
+      <span className="mt-auto flex h-5 items-center gap-1.5 text-[13px] leading-5 font-medium">
+        <CopyGlyph size={16} />
+        Запрос для Claude
+      </span>
     </button>
   );
 }

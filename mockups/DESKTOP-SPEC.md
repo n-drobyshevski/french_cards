@@ -1019,6 +1019,14 @@ Everything phones can do, desktop can do too. Where the boards above differ, thi
   text options beside the label in 640. «Сколько в наборе» keeps the phone's 3-stop slider (a 320px radiogroup at
   the right of its row, ←/→ move), disabled with «Обычно»; the 12 muted footnote is the phone's. The «Новый набор»
   panel shows the same muted line «Чаще трудные · половина набора · Настройки ›» under «Запрос».
+- **«Упражнение по трудным словам»** (added 2026-10-23; SPEC.md «Упражнения», boards `Exercise-S-Request-Scope`,
+  `Exercise-S-Quick-Tiles`, `Exercise-S-Entry-Library-Done`): the «Новый набор» panel has the phone's «Откуда слова»
+  radiogroup on top (←/→ move; a scope with no words is disabled) and hides the themes, «+ своя тема» and «Можно новые
+  слова» the same way. The list grid carries the two dashed tiles «Трудные слова» / «К повторению» before «+ Попросить
+  набор». In Библиотека (all words) a right click, a long press or the menu key on «К повторению N» / «Трудные N» of the
+  filter strip opens a menu «Показать в библиотеке» / «Упражнение по ним в Claude»; a click stays the filter. «Готово на
+  сегодня» shows the row «Упражнение по трудным словам · N ›» under «Трудные». Copies end in the snackbar «Запрос
+  скопирован» with «Открыть Claude ↗».
 - «Вибрация при свайпах» stays phone-only (§5 #20); the offline page is 560px wide from 768 and says
   «…не сохранена на устройстве».
 

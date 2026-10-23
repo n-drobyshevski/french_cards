@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addSheet, gateSuggest, LA_THUNE, mockEnrich, mockSuggest, openReview, questionCard, seedExerciseSets, SLANG_SET } from "./fixtures";
+import { addSheet, gateSuggest, LA_THUNE, mockEnrich, mockSuggest, openReview, questionCard, seedCardStates, seedExerciseSets, SEED_WORDS, SLANG_SET } from "./fixtures";
 
 // What phones can do, desktop can do too (parity audit 2026-10-22): the done screen keeps its
 // running head, the library's «Новые» filter and phone orders, theme actions from the sidebar and
@@ -161,4 +161,51 @@ test("«Упражнения»: a right click on a set offers the phone's long-p
   await panel.getByRole("button", { name: "Скопировать запрос" }).click();
   await expect(panel.getByRole("button", { name: "Скопировано" })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(text);
+});
+
+test("«Упражнение по трудным словам»: the panel's «Откуда слова», the quick tiles, the strip's menu and «Готово на сегодня»", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openReview(page);
+  const difficult = ["se casser", "les flics", "vas-y"];
+  const due = ["une blague", "arrête"];
+  await seedCardStates(page, Object.fromEntries(SEED_WORDS.map((fr) => [fr, difficult.includes(fr) ? "difficult" : due.includes(fr) ? "due" : "known"] as const)));
+  await seedExerciseSets(page, [SLANG_SET]);
+  const clipboard = () => page.evaluate(() => navigator.clipboard.readText());
+  const difficultText = "Сделай упражнение в Карточках по трудным словам из всех тем, 12 вопросов.";
+
+  // «Упражнения»: the right column has the phone's «Откуда слова»; the grid has the quick tiles.
+  await page.goto("/exercises");
+  const panel = page.getByRole("complementary", { name: "Попросить набор" });
+  const from = panel.getByRole("radiogroup", { name: "Откуда слова" });
+  await from.getByRole("radio", { name: "Трудные: 3" }).click();
+  await expect(panel.getByText(difficultText)).toBeVisible();
+  await expect(panel.getByRole("group", { name: "Темы" })).toHaveCount(0);
+  await expect(panel.getByRole("checkbox", { name: /Можно новые слова/ })).toHaveCount(0);
+  await page.getByRole("button", { name: /^К повторению: 2 слова из всех тем/ }).click();
+  expect(await clipboard()).toBe("Сделай упражнение в Карточках по словам к повторению из всех тем, 12 вопросов.");
+  await expect(page.getByText("Ждём набор из чата").first()).toBeVisible();
+
+  // Библиотека: a right click on «Трудные» in the strip = the phone ledger's long press.
+  await page.goto("/library");
+  const strip = page.getByRole("group", { name: "Фильтр" });
+  const hard = strip.getByRole("button", { name: /^Трудные/ });
+  await hard.click({ button: "right" });
+  const menu = page.getByRole("menu", { name: "Трудные" });
+  await expect(menu.getByRole("menuitem", { name: "Показать в библиотеке" })).toBeVisible();
+  await menu.getByRole("menuitem", { name: /^Упражнение по ним в Claude/ }).click();
+  expect(await clipboard()).toBe(difficultText);
+  await expect(page.locator("[data-snackbar]")).toContainText("Запрос скопирован");
+  await expect(hard).toHaveAttribute("aria-pressed", "false");
+  await page.waitForTimeout(900); // a second menu within 800 ms of the first is taken for the same press
+  await hard.click({ button: "right" });
+  await page.getByRole("menu", { name: "Трудные" }).getByRole("menuitem", { name: "Показать в библиотеке" }).click();
+  await expect(hard).toHaveAttribute("aria-pressed", "true");
+
+  // «Готово на сегодня» (nothing due once the due words are reviewed): the quiet row.
+  await seedCardStates(page, { "une blague": "known", arrête: "known" });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Готово на сегодня" })).toBeVisible();
+  await page.getByRole("button", { name: /^Упражнение по трудным словам/ }).click();
+  expect(await clipboard()).toBe(difficultText);
+  await expect(page.getByText("Запрос скопирован", { exact: true })).toBeVisible();
 });
