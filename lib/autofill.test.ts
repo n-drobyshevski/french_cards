@@ -1,7 +1,7 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LookupResponse } from "./ai/schemas";
-import { autofillConjugation, autofillOrigin, FillError } from "./autofill";
+import { autofillConjugation, autofillNote, autofillOrigin, detectEntry, FillError } from "./autofill";
 import { clearHistory, saveLookup } from "./context";
 
 const word = { fr: "kiffer", ru: "тащиться", pos: "verb" as const };
@@ -56,5 +56,46 @@ describe("autofillConjugation", () => {
     expect(await autofillConjugation(word, { fetchImpl: reply({ field: "conjugation", value: full }) })).toEqual(full);
     const partial = { ...full, tenses: { ...full.tenses, futur: six("f").slice(1) } };
     await expect(autofillConjugation(word, { fetchImpl: reply({ field: "conjugation", value: partial }) })).rejects.toMatchObject({ fillCode: "none" });
+  });
+});
+
+const suggestion = (fr: string, over: Record<string, unknown> = {}) => ({
+  fr,
+  ru: "менты",
+  note: null,
+  example_fr: null,
+  example_ru: null,
+  pos: "noun",
+  gender: "m",
+  slang_level: 1,
+  verlan: false,
+  folder: "INBOX",
+  folder_alternatives: [],
+  new_folder: null,
+  confidence: "high",
+  ...over,
+});
+const stream = (...items: unknown[]) =>
+  vi.fn(
+    async () =>
+      new Response(
+        [{ type: "meta", direction: "fr" }, ...items.map((s, index) => ({ type: "suggestion", index, suggestion: s })), { type: "done", count: items.length }]
+          .map((l) => JSON.stringify(l))
+          .join("\n") + "\n",
+        { status: 200 },
+      ),
+  );
+
+describe("autofillNote / detectEntry", () => {
+  it("read the suggestion for the word itself, not the first one", async () => {
+    const fetchImpl = stream(suggestion("le flic", { note: "не то" }), suggestion("les flics", { note: "Нейтральнее.", slang_level: 2, verlan: true, gender: "mf" }));
+    expect(await autofillNote({ fr: "Les flics" }, { fetchImpl })).toBe("Нейтральнее.");
+    expect(await detectEntry({ fr: "les flics" }, { fetchImpl })).toEqual({ slang_level: 2, verlan: true, pos: "noun", gender: "mf" });
+  });
+
+  it("say so when there is no note, and map the route's errors", async () => {
+    await expect(autofillNote({ fr: "les flics" }, { fetchImpl: stream(suggestion("les flics")) })).rejects.toMatchObject({ fillCode: "none" });
+    await expect(detectEntry({ fr: "x" }, { fetchImpl: reply({ error: "rate_limited" }, 429) })).rejects.toBeInstanceOf(FillError);
+    await expect(detectEntry({ fr: "x" }, { fetchImpl: reply({ error: "unauthenticated" }, 401) })).rejects.toMatchObject({ fillCode: "auth" });
   });
 });

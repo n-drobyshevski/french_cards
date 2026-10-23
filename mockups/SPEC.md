@@ -6,7 +6,7 @@ just one dimension: every word gets a detected slang level). App name everywhere
 
 ## v3 DIRECTION — read this first, it overrides any older habit
 The user said the previous mockups looked "AI-styled". v3 must NOT look like a generic AI-generated app:
-- Sparkle: only as the ink «spark» glyph (Icons `spark`, `spark-refresh`, `spark-plus`: thin 1.5px four-point stars, ink colour, never filled, coloured or animated) on buttons that call Claude — «Обновить перевод и заметку», «Другой пример» ↻, «+ Ещё пример» / «Подобрать пример», «Разложить» / «Разложить по темам», «Дополнить карточки», «Расформировать», «Распознать заново» (option B of canvas «Пометка ИИ — варианты», chosen 2026-10-22). No other magic imagery. NO «ИИ» / «AI» labels in the UI, except the Settings section «ИИ» and its privacy line (changed 2026-10-22 at the user's request).
+- Sparkle: only as the ink «spark» glyph (Icons `spark`, `spark-refresh`, `spark-plus`: thin 1.5px four-point stars, ink colour, never filled, coloured or animated) on buttons that call Claude — «Заполнить автоматически», «Определить уровень и часть речи», «Другой пример» ↻, «+ Ещё пример» / «Подобрать пример», «Разложить» / «Разложить по темам», «Дополнить карточки», «Расформировать», «Распознать заново» (option B of canvas «Пометка ИИ — варианты», chosen 2026-10-22). No other magic imagery. NO «ИИ» / «AI» labels in the UI, except the Settings section «ИИ» and its privacy line (changed 2026-10-22 at the user's request).
   Automatic features just work quietly and are described by what they do: «Варианты», «подобрано автоматически»,
   «догадка» (translation not visible on screenshot), «Разложить по темам».
 - NO pastel pill soup, no tinted icon chips, no soft drop shadows, no big rounded "bubbly" cards, no gradient, no shimmer.
@@ -108,7 +108,7 @@ Theme colors (muted inks, used only for that top band and progress): Повсе�
 - Theme picked automatically: chip selected + tiny muted caption «подобрано автоматически».
 - Screenshot translation not present in image: italic text + mono tag `ДОГАДКА`.
 - Re-sort button/screen: «Разложить по темам» / «Предлагаемые перемещения».
-- Regenerate in word detail: «Обновить перевод и заметку».
+- Regenerate in word detail: «Обновить перевод и заметку» (removed 2026-10-23: split into the fields' own buttons, see «Раздать по полям»).
 
 ## Sample data (use these, consistently)
 Words (fr — ru — note — register — folder):
@@ -349,3 +349,8 @@ Pixel-careful, consistent spacing (8px grid), real hierarchy, nothing overlappin
 
 ### Сохранить / Отмена при правке поля (added 2026-10-23; canvas «Правка полей — мокапы», chosen H4)
 - Phone word sheet: no more full-width «Сохранить» + «Отмена» row under the field. The field being edited gets two 40 px round buttons at its bottom right: ✕ «Отмена» (muted, no fill) and ✓ «Сохранить» (ink disc, white check; a spinning refresh while saving). A one-input field (Заметка, Происхождение) holds them inside its box, and so does «Русский» in the word-and-translation form (one 1px rule box, ink while focused); the example and «Свои поля» forms put them at the right end of their «+ Ещё пример» / «+ Поле» row (each row there already has its own «×» to remove it), and the conjugation form has them right-aligned under it. A duplicate French word turns ✓ into the pill «Сохранить всё равно». Desktop pane keeps «Отмена Esc · Сохранить ⌘↵».
+
+### Раздать по полям (added 2026-10-23; no separate board)
+- «Обновить перевод и заметку» is gone from the word card (phone sheet and desktop pane), with its «Предлагаемые изменения» diff. Each part it rewrote now has its own control: the translation — «Вариант · Подставить» under «Русский» (already there); the example — ↻ / «Подобрать пример»; the note — «Заполнить автоматически» under the note box; slang level, verlan and part of speech — «Определить уровень и часть речи» under the slang row of the word-and-translation form.
+- Both are the same spark text button as under «Происхождение». They fill the open form only; ✓ / «Сохранить» saves. «Определить» sets the level and the verl. toggle; a part of speech that would change shows as a muted «Часть речи: *n. f.*» next to the button (the form has no control for it) and is saved with the form.
+- The actions row is now «Сбросить прогресс» · «На паузу» · «Удалить слово».
