@@ -27,9 +27,7 @@ import { headwordStep, posAbbr, type HeadwordStep } from "./format";
 import { flyOut, stackPose, swipeVisual, type SwipeOutcome, type SwipeVisual } from "./swipe";
 import { useSwipe } from "./useSwipe";
 import { useShowOrigin } from "@/lib/use-show-origin";
-
-/** Index-card shell: white, radius 6, 1px rule, the red header rule 44px from the top. */
-const cardShell = "flex flex-col overflow-hidden rounded-card border border-rule bg-surface text-ink";
+import { CardHeader, cardShell } from "./card-parts";
 
 /** The card's place in the column (phone: fills it; from 768: the fixed index card). Shared with the placeholder. */
 const cardSlot =
@@ -96,15 +94,6 @@ const STEP_POS: Record<HeadwordStep, string> = {
   2: "md:-mt-[9px]",
   3: "md:mt-1",
 };
-
-function CardHeader({ label, children }: { label: ReactNode; children?: ReactNode }) {
-  return (
-    <span className="flex h-[46px] shrink-0 items-center justify-between border-b-2 border-red px-5 md:h-12 md:px-10">
-      <span className="font-mono text-[11px] tracking-[.06em] text-muted md:tracking-normal md:tabular-nums">{label}</span>
-      {children}
-    </span>
-  );
-}
 
 /** «FR» on phones; «FR · № 001» from 768 up. */
 function CallNumber({ side, number }: { side: string; number?: string }) {
