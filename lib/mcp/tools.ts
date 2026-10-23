@@ -6,6 +6,7 @@
 // - every rewritten row gets updated_at past the stored one; a word is rewritten only if it is
 //   still the version that was read (compare-and-set), otherwise it comes back as a conflict;
 // - nothing is hard-deleted; deleting a word soft-deletes its cards too.
+import { createHash } from "node:crypto";
 import type { CallToolResult, McpServer, StandardSchemaWithJSON, ToolAnnotations } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import { GENDER_VALUES, POS_VALUES } from "@/lib/ai/schemas";
@@ -25,13 +26,44 @@ import {
   withFieldValue,
 } from "@/lib/core/custom-fields";
 import { DEFAULT_FOLDERS, defaultFolderId, nextFolderSort, pickFolderColor, uniqueSlug } from "@/lib/core/folders";
-import { matchesSearch, normalizeLemma } from "@/lib/core/text";
+import {
+  ANSWER_MAX,
+  completeSet,
+  contextFromWords,
+  EXERCISE_ID_PREFIX,
+  EXPLAIN_MAX,
+  ITEMS_MAX,
+  ITEMS_MIN,
+  missedWords,
+  NEW_WORDS_MAX,
+  REF_MAX,
+  TEXT_MAX,
+  TITLE_MAX,
+  TOPIC_MAX,
+  validateSet,
+  warningsFor,
+} from "@/lib/core/exercises";
+import { matchesSearch, normalizeLemma, searchHaystack, searchKey, searchTerms } from "@/lib/core/text";
 import { buildWord, cleanText, directionsOf, isMovable } from "@/lib/core/words";
 import { cleanConjugation, cleanOrigin, conjugate, ORIGIN_MAX, type ConjData } from "@/lib/core/conjugate";
 import conjTable from "@/public/lexique/fr-conj.json";
 import { newId } from "@/lib/id";
-import { newReviewState, reviewStateId, wordStatus, type CardStatus } from "@/lib/scheduler";
-import type { Confidence, Conjugation, CustomFieldValue, Direction, FieldDef, Folder, ReviewState, Word } from "@/lib/types";
+import { cardStatus, newReviewState, reviewStateId, wordStatus, type CardStatus } from "@/lib/scheduler";
+import type {
+  Confidence,
+  Conjugation,
+  CustomFieldValue,
+  Direction,
+  ExerciseItemType,
+  ExerciseRun,
+  ExerciseSet,
+  ExerciseSkill,
+  FieldDef,
+  Folder,
+  ReviewState,
+  SlangLevel,
+  Word,
+} from "@/lib/types";
 import { PartialWriteError, RepoError, type McpRepo, type Replacement } from "./repo";
 import { studyDay } from "./study-day";
 
@@ -402,6 +434,8 @@ export interface ToolSpec<S extends z.ZodObject, O extends Record<string, unknow
   input: S;
   /** Write tools take a rate-limit token per call. */
   write: boolean;
+  /** For a write tool: what to tell Claude after a database error (default: check with search_words). */
+  retryHint?: string;
   annotations: ToolAnnotations;
   /** Returns the structured result (also sent as JSON text). Throws ToolError for a refusal. */
   run: (deps: ToolDeps, args: z.output<S>) => Promise<O>;
@@ -1304,6 +1338,419 @@ export const restoreFolder = tool({
 });
 
 // ---------------------------------------------------------------------------------------------
+// «Упражнения»: exercise sets Claude writes and the app plays offline. The rules of a set live in
+// lib/core/exercises.ts (shared with the app); the item contract is on ExerciseItem in lib/types.ts.
+// The connector writes a set's content once (create) and its deleted_at (delete / restore); runs
+// are written only by the playing device, so they are read here and never written.
+
+const DAY_MS = 86_400_000;
+const ITEM_TYPES = ["choice", "cloze", "register", "pairs"] as const satisfies readonly ExerciseItemType[];
+const SKILLS = ["meaning", "form", "neutral", "verlan", "situation"] as const satisfies readonly ExerciseSkill[];
+/** Most recent sets exercise_material lists, so Claude doesn't repeat one. */
+const RECENT_SETS = 5;
+const TOPIC_MATCHES_MAX = 40;
+const CONFUSIONS_MAX = 5;
+
+/** A set's id: "x-" + sha256(client_ref), so a retried create hits the same row. */
+export const exerciseSetId = (clientRef: string): string =>
+  EXERCISE_ID_PREFIX + createHash("sha256").update(clientRef.trim()).digest("hex").slice(0, 24);
+
+/** Also accepts the array as a JSON string (some clients send nested arrays stringified). */
+const jsonArray = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((value) => {
+    if (typeof value !== "string") return value;
+    try {
+      return JSON.parse(value) as unknown;
+    } catch {
+      return value;
+    }
+  }, schema);
+
+const byType = (items: ExerciseSet["items"]): Partial<Record<ExerciseItemType, number>> => {
+  const out: Partial<Record<ExerciseItemType, number>> = {};
+  for (const item of items) out[item.type] = (out[item.type] ?? 0) + 1;
+  return out;
+};
+
+const setSummary = (s: ExerciseSet) => ({ id: s.id, title: s.title, count: s.items.length, by_type: byType(s.items), new_words: s.new_words.length });
+
+/** The themes a set names, as {id, name} ("inbox" → «Входящие»; unknown ids left out). */
+function setFolders(s: Pick<ExerciseSet, "folders">, folders: readonly Folder[]): FolderRef[] {
+  const byId = new Map(folders.map((f) => [f.id, f]));
+  return s.folders.flatMap((id) => (id === INBOX_SELECTOR ? [folderRef(null)] : byId.has(id) ? [folderRef(byId.get(id))] : []));
+}
+
+/** Writes one set; a stale write (the app changed it meanwhile) comes back as the stored row. */
+async function writeExerciseSet(deps: ToolDeps, row: ExerciseSet, clash: string): Promise<ExerciseSet> {
+  const [stored] = await deps.repo.upsert("exercise_sets", [row]);
+  if (!stored || stored.updated_at !== row.updated_at) throw new ToolError(clash);
+  return stored;
+}
+
+const SET_CLASH = "The set was changed in the app at the same time. Call list_exercise_sets and try again.";
+
+interface Signals {
+  /** Lapses of the word's review cards. */
+  lapses: number;
+  /** A review card is due today. */
+  due: boolean;
+  /** The app rates a card «трудное» (cardStatus difficult). */
+  difficult: boolean;
+  /** Reviews in the window graded «Снова» or «Трудно». */
+  review_misses: number;
+  /** Exercise answers about the word in the window, and the wrong / «Не знаю» ones. */
+  ex_attempts: number;
+  ex_misses: number;
+  /** Wrong options the user picked for it («keuf» instead of «meuf»). */
+  confusions: string[];
+  last_miss: string | null;
+}
+
+const noSignals = (): Signals => ({ lapses: 0, due: false, difficult: false, review_misses: 0, ex_attempts: 0, ex_misses: 0, confusions: [], last_miss: null });
+const later = (a: string | null, b: string) => (a === null || Date.parse(b) > Date.parse(a) ? b : a);
+const weakness = (s: Signals) => s.ex_misses * 3 + s.review_misses * 2 + s.lapses + (s.difficult ? 2 : 0) + (s.due ? 1 : 0);
+
+/** The word an answer is about: its own word_id, else its item's (never a new word's ref). */
+function answerWordId(a: ExerciseRun["answers"][number], set: ExerciseSet | undefined): string | null {
+  if (a.word_id) return a.word_id;
+  if (a.new_ref) return null;
+  return set?.items.find((i) => i.id === a.item_id)?.word_id ?? null;
+}
+
+/** Signals per word: exercise answers, poorly graded reviews and the cards' state. */
+function weaknessSignals(
+  words: readonly Word[],
+  ctx: ViewContext,
+  logs: readonly { word_id: string; rating: number; review: string; deleted_at: string | null }[],
+  runs: readonly ExerciseRun[],
+  sets: ReadonlyMap<string, ExerciseSet>,
+): Map<string, Signals> {
+  const out = new Map(words.map((w) => [w.id, noSignals()]));
+  for (const w of words) {
+    const s = out.get(w.id)!;
+    for (const card of ctx.statesByWord.get(w.id) ?? []) {
+      s.lapses += card.lapses;
+      if (isDueToday(card, ctx.dayEnd)) s.due = true;
+      if (cardStatus(card) === "difficult") s.difficult = true;
+    }
+  }
+  for (const l of logs) {
+    const s = out.get(l.word_id);
+    if (!s || l.deleted_at !== null || l.rating > 2) continue;
+    s.review_misses++;
+    s.last_miss = later(s.last_miss, l.review);
+  }
+  for (const run of runs) {
+    if (run.deleted_at !== null) continue;
+    const set = run.set_id ? sets.get(run.set_id) : undefined;
+    for (const a of run.answers) {
+      const id = answerWordId(a, set);
+      const s = id ? out.get(id) : undefined;
+      if (!s) continue;
+      s.ex_attempts++;
+      if (a.outcome === "correct") continue;
+      s.ex_misses++;
+      if (a.at) s.last_miss = later(s.last_miss, a.at);
+      if (a.chosen && s.confusions.length < CONFUSIONS_MAX && !s.confusions.includes(a.chosen)) s.confusions.push(a.chosen);
+    }
+  }
+  return out;
+}
+
+const TOPIC_STOP = new Set(["для", "про", "при", "или", "как", "что", "les", "des", "une", "sur", "pour", "avec", "dans", "the"]);
+
+/**
+ * Saved words that match a free-text topic: each term of the topic (Russian endings trimmed) is
+ * looked for in the word's text (fr, ru, note, tags, custom fields) and its theme's name and
+ * description, accent-insensitively. Most matching terms first.
+ */
+function topicMatches(topic: string, words: readonly Word[], live: ReadonlyMap<string, Folder>) {
+  const terms = searchTerms(topic)
+    .filter((t) => t.length >= 3 && !TOPIC_STOP.has(t))
+    .map((t) => (t.length > 5 ? t.slice(0, t.length - 2) : t));
+  if (terms.length === 0) return [];
+  return words
+    .filter((w) => w.deleted_at === null)
+    .map((w) => {
+      const f = placeOf(w, live);
+      const hay = `${searchHaystack(w)} ${f ? searchKey(`${f.name} ${f.description ?? ""}`) : ""}`;
+      return { w, hits: terms.filter((t) => hay.includes(t)).length };
+    })
+    .filter((m) => m.hits > 0)
+    .sort((a, b) => b.hits - a.hits || b.w.created_at.localeCompare(a.w.created_at) || a.w.id.localeCompare(b.w.id))
+    .slice(0, TOPIC_MATCHES_MAX)
+    .map(({ w }) => ({ ...brief(w, live), ...(w.muted ? { muted: true } : {}) }));
+}
+
+/** The French of the words a set uses, for recent_sets. */
+const setWords = (s: ExerciseSet) => [...new Set(s.items.flatMap((i) => (i.type === "pairs" ? i.tiles.map((t) => t.fr) : i.word ? [i.word.fr] : [])))].slice(0, 20);
+
+export const exerciseMaterial = tool({
+  name: "exercise_material",
+  title: "Material for an exercise",
+  description:
+    `Read what an exercise set («Упражнения») should practise, before create_exercise_set. \`words\`: the live words of the given themes (all themes without \`folders\`), weakest first, each with \`signals\` merged from the last \`days\`: exercise answers (ex_attempts, ex_misses, confusions = wrong options the user picked), reviews graded «Снова»/«Трудно» (review_misses), lapses, due today and difficult cards. Words «на паузе» and deleted words are left out. With \`topic\` (a free-text subject like «вечеринка»), \`topic_matches\` lists saved words that fit it: use them by word_id and never put them in new_words (a muted one can't be used at all). \`recent_sets\` are the latest sets with their words, so the next one doesn't repeat them.`,
+  input: z.object({
+    folders: jsonArray(z.array(folderSelector).max(10)).nullable().optional().describe(`Themes to draw words from (id, slug, name or "${INBOX_SELECTOR}"); default every theme.`),
+    topic: z.string().trim().max(TOPIC_MAX).optional().describe("A free-text topic («вечеринка», «в баре»), when the user asked for one."),
+    limit: z.number().int().min(1).max(60).default(30).describe("How many words to return (weakest first)."),
+    days: z.number().int().min(1).max(60).default(14).describe("The window for exercise answers and reviews."),
+  }),
+  write: false,
+  annotations: READ,
+  async run(deps, args) {
+    const now = deps.now();
+    const from = new Date(now.getTime() - args.days * DAY_MS).toISOString();
+    const [folders, words, states, logs, runs, sets] = await Promise.all([
+      deps.repo.folders(),
+      deps.repo.words(),
+      deps.repo.states(),
+      deps.repo.logsSince(from),
+      deps.repo.exerciseRunsSince(from),
+      deps.repo.exerciseSets(),
+    ]);
+    const targets = args.folders?.length ? [...new Map(args.folders.map((s) => resolveFolder(s, folders)).map((f) => [f?.id ?? null, f])).values()] : null;
+    const targetIds = targets ? new Set(targets.map((f) => f?.id ?? null)) : null;
+    const ctx = viewContext(folders, states, [], deps);
+    const inScope = words.filter((w) => w.deleted_at === null && !w.muted && (!targetIds || targetIds.has(placeOf(w, ctx.live)?.id ?? null)));
+    const liveSets = sets.filter((s) => s.deleted_at === null);
+    const signals = weaknessSignals(inScope, ctx, logs, runs, new Map(sets.map((s) => [s.id, s])));
+    const ranked = inScope
+      .map((w) => ({ w, s: signals.get(w.id)! }))
+      .sort((a, b) => weakness(b.s) - weakness(a.s) || a.s.ex_attempts - b.s.ex_attempts || b.w.created_at.localeCompare(a.w.created_at) || a.w.id.localeCompare(b.w.id));
+    const topic = cleanText(args.topic);
+    return {
+      scope: { folders: targets ? targets.map(folderRef) : "all", ...(topic ? { topic } : {}), days: args.days },
+      total: inScope.length,
+      words: ranked.slice(0, args.limit).map(({ w, s }) => ({
+        id: w.id,
+        fr: w.fr,
+        ru: w.ru,
+        pos: w.pos,
+        gender: w.gender,
+        slang_level: w.slang_level,
+        verlan: w.verlan,
+        example_fr: w.example_fr,
+        example_ru: w.example_ru,
+        folder: folderRef(placeOf(w, ctx.live)),
+        status: wordStatus(ctx.statesByWord.get(w.id) ?? []),
+        signals: s,
+      })),
+      ...(topic ? { topic_matches: topicMatches(topic, words, ctx.live) } : {}),
+      recent_sets: liveSets
+        .sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id))
+        .slice(0, RECENT_SETS)
+        .map((s) => ({ id: s.id, title: s.title, topic: s.topic, created_at: s.created_at, count: s.items.length, words: setWords(s) })),
+      note: "Build 10–15 items of at least 3 types, put the weakest words late and twice, and save them with one create_exercise_set call.",
+    };
+  },
+});
+
+const exerciseText = (max: number, what: string) => z.string().max(max).nullable().optional().describe(what);
+
+const exerciseItemSchema = z.object({
+  id: z.union([z.string().max(40), z.number()]).nullable().optional().describe("Ignored: the server numbers the items q1…qN in the order sent."),
+  type: z
+    .enum(ITEM_TYPES)
+    .describe(
+      "choice: 4 options (answer + 3 distractors). cloze: a French sentence with a gap. register: the user picks the word's slang level (нейтр./fam./arg./vulg.). pairs: match 4–6 words with their translations.",
+    ),
+  skill: z
+    .enum(SKILLS)
+    .nullable()
+    .optional()
+    .describe(
+      "choice only (default meaning): meaning = the word ↔ its translation (prompt and answer are written by the server from the word); form = the right French form for a Russian cue; neutral = the neutral equivalent of a slang word; verlan = the verlan form or its source; situation = what you would say in a described situation.",
+    ),
+  ask: z.enum(["fr", "ru"]).nullable().optional().describe("choice + meaning: fr (default) shows the French word with Russian options; ru the reverse. Distractors are then in the options' language."),
+  word_id: z.string().trim().min(1).max(64).nullable().optional().describe("The library word the item is about (from exercise_material). choice, cloze, register: word_id or new_ref."),
+  new_ref: z.string().trim().min(1).max(REF_MAX).nullable().optional().describe("A new_words[].ref instead of word_id, for a word that is not in the library."),
+  prompt: exerciseText(TEXT_MAX, "The question on the card (Russian or French). Required for choice skills other than meaning; for cloze and register an optional instruction."),
+  sentence: exerciseText(TEXT_MAX, "cloze only: a natural French sentence with exactly one [[…]] gap around the answer: «J'ai trop [[kiffé]] ce concert.»"),
+  sentence_ru: exerciseText(TEXT_MAX, "cloze only: a short Russian hint of the situation. It must never translate the missing word."),
+  answer: exerciseText(ANSWER_MAX, "The right option (choice, cloze; a cloze answer defaults to its gap). Left out for meaning, register and pairs: the server writes it."),
+  distractors: jsonArray(z.array(z.string().max(ANSWER_MAX)).max(6))
+    .nullable()
+    .optional()
+    .describe("choice and cloze: exactly 3 wrong options, same part of speech, gender, register and about the same length as the answer, each clearly wrong. Empty for register and pairs."),
+  pairs: jsonArray(z.array(z.string().trim().min(1).max(64)).max(10)).nullable().optional().describe("pairs only: 4–6 word_ids or new_refs with distinct translations; the server builds the tiles."),
+  explain_ru: exerciseText(EXPLAIN_MAX, "Optional one-line Russian explanation shown after the answer («верлан от femme»)."),
+});
+
+const exerciseNewWordSchema = newWordSchema.pick({ fr: true, ru: true, note: true, example_fr: true, example_ru: true, pos: true, gender: true, slang_level: true, verlan: true, origin: true }).extend({
+  ref: z.string().trim().min(1).max(REF_MAX).describe("A short handle the items use as new_ref: n1, n2…"),
+  source_url: z.string().trim().max(500).nullable().optional().describe("The page you found the word and its meaning on (one of the two sources you checked)."),
+});
+
+export const createExerciseSet = tool({
+  name: "create_exercise_set",
+  title: "Save an exercise set",
+  description:
+    `Save one exercise set («Упражнения») that the app plays offline; it never changes the review schedule. Call exercise_material first, then send the whole set in one call: ${ITEMS_MIN}–${ITEMS_MAX} items (10–15 is best) of at least 3 types. Items are about library words (word_id) or new words (new_ref → new_words, at most ${NEW_WORDS_MAX}, found with your web search; the user adds them from the app, so never add_words them yourself). The server numbers the items, copies each word into the set, writes the meaning prompt and answer, the register answer and the pairs tiles, and checks every rule: a refusal names each problem by path (items[7].distractors …); fix them all and call again with the same client_ref. \`warnings\` never block. A retry with the same client_ref returns already_saved: true and writes nothing. The result is a short summary, not the set. Undo with delete_exercise_set.`,
+  input: z.object({
+    client_ref: z
+      .string()
+      .trim()
+      .min(1)
+      .max(40)
+      .describe("A unique name you make up for this set, e.g. «eda-2026-10-23». Keep it when retrying the same set; use a new one for a different set."),
+    title: z.string().trim().min(1).max(TITLE_MAX).describe("Short Russian title the list shows, e.g. «Вечеринка · сленг»."),
+    topic: z.string().trim().max(TOPIC_MAX).nullable().optional().describe("The free-text topic, when the user asked for one («вечеринка»)."),
+    folders: jsonArray(z.array(folderSelector).max(10))
+      .nullable()
+      .optional()
+      .describe(`Themes the set was built from (id, slug, name or "${INBOX_SELECTOR}"). New words the user adds from the app go into the first one.`),
+    items: jsonArray(z.array(exerciseItemSchema).min(ITEMS_MIN).max(ITEMS_MAX)).describe("The questions, in the order they are played: recognise before produce, weak words late."),
+    new_words: jsonArray(z.array(exerciseNewWordSchema).max(NEW_WORDS_MAX))
+      .nullable()
+      .optional()
+      .describe("Words that are not in the library yet, in the add_words format plus ref and source_url. Each gets an intro card before its first item."),
+  }),
+  write: true,
+  retryHint: "Retrying with the same client_ref is safe: a set that was saved comes back as already_saved.",
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  async run(deps, args) {
+    const id = exerciseSetId(args.client_ref);
+    const [sets, folders] = await Promise.all([deps.repo.exerciseSets(), deps.repo.folders()]);
+    const stored = sets.find((s) => s.id === id);
+    if (stored && stored.deleted_at === null) {
+      return {
+        already_saved: true,
+        set: setSummary(stored),
+        undo: { tool: "delete_exercise_set", id: stored.id },
+        message: "A set with this client_ref was saved before, so nothing was written. To save a different set, use a new client_ref.",
+        note: SYNC_NOTE,
+      };
+    }
+    if (stored) {
+      throw new ToolError(`The set saved with this client_ref («${stored.title}») was deleted. Bring it back with restore_exercise_set (id ${stored.id}), or use a new client_ref.`);
+    }
+    // Ids and order of themes as named; resolveFolder refuses unknown and deleted ones.
+    const folderIds = [...new Set((args.folders ?? []).map((s) => resolveFolder(s, folders)?.id ?? INBOX_SELECTOR))];
+    const ctx = contextFromWords(await deps.repo.words());
+    const content = completeSet(
+      {
+        title: args.title,
+        topic: args.topic,
+        folders: folderIds,
+        // Ids Claude sent are dropped: the server numbers q1…qN, so they never clash.
+        items: args.items.map((item) => ({ ...item, id: null })),
+        new_words: (args.new_words ?? []).map((w) => ({
+          ...w,
+          gender: w.pos === "noun" ? (w.gender ?? "none") : "none",
+          slang_level: (w.slang_level ?? 0) as SlangLevel,
+        })),
+      },
+      ctx,
+    );
+    const check = validateSet(content, ctx);
+    if (!check.ok) {
+      const lines = check.errors.slice(0, 30).map((e) => `- ${e.path}: ${e.message}`);
+      const more = check.errors.length > 30 ? `\n- …and ${check.errors.length - 30} more` : "";
+      throw new ToolError(`The set was not saved. Fix every problem below, then call create_exercise_set again with the same client_ref:\n${lines.join("\n")}${more}`);
+    }
+    const now = deps.now().toISOString();
+    const row: ExerciseSet = { id, ...content, source: "chat", created_at: now, updated_at: now, deleted_at: null };
+    const saved = await writeExerciseSet(deps, row, "A set with this client_ref was saved at the same time. Call list_exercise_sets to see it.");
+    return {
+      already_saved: false,
+      set: setSummary(saved),
+      warnings: warningsFor(saved),
+      undo: { tool: "delete_exercise_set", id: saved.id },
+      note: SYNC_NOTE,
+    };
+  },
+});
+
+export const listExerciseSets = tool({
+  name: "list_exercise_sets",
+  title: "List exercise sets",
+  description:
+    "List the user's exercise sets («Упражнения»), newest first: title, themes, number of questions by type, new words, and `last_run` (the latest playthrough: when, whether it was finished, first-try score, and the words missed with the wrong options picked). Use it for «работа над ошибками» and to find a set's id for delete_exercise_set.",
+  input: z.object({
+    limit: z.number().int().min(1).max(50).default(20),
+    include_deleted: z.boolean().default(false).describe("Also list deleted sets (restore_exercise_set brings one back)."),
+  }),
+  write: false,
+  annotations: READ,
+  async run(deps, args) {
+    const [sets, folders] = await Promise.all([deps.repo.exerciseSets(), deps.repo.folders()]);
+    const shown = sets
+      .filter((s) => args.include_deleted || s.deleted_at === null)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id))
+      .slice(0, args.limit);
+    // A run starts after its set was made; a day of margin covers a device clock running behind.
+    const oldest = Math.min(...shown.map((s) => Date.parse(s.created_at)).filter((t) => !Number.isNaN(t)));
+    const runs = shown.length > 0 && Number.isFinite(oldest) ? await deps.repo.exerciseRunsSince(new Date(oldest - DAY_MS).toISOString()) : [];
+    const latest = new Map<string, ExerciseRun>();
+    for (const run of runs) {
+      if (run.deleted_at !== null || !run.set_id) continue;
+      const prev = latest.get(run.set_id);
+      if (!prev || run.started_at > prev.started_at) latest.set(run.set_id, run);
+    }
+    return {
+      total: sets.filter((s) => args.include_deleted || s.deleted_at === null).length,
+      sets: shown.map((s) => {
+        const run = latest.get(s.id);
+        return {
+          ...setSummary(s),
+          topic: s.topic,
+          folders: setFolders(s, folders),
+          created_at: s.created_at,
+          ...(s.deleted_at !== null ? { deleted: true } : {}),
+          last_run: run
+            ? {
+                at: run.finished_at ?? run.answers.at(-1)?.at ?? run.started_at,
+                kind: run.kind,
+                finished: run.finished_at !== null,
+                first_try: run.first_try,
+                total: run.total,
+                missed: missedWords(run, s).map((m) => ({ ...(m.word_id ? { word_id: m.word_id } : { new_ref: m.new_ref }), fr: m.fr, ru: m.ru, chosen: m.chosen })),
+              }
+            : null,
+        };
+      }),
+    };
+  },
+});
+
+export const deleteExerciseSet = tool({
+  name: "delete_exercise_set",
+  title: "Delete an exercise set",
+  description: "Delete an exercise set (soft: its results stay). Use it when the user asks, or to undo create_exercise_set. Undo with restore_exercise_set and the returned id.",
+  input: z.object({ id: z.string().trim().min(1).max(64).describe("The set id from create_exercise_set or list_exercise_sets.") }),
+  write: true,
+  retryHint: "Retrying is safe: a set that is already in that state comes back unchanged.",
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  async run(deps, args) {
+    const current = (await deps.repo.exerciseSets()).find((s) => s.id === args.id);
+    if (!current) throw new ToolError(`No exercise set with id "${args.id}". Call list_exercise_sets for the sets.`);
+    const undo = { tool: "restore_exercise_set", id: current.id };
+    if (current.deleted_at !== null) return { deleted: setSummary(current), result: "unchanged", undo };
+    const stamp = stampAfter(deps.now(), current.updated_at);
+    const stored = await writeExerciseSet(deps, { ...current, deleted_at: stamp, updated_at: stamp }, SET_CLASH);
+    return { deleted: setSummary(stored), undo, note: SYNC_NOTE };
+  },
+});
+
+export const restoreExerciseSet = tool({
+  name: "restore_exercise_set",
+  title: "Restore a deleted exercise set",
+  description: "Undo delete_exercise_set: bring a deleted exercise set back, with its results.",
+  input: z.object({ id: z.string().trim().min(1).max(64).describe("The id from delete_exercise_set's `undo`.") }),
+  write: true,
+  retryHint: "Retrying is safe: a set that is already in that state comes back unchanged.",
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  async run(deps, args) {
+    const current = (await deps.repo.exerciseSets()).find((s) => s.id === args.id);
+    if (!current) throw new ToolError(`No exercise set with id "${args.id}".`);
+    if (current.deleted_at === null) return { set: setSummary(current), result: "unchanged" };
+    const stored = await writeExerciseSet(deps, { ...current, deleted_at: null, updated_at: stampAfter(deps.now(), current.updated_at) }, SET_CLASH);
+    return { restored: setSummary(stored), note: SYNC_NOTE };
+  },
+});
+
+// ---------------------------------------------------------------------------------------------
 // Execution and registration
 
 const errorResult = (message: string): CallToolResult => ({ content: [{ type: "text", text: message }], isError: true });
@@ -1320,7 +1767,7 @@ async function execute<S extends z.ZodObject>(spec: ToolSpec<S>, deps: ToolDeps,
     if (error instanceof ToolError) return errorResult(error.message);
     if (error instanceof RepoError) {
       console.error(`[mcp] ${spec.name}: ${error.message}`);
-      const hint = spec.write ? " Part of the change may be saved: check with search_words before retrying." : "";
+      const hint = spec.write ? ` ${spec.retryHint ?? "Part of the change may be saved: check with search_words before retrying."}` : "";
       return errorResult(`The database refused or did not answer: ${error.message}.${hint}`);
     }
     console.error(`[mcp] ${spec.name} failed`, error);
@@ -1363,6 +1810,11 @@ export const TOOL_NAMES = [
   updateFolder.name,
   deleteFolder.name,
   restoreFolder.name,
+  exerciseMaterial.name,
+  createExerciseSet.name,
+  listExerciseSets.name,
+  deleteExerciseSet.name,
+  restoreExerciseSet.name,
 ] as const;
 
 export function registerTools(server: McpServer, deps: ToolDeps): void {
@@ -1384,6 +1836,11 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   register(server, deps, updateFolder);
   register(server, deps, deleteFolder);
   register(server, deps, restoreFolder);
+  register(server, deps, exerciseMaterial);
+  register(server, deps, createExerciseSet);
+  register(server, deps, listExerciseSets);
+  register(server, deps, deleteExerciseSet);
+  register(server, deps, restoreExerciseSet);
 }
 
 export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard app for colloquial French; the user is a Russian speaker. A card is a French word or phrase (fr) with its Russian translation (ru). Words are grouped into themes («темы»); «${INBOX_NAME}» (inbox) holds words without a theme.
@@ -1393,7 +1850,13 @@ export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard
 - A word can carry origin («Происхождение»: one Russian line, e.g. «верлан от lourd», «от volonté „воля“ + -aire») and, for verbs, a conjugation (présent, passé composé, imparfait, futur; six forms each with pronouns). The app builds most conjugations itself from Lexique: search_words shows conjugation_builtin false where it cannot. Fill them with update_word when the user asks (e.g. «заполни происхождение для слов из темы X»), checking forms you are not sure of; never overwrite an existing origin or conjugation unless asked.
 - Cards can carry the user's custom fields («Свои поля»): list_fields shows the shared ones and what to write in each. Set them by name with custom_fields in add_words or update_word (null clears one); search_words shows them. Use a name not in list_fields only when the user asks for a field on that one word. create_field, update_field and delete_field manage the shared fields; ask the user before creating or deleting one.
 - Before adding more than 5 words, and before any move, delete, or renaming or deleting a theme (update_folder, delete_folder), list what will change and wait for the user's OK.
-- After a change, say what changed and how to undo it with the result's \`undo\` (delete_words, restore_words, restore_moves, restore_folder, delete_field or restore_field).
+- After a change, say what changed and how to undo it with the result's \`undo\` (delete_words, restore_words, restore_moves, restore_folder, delete_field, restore_field, delete_exercise_set or restore_exercise_set).
+- Exercises («Упражнения»: «сделай упражнение / тест / квиз по теме …»): call exercise_material first, then save the whole set with exactly one create_exercise_set call. Never write the questions into the chat instead; the app plays the set offline and it never changes the review schedule.
+- For a free-text topic, use the saved words in topic_matches by word_id. Words found with web search go in new_words (at most 8, each checked in at least 2 sources, slang_level by the rubric, source_url); never add_words them without the user's OK, since the user adds them from the app.
+- choice and cloze have 4 options: the answer plus 3 distractors of the same part of speech, gender, register and length, with exactly one best answer. A cloze's sentence_ru hints at the situation and never translates the gap.
+- Order the items recognise-before-produce (meaning fr→ru and pairs before ru→fr and cloze), put the weakest words (first in exercise_material) late and twice, keep the same word apart, and use 10–15 items of at least 3 types.
+- «Работа над ошибками»: list_exercise_sets' last_run.missed and exercise_material's signals (ex_misses, confusions) say what to drill; use the confused options as distractors.
+- After saving, give the set's title and number of questions and how to undo it; it shows in «Упражнения» after the app's next sync.
 - Make write calls one at a time, never in parallel: each reads the current rows first, and parallel writes to the same words conflict or slip past the duplicate check.
 - Changes reach the app on its next sync (when it is opened or focused). Reviewing and grading cards happen in the app only.
 - Talk about the app's features plainly; never call them "AI".`;

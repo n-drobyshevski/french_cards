@@ -1,6 +1,6 @@
 # Claude connector («Карточки» in the Claude apps)
 
-The app serves a remote MCP server at `/api/mcp/<MCP_SECRET>`. Added once as a custom connector on claude.ai, it works in Claude on the web, desktop and mobile, and in Claude Code signed in with the same account. Claude can then search, add, edit, move, delete and restore words, fill in custom fields («Свои поля»), undo moves, create themes and read today's study numbers. Grading reviews stays in the app.
+The app serves a remote MCP server at `/api/mcp/<MCP_SECRET>`. Added once as a custom connector on claude.ai, it works in Claude on the web, desktop and mobile, and in Claude Code signed in with the same account. Claude can then search, add, edit, move, delete and restore words, fill in custom fields («Свои поля»), undo moves, create themes, read today's study numbers and write exercise sets («Упражнения») for the app to play. Grading reviews and playing exercises stay in the app.
 
 An optional skill (`claude/skills/kartochki/`) teaches Claude the card conventions: the slang-level rubric, verlan, translation and example style, when to ask before changing anything, and recipes. The connector works without it.
 
@@ -44,6 +44,11 @@ An optional skill (`claude/skills/kartochki/`) teaches Claude the card conventio
 | `update_folder` | write | Rename a theme, change its description, lock/unlock it or move it (`position`, 1-based); the slug and the words stay. Returns `previous` for undo. «Входящие» can't be changed. |
 | `delete_folder` | write | Soft-deletes a theme; its words move to «Входящие» (as in the app). Undo: `restore_folder` with the returned `undo`. |
 | `restore_folder` | write | Brings a deleted theme back and returns its words to it (only those still in «Входящие»). |
+| `exercise_material` | read | What an exercise set should practise: the live, unpaused words of the given themes (or all), weakest first, with `signals` from the last `days` (exercise misses and confusions, reviews graded 1–2, lapses, due, difficult); `topic_matches` (saved words that fit a free-text topic) and `recent_sets`. |
+| `create_exercise_set` | write | Saves one set of 6–20 items (`choice`, `cloze`, `register`, `pairs`) and up to 8 `new_words`, all or nothing. Refusals name every problem by path; `warnings` never block. Idempotent on `client_ref`. Undo: `delete_exercise_set`. |
+| `list_exercise_sets` | read | Sets newest first with counts by type and `last_run` (when, finished, first-try score, missed words with the wrong options picked). |
+| `delete_exercise_set` | write | Soft-deletes a set; its runs stay. Undo: `restore_exercise_set`. |
+| `restore_exercise_set` | write | Brings a deleted set back. |
 
 Themes can be named by id, slug, Russian name, or `inbox`.
 
@@ -64,6 +69,14 @@ The shared definitions are edited in the app (Settings → «Свои поля»
 - **Output:** such words carry `muted: true`; their `due_today` is false and `study_summary` leaves them out of the due and new counts.
 - **Storage:** `words.muted` (boolean, default false), migration `0009_word_muted.sql`, synced like the other word columns.
 
+### Упражнения
+Claude writes Duolingo-style question sets through the connector; the app plays them offline from its synced copy and never asks the API for them. Exercises never write `review_state` or `review_log`.
+- **Storage:** `exercise_sets` and `exercise_runs`, migration `0010_exercises.sql`, synced like the other tables. The connector writes a set's content once and later only its `deleted_at` (delete / restore); the app only sets `deleted_at` too. Runs are written only by the device that plays them (one row per playthrough, upserted after each answer), so the connector reads them and never writes them. `service_role` has `select, insert, update` on `exercise_sets` and `select` on `exercise_runs`.
+- **Input** (`create_exercise_set`): `{ client_ref ≤40, title ≤60, topic?, folders?, items 6–20, new_words? ≤8 }`. `items`, `new_words` and `folders` may also come as JSON strings. The item contract is documented on `ExerciseItem` in `lib/types.ts`; the rules live in `lib/core/exercises.ts` (shared with the app).
+- **What the server does:** the id is `x-` + the first 24 hex digits of `sha256(client_ref)`, so a retry hits the same row: a replay of a live set answers `already_saved: true` and writes nothing; a `client_ref` whose set was deleted is refused with a pointer to `restore_exercise_set`. The items are renumbered `q1…qN` (ids Claude sends are ignored). `completeSet` copies each word into the set (it plays without the library), writes the `choice`/meaning prompt and answer, the `register` answer and the `pairs` tiles; `validateSet` then refuses the whole set, listing every error by path (`items[7].word_id: no such word …`): unknown, deleted or paused words, an unresolved `new_ref`, a new word that is already saved («use word_id …»), anything but 3 distinct distractors different from the answer, a cloze span that is not the answer, bad pairs. Themes are resolved like everywhere else (id, slug, name, `inbox`). The row is one upsert, so a failure saves nothing; the result is a summary (`{ id, title, count, by_type, new_words }`, `warnings`, `undo`), never the set.
+- **Warnings** (`warningsFor`, saved anyway): fewer than 3 types, the answer is the longest option in over 60 % of items, an answer shows in a stem, the same word in two consecutive items, over 30 % new words.
+- **Closing the loop:** `exercise_material` and `list_exercise_sets` read the runs (`repo.exerciseRunsSince`, by `started_at`), so Claude can build «работа над ошибками» from the misses and the wrong options picked.
+
 ## Setup
 
 1. Generate a secret:
@@ -77,7 +90,7 @@ The shared definitions are edited in the app (Settings → «Свои поля»
    - `MCP_TIMEZONE` (optional): your IANA time zone, for example `Europe/Moscow`. The default is `Europe/Paris`.
 
    Then redeploy.
-   Apply `supabase/migrations/0005_connector_grants.sql`, `0006_custom_fields.sql`, `0007_connector_field_writes.sql`, `0008_word_origin_conjugation.sql` and `0009_word_muted.sql` if you haven't (README, step 1).
+   Apply `supabase/migrations/0005_connector_grants.sql`, `0006_custom_fields.sql`, `0007_connector_field_writes.sql`, `0008_word_origin_conjugation.sql`, `0009_word_muted.sql` and `0010_exercises.sql` if you haven't (README, step 1). Without 0010, `exercise_material` and the exercise-set tools fail with a database error (and the app's sync fails, so apply it before deploying).
 3. Check the endpoint. A wrong key must give `404`, with no redirect:
    ```sh
    curl -s -o /dev/null -w "%{http_code}\n" -X POST https://frenchcards.vercel.app/api/mcp/wrong

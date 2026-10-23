@@ -173,6 +173,34 @@ describe("createSupabaseRepo", () => {
     expect(calls).toHaveLength(20);
   });
 
+  it("reads exercise sets and recent runs of the user only, paging both, and writes sets with the user id", async () => {
+    const pages: Record<string, unknown[][]> = {
+      exercise_sets: [ids(PAGE).map((r) => ({ ...r, title: "Еда", items: [], created_at: r.updated_at, user_id: "user-1", synced_at: "x" })), []],
+      exercise_runs: [ids(2).map((r) => ({ ...r, set_id: "x-1", started_at: "2026-10-21T08:00:00+00:00", answers: [], user_id: "user-1" })), []],
+    };
+    const { client, calls } = fakeClient((call) => ({ data: call.ops.some(([op]) => op === "upsert") ? [] : (pages[call.table]?.shift() ?? []), error: null }));
+    const repo = createSupabaseRepo(client, "user-1");
+    const sets = await repo.exerciseSets();
+    expect(sets).toHaveLength(PAGE);
+    expect(sets[0]).toMatchObject({ title: "Еда", created_at: "2026-10-22T10:00:00.000Z" });
+    expect(sets[0]).not.toHaveProperty("user_id");
+    const runs = await repo.exerciseRunsSince("2026-10-08T10:00:00.000Z");
+    expect(runs.map((r) => r.started_at)).toEqual(["2026-10-21T08:00:00.000Z", "2026-10-21T08:00:00.000Z"]);
+    expect(calls.map((c) => c.table)).toEqual(["exercise_sets", "exercise_sets", "exercise_runs", "exercise_runs"]);
+    for (const call of calls) {
+      expect(call.ops).toContainEqual(["eq", "user_id", "user-1"]);
+      expect(call.ops).toContainEqual(["order", "id", { ascending: true }]);
+    }
+    expect(calls[1].ops).toContainEqual(["gt", "id", `id-${String(PAGE - 1).padStart(4, "0")}`]);
+    expect(calls[2].ops).toContainEqual(["gte", "started_at", "2026-10-08T10:00:00.000Z"]);
+
+    await repo.upsert("exercise_sets", [{ ...sets[0], items: [], folders: ["inbox"], new_words: [], topic: null, source: "chat", deleted_at: null }]);
+    const [, body, options] = calls.at(-1)!.ops.find(([op]) => op === "upsert") as [string, Record<string, unknown>[], unknown];
+    expect(calls.at(-1)!.table).toBe("exercise_sets");
+    expect(body[0]).toMatchObject({ id: "id-0000", folders: ["inbox"], user_id: "user-1" });
+    expect(options).toEqual({ onConflict: "user_id,id" });
+  });
+
   it("turns Supabase errors into RepoError", async () => {
     const { client } = fakeClient(() => ({ data: null, error: { message: "permission denied" } }));
     await expect(createSupabaseRepo(client, "user-1").folders()).rejects.toThrow(RepoError);

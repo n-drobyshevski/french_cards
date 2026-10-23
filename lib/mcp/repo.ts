@@ -5,7 +5,7 @@
 // the stored row when a write's updated_at is not newer.
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { fromRemoteRow, toRemoteRow } from "@/lib/core/rows";
-import type { FieldDef, Folder, ReviewLog, ReviewState, Word } from "@/lib/types";
+import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ReviewLog, ReviewState, Word } from "@/lib/types";
 import type { McpConfig } from "./config";
 
 /** Keyset page size (the app's PULL_PAGE); a page is never trusted to be the last unless it is empty. */
@@ -22,9 +22,13 @@ export interface TableRows {
   review_log: ReviewLog;
   /** Read-only here: the definitions of «Свои поля» are edited in the app. */
   field_defs: FieldDef;
+  /** «Упражнения»: the connector writes the content (create, soft delete, restore). */
+  exercise_sets: ExerciseSet;
+  /** Read-only here: runs are written by the device that plays them. */
+  exercise_runs: ExerciseRun;
 }
 
-export type WritableTable = "folders" | "words" | "review_state" | "field_defs";
+export type WritableTable = "folders" | "words" | "review_state" | "field_defs" | "exercise_sets";
 
 export interface McpRepo {
   /** Every folder, tombstones included. */
@@ -39,6 +43,10 @@ export interface McpRepo {
   states(wordIds?: readonly string[]): Promise<ReviewState[]>;
   /** Review-log rows with `review >= from`. Tombstones (undone reviews) included. */
   logsSince(from: string): Promise<ReviewLog[]>;
+  /** Every exercise set, tombstones included. */
+  exerciseSets(): Promise<ExerciseSet[]>;
+  /** Exercise runs with `started_at >= from`, tombstones included. Read-only. */
+  exerciseRunsSince(from: string): Promise<ExerciseRun[]>;
   /** Inserts or replaces rows; returns them as stored (an older-than-stored write comes back unchanged). */
   upsert<T extends WritableTable>(table: T, rows: readonly TableRows[T][]): Promise<TableRows[T][]>;
   /**
@@ -124,6 +132,8 @@ export function createSupabaseRepo(client: SupabaseClient, userId: string): McpR
     wordsByIds: (ids) => (ids.length ? fetchIn("words", "id", ids) : Promise.resolve([])),
     states: (wordIds) => (wordIds === undefined ? fetchAll("review_state") : wordIds.length ? fetchIn("review_state", "word_id", wordIds) : Promise.resolve([])),
     logsSince: (from) => fetchAll("review_log", { column: "review", op: "gte", value: from }),
+    exerciseSets: () => fetchAll("exercise_sets"),
+    exerciseRunsSince: (from) => fetchAll("exercise_runs", { column: "started_at", op: "gte", value: from }),
     async upsert(table, rows) {
       if (rows.length === 0) return [];
       const body = rows.map((row) => ({ ...toRemoteRow(table, row), user_id: userId }));

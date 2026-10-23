@@ -1,24 +1,31 @@
+import { createHash } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { z } from "zod";
 import { resetRateLimits } from "@/lib/ai/rate-limit";
 import { defaultFolderId } from "@/lib/core/folders";
 import { buildWord, type NewWordInput } from "@/lib/core/words";
 import { newReviewState } from "@/lib/scheduler";
-import type { FieldDef, Folder, ReviewLog, ReviewState } from "@/lib/types";
+import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ReviewLog, ReviewState } from "@/lib/types";
 import { createFakeRepo, type FakeRepo } from "./fake-repo";
 import { RepoError } from "./repo";
 import {
   addWords,
   callTool,
+  createExerciseSet,
   createField,
   createFolder,
+  deleteExerciseSet,
   deleteField,
   deleteFolder,
   deleteWords,
+  exerciseMaterial,
+  exerciseSetId,
+  listExerciseSets,
   listFields,
   listFolders,
   moveWords,
   resolveFolder,
+  restoreExerciseSet,
   restoreField,
   restoreFolder,
   restoreMoves,
@@ -862,5 +869,336 @@ describe("origin and conjugation", () => {
     const [a, b] = out.added.map((w: { id: string }) => fake.tables.words.get(w.id)!);
     expect(a).toMatchObject({ origin: "из цыганского", conjugation: { auxiliary: "avoir" } });
     expect(b).toMatchObject({ origin: "верлан от lourd", conjugation: null });
+  });
+});
+
+describe("exercises («Упражнения»)", () => {
+  const LIB = [
+    word("w-meuf", "la meuf", "девушка", { pos: "noun", gender: "f", slang_level: 1, verlan: true, folder_id: "f-emotsii" }),
+    word("w-relou", "relou", "занудный", { pos: "adj", slang_level: 1, verlan: true, folder_id: "f-emotsii" }),
+    word("w-bagnole", "la bagnole", "тачка", { pos: "noun", gender: "f", slang_level: 1, folder_id: "f-dengi" }),
+    word("w-kiffer", "kiffer", "тащиться", { pos: "verb", slang_level: 1, example_fr: "J'ai trop kiffé ce concert.", example_ru: "Я так кайфанул на концерте." }),
+    word("w-keuf", "le keuf", "мент", { pos: "noun", gender: "m", slang_level: 2, verlan: true }),
+    word("w-ouf", "ouf", "безумный", { pos: "adj", slang_level: 1, verlan: true, folder_id: "f-emotsii" }),
+    word("w-chelou", "chelou", "стрёмный", { pos: "adj", slang_level: 2, verlan: true, folder_id: "f-emotsii", note: "верлан от louche, про вечеринку" }),
+    { ...word("w-thune", "la thune", "бабки", { pos: "noun", gender: "f", slang_level: 2 }), muted: true },
+    { ...word("w-fric", "le fric", "бабло", { pos: "noun", gender: "m", slang_level: 1 }), deleted_at: OLD.toISOString() },
+  ];
+
+  /** A valid set covering every v1 type; `id`s are deliberately clashing, the server renumbers them. */
+  const ITEMS: Record<string, unknown>[] = [
+    { id: "a", type: "choice", word_id: "w-meuf", distractors: ["тачка", "мент", "зануда"] },
+    { id: "a", type: "choice", skill: "verlan", word_id: "w-keuf", prompt: "Верлан от «flic»", answer: "le keuf", distractors: ["le reuf", "la meuf", "le teuf"] },
+    { type: "cloze", word_id: "w-kiffer", sentence: "J'ai trop [[kiffé]] ce concert.", sentence_ru: "Концерт был что надо.", distractors: ["bouffé", "galéré", "flippé"] },
+    { type: "register", word_id: "w-relou" },
+    { type: "pairs", pairs: ["w-meuf", "w-bagnole", "w-keuf", "w-ouf"] },
+    {
+      type: "choice",
+      skill: "situation",
+      word_id: "w-ouf",
+      prompt: "Друг рассказывает о концерте: было офигенно. Что он скажет?",
+      answer: "C'était ouf",
+      distractors: ["C'était chelou", "C'était relou", "C'était nul"],
+    },
+    { type: "choice", ask: "ru", word_id: "w-chelou", distractors: ["relou", "vénère", "louche"] },
+  ];
+  const set = (extra: Record<string, unknown> = {}) => ({ client_ref: "fete-1", title: "Вечеринка · сленг", folders: ["Эмоции", "inbox"], items: ITEMS, ...extra });
+  const fakeLib = (seed: Parameters<typeof createFakeRepo>[0] = {}) => createFakeRepo({ folders: FOLDERS, words: LIB, ...seed });
+  const stored = (fake: FakeRepo) => [...fake.tables.exercise_sets.values()];
+
+  it("saves a set under x- + sha256(client_ref), renumbers the items and fills what the server writes", async () => {
+    const fake = fakeLib();
+    const out = await ok(createExerciseSet, fake, set());
+    const id = `x-${createHash("sha256").update("fete-1").digest("hex").slice(0, 24)}`;
+    expect(exerciseSetId(" fete-1 ")).toBe(id);
+    expect(out).toEqual({
+      already_saved: false,
+      set: { id, title: "Вечеринка · сленг", count: 7, by_type: { choice: 4, cloze: 1, register: 1, pairs: 1 }, new_words: 0 },
+      warnings: expect.any(Array),
+      undo: { tool: "delete_exercise_set", id },
+      note: expect.stringMatching(/next sync/),
+    });
+    // The set itself is not echoed back.
+    expect(JSON.stringify(out)).not.toContain("стрёмный");
+    expect(fake.writes.map((w) => w.table)).toEqual(["exercise_sets"]);
+    const [row] = stored(fake);
+    expect(row).toMatchObject({ id, folders: ["f-emotsii", "inbox"], source: "chat", created_at: NOW.toISOString(), updated_at: NOW.toISOString(), deleted_at: null, new_words: [] });
+    expect(row.items.map((i) => i.id)).toEqual(["q1", "q2", "q3", "q4", "q5", "q6", "q7"]);
+    expect(row.items[0]).toMatchObject({ skill: "meaning", ask: "fr", prompt: "la meuf", answer: "девушка", word: { fr: "la meuf", ru: "девушка", gender: "f", verlan: true } });
+    expect(row.items[2]).toMatchObject({ answer: "kiffé", word: { example_fr: "J'ai trop kiffé ce concert." } });
+    expect(row.items[3]).toMatchObject({ answer: "fam.", distractors: [] });
+    expect(row.items[4].tiles).toEqual([
+      { key: "w-meuf", fr: "la meuf", ru: "девушка" },
+      { key: "w-bagnole", fr: "la bagnole", ru: "тачка" },
+      { key: "w-keuf", fr: "le keuf", ru: "мент" },
+      { key: "w-ouf", fr: "ouf", ru: "безумный" },
+    ]);
+    expect(row.items[6]).toMatchObject({ ask: "ru", prompt: "стрёмный", answer: "chelou" });
+  });
+
+  it("parses items, new_words and folders sent as JSON strings", async () => {
+    const fake = fakeLib();
+    const newWords = [{ ref: "n1", fr: "la teuf", ru: "тусовка", pos: "noun", gender: "f", slang_level: 2, verlan: true, source_url: "https://example.org/teuf" }];
+    const items = [...ITEMS.slice(0, 6), { type: "choice", new_ref: "n1", distractors: ["тачка", "мент", "бабки"] }];
+    const out = await ok(createExerciseSet, fake, set({ items: JSON.stringify(items), new_words: JSON.stringify(newWords), folders: '["emotsii"]' }));
+    expect(out.set).toMatchObject({ count: 7, new_words: 1 });
+    const [row] = stored(fake);
+    expect(row.folders).toEqual(["f-emotsii"]);
+    expect(row.new_words[0]).toMatchObject({ ref: "n1", fr: "la teuf", gender: "f", slang_level: 2, source_url: "https://example.org/teuf", note: null });
+    expect(row.items[6]).toMatchObject({ new_ref: "n1", word_id: null, prompt: "la teuf", answer: "тусовка" });
+  });
+
+  it("accepts null for absent fields and any item ids (they are renumbered anyway)", async () => {
+    const fake = fakeLib();
+    const items = ITEMS.map((item, i) => ({ skill: null, ask: null, distractors: null, pairs: null, prompt: null, answer: null, ...item, id: i }));
+    items[3] = { ...items[3], skill: null, ask: null, distractors: null, pairs: null };
+    const out = await ok(createExerciseSet, fake, set({ items, new_words: null, folders: null, topic: null }));
+    expect(out.set).toMatchObject({ count: 7, new_words: 0 });
+    const [row] = stored(fake);
+    expect(row.folders).toEqual([]);
+    expect(row.items.map((i) => i.id)).toEqual(["q1", "q2", "q3", "q4", "q5", "q6", "q7"]);
+    expect(row.items[3]).toMatchObject({ type: "register", skill: null, answer: "fam.", distractors: [] });
+    expect((await ok(exerciseMaterial, fake, { folders: null })).scope).toMatchObject({ folders: "all" });
+  });
+
+  it("refuses unknown, deleted and muted word_ids with their paths, and writes nothing", async () => {
+    const fake = fakeLib();
+    const items = [...ITEMS];
+    items[1] = { ...items[1], word_id: "w-nope" };
+    items[3] = { type: "register", word_id: "w-thune" };
+    items[6] = { ...items[6], word_id: "w-fric" };
+    const message = await refused(createExerciseSet, fake, set({ items }));
+    expect(message).toMatch(/not saved/);
+    expect(message).toContain('items[1].word_id: no such word "w-nope"');
+    expect(message).toMatch(/items\[3\]\.word_id: «la thune» is paused/);
+    expect(message).toContain('items[6].word_id: no such word "w-fric"');
+    expect(fake.writes).toEqual([]);
+  });
+
+  it("refuses a new word that is saved already (use word_id), an unknown new_ref, a distractor equal to the answer and a cloze span that is not the answer", async () => {
+    const fake = fakeLib();
+    const items = [...ITEMS];
+    items[0] = { ...items[0], distractors: ["Девушка ", "мент", "тачка"] };
+    items[2] = { ...items[2], answer: "bouffé", distractors: ["kiffé", "galéré", "flippé"] };
+    items[5] = { ...items[5], new_ref: "n9", word_id: null };
+    const message = await refused(createExerciseSet, fake, set({ items, new_words: [{ ref: "n1", fr: "Relou", ru: "занудный" }] }));
+    expect(message).toContain("new_words[0].fr: «Relou» is already saved: use word_id w-relou");
+    expect(message).toContain("items[0].distractors[0]: equals the answer «девушка»");
+    expect(message).toMatch(/items\[2\]\.sentence: the span «kiffé» differs from the answer «bouffé»/);
+    expect(message).toContain('items[5].new_ref: no new word with ref "n9"');
+    expect(fake.writes).toEqual([]);
+  });
+
+  it("refuses an unknown theme and a set that is too short before reading words", async () => {
+    const fake = fakeLib();
+    expect(await refused(createExerciseSet, fake, set({ folders: ["Полиция"] }))).toMatch(/Unknown theme/);
+    expect(await refused(createExerciseSet, fake, set({ items: ITEMS.slice(0, 5) }))).toMatch(/^items/);
+    expect(fake.writes).toEqual([]);
+  });
+
+  it("returns already_saved on a client_ref replay without rewriting, and refuses one whose set was deleted", async () => {
+    const fake = fakeLib();
+    const first = await ok(createExerciseSet, fake, set());
+    const before = structuredClone(stored(fake));
+    const again = await ok(createExerciseSet, fake, set({ title: "Другое", items: ITEMS.slice(1) }));
+    expect(again).toMatchObject({ already_saved: true, set: first.set, undo: first.undo });
+    expect(fake.writes).toHaveLength(1);
+    expect(stored(fake)).toEqual(before);
+
+    await ok(deleteExerciseSet, fake, { id: first.set.id });
+    expect(await refused(createExerciseSet, fake, set())).toMatch(/was deleted.*restore_exercise_set/);
+  });
+
+  it("is all or nothing: a failed upsert leaves no set, and the retry with the same client_ref saves it", async () => {
+    const fake = fakeLib();
+    fake.failNextUpsert("exercise_sets");
+    const res = await callTool(createExerciseSet, deps(fake), set());
+    expect(res.isError).toBe(true);
+    expect(fake.tables.exercise_sets.size).toBe(0);
+    const out = await ok(createExerciseSet, fake, set());
+    expect(out.already_saved).toBe(false);
+    expect(fake.tables.exercise_sets.size).toBe(1);
+  });
+
+  it("says so when the database refuses, with a safe retry hint", async () => {
+    const fake = fakeLib();
+    fake.repo.upsert = async () => {
+      throw new RepoError("exercise_sets: fetch failed");
+    };
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    expect(await refused(createExerciseSet, fake, set())).toMatch(/did not answer.*same client_ref is safe/);
+  });
+
+  it("refuses a write the app overtook, like the other single-row writes", async () => {
+    const fake = fakeLib();
+    const { set: saved } = await ok(createExerciseSet, fake, set());
+    fake.beforeUpsert = (table, rows) => {
+      const row = rows[0] as ExerciseSet;
+      fake.tables.exercise_sets.set(row.id, { ...row, deleted_at: null, updated_at: "2027-01-01T00:00:00.000Z" });
+    };
+    expect(await refused(deleteExerciseSet, fake, { id: saved.id })).toMatch(/changed in the app at the same time/);
+  });
+
+  it("returns warnings that never block", async () => {
+    const fake = fakeLib();
+    const onlyChoice = [0, 1, 5, 6, 6, 1].map((i) => ITEMS[i]);
+    const out = await ok(createExerciseSet, fake, set({ items: onlyChoice }));
+    expect(out.warnings!.map((w: { code: string }) => w.code)).toEqual(expect.arrayContaining(["few_types", "consecutive_word"]));
+    expect(fake.tables.exercise_sets.size).toBe(1);
+  });
+
+  it("delete is soft and restore brings it back; list hides deleted sets unless asked", async () => {
+    const fake = fakeLib();
+    const { set: saved } = await ok(createExerciseSet, fake, set());
+    const del = await ok(deleteExerciseSet, fake, { id: saved.id });
+    expect(del.undo).toEqual({ tool: "restore_exercise_set", id: saved.id });
+    // Created at NOW too, so the delete is stamped 1 ms past it.
+    expect(stored(fake)[0].deleted_at).toBe("2026-10-22T10:00:00.001Z");
+    expect(await ok(deleteExerciseSet, fake, { id: saved.id })).toMatchObject({ result: "unchanged" });
+    expect((await ok(listExerciseSets, fake, {})).sets).toEqual([]);
+    expect((await ok(listExerciseSets, fake, { include_deleted: true })).sets[0]).toMatchObject({ id: saved.id, deleted: true });
+
+    const back = await ok(restoreExerciseSet, fake, { id: saved.id });
+    expect(back.restored).toMatchObject({ id: saved.id });
+    expect(stored(fake)[0].deleted_at).toBeNull();
+    expect(Date.parse(stored(fake)[0].updated_at)).toBeGreaterThan(NOW.getTime());
+    expect(await ok(restoreExerciseSet, fake, { id: saved.id })).toMatchObject({ result: "unchanged" });
+    expect(await refused(deleteExerciseSet, fake, { id: "x-nope" })).toMatch(/No exercise set/);
+    expect(fake.writes.every((w) => w.table === "exercise_sets")).toBe(true);
+  });
+
+  const SET: ExerciseSet = {
+    id: "x-old",
+    title: "Эмоции · 7",
+    topic: null,
+    folders: ["f-emotsii", "inbox"],
+    items: [
+      { ...blankItem("q1", "w-meuf"), answer: "девушка", word: { fr: "la meuf", ru: "девушка", pos: "noun", gender: "f", slang_level: 1, verlan: true, example_fr: null, example_ru: null } },
+      { ...blankItem("q2", "w-relou"), answer: "занудный", word: { fr: "relou", ru: "занудный", pos: "adj", gender: "none", slang_level: 1, verlan: true, example_fr: null, example_ru: null } },
+    ],
+    new_words: [],
+    source: "chat",
+    created_at: "2026-10-20T10:00:00.000Z",
+    updated_at: "2026-10-20T10:00:00.000Z",
+    deleted_at: null,
+  };
+  function blankItem(id: string, wordId: string): ExerciseSet["items"][number] {
+    return { id, type: "choice", skill: "meaning", ask: "fr", word_id: wordId, new_ref: null, prompt: null, sentence: null, sentence_ru: null, answer: null, distractors: ["a", "b", "c"], pairs: [], tiles: [], explain_ru: null, word: null };
+  }
+  const run = (id: string, startedAt: string, answers: ExerciseRun["answers"], extra: Partial<ExerciseRun> = {}): ExerciseRun => ({
+    id,
+    set_id: "x-old",
+    kind: "set",
+    item_ids: [],
+    started_at: startedAt,
+    finished_at: null,
+    answers,
+    total: 2,
+    first_try: 0,
+    updated_at: startedAt,
+    deleted_at: null,
+    ...extra,
+  });
+  const answer = (item: string, outcome: "correct" | "wrong" | "dont_know", chosen: string | null, at: string, attempt = 1) => ({
+    item_id: item,
+    word_id: null,
+    new_ref: null,
+    attempt,
+    outcome,
+    chosen,
+    ms: 900,
+    at,
+  });
+
+  it("list_exercise_sets shows the newest run with the words missed and the options picked", async () => {
+    const older = run("r1", "2026-10-20T11:00:00.000Z", [answer("q1", "correct", "девушка", "2026-10-20T11:00:05.000Z")], { finished_at: "2026-10-20T11:02:00.000Z", first_try: 1 });
+    const newer = run("r2", "2026-10-21T09:00:00.000Z", [
+      answer("q1", "wrong", "мент", "2026-10-21T09:00:05.000Z"),
+      answer("q2", "correct", "занудный", "2026-10-21T09:00:09.000Z"),
+      answer("q1", "correct", "девушка", "2026-10-21T09:00:20.000Z", 2),
+    ], { first_try: 1 });
+    const fake = fakeLib({ exercise_sets: [SET], exercise_runs: [older, newer, run("r3", "2026-10-22T09:00:00.000Z", [], { deleted_at: NOW.toISOString() })] });
+    const out = await ok(listExerciseSets, fake, {});
+    expect(out.total).toBe(1);
+    expect(out.sets[0]).toMatchObject({
+      id: "x-old",
+      count: 2,
+      by_type: { choice: 2 },
+      folders: [{ id: "f-emotsii", name: "Эмоции" }, { id: null, name: "Входящие" }],
+      last_run: {
+        at: "2026-10-21T09:00:20.000Z",
+        kind: "set",
+        finished: false,
+        first_try: 1,
+        total: 2,
+        missed: [{ word_id: "w-meuf", fr: "la meuf", ru: "девушка", chosen: ["мент"] }],
+      },
+    });
+  });
+
+  it("exercise_material ranks words weakest first from runs, low ratings and difficult cards, without muted or deleted words", async () => {
+    const hardCard: ReviewState = { ...cards("w-bagnole")[0], state: 2, reps: 6, lapses: 3, stability: 2, difficulty: 6, due: "2026-10-30T00:00:00.000Z" };
+    const lowLog: ReviewLog = {
+      id: "l1",
+      word_id: "w-relou",
+      direction: "fr_ru",
+      rating: 1,
+      state: 2,
+      due: NOW.toISOString(),
+      stability: 1,
+      difficulty: 5,
+      elapsed_days: 1,
+      scheduled_days: 1,
+      review: "2026-10-21T08:00:00.000Z",
+      prev: null,
+      updated_at: "2026-10-21T08:00:00.000Z",
+      deleted_at: null,
+    };
+    const fake = fakeLib({
+      review_state: [hardCard],
+      review_log: [lowLog, { ...lowLog, id: "l2", rating: 3 }],
+      exercise_sets: [SET],
+      exercise_runs: [
+        run("r2", "2026-10-21T09:00:00.000Z", [
+          answer("q1", "wrong", "мент", "2026-10-21T09:00:05.000Z"),
+          answer("q1", "dont_know", null, "2026-10-21T09:00:30.000Z", 2),
+          answer("q2", "correct", "занудный", "2026-10-21T09:00:09.000Z"),
+        ]),
+        // Outside the window.
+        run("r0", "2026-09-01T09:00:00.000Z", [answer("q2", "wrong", "x", "2026-09-01T09:00:05.000Z")]),
+      ],
+    });
+    const out = await ok(exerciseMaterial, fake, {});
+    const ids = out.words.map((w: { id: string }) => w.id);
+    expect(ids.slice(0, 3)).toEqual(["w-meuf", "w-bagnole", "w-relou"]);
+    expect(ids).not.toContain("w-thune");
+    expect(ids).not.toContain("w-fric");
+    expect(out.total).toBe(7);
+    const byId = Object.fromEntries(out.words.map((w: { id: string; signals: unknown }) => [w.id, w.signals]));
+    expect(byId["w-meuf"]).toEqual({ lapses: 0, due: false, difficult: false, review_misses: 0, ex_attempts: 2, ex_misses: 2, confusions: ["мент"], last_miss: "2026-10-21T09:00:30.000Z" });
+    expect(byId["w-bagnole"]).toMatchObject({ lapses: 3, difficult: true });
+    expect(byId["w-relou"]).toMatchObject({ review_misses: 1, ex_attempts: 1, ex_misses: 0, last_miss: "2026-10-21T08:00:00.000Z" });
+    expect(out.recent_sets).toEqual([{ id: "x-old", title: "Эмоции · 7", topic: null, created_at: SET.created_at, count: 2, words: ["la meuf", "relou"] }]);
+    expect(out).not.toHaveProperty("topic_matches");
+  });
+
+  it("exercise_material keeps to the given themes and lists saved words that fit a topic", async () => {
+    const fake = fakeLib();
+    const out = await ok(exerciseMaterial, fake, { folders: '["Эмоции"]', topic: "вечеринке", limit: 2 });
+    expect(out.scope).toEqual({ folders: [{ id: "f-emotsii", name: "Эмоции" }], topic: "вечеринке", days: 14 });
+    expect(out.total).toBe(4);
+    expect(out.words).toHaveLength(2);
+    expect(out.topic_matches!.map((w: { id: string }) => w.id)).toEqual(["w-chelou"]);
+    const muted = await ok(exerciseMaterial, fake, { topic: "бабки" });
+    expect(muted.topic_matches).toEqual([expect.objectContaining({ id: "w-thune", muted: true })]);
+    expect(await refused(exerciseMaterial, fake, { folders: ["Старое"] })).toMatch(/deleted/);
+  });
+
+  it("takes a rate-limit token for create_exercise_set but not for the read tools", async () => {
+    const fake = fakeLib();
+    for (let i = 0; i < 20; i++) expect((await callTool(createExerciseSet, deps(fake), set({ client_ref: `s-${i}` }))).isError).toBeFalsy();
+    expect(await refused(createExerciseSet, fake, set({ client_ref: "s-20" }))).toMatch(/Too many changes/);
+    expect((await callTool(exerciseMaterial, deps(fake), {})).isError).toBeFalsy();
+    expect((await callTool(listExerciseSets, deps(fake), {})).isError).toBeFalsy();
   });
 });

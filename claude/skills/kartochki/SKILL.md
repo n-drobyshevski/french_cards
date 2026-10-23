@@ -1,6 +1,6 @@
 ---
 name: kartochki
-description: Conventions for the user's «Карточки» flashcard app for colloquial French (the user is a Russian speaker). Use whenever the user wants to add, find, fix, sort or delete French words or slang, asks what to review today («что повторить сегодня»), sends a French text, chat, song or screenshot to turn into cards, or mentions карточки, темы or «Входящие». Covers card format (dictionary form, Russian translation in the same register, example), the slang level rubric 0–3 with verlan, theme choice, when to ask before changing anything, and step-by-step recipes for the Kartochki connector tools (search_words, add_words, update_word, move_words, restore_moves, delete_words, restore_words, create_folder, update_folder, delete_folder, restore_folder, list_folders, list_fields, create_field, update_field, delete_field, restore_field, study_summary). Needs the Kartochki connector; without it, explain that it must be added first.
+description: Conventions for the user's «Карточки» flashcard app for colloquial French (the user is a Russian speaker). Use whenever the user wants to add, find, fix, sort or delete French words or slang, asks what to review today («что повторить сегодня»), sends a text, chat, song or screenshot to turn into cards, asks for an exercise («упражнение», тест, квиз, QCM, «работа над ошибками»), or mentions карточки, темы or «Входящие». Covers card format, the slang level rubric 0–3 with verlan, theme choice, when to ask first, exercise rules, and recipes for the Kartochki connector tools (search_words, add_words, update_word, move_words, restore_moves, delete_words, restore_words, create/update/delete/restore_folder, list_folders, list_fields, create/update/delete/restore_field, study_summary, exercise_material, create_exercise_set, list_exercise_sets, delete/restore_exercise_set). Needs the Kartochki connector; without it, explain that it must be added first.
 ---
 
 # Карточки: working with the user's French cards
@@ -71,8 +71,9 @@ The connector's write tools normally ask the user for approval in the chat. Stil
 - **Moving or deleting any words:** always list what will change and wait for an OK.
 - **Editing a word:** fine without asking when the user asked for that edit; otherwise propose it.
 - **Up to 5 words the user asked to add:** add them directly.
+- **An exercise set the user asked for:** save it directly; it adds no words and never changes the review schedule.
 
-After every change, report what was done in one or two lines and how to undo it: `delete_words` with the returned ids after adding, `restore_words` after deleting, `restore_moves` with the returned `undo.moves` after moving (never a move back with `move_words`: it would change how automatic sorting treats the words). Mention that the app shows the change after its next sync (open the app or switch back to it).
+After every change, report what was done in one or two lines and how to undo it: `delete_words` with the returned ids after adding, `restore_words` after deleting, `restore_moves` with the returned `undo.moves` after moving (never a move back with `move_words`: it would change how automatic sorting treats the words), `delete_exercise_set` after saving an exercise set and `restore_exercise_set` after deleting one. Mention that the app shows the change after its next sync (open the app or switch back to it).
 
 Make write calls one at a time, never in parallel, even for different fields of the same word.
 
@@ -110,8 +111,37 @@ Make write calls one at a time, never in parallel, even for different fields of 
 2. Edit with `update_word` (only the changed fields). The theme is changed with `move_words` (mode `user`), not with `update_word`.
 3. Deleting: name the words, wait for the OK, `delete_words`, then mention that `restore_words` can bring them back with their progress.
 
+## Упражнения (exercise sets)
+
+The app's «Упражнения» tab plays Duolingo-style question sets that **you** write and save through the connector; the app plays them offline and they never touch the review schedule. The user asks in the chat («сделай упражнение по теме Еда»), or pastes a request the app built («Сделай упражнение в Карточках по теме «Люди», 12 вопросов.»). Never write the questions into the chat instead, and never call the app's own features for this.
+
+- **Tools:** `exercise_material` (read: the words to use, weakest first, with `signals`; `topic_matches` for a free-text topic; `recent_sets`), then **one** `create_exercise_set` call with the whole set. `list_exercise_sets` shows the sets and each one's `last_run` (score, missed words, the wrong options picked). `delete_exercise_set` / `restore_exercise_set` undo.
+- **Item types:** `choice` (4 options; skill `meaning`, `form`, `neutral`, `verlan` or `situation`), `cloze` (a French sentence with one `[[gap]]`, 4 options), `register` (the user picks нейтр. / fam. / arg. / vulg. for the word), `pairs` (match 4–6 words with their translations). For `choice`/`meaning` send only `word_id`, `ask` and the 3 distractors: the server writes the prompt and the answer. For `register` send only the word. For `pairs` send only the ids.
+- **The rubric, in short** (full version with examples: [references/exercises.md](references/exercises.md)): 10–15 items of at least 3 types; `choice` and `cloze` get exactly 3 distractors of the same part of speech, gender, register and length as the answer, with exactly one best answer; a cloze's `sentence_ru` sets the scene and never translates the gap; recognise before produce (FR→RU and pairs first, RU→FR and cloze later); the weakest words late and twice (not in a row); no answer visible in another item's stem.
+- **New words from the web** (only when the user allowed new words, «можно новые слова», or asked for a topic their library lacks): at most 8, each checked in at least 2 sources, `slang_level` by the rubric above, filled like a card, with a `source_url`. They go in `new_words` with a `ref` (`n1`, `n2`…) and the items point at them with `new_ref`. Never `add_words` them: the user ticks the ones to keep on the app's done screen. A word in `topic_matches` is saved already: use its `word_id`.
+- **Saving:** make up a `client_ref` (e.g. `eda-2026-10-23`) and keep it when you retry after a refusal; a refusal lists every problem by path (`items[7].distractors …`), so fix them all in one go. `warnings` never block, but fix them next time. Reply with the title, the number of questions and the undo (`delete_exercise_set`); the set shows in «Упражнения» after the app's next sync.
+
+### «Сделай упражнение по теме „Еда“» / «по темам „Люди“, „Эмоции“» / «по всем темам»
+
+1. `exercise_material` with `folders` (the themes named; none for «по всем темам»); the default `limit: 30` is plenty.
+2. Pick 8–12 words: the weakest first in the list, plus a few the user knows, for confidence. Plan the order: meaning FR→RU and pairs → register, situation, verlan → meaning RU→FR, cloze; the 2–3 weakest words come back a second time near the end.
+3. Write the items by the rubric and run the leak checks from the reference.
+4. `create_exercise_set` with `title` («Еда · 12 вопросов» style, at most 60 characters), `folders` as named, the items. Reply in two lines with the undo.
+
+### «Сделай упражнение на тему „вечеринка“» (a free-text topic)
+
+1. `exercise_material` with `topic` (and the themes, if the user named some). Use `topic_matches` (saved words) by `word_id`.
+2. When too few saved words fit and new words are allowed: web search for the topic's spoken vocabulary, keep words you confirm in 2 sources, rate their register, and put them in `new_words` (at most 8; keep them under a third of the set's words, mixing in library words).
+3. Write the set; every new word gets at least one recognition item (meaning FR→RU or pairs) before any production item. Save with `topic` set.
+
+### «Работа над ошибками» / «следующий набор с упором на ошибки»
+
+1. `list_exercise_sets` (the latest set's `last_run.missed`, with `chosen` = the wrong options picked) and `exercise_material` (`signals.ex_misses`, `confusions`, `review_misses`).
+2. Build the set around the missed words: each one twice, in two different types (e.g. choice and cloze), and use the confused options as distractors («keuf» for «meuf»). Fill up with a few words the user got right.
+3. Save; mention which words the set drills.
+
 ## Limits to keep in mind
 
 - The connector sees the synced copy of the cards. Words just added on the phone without a connection are not visible yet, so a «duplicate» check can miss them.
-- Grading reviews is only possible in the app.
+- Grading reviews is only possible in the app, and so is playing exercises: their results come back through `list_exercise_sets` and `exercise_material` after the app syncs.
 - If a tool answers `conflict`, the app saved a newer version meanwhile: search again and retry with the fresh data.
