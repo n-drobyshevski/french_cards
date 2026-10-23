@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Suspense, useState } from "react";
+import { Suspense, useState, useSyncExternalStore } from "react";
 import { useAddSheet } from "@/components/providers/AddSheetContext";
 import { cx } from "./cx";
 import { Icon, type IconName } from "./Icons";
@@ -25,6 +25,29 @@ export function tabForPath(pathname: string | null): TabId | null {
 export function hidesTabBar(pathname: string | null): boolean {
   if (!pathname) return false;
   return pathname.startsWith("/import") || pathname === "/exercises/play" || pathname.startsWith("/exercises/play/");
+}
+
+// A full-screen flow can bring the bar back while it shows a resting view: the exercise player's
+// done screen (SPEC «Упражнения» → Done, «tab bar back») stays on /exercises/play.
+let revealed = false;
+const revealListeners = new Set<() => void>();
+
+/** Shows the bar on a route hidesTabBar() covers (true), or hides it again (false). */
+export function revealTabBar(on: boolean): void {
+  if (revealed === on) return;
+  revealed = on;
+  for (const listener of revealListeners) listener();
+}
+
+function useTabBarRevealed(): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      revealListeners.add(listener);
+      return () => revealListeners.delete(listener);
+    },
+    () => revealed,
+    () => false,
+  );
 }
 
 /** Height the bar takes, including its 1px top rule and the home-indicator inset. */
@@ -131,7 +154,8 @@ function Bar({ active, pathname = null }: { active: TabId | null; pathname?: str
 
 function RoutedBar() {
   const pathname = usePathname();
-  if (hidesTabBar(pathname)) return null;
+  const reveal = useTabBarRevealed();
+  if (hidesTabBar(pathname) && !(reveal && pathname?.startsWith("/exercises/play"))) return null;
   return <Bar active={tabForPath(pathname)} pathname={pathname} />;
 }
 

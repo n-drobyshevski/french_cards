@@ -19,10 +19,13 @@ import {
   missedWords,
   optionsFor,
   pairsBoard,
+  playableItemIds,
   type QueueEntry,
   REGISTER_LEVELS,
   requeue,
   resumeQueue,
+  runSettled,
+  ruEquivalents,
   scoreRun,
   seededRandom,
   shuffled,
@@ -625,6 +628,100 @@ describe("request texts", () => {
       "Сделай следующее упражнение в Карточках после «Вечеринка», 6 вопросов, с упором на ошибки: relou, le keuf, можно новые слова.",
     );
     expect(buildFollowUpText({ ...set, new_words: [] }, [])).toBe("Сделай следующее упражнение в Карточках после «Вечеринка», 6 вопросов.");
+  });
+});
+
+describe("review fixes", () => {
+  const SLANG_WORDS = [...WORDS, lib("w-meuf2", "la nana", "девушка, тёлка"), lib("w-paused", "le keuf2", "коп", { muted: true })];
+  const slangCtx = contextFromWords(SLANG_WORDS);
+  const complete = (items: ExerciseItemInput[], newWords: ExerciseSetInput["new_words"] = []) =>
+    completeSet({ ...goodInput(), new_words: newWords, items: [...goodInput().items.slice(1, 5), ...items] }, slangCtx);
+
+  it("a meaning answer is the word's first equivalent; the others may not be distractors", () => {
+    expect(ruEquivalents("девушка, тёлка; баба")).toEqual(["девушка", "тёлка", "баба"]);
+    const set = complete([
+      { type: "choice", word_id: "w-meuf2", distractors: ["тачка", "тёлка", "хата"] },
+      { type: "choice", word_id: "w-bagnole", distractors: ["бабки", "коп", "батя"] },
+    ]);
+    const nana = set.items[4];
+    expect(nana).toMatchObject({ prompt: "la nana", answer: "девушка" });
+    expect(nana.word?.ru).toBe("девушка, тёлка");
+    const errors = validateSet(set, slangCtx).errors;
+    expect(errors.map((e) => e.path)).toEqual(["items[4].distractors[1]"]);
+    expect(errors[0].message).toMatch(/translation of the word itself/);
+  });
+
+  it("refuses meaning distractors in the other language than the answer", () => {
+    const set = complete([
+      { type: "choice", skill: "meaning", ask: "ru", word_id: "w-relou", distractors: ["злой", "напряжный", "безумный"] },
+      { type: "choice", word_id: "w-meuf", distractors: ["la caisse", "тачка", "хата"] },
+    ]);
+    const errors = validateSet(set, slangCtx).errors;
+    expect(errors.map((e) => e.path)).toEqual(["items[4].distractors[0]", "items[4].distractors[1]", "items[4].distractors[2]", "items[5].distractors[0]"]);
+    expect(errors[0].message).toMatch(/must be French/);
+    expect(errors[3].message).toMatch(/must be Russian/);
+  });
+
+  it("warns when any equivalent of a meaning answer shows in another stem", () => {
+    const set = complete([
+      { type: "choice", word_id: "w-meuf2", distractors: ["тачка", "бабки", "хата"] },
+      { type: "cloze", word_id: "w-kiffer", sentence: "J'ai [[kiffé]] le concert.", sentence_ru: "Твоя тёлка в восторге от концерта.", distractors: ["bouffé", "galéré", "flippé"] },
+    ]);
+    expect(warningsFor(set)).toContainEqual(expect.objectContaining({ code: "stem_leak", path: "items[4]", message: expect.stringMatching(/«тёлка».*items\[5\]/) }));
+  });
+
+  it("a meaning item whose word does not resolve reports only the reference", () => {
+    const set = complete([{ type: "choice", word_id: "nope", distractors: ["тачка", "бабки", "хата"] }, { type: "register", word_id: "w-meuf" }]);
+    expect(validateSet(set, slangCtx).errors.map((e) => e.path)).toEqual(["items[4].word_id"]);
+  });
+
+  it("a new word matching a paused library word is refused as paused, not «use word_id»", () => {
+    const set = complete([{ type: "register", word_id: "w-meuf" }, { type: "register", word_id: "w-relou" }], [{ ...FLEMME, ref: "n1", fr: "le keuf2" }]);
+    const error = validateSet(set, slangCtx).errors.find((e) => e.path === "new_words[0].fr");
+    expect(error?.message).toMatch(/paused/);
+    expect(error?.message).not.toMatch(/use word_id/);
+  });
+
+  it("requeue never puts a missed item between an intro card and its question", () => {
+    const queue: QueueEntry[] = [
+      { kind: "item", item_id: "q1", attempt: 1 },
+      { kind: "item", item_id: "q2", attempt: 1 },
+      { kind: "item", item_id: "q3", attempt: 1 },
+      { kind: "intro", new_ref: "n1" },
+      { kind: "item", item_id: "q4", attempt: 1 },
+      { kind: "item", item_id: "q5", attempt: 1 },
+    ];
+    expect(ids(requeue(queue, "wrong"))).toEqual(["q2", "q3", "+n1", "q4", "q1", "q5"]);
+    expect(ids(requeue([queue[0], queue[3], queue[4], queue[1]], "wrong"))).toEqual(["+n1", "q4", "q2", "q1"]);
+  });
+
+  const pairsSet = {
+    items: [item("q1", "a"), { ...item("p", "x", "pairs"), word_id: null, pairs: ["w-a", "n1"], tiles: [] }, item("q3", "b")],
+    new_words: [newWord("n1")],
+  };
+
+  it("a pairs board left half-played resumes at the same attempt; its mismatches never settle it", () => {
+    const half = resumeQueue(pairsSet, run([answer("q1", 1, "correct"), answer("p", 1, "wrong", { word_id: "w-a" })]));
+    expect(half.find((e) => e.kind === "item" && e.item_id === "p")).toEqual({ kind: "item", item_id: "p", attempt: 1 });
+    const third = [answer("p", 1, "wrong"), answer("p", 1, "dont_know"), answer("p", 2, "wrong"), answer("p", 2, "dont_know"), answer("p", 3, "wrong")];
+    expect(resumeQueue(pairsSet, run(third)).find((e) => e.kind === "item" && e.item_id === "p")).toEqual({ kind: "item", item_id: "p", attempt: 3 });
+    expect(runSettled(pairsSet, run([...third, answer("q1", 1, "correct"), answer("q3", 1, "correct")]))).toBe(false);
+    expect(runSettled(pairsSet, run([...third, answer("p", 3, "dont_know"), answer("q1", 1, "correct"), answer("q3", 1, "correct")]))).toBe(true);
+  });
+
+  it("missed words: a pairs row without a word stands for the board, a register miss keeps no option", () => {
+    const set = good();
+    const missed = missedWords(run([answer("q4", 1, "dont_know"), answer("q3", 1, "wrong", { chosen: "arg." })]), set);
+    expect(missed.map((m) => m.key)).toEqual(["w-thune", "w-keuf", "w-daron", "w-bouffer", "w-bagnole"]);
+    expect(missed.at(-1)?.chosen).toEqual([]);
+  });
+
+  it("leaves out items about blocked words, and intro cards of saved new words", () => {
+    const set = { items: [item("q1", "a"), item("q2", "n1"), item("q3", "b"), { ...item("p", "x", "pairs"), word_id: null, pairs: ["a", "c"] }], new_words: [newWord("n1")] };
+    expect(playableItemIds(set, new Set(["a"]))).toEqual(["q2", "q3"]);
+    expect(ids(buildQueue(set, { blocked: new Set(["a"]) }))).toEqual(["+n1", "q2", "q3"]);
+    expect(ids(buildQueue(set, { savedRefs: new Set(["n1"]) }))).toEqual(["q1", "q2", "q3", "p"]);
+    expect(ids(resumeQueue(set, run([answer("q1", 1, "correct")]), { blocked: new Set(["b"]), savedRefs: new Set(["n1"]) }))).toEqual(["q2", "p"]);
   });
 });
 

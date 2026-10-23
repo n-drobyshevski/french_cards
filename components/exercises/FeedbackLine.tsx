@@ -13,7 +13,7 @@ export interface FeedbackLineProps {
   answer?: ReactNode;
   /** Plain text of the answer, for its language. */
   answerText?: string | null;
-  /** explain_ru: one muted line, cut with an ellipsis. */
+  /** explain_ru: on phones its own line under the answer (two lines at most); from 768 one muted line, cut with an ellipsis. */
   explain?: string | null;
   /** Mismatches on a pairs board. */
   misses?: number;
@@ -32,9 +32,11 @@ const nextButton =
  * The one result line under the grid (pick D5 C), inside the player's fixed action zone, so nothing
  * moves when the answer lands. Wrong / «Не знаю»: mono «ОТВЕТ» + the right answer in the good tone,
  * `explain_ru`, «Слово ›», and the black «Дальше» that waits. Right: `explain_ru` + «Слово ›», and
- * the auto-advance — a 2px good hairline draining over 1 s under «Дальше через 1 с · нажмите,
- * чтобы остаться»; a tap holds it and «Дальше» takes its place (always, under reduced motion).
- * From 768: one 64px row ruled at the bottom, «Дальше ↵» at its right, the hairline on the rule.
+ * the auto-advance — a 2px good hairline draining over 1 s over «Дальше через 1 с · нажмите,
+ * чтобы остаться»; a tap holds it: the hairline stops where it is and the label becomes «Дальше»
+ * (MOTION-SPEC §5.15). Under reduced motion the black «Дальше» waits. On phones `explain_ru` takes
+ * its own line under the answer. From 768: one 64px row ruled at the bottom, «Дальше ↵» at its
+ * right, the hairline on the rule.
  */
 export function FeedbackLine({ tone, answer, answerText, explain, misses = 0, onWord, phase, onHold, onNext }: FeedbackLineProps) {
   const running = tone === "right" && (phase === "running" || phase === "held");
@@ -56,11 +58,14 @@ export function FeedbackLine({ tone, answer, answerText, explain, misses = 0, on
     <section
       aria-label="Результат ответа"
       data-exercise-result={tone}
-      className="flex h-full flex-col animate-[fade-in_var(--dur-quick)_var(--ease-standard)] md:relative md:h-16 md:flex-row md:items-center md:gap-3 md:border-b md:border-rule"
+      // The player focuses the line while the 1 s timer runs (keyboard and screen-reader users).
+      tabIndex={-1}
+      className="flex h-full flex-col outline-none animate-[fade-in_var(--dur-quick)_var(--ease-standard)] md:relative md:h-16 md:flex-row md:items-center md:gap-3 md:border-b md:border-rule"
     >
       {/* For reading the page; the player's live region announces it. */}
       <span className="sr-only">{resultAnnouncement(tone, misses)}</span>
-      <div className="flex h-11 min-w-0 shrink-0 items-center gap-2 md:h-auto md:flex-1 md:gap-3">
+      {/* Phones: the answer row (dropped when it would be empty: a right answer with no «Слово ›»). */}
+      <div className={cx("flex h-11 min-w-0 shrink-0 items-center gap-2 md:h-auto md:flex-1 md:gap-3", tone === "right" && !onWord && "max-md:hidden")}>
         {tone === "wrong" && answer != null && (
           <>
             <span className="meta shrink-0">ответ</span>
@@ -77,12 +82,12 @@ export function FeedbackLine({ tone, answer, answerText, explain, misses = 0, on
         )}
         {tone === "pairs" && <span className="meta shrink-0">ошибок: {misses}</span>}
         {explain && (
-          <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-muted">
+          <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-muted max-md:hidden">
             {tone === "wrong" || tone === "pairs" ? "· " : ""}
             {explain}
           </span>
         )}
-        {!explain && <span className="flex-1" />}
+        <span className={cx("flex-1", explain && "md:hidden")} />
         {onWord && (
           <button
             type="button"
@@ -94,21 +99,35 @@ export function FeedbackLine({ tone, answer, answerText, explain, misses = 0, on
         )}
       </div>
 
+      {/* Phones: the explanation in full (it teaches the word), under the answer. */}
+      {explain && <p className="m-0 line-clamp-2 shrink-0 text-[13px] leading-5 whitespace-normal text-muted md:hidden [@media(max-height:740px)]:line-clamp-1">{explain}</p>}
+
       {/* Phones: the bottom of the zone. */}
       <div className="flex min-h-0 flex-1 flex-col justify-end md:hidden">
-        {timer ? (
+        {running ? (
           <>
             <div className="relative h-[2px] shrink-0">
               <span aria-hidden="true" className="absolute inset-x-0 top-px h-px bg-rule" />
               {drain}
             </div>
-            <button
-              type="button"
-              onClick={onHold}
-              className="mt-1 h-11 shrink-0 p-0 text-left font-mono text-[11px] leading-4 tracking-[.06em] text-muted uppercase"
-            >
-              Дальше через 1 с · нажмите, чтобы остаться
-            </button>
+            {timer ? (
+              <button
+                type="button"
+                onClick={onHold}
+                className="mt-1 h-11 shrink-0 p-0 text-left font-mono text-[11px] leading-4 tracking-[.06em] text-muted uppercase"
+              >
+                Дальше через 1 с · нажмите, чтобы остаться
+              </button>
+            ) : (
+              <button
+                type="button"
+                data-advance=""
+                onClick={onNext}
+                className="press-sm mt-1 h-11 shrink-0 p-0 text-left font-mono text-[11px] leading-4 font-medium tracking-[.06em] text-ink uppercase"
+              >
+                Дальше
+              </button>
+            )}
           </>
         ) : (
           <button type="button" data-advance="" onClick={onNext} className={cx(nextButton, "inline-flex h-[52px] w-full text-[15px]")}>
@@ -121,7 +140,7 @@ export function FeedbackLine({ tone, answer, answerText, explain, misses = 0, on
       {running && <div className="absolute inset-x-0 -bottom-px hidden h-[2px] max-md:hidden md:block">{drain}</div>}
       {timer && (
         <span className="hidden shrink-0 font-mono text-[11px] leading-4 tracking-[.06em] whitespace-nowrap text-muted uppercase xl:inline">
-          через 1 с · нажмите, чтобы остаться
+          Дальше через 1 с · нажмите, чтобы остаться
         </span>
       )}
       <button

@@ -217,7 +217,7 @@ describe("import", () => {
       title: "Сленг",
       topic: null,
       folders: [],
-      items: [{ id: "q1", type: "register" }],
+      items: [{ id: "q1", type: "register", word_id: "w-1", new_ref: null, answer: "fam.", distractors: [], pairs: [], tiles: [] }],
       new_words: [],
       source: "chat",
       created_at: T0.toISOString(),
@@ -256,6 +256,11 @@ describe("import", () => {
         exercise_sets: [
           { ...set, id: "x-2", items: "nope" },
           { ...set, id: "x-3", new_words: undefined },
+          // A pairs item without its tiles, a choice without distractors, an unknown type: the player would crash on them.
+          { ...set, id: "x-4", items: [{ id: "q1", type: "pairs", pairs: ["w-1"] }] },
+          { ...set, id: "x-5", items: [{ id: "q1", type: "choice", answer: "девушка" }] },
+          { ...set, id: "x-6", items: [{ id: "q1", type: "typed" }] },
+          { ...set, id: "x-7", new_words: [{ ref: "n1" }] },
         ],
         exercise_runs: [
           { ...run, id: "r-2", answers: null },
@@ -263,7 +268,8 @@ describe("import", () => {
         ],
       },
     });
-    expect(malformed.exercise_sets.skipped).toBe(2);
+    expect(malformed.exercise_sets.skipped).toBe(6);
+    expect(await db.exercise_sets.count()).toBe(1);
     expect(malformed.exercise_runs.skipped).toBe(2);
 
     await clearAll();

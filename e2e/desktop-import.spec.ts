@@ -142,19 +142,21 @@ test("pasting an image elsewhere in the app starts the import", async ({ page })
   const png = (await screenshotPng(page)).toString("base64");
 
   // A paste into a text field stays there.
-  const pasteInto = (selector: string | null) =>
-    page.evaluate(
-      ([b64, sel]) => {
-        const bytes = Uint8Array.from(atob(b64!), (c) => c.charCodeAt(0));
+  // Focus through the locator (it waits out a re-render of the field), then paste where focus is.
+  const pasteInto = async (selector: string | null) => {
+    if (selector) await page.locator(selector).focus();
+    await page.evaluate(
+      ([b64, focused]) => {
+        const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
         const data = new DataTransfer();
         data.items.add(new File([bytes], "shot.png", { type: "image/png" }));
-        const target = sel ? document.querySelector<HTMLElement>(sel)! : document.body;
-        if (sel) target.focus();
-        else (document.activeElement as HTMLElement | null)?.blur();
+        const target = focused ? ((document.activeElement as HTMLElement | null) ?? document.body) : document.body;
+        if (!focused) (document.activeElement as HTMLElement | null)?.blur();
         target.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }));
       },
-      [png, selector] as const,
+      [png, selector !== null] as const,
     );
+  };
 
   // The desk replaces its placeholder (no input) once the words are read; wait for the real field.
   await expect(page.locator("main input[type=search]")).toBeVisible();

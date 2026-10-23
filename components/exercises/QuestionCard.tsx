@@ -180,9 +180,12 @@ export function QuestionCard({ item, setTitle, attempt, answered, pairsCount, st
     <article
       aria-label={label}
       data-exercise-card={item.type}
+      // The player moves focus here when the card appears (keyboard and screen-reader users).
+      data-exercise-focus=""
+      tabIndex={-1}
       className={cx(
         cardShell,
-        "relative min-h-[220px] flex-1 max-md:[@media(max-height:740px)]:min-h-[180px] md:min-h-0 md:flex-none",
+        "relative min-h-[220px] outline-none flex-1 max-md:[@media(max-height:740px)]:min-h-[180px] md:min-h-0 md:flex-none",
         item.type === "pairs" ? "md:min-h-[296px]" : "md:h-[296px]",
       )}
     >
@@ -205,7 +208,7 @@ export function QuestionCard({ item, setTitle, attempt, answered, pairsCount, st
       <div
         className={cx(
           "flex min-h-0 flex-1 flex-col px-6 md:px-10",
-          item.type === "pairs" ? "justify-start pt-6 pb-4 md:pt-6" : "justify-center pb-2 md:justify-start md:pt-8",
+          item.type === "pairs" ? "justify-center py-4 md:justify-start md:pt-6" : "justify-center pb-2 md:justify-start md:pt-8",
         )}
       >
         {body}

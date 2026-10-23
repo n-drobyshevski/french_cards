@@ -19,11 +19,13 @@ export interface OptionGridProps {
   locked?: boolean;
 }
 
+// Every tone keeps the ✓ / ✕ corner clear (the label never reflows when the answer lands); the
+// right tile's 2px border takes its extra pixel out of the padding.
 const TONE: Record<TileVerdict, string> = {
-  idle: "border border-boundary text-ink hoverable:bg-hover-surface",
-  right: "border-2 border-good px-[13px] pr-[25px] text-good",
-  wrong: "border border-again pr-[26px] text-again",
-  dim: "border border-rule text-muted",
+  idle: "border border-boundary pr-8 pl-3.5 text-ink hoverable:bg-hover-surface",
+  right: "border-2 border-good pr-[31px] pl-[13px] text-good",
+  wrong: "border border-again pr-8 pl-3.5 text-again",
+  dim: "border border-rule pr-8 pl-3.5 text-muted",
 };
 
 /** The default tile text: French options in Newsreader 19, Russian ones in Plex 16 (two lines fit). */
@@ -33,7 +35,8 @@ export function OptionText({ text }: { text: string }) {
     <span
       lang={ru ? "ru" : "fr"}
       className={cx(
-        "line-clamp-2 min-w-0",
+        // A word longer than the tile breaks (hyphenated where the browser can) instead of running under the ✓ / ✕ or being clipped.
+        "line-clamp-2 min-w-0 hyphens-auto [overflow-wrap:anywhere]",
         ru ? "text-[16px] leading-[22px] font-medium" : "font-serif text-[19px] leading-6 font-medium",
       )}
     >
@@ -65,7 +68,7 @@ export function OptionGrid({ options, correct, result, onPick, renderOption, loc
               if (!locked) onPick(i);
             }}
             className={cx(
-              "press relative flex h-[88px] min-w-0 items-center overflow-hidden rounded-card bg-surface px-3.5 text-left disabled:cursor-default md:h-16",
+              "press relative flex h-[88px] min-w-0 items-center overflow-hidden rounded-card bg-surface text-left disabled:cursor-default md:h-16",
               TONE[verdict],
             )}
           >

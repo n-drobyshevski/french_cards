@@ -9,7 +9,17 @@ import { cx } from "@/components/ui/cx";
 import { Kbd } from "@/components/ui/Kbd";
 import { SlangMeter } from "@/components/ui/SlangMeter";
 import { useSnackbar } from "@/components/ui/Snackbar";
-import { addNewWords, buildFollowUpText, missedItemIds, missedWords, savedNewWords, scoreRun, undoAddNewWords, useExerciseSets } from "@/lib/exercises";
+import {
+  addNewWords,
+  buildFollowUpText,
+  missedItemIds,
+  missedWords,
+  savedNewWords,
+  scoreRun,
+  undoAddNewWords,
+  useExerciseSets,
+  useLiveWords,
+} from "@/lib/exercises";
 import type { ExerciseRun, ExerciseSet } from "@/lib/types";
 import { copyRequest } from "./clipboard";
 import { nQuestions, plural } from "./list-format";
@@ -28,9 +38,15 @@ function ReceiptRow({ label, value, style }: { label: string; value: string; sty
   );
 }
 
-function SectionHead({ title, aside, asideTone = "muted" }: { title: string; aside?: string; asideTone?: "muted" | "red" }) {
+/** A section's head: the label and its aside, at the far right; `inline`: from 768 the aside follows the label (a count, D-Exercise-Done). */
+function SectionHead({ title, aside, asideTone = "muted", inline = false }: { title: string; aside?: string; asideTone?: "muted" | "red"; inline?: boolean }) {
   return (
-    <div className="flex h-4 items-baseline justify-between font-mono text-[11px] leading-4 tracking-[.06em] uppercase md:h-auto md:border-b md:border-ink md:pb-2">
+    <div
+      className={cx(
+        "flex h-4 items-baseline justify-between font-mono text-[11px] leading-4 tracking-[.06em] uppercase md:h-auto md:border-b md:border-ink md:pb-2",
+        inline && "md:justify-start md:gap-2 md:text-[12px] md:tracking-normal",
+      )}
+    >
       <h2 className="m-0 text-[11px] font-normal text-muted md:font-sans md:text-[13px] md:font-medium md:tracking-normal md:text-ink md:normal-case">
         {title}
       </h2>
@@ -69,6 +85,11 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
   const score = scoreRun(run, set);
   const missed = missedWords(run, set);
   const missedItems = missedItemIds(run);
+  // The library rows of the missed words: a link only to a word still there, and the meter for a
+  // word met only in pairs (its tile carries no snapshot).
+  const library = useLiveWords(missed.flatMap((m) => (m.word_id ? [m.word_id] : [])));
+  // «Повторить ошибки (N)» counts the mistakes listed under «Ошибки» (it replays the questions behind them).
+  const repeatCount = missed.length || missedItems.length;
   const saved = useLiveQuery(() => savedNewWords(set), [set]);
   // Read ahead: the copy must start inside the tap (iOS drops the gesture across an IndexedDB await).
   const sets = useExerciseSets();
@@ -109,21 +130,19 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
     snackbar.show({ message: ok ? "Запрос скопирован — вставьте его в чат с Claude" : "Не удалось скопировать запрос" });
   };
 
-  // Desktop: focus on the primary action (or the heading); a key held from the last card does not press it.
+  // Desktop: focus on the primary action (or the heading); a key held from the last card does not
+  // press it: ↵ / Space right after the screen appears, and their auto-repeat, are swallowed (a
+  // fresh press still works).
   useEffect(() => {
     const root = rootRef.current;
     const target = root?.querySelector<HTMLElement>("[data-done-primary]:not(:disabled)") ?? root?.querySelector<HTMLElement>("h1");
     if (window.matchMedia("(min-width: 768px)").matches) target?.focus({ preventScroll: true });
     const until = performance.now() + INPUT_GUARD_MS;
     const swallow = (event: KeyboardEvent) => {
-      if (event.timeStamp < until && (event.key === " " || event.key === "Enter")) event.preventDefault();
+      if ((event.repeat || event.timeStamp < until) && (event.key === " " || event.key === "Enter")) event.preventDefault();
     };
     window.addEventListener("keydown", swallow, true);
-    const timer = window.setTimeout(() => window.removeEventListener("keydown", swallow, true), INPUT_GUARD_MS);
-    return () => {
-      window.clearTimeout(timer);
-      window.removeEventListener("keydown", swallow, true);
-    };
+    return () => window.removeEventListener("keydown", swallow, true);
   }, []);
 
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
@@ -165,8 +184,8 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
         <ReceiptRow label="Точность" value={`${score.accuracy} %`} />
       </section>
 
-      {/* Actions: at the bottom on phones, under the receipt from 768. */}
-      <div className="order-last mt-3 flex shrink-0 flex-col gap-2 md:order-none md:mt-5 md:flex-row md:items-center md:gap-6">
+      {/* Actions: after the lists on phones (Exercise-S-Done), under the receipt from 768. */}
+      <div className="order-last mt-5 flex shrink-0 flex-col gap-2 md:order-none md:mt-5 md:flex-row md:items-center md:gap-6">
         {missedItems.length > 0 && (
           <Button
             data-done-primary=""
@@ -175,7 +194,7 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
             onClick={() => onRepeat(missedItems)}
             className="md:h-11 md:w-auto md:px-4 md:text-[14px]"
           >
-            Повторить ошибки ({missedItems.length})
+            Повторить ошибки ({repeatCount})
           </Button>
         )}
         <Button
@@ -208,21 +227,23 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
 
       {missed.length > 0 && (
         <section aria-label="Ошибки" className="mt-5 shrink-0 md:mt-10">
-          <SectionHead title="Ошибки" aside={String(missed.length)} asideTone="red" />
+          <SectionHead title="Ошибки" aside={String(missed.length)} asideTone="red" inline />
           <ul className="m-0 mt-1.5 list-none border-t border-rule p-0 md:mt-0 md:border-t-0">
             {missed.map((m) => {
+              const saved = m.word_id ? library?.get(m.word_id) : undefined;
+              const meter = m.word ?? saved;
               const content = (
                 <>
-                  <span lang="fr" className="shrink-0 font-serif text-[19px] leading-6 font-medium md:w-[232px] md:truncate">
+                  <span lang="fr" className="min-w-0 shrink-0 font-serif text-[19px] leading-6 font-medium max-md:max-w-[60%] max-md:truncate md:w-[232px] md:truncate">
                     {m.fr}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-[14px] text-muted">{m.ru}</span>
-                  {m.word && <SlangMeter level={m.word.slang_level} verlan={m.word.verlan} className="[&>span:last-child]:w-[76px]" />}
+                  {meter && <SlangMeter level={meter.slang_level} verlan={meter.verlan} className="[&>span:last-child]:w-[76px]" />}
                 </>
               );
               return (
                 <li key={m.key}>
-                  {m.word_id ? (
+                  {saved ? (
                     <button type="button" onClick={() => onWord(m.word_id!)} className={cx(row, "press-tint w-full bg-transparent text-left")}>
                       {content}
                     </button>
@@ -295,8 +316,6 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
           )}
         </section>
       )}
-
-      <div aria-hidden="true" className="min-h-3 flex-1 md:hidden" />
     </div>
   );
 }

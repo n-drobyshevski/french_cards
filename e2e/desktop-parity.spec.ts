@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addSheet, gateSuggest, LA_THUNE, mockEnrich, mockSuggest, openReview, questionCard } from "./fixtures";
+import { addSheet, gateSuggest, LA_THUNE, mockEnrich, mockSuggest, openReview, questionCard, seedExerciseSets, SLANG_SET } from "./fixtures";
 
 // What phones can do, desktop can do too (parity audit 2026-10-22): the done screen keeps its
 // running head, the library's «Новые» filter and phone orders, theme actions from the sidebar and
@@ -131,4 +131,34 @@ test("add dialog: «Стереть» clears the headword; the quick form warns a
   suggest.release();
   await expect(addSheet(page).getByRole("textbox", { name: "Русский" })).toBeVisible();
   await expect(addSheet(page).getByRole("note", { name: "Повтор" })).toContainText("Уже есть в теме «Повседневное»");
+});
+
+test("«Упражнения»: a right click on a set offers the phone's long-press actions; the request panel copies its request", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await openReview(page);
+  await seedExerciseSets(page, [SLANG_SET]);
+  await page.goto("/exercises");
+  const tile = page.getByRole("link", { name: new RegExp(`^${SLANG_SET.title}:`) });
+  await expect(tile).toBeVisible();
+
+  // Long press on phones = right click here: Начать / Скопировать запрос на похожий / Удалить (undo).
+  await tile.click({ button: "right" });
+  const menu = page.getByRole("dialog", { name: SLANG_SET.title });
+  await expect(menu.getByRole("button", { name: "Начать" })).toBeVisible();
+  await expect(menu.getByRole("button", { name: "Скопировать запрос на похожий" })).toBeVisible();
+  await menu.getByRole("button", { name: "Удалить" }).click();
+  await expect(page.getByText(`Набор «${SLANG_SET.title}» удалён`)).toBeVisible();
+  await expect(tile).toHaveCount(0);
+  await page.getByRole("button", { name: "Отменить", exact: true }).click();
+  await expect(tile).toBeVisible();
+
+  // The phone's request sheet is the right column here: themes, size, new words, copy.
+  const panel = page.getByRole("complementary", { name: "Попросить набор" });
+  await panel.getByRole("button", { name: /^Полиция/ }).click();
+  await panel.getByRole("radio", { name: "16" }).click();
+  const text = "Сделай упражнение в Карточках по теме «Полиция», 16 вопросов, можно новые слова.";
+  await expect(panel.getByText(text)).toBeVisible();
+  await panel.getByRole("button", { name: "Скопировать запрос" }).click();
+  await expect(panel.getByRole("button", { name: "Скопировано" })).toBeVisible();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(text);
 });

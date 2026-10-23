@@ -7,8 +7,7 @@
 // refuses a broken set with path-precise errors and `warningsFor(set)` lists what is merely weak.
 // App side: `optionsFor`, `clozeParts`, `pairsBoard`, `buildQueue` / `requeue` / `resumeQueue`,
 // `scoreRun`, `missedWords`, and the request texts the user copies into Claude.
-import { advancePractice } from "./practice";
-import { normalizeLemma, searchKey } from "./text";
+import { isRussian, normalizeLemma, searchKey } from "./text";
 import {
   SLANG_LABELS,
   type ExerciseAnswer,
@@ -71,8 +70,11 @@ export type ExerciseLibraryWord = Pick<
 export interface ExerciseContext {
   /** A library word by id. Return deleted and paused words too, so the error can say why. */
   word(id: string): ExerciseLibraryWord | undefined;
-  /** The live library word with this French form (normalizeLemma), if any: a new word must not be one. */
-  savedWord?(fr: string): { id: string } | undefined;
+  /**
+   * The saved (not deleted) library word with this French form (normalizeLemma), if any: a new word
+   * must not be one. Paused words are included, with `muted`, so the refusal can say why.
+   */
+  savedWord?(fr: string): { id: string; muted?: boolean } | undefined;
 }
 
 /** A context over a list of library words (the server's `repo.words()`, or Dexie rows). */
@@ -136,6 +138,14 @@ const cleanList = (list: unknown): string[] =>
   Array.isArray(list) ? list.map((x) => (typeof x === "string" ? x.replace(/\s+/g, " ").trim() : "")) : [];
 
 const isLevel = (n: unknown): n is SlangLevel => n === 0 || n === 1 || n === 2 || n === 3;
+
+/** A word's Russian equivalents: «девушка, тёлка» → ["девушка", "тёлка"] (ru holds one to three, comma-separated). */
+export function ruEquivalents(ru: string): string[] {
+  return ru
+    .split(/[,;]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
 
 /** The snapshot an item carries of its word. */
 export function wordSnapshot(word: Pick<Word, "fr" | "ru" | "pos" | "gender" | "slang_level" | "verlan" | "example_fr" | "example_ru">): ExerciseWordSnapshot {
@@ -203,7 +213,8 @@ export function completeSet(input: ExerciseSetInput, ctx: ExerciseContext): Exer
     const sentence = type === "cloze" ? clean(raw.sentence) : null;
     if (skill === "meaning" && word) {
       prompt ??= ask === "ru" ? word.ru : word.fr;
-      answer ??= ask === "ru" ? word.fr : word.ru;
+      // One equivalent, the shape of a distractor (a whole «девушка, тёлка» list would stand out).
+      answer ??= ask === "ru" ? word.fr : (ruEquivalents(word.ru)[0] ?? word.ru);
     }
     if (type === "cloze" && !answer && sentence) answer = clozeParts(sentence)?.answer ?? null;
     if (type === "register") answer = word ? REGISTER_LEVELS[word.slang_level] : null;
@@ -299,7 +310,8 @@ export function validateSet(set: ExerciseSetContent, ctx: ExerciseContext): Exer
       if (newLemmas.has(lemma)) err(`${p}.fr`, `«${w.fr}» is listed twice`);
       newLemmas.add(lemma);
       const saved = ctx.savedWord?.(w.fr);
-      if (saved) err(`${p}.fr`, `«${w.fr}» is already saved: use word_id ${saved.id}`);
+      if (saved?.muted) err(`${p}.fr`, `«${w.fr}» is already saved but paused (muted): it can't be used in exercises, pick another word`);
+      else if (saved) err(`${p}.fr`, `«${w.fr}» is already saved: use word_id ${saved.id}`);
     }
   });
 
@@ -318,13 +330,18 @@ export function validateSet(set: ExerciseSetContent, ctx: ExerciseContext): Exer
       if (!refs.has(item.new_ref)) err(`${p}.new_ref`, `no new word with ref "${item.new_ref}"`);
     } else err(`${p}.word_id`, "required (or new_ref)");
   };
-  const checkOptions = (p: string, item: ExerciseItem) => {
-    text(`${p}.answer`, item.answer, ANSWER_MAX, true);
+  const checkOptions = (p: string, item: ExerciseItem, answerRequired = true) => {
+    text(`${p}.answer`, item.answer, ANSWER_MAX, answerRequired);
     const list = Array.isArray(item.distractors) ? item.distractors : [];
     if (list.length !== DISTRACTORS) {
       err(`${p}.distractors`, `exactly ${DISTRACTORS} distractors (got ${list.length})`);
     }
     const answerKey = item.answer ? searchKey(item.answer) : null;
+    // choice/meaning fr→ru: every equivalent of the word is a right answer, so none may be a distractor.
+    const meaning = item.type === "choice" && item.skill === "meaning";
+    const synonyms = new Set(meaning && item.ask === "fr" && item.word ? ruEquivalents(item.word.ru).map(searchKey) : []);
+    // choice/meaning: all four options in one language (ask "fr" → Russian options, "ru" → French).
+    const russian = meaning && item.answer ? isRussian(item.answer) : null;
     const seen = new Set<string>();
     list.forEach((d, j) => {
       const dp = `${p}.distractors[${j}]`;
@@ -332,7 +349,11 @@ export function validateSet(set: ExerciseSetContent, ctx: ExerciseContext): Exer
       if (d.length > ANSWER_MAX) return err(dp, `too long (> ${ANSWER_MAX} characters)`);
       const key = searchKey(d);
       if (key === answerKey) err(dp, `equals the answer «${item.answer}»`);
+      else if (synonyms.has(key)) err(dp, `«${d}» is a translation of the word itself (its ru is «${item.word!.ru}»)`);
       else if (seen.has(key)) err(dp, `duplicate distractor «${d}»`);
+      else if (russian !== null && isRussian(d) !== russian) {
+        err(dp, russian ? 'must be Russian like the answer (ask "fr" shows the French word, the options are Russian)' : 'must be French like the answer (ask "ru" shows the Russian, the options are French)');
+      }
       seen.add(key);
     });
   };
@@ -348,14 +369,17 @@ export function validateSet(set: ExerciseSetContent, ctx: ExerciseContext): Exer
     else if (ids.has(item.id)) err(`${p}.id`, `duplicate id "${item.id}"`);
     else ids.add(item.id);
     text(`${p}.explain_ru`, item.explain_ru, EXPLAIN_MAX, false);
-    text(`${p}.prompt`, item.prompt, TEXT_MAX, item.type === "choice");
+    // choice/meaning: the server writes the prompt and answer from the word; when the word does not
+    // resolve, only the word_id / new_ref error is reported (never «prompt: required»).
+    const unresolved = item.type === "choice" && item.skill === "meaning" && !item.word;
+    text(`${p}.prompt`, item.prompt, TEXT_MAX, item.type === "choice" && !unresolved);
 
     switch (item.type) {
       case "choice":
         checkRef(p, item);
         if (!item.skill || !EXERCISE_SKILLS.includes(item.skill)) err(`${p}.skill`, `one of ${EXERCISE_SKILLS.join(", ")}`);
         if (item.skill === "meaning" && item.ask !== "fr" && item.ask !== "ru") err(`${p}.ask`, 'meaning items ask "fr" or "ru"');
-        checkOptions(p, item);
+        checkOptions(p, item, !unresolved);
         break;
       case "cloze": {
         checkRef(p, item);
@@ -427,7 +451,8 @@ export interface ExerciseWarning {
 
 /** The words an item is about: its word_id or new_ref, or every word of a pairs item. */
 export function itemWordKeys(item: Pick<ExerciseItem, "type" | "word_id" | "new_ref" | "pairs">): string[] {
-  if (item.type === "pairs") return [...item.pairs];
+  // Tolerant of rows written by older code (or a hand-edited backup) without the arrays.
+  if (item.type === "pairs") return [...(item.pairs ?? [])];
   const key = item.word_id ?? item.new_ref;
   return key ? [key] : [];
 }
@@ -456,7 +481,7 @@ export function warningsFor(set: Pick<ExerciseSet, "items" | "new_words">): Exer
   const types = new Set(items.map((i) => i.type));
   if (types.size < 3) out.push({ code: "few_types", message: `only ${types.size} item type(s); use at least 3 (choice, cloze, register, pairs)` });
 
-  const optioned = items.filter((i) => (i.type === "choice" || i.type === "cloze") && i.answer && i.distractors.length > 0);
+  const optioned = items.filter((i) => (i.type === "choice" || i.type === "cloze") && i.answer && (i.distractors ?? []).length > 0);
   const longest = optioned.filter((i) => i.answer!.length > Math.max(...i.distractors.map((d) => d.length))).length;
   if (optioned.length >= 3 && longest / optioned.length > 0.6) {
     out.push({
@@ -467,16 +492,28 @@ export function warningsFor(set: Pick<ExerciseSet, "items" | "new_words">): Exer
 
   items.forEach((item, i) => {
     if (!item.answer || item.type === "register" || item.type === "pairs") return;
+    // A fr→ru meaning item is answered by any of the word's equivalents: look for each one.
+    const forms =
+      item.type === "choice" && item.skill === "meaning" && item.ask === "fr" && item.word
+        ? [...new Set([item.answer, ...ruEquivalents(item.word.ru)])]
+        : [item.answer];
+    const leaks = (s: string) => forms.find((f) => containsWord(s, f));
     const own = item.type === "cloze" ? stemsOf(item) : item.prompt ? [item.prompt] : [];
-    if (own.some((s) => containsWord(s, item.answer!))) {
-      out.push({ code: "stem_leak", path: `items[${i}]`, message: `the answer «${item.answer}» shows in the item's own stem` });
+    const ownLeak = own.map(leaks).find(Boolean);
+    if (ownLeak) {
+      out.push({ code: "stem_leak", path: `items[${i}]`, message: `the answer «${ownLeak}» shows in the item's own stem` });
       return;
     }
     const mine = new Set(itemWordKeys(item));
-    const leak = items.findIndex(
-      (other, j) => j !== i && !itemWordKeys(other).some((k) => mine.has(k)) && stemsOf(other).some((s) => containsWord(s, item.answer!)),
-    );
-    if (leak >= 0) out.push({ code: "stem_leak", path: `items[${i}]`, message: `the answer «${item.answer}» shows in the stem of items[${leak}]` });
+    for (let j = 0; j < items.length; j++) {
+      const other = items[j];
+      if (j === i || itemWordKeys(other).some((k) => mine.has(k))) continue;
+      const hit = stemsOf(other).map(leaks).find(Boolean);
+      if (hit) {
+        out.push({ code: "stem_leak", path: `items[${i}]`, message: `the answer «${hit}» shows in the stem of items[${j}]` });
+        break;
+      }
+    }
   });
 
   for (let i = 1; i < items.length; i++) {
@@ -537,14 +574,16 @@ export function optionsFor(item: ExerciseItem, random: () => number = Math.rando
     return { options: [...REGISTER_LEVELS], correct: level };
   }
   if (item.type === "pairs" || !item.answer) return { options: [], correct: -1 };
-  const order = shuffled([0, ...item.distractors.map((_, i) => i + 1)], random);
-  const all = [item.answer, ...item.distractors];
+  const distractors = item.distractors ?? [];
+  const order = shuffled([0, ...distractors.map((_, i) => i + 1)], random);
+  const all = [item.answer, ...distractors];
   return { options: order.map((i) => all[i]), correct: order.indexOf(0) };
 }
 
 /** A pairs item's two columns, each shuffled on its own: French tiles and Russian tiles. */
 export function pairsBoard(item: ExerciseItem, random: () => number = Math.random): { fr: ExercisePairTile[]; ru: ExercisePairTile[] } {
-  return { fr: shuffled(item.tiles, random), ru: shuffled(item.tiles, random) };
+  const tiles = item.tiles ?? [];
+  return { fr: shuffled(tiles, random), ru: shuffled(tiles, random) };
 }
 
 /** One step of a round: a new word's intro card, or an item (attempt 1 the first time). */
@@ -557,6 +596,10 @@ export interface QueueOptions {
   intros?: boolean;
   /** When given, the items are shuffled before spacing (the set's own order is kept otherwise). */
   random?: () => number;
+  /** New words already saved to the library (refs): no intro card for them. */
+  savedRefs?: ReadonlySet<string>;
+  /** Library words deleted or paused since the set was made: their items are left out (playableItemIds). */
+  blocked?: ReadonlySet<string>;
 }
 
 /** The items a run plays, in set order. */
@@ -573,7 +616,8 @@ export function runItems(set: Pick<ExerciseSet, "items">, itemIds?: readonly str
  * first item that uses it.
  */
 export function buildQueue(set: Pick<ExerciseSet, "items" | "new_words">, opts: QueueOptions = {}): QueueEntry[] {
-  const base = runItems(set, opts.itemIds);
+  const blocked = opts.blocked;
+  const base = runItems(set, opts.itemIds).filter((i) => !blocked || !itemWordKeys(i).some((k) => blocked.has(k)));
   const remaining = opts.random ? shuffled(base, opts.random) : base;
   const placed: ExerciseItem[] = [];
   while (remaining.length > 0) {
@@ -590,7 +634,7 @@ export function buildQueue(set: Pick<ExerciseSet, "items" | "new_words">, opts: 
   for (const item of placed) {
     if (opts.intros !== false) {
       for (const key of itemWordKeys(item)) {
-        if (!refs.has(key) || introduced.has(key)) continue;
+        if (!refs.has(key) || introduced.has(key) || opts.savedRefs?.has(key)) continue;
         introduced.add(key);
         out.push({ kind: "intro", new_ref: key });
       }
@@ -600,39 +644,85 @@ export function buildQueue(set: Pick<ExerciseSet, "items" | "new_words">, opts: 
   return out;
 }
 
+/** Other questions a missed item waits behind before it comes back (practice's Again step). */
+const REQUEUE_AFTER = 3;
+
 /**
  * The queue after its head was answered. A right answer (or a seen intro card) drops it; a wrong
- * answer or «Не знаю» brings the item back after 3 others (`advancePractice`, rating Again) with
- * the next attempt number, until MAX_ATTEMPTS misses. Never touches the schedule.
+ * answer or «Не знаю» brings the item back after 3 other questions (as practice's Again step) with
+ * the next attempt number, until MAX_ATTEMPTS misses. Intro cards are not counted, and the item
+ * never lands between an intro card and the question it introduces. Never touches the schedule.
  */
 export function requeue(queue: readonly QueueEntry[], outcome: ExerciseOutcome | "seen"): QueueEntry[] {
   if (queue.length === 0) return [];
   const [head, ...rest] = queue;
   if (head.kind === "intro" || outcome === "correct" || outcome === "seen" || head.attempt >= MAX_ATTEMPTS) return rest;
-  return advancePractice([{ ...head, attempt: head.attempt + 1 }, ...rest], 1);
+  let at = rest.length;
+  for (let i = 0, passed = 0; i < rest.length; i++) {
+    if (rest[i].kind === "item" && ++passed === REQUEUE_AFTER) {
+      at = i + 1;
+      break;
+    }
+  }
+  // Defensive: a queue ending on an intro card keeps it next to nothing but its own question.
+  while (at > 0 && rest[at - 1].kind === "intro") at--;
+  return [...rest.slice(0, at), { ...head, attempt: head.attempt + 1 }, ...rest.slice(at)];
 }
 
-/** Per item of the run: its last attempt and whether it is settled (answered right, or out of attempts). */
-function attemptsOf(answers: readonly ExerciseAnswer[]): Map<string, { last: number; settled: boolean }> {
+/**
+ * Per item of the run: its last finished attempt and whether it is settled (answered right, or out
+ * of attempts). Every item writes one row per attempt, except a pairs board: its mismatches are
+ * logged as they happen ('wrong'), and the attempt ends only with 'correct' (every pair found) or
+ * 'dont_know'. So a board left half-played resumes at the same attempt, and its 'wrong' rows never
+ * settle it.
+ */
+function attemptsOf(answers: readonly ExerciseAnswer[], pairsIds: ReadonlySet<string>): Map<string, { last: number; settled: boolean }> {
   const out = new Map<string, { last: number; settled: boolean }>();
   for (const a of answers) {
-    const prev = out.get(a.item_id);
-    const last = Math.max(prev?.last ?? 0, a.attempt);
-    out.set(a.item_id, { last, settled: !!prev?.settled || a.outcome === "correct" || a.attempt >= MAX_ATTEMPTS });
+    const prev = out.get(a.item_id) ?? { last: 0, settled: false };
+    const final = !pairsIds.has(a.item_id) || a.outcome !== "wrong";
+    out.set(a.item_id, {
+      last: final ? Math.max(prev.last, a.attempt) : prev.last,
+      settled: prev.settled || a.outcome === "correct" || (final && a.attempt >= MAX_ATTEMPTS),
+    });
   }
   return out;
 }
 
+const pairsIdsOf = (set: Pick<ExerciseSet, "items">) => new Set(set.items.filter((i) => i.type === "pairs").map((i) => i.id));
+
+/** Every item of the run is settled: nothing is left to play (the run can be marked finished). */
+export function runSettled(set: Pick<ExerciseSet, "items">, run: Pick<ExerciseRun, "item_ids" | "answers">): boolean {
+  const attempts = attemptsOf(run.answers, pairsIdsOf(set));
+  return runItems(set, run.item_ids).every((i) => attempts.get(i.id)?.settled);
+}
+
+export type ResumeOptions = Pick<QueueOptions, "savedRefs" | "blocked">;
+
 /** The queue to continue an unfinished run («Продолжить»): unsettled items, intros only for words not met yet. */
-export function resumeQueue(set: Pick<ExerciseSet, "items" | "new_words">, run: Pick<ExerciseRun, "item_ids" | "answers" | "kind">): QueueEntry[] {
-  const attempts = attemptsOf(run.answers);
+export function resumeQueue(
+  set: Pick<ExerciseSet, "items" | "new_words">,
+  run: Pick<ExerciseRun, "item_ids" | "answers" | "kind">,
+  opts: ResumeOptions = {},
+): QueueEntry[] {
+  const attempts = attemptsOf(run.answers, pairsIdsOf(set));
   const items = runItems(set, run.item_ids);
   const open = items.filter((i) => !attempts.get(i.id)?.settled).map((i) => i.id);
   if (open.length === 0) return [];
-  const met = new Set(items.filter((i) => attempts.has(i.id)).flatMap(itemWordKeys));
-  return buildQueue(set, { itemIds: open, intros: run.kind !== "mistakes" })
+  const answered = new Set(run.answers.map((a) => a.item_id));
+  const met = new Set(items.filter((i) => answered.has(i.id)).flatMap(itemWordKeys));
+  return buildQueue(set, { itemIds: open, intros: run.kind !== "mistakes", savedRefs: opts.savedRefs, blocked: opts.blocked })
     .filter((e) => e.kind === "item" || !met.has(e.new_ref))
-    .map((e) => (e.kind === "item" ? { ...e, attempt: (attempts.get(e.item_id)?.last ?? 0) + 1 } : e));
+    .map((e) => (e.kind === "item" ? { ...e, attempt: Math.min(MAX_ATTEMPTS, (attempts.get(e.item_id)?.last ?? 0) + 1) } : e));
+}
+
+/**
+ * The items of a set that can still be played: choice / cloze / register items about a word in
+ * `blocked` (deleted or paused in the library since the set was made) and pairs boards with such
+ * a word are left out. Every item when nothing is blocked.
+ */
+export function playableItemIds(set: Pick<ExerciseSet, "items">, blocked: ReadonlySet<string>): string[] {
+  return set.items.filter((i) => !itemWordKeys(i).some((k) => blocked.has(k))).map((i) => i.id);
 }
 
 /** Items answered right on the first attempt with no miss in it (a pairs board can log misses before its last match). */
@@ -685,34 +775,52 @@ export interface MissedWord {
   chosen: string[];
 }
 
+/**
+ * The words an answer row is about: its own word_id / new_ref, else its item's. A pairs row that
+ * names no word (an older «Не знаю» on the board) stands for every word of the board.
+ */
+export function answerWords(
+  a: Pick<ExerciseAnswer, "word_id" | "new_ref">,
+  item: Pick<ExerciseItem, "type" | "word_id" | "new_ref" | "pairs"> | undefined,
+  newRefs: ReadonlySet<string>,
+): { word_id: string | null; new_ref: string | null }[] {
+  if (a.word_id) return [{ word_id: a.word_id, new_ref: null }];
+  if (a.new_ref) return [{ word_id: null, new_ref: a.new_ref }];
+  if (!item) return [];
+  if (item.type === "pairs") return (item.pairs ?? []).map((k) => (newRefs.has(k) ? { word_id: null, new_ref: k } : { word_id: k, new_ref: null }));
+  if (item.word_id) return [{ word_id: item.word_id, new_ref: null }];
+  return item.new_ref ? [{ word_id: null, new_ref: item.new_ref }] : [];
+}
+
 /** The words behind the misses, in the order of their first miss, one entry per word. */
 export function missedWords(run: Pick<ExerciseRun, "answers">, set: Pick<ExerciseSet, "items" | "new_words">): MissedWord[] {
   const items = new Map(set.items.map((i) => [i.id, i]));
   const fresh = new Map(set.new_words.map((w) => [w.ref, w]));
+  const refs = new Set(fresh.keys());
   const out = new Map<string, MissedWord>();
   for (const a of run.answers) {
     if (a.outcome === "correct") continue;
     const item = items.get(a.item_id);
-    const word_id = a.word_id ?? (a.new_ref ? null : (item?.word_id ?? null));
-    const new_ref = word_id ? null : (a.new_ref ?? item?.new_ref ?? null);
-    const key = word_id ?? new_ref;
-    if (!key) continue;
-    let entry = out.get(key);
-    if (!entry) {
-      const n = new_ref ? fresh.get(new_ref) : undefined;
-      const snapshot =
-        (n ? wordSnapshot(n) : null) ??
-        set.items.find((i) => (i.word_id ?? i.new_ref) === key && i.word)?.word ??
-        null;
-      const tile = snapshot ? null : set.items.flatMap((i) => i.tiles).find((t) => t.key === key);
-      const fr = snapshot?.fr ?? tile?.fr;
-      const ru = snapshot?.ru ?? tile?.ru;
-      if (fr === undefined || ru === undefined) continue;
-      entry = { key, word_id, new_ref, fr, ru, word: snapshot, item_ids: [], chosen: [] };
-      out.set(key, entry);
+    for (const { word_id, new_ref } of answerWords(a, item, refs)) {
+      const key = (word_id ?? new_ref)!;
+      let entry = out.get(key);
+      if (!entry) {
+        const n = new_ref ? fresh.get(new_ref) : undefined;
+        const snapshot =
+          (n ? wordSnapshot(n) : null) ??
+          set.items.find((i) => (i.word_id ?? i.new_ref) === key && i.word)?.word ??
+          null;
+        const tile = snapshot ? null : set.items.flatMap((i) => i.tiles ?? []).find((t) => t.key === key);
+        const fr = snapshot?.fr ?? tile?.fr;
+        const ru = snapshot?.ru ?? tile?.ru;
+        if (fr === undefined || ru === undefined) continue;
+        entry = { key, word_id, new_ref, fr, ru, word: snapshot, item_ids: [], chosen: [] };
+        out.set(key, entry);
+      }
+      if (!entry.item_ids.includes(a.item_id)) entry.item_ids.push(a.item_id);
+      // A register miss picked a level label («arg.»), never a usable distractor.
+      if (a.chosen && item?.type !== "register" && !entry.chosen.includes(a.chosen)) entry.chosen.push(a.chosen);
     }
-    if (!entry.item_ids.includes(a.item_id)) entry.item_ids.push(a.item_id);
-    if (a.chosen && !entry.chosen.includes(a.chosen)) entry.chosen.push(a.chosen);
   }
   return [...out.values()];
 }

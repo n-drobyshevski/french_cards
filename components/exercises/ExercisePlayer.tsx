@@ -17,20 +17,26 @@ import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { Kbd } from "@/components/ui/Kbd";
 import { SLANG_NAMES_RU } from "@/components/ui/SlangMeter";
+import { useSnackbar } from "@/components/ui/Snackbar";
+import { revealTabBar } from "@/components/ui/TabBar";
 import { haptic } from "@/lib/haptics";
 import {
   REGISTER_LEVELS,
   buildQueue,
   finishRun,
-  getRun,
+  getResumableRun,
   getSet,
-  latestRunFor,
   optionsFor,
   pairsBoard,
+  playableItemIds,
+  playContext,
   recordAnswer,
+  resumableRunFor,
   resumeQueue,
   startRun,
   unfinishedRun,
+  useLiveWords,
+  type PlayContext,
   type QueueEntry,
 } from "@/lib/exercises";
 import { exitMs, prefersReducedMotion } from "@/lib/motion";
@@ -108,25 +114,39 @@ interface Boot {
   set: ExerciseSet;
   run: ExerciseRun;
   queue: QueueEntry[];
+  ctx: PlayContext;
 }
 
-function resumeOf(set: ExerciseSet, run: ExerciseRun): Boot {
-  return { set, run, queue: run.finished_at === null ? resumeQueue(set, run) : [] };
+/** Nothing of the set can be played: its words were deleted or paused since it was made. */
+const NOTHING_TO_PLAY = "blocked" as const;
+
+async function resumeOf(set: ExerciseSet, run: ExerciseRun): Promise<Boot> {
+  const ctx = await playContext(set);
+  return { set, run, queue: run.finished_at === null ? resumeQueue(set, run, ctx) : [], ctx };
 }
 
-async function startOf(set: ExerciseSet, kind: "set" | "mistakes", itemIds?: readonly string[]): Promise<Boot> {
-  const run = await startRun(set, kind === "mistakes" ? { kind, itemIds } : { kind });
-  return { set, run, queue: buildQueue(set, { itemIds: run.item_ids, intros: kind !== "mistakes" }) };
+async function startOf(set: ExerciseSet, kind: "set" | "mistakes", itemIds?: readonly string[], known?: PlayContext): Promise<Boot | typeof NOTHING_TO_PLAY> {
+  const ctx = known ?? (await playContext(set));
+  const playable = playableItemIds(set, ctx.blocked);
+  const wanted = itemIds ? playable.filter((id) => itemIds.includes(id)) : playable;
+  if (wanted.length === 0) return NOTHING_TO_PLAY;
+  // A whole-set run lists its items only when some are left out (item_ids [] = every item).
+  const ids = kind === "mistakes" || wanted.length < set.items.length ? wanted : undefined;
+  const run = await startRun(set, { kind, itemIds: ids });
+  return { set, run, queue: buildQueue(set, { itemIds: run.item_ids, intros: kind !== "mistakes", ...ctx }), ctx };
 }
 
-/** What to play: the hand-over, else ?set=<id> (its unfinished run, or a new one), else the newest unfinished run. */
-async function bootFrom(pending: PendingExercise | null, search: string): Promise<Boot | null> {
+/**
+ * What to play: the hand-over, else ?set=<id> (its unfinished run, or a new one), else the newest
+ * unfinished run. Only runs started on this device resume (another device's starts afresh).
+ */
+async function bootFrom(pending: PendingExercise | null, search: string): Promise<Boot | typeof NOTHING_TO_PLAY | null> {
   if (pending) {
     const set = await getSet(pending.setId);
     if (set) {
       if (pending.runId) {
-        const run = await getRun(pending.runId);
-        if (run && run.set_id === set.id) return resumeOf(set, run);
+        const run = await getResumableRun(pending.runId, set);
+        if (run) return resumeOf(set, run);
       }
       return startOf(set, pending.kind ?? "set", pending.itemIds);
     }
@@ -135,8 +155,8 @@ async function bootFrom(pending: PendingExercise | null, search: string): Promis
   if (setId) {
     const set = await getSet(setId);
     if (set) {
-      const latest = await latestRunFor(set.id);
-      return latest && latest.finished_at === null ? resumeOf(set, latest) : startOf(set, "set");
+      const open = await resumableRunFor(set);
+      return open ? resumeOf(set, open) : startOf(set, "set");
     }
   }
   const open = await unfinishedRun();
@@ -155,10 +175,11 @@ export function ExercisePlayer() {
 
 function PlayerSession() {
   const router = useRouter();
+  const snackbar = useSnackbar();
   const { openShortcuts } = useShell();
   const keyHints = useLiveQuery(async () => (await getSettings()).key_hints, [], true);
 
-  const [session, setSession] = useState<{ set: ExerciseSet; run: ExerciseRun } | null>(null);
+  const [session, setSession] = useState<{ set: ExerciseSet; run: ExerciseRun; ctx: PlayContext } | null>(null);
   const [view, setView] = useState<"loading" | "play" | "done">("loading");
   const [state, dispatch] = useReducer(playerReducer, EMPTY_PLAYER);
   const [doneRun, setDoneRun] = useState<ExerciseRun | null>(null);
@@ -168,7 +189,7 @@ function PlayerSession() {
   const [wordId, setWordId] = useState<string | null>(null);
   const [repeatPending, setRepeatPending] = useState(false);
 
-  const bootRef = useRef<Promise<Boot | null> | null>(null);
+  const bootRef = useRef<Promise<Boot | typeof NOTHING_TO_PLAY | null> | null>(null);
   const booted = useRef(false);
   const writes = useRef<Promise<unknown>>(Promise.resolve());
   const answers = useRef<ExerciseAnswer[]>([]);
@@ -180,6 +201,9 @@ function PlayerSession() {
   const heldAt = useRef(-Infinity);
   const leavingRef = useRef(false);
   const focusByPointer = useRef(false);
+  /** Where focus goes after this render: the result line's «Дальше» after an answer, the new card after «Дальше». */
+  const refocus = useRef<"advance" | "card" | null>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
 
   const set = session?.set ?? null;
   const run = session?.run ?? null;
@@ -192,17 +216,28 @@ function PlayerSession() {
   const board = item && random && item.type === "pairs" ? pairsBoard(item, random) : null;
   const pairsState = pairs.step === state.step ? pairs.state : EMPTY_PAIRS;
   const progress = progressOf(state);
+  // «Слово ›» only for a word still in the library (a deleted one would open a sheet that closes at once).
+  const liveWords = useLiveWords(item?.word_id ? [item.word_id] : []);
+
+  // SPEC «Упражнения» → Done: the tab bar comes back on the done screen (the route still hides it while playing).
+  useEffect(() => {
+    revealTabBar(view === "done");
+    return () => revealTabBar(false);
+  }, [view]);
 
   const begin = (boot: Boot) => {
-    setSession({ set: boot.set, run: boot.run });
+    setSession({ set: boot.set, run: boot.run, ctx: boot.ctx });
     answers.current = [...boot.run.answers];
     finishing.current = false;
+    refocus.current = null;
     setDoneRun(null);
     setEnter("fade");
     dispatch({ type: "load", queue: boot.queue, total: boot.run.total });
     guardUntil.current = performance.now() + INPUT_GUARD_MS;
     setView("play");
   };
+
+  const onNothingToPlay = useEffectEvent(() => snackbar.show({ message: "В наборе нечего повторять: его слова удалены или на паузе" }));
 
   useEffect(() => {
     let alive = true;
@@ -211,8 +246,9 @@ function PlayerSession() {
     void bootRef.current.then((boot) => {
       if (!alive || booted.current) return;
       booted.current = true;
-      if (boot) begin(boot);
-      else router.replace("/exercises");
+      if (boot && boot !== NOTHING_TO_PLAY) return begin(boot);
+      if (boot === NOTHING_TO_PLAY) onNothingToPlay();
+      router.replace("/exercises");
     });
     return () => {
       alive = false;
@@ -243,15 +279,36 @@ function PlayerSession() {
     if (view === "play" && state.queue.length === 0) void finish();
   }, [view, state.queue.length]);
 
-  /** Commits the current card's answer: once per card, saved at once, with its haptic (taps only, never keys: MOTION-SPEC §5.13). */
-  const commit = (outcome: ExerciseOutcome, pick: number | null, chosen: string | null, misses?: number, fromKey = false) => {
+  /** Focus is on the card (about to be disabled or swapped) or nowhere: it is moved on, so Tab and screen readers keep their place. */
+  const focusInStage = () => {
+    const active = document.activeElement;
+    return !active || active === document.body || !!stageRef.current?.contains(active);
+  };
+
+  /**
+   * Commits the current card's answer: once per card, saved at once, with its haptic (taps only,
+   * never keys: MOTION-SPEC §5.13). `words`: one row per word instead (a pairs «Не знаю» names
+   * every pair still open, so each counts as missed).
+   */
+  const commit = (
+    outcome: ExerciseOutcome,
+    pick: number | null,
+    chosen: string | null,
+    misses?: number,
+    fromKey = false,
+    words?: { word_id: string | null; new_ref: string | null }[],
+  ) => {
     if (!item || head?.kind !== "item" || state.result || leavingRef.current) return;
     if (answeredStep.current === state.step) return;
     answeredStep.current = state.step;
+    if (focusInStage()) refocus.current = "advance";
     dispatch({ type: "answer", outcome, pick, misses });
     lockUntil.current = performance.now() + RESULT_LOCK_MS;
     if (!fromKey) haptic(outcome === "correct" ? "good" : "again");
-    save(answerRow(item, head.attempt, outcome, chosen, performance.now() - shownAt.current, new Date()));
+    const ms = performance.now() - shownAt.current;
+    const at = new Date();
+    if (words?.length) for (const word of words) save(answerRow(item, head.attempt, outcome, chosen, ms, at, word));
+    else save(answerRow(item, head.attempt, outcome, chosen, ms, at));
   };
 
   const pick = (index: number, fromKey = false) => {
@@ -259,7 +316,10 @@ function PlayerSession() {
     commit(index === options.correct ? "correct" : "wrong", index, options.options[index], undefined, fromKey);
   };
 
-  const dontKnow = (fromKey = false) => commit("dont_know", null, null, undefined, fromKey);
+  const dontKnow = (fromKey = false) => {
+    const open = item?.type === "pairs" && set ? item.tiles.filter((t) => !pairsState.matched.includes(t.key)).map((t) => tileWord(set, t.key)) : undefined;
+    commit("dont_know", null, null, undefined, fromKey, open);
+  };
 
   const onPairTap = (side: "fr" | "ru", key: string) => {
     if (!item || !set || head?.kind !== "item" || state.result || leavingRef.current) return;
@@ -280,6 +340,7 @@ function PlayerSession() {
     if (head.kind === "item" && !state.result) return;
     const now = performance.now();
     if (now < lockUntil.current || now - heldAt.current < HOLD_CLICK_MS) return;
+    refocus.current = focusInStage() ? "card" : null;
     // Keys (DESKTOP-SPEC §4) and reduced motion: the next card fades in place, no travel.
     if (viaKey || prefersReducedMotion()) {
       setEnter("fade");
@@ -318,7 +379,21 @@ function PlayerSession() {
     return () => window.removeEventListener("pointerdown", listener, true);
   }, [auto.phase]);
 
-  const leave = () => router.replace("/exercises");
+  /**
+   * × / Esc: every answer is already saved. A run left on its last card after answering it (every
+   * item settled, the «Дальше» that would end it not pressed) is marked finished on the way out.
+   */
+  const leave = () => {
+    if (view === "play" && session && !finishing.current) {
+      const left = resumeQueue(session.set, { ...session.run, answers: answers.current }, session.ctx);
+      if (left.length === 0) {
+        finishing.current = true;
+        const id = session.run.id;
+        writes.current = writes.current.then(() => finishRun(id)).catch(() => undefined);
+      }
+    }
+    router.replace("/exercises");
+  };
 
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
     if (view !== "play" || !head) return;
@@ -328,8 +403,10 @@ function PlayerSession() {
     const phase = head.kind === "intro" ? "intro" : state.result ? "answered" : "question";
     const action = exerciseKeyAction(event, { phase, options: options?.options.length ?? 0 });
     if (!action) return;
-    // ↵ / Space on a control reached with Tab is that control's own press.
-    if (action.type === "next" && keepsActivationKeys(event.target, focusByPointer.current)) return;
+    // ↵ / Space on a control reached with Tab is that control's own press; ↵ on «Дальше» (where the
+    // player puts focus after an answer) stays the key's own «next» (a fade, DESKTOP-SPEC §4).
+    const onAdvance = event.target instanceof Element && !!event.target.closest("[data-advance]");
+    if (action.type === "next" && !onAdvance && keepsActivationKeys(event.target, focusByPointer.current)) return;
     event.preventDefault();
     if (action.type === "leave") leave();
     else if (action.type === "pick") pick(action.index, true);
@@ -369,11 +446,34 @@ function PlayerSession() {
     }
   }, [view, set, head, item, intro]);
 
+  // Focus follows the answer and the card (as the review screen): the visible «Дальше» once a miss
+  // waits for it (or the result line while the 1 s timer runs), then the new card itself — never an
+  // option, so a held ↵ cannot answer the next question.
+  useEffect(() => {
+    const target = refocus.current;
+    const root = stageRef.current;
+    if (!target || view !== "play" || !root || leaving) return;
+    const visible = (el: HTMLElement) => el.getClientRects().length > 0;
+    let el: HTMLElement | null | undefined;
+    if (target === "advance") {
+      if (!result) return;
+      const line = root.querySelector<HTMLElement>("[data-exercise-result]");
+      el = auto.phase === "running" ? line : ([...root.querySelectorAll<HTMLElement>("[data-advance]")].find(visible) ?? line);
+    } else {
+      if (result) return;
+      el = root.querySelector<HTMLElement>("[data-exercise-focus]");
+    }
+    if (!el) return;
+    refocus.current = null;
+    el.focus({ preventScroll: true });
+  });
+
   const repeatMistakes = async (itemIds: string[]) => {
-    if (!set || repeatPending) return;
+    if (!session || repeatPending) return;
     setRepeatPending(true);
     try {
-      begin(await startOf(set, "mistakes", itemIds));
+      const boot = await startOf(session.set, "mistakes", itemIds, session.ctx);
+      if (boot !== NOTHING_TO_PLAY) begin(boot);
     } catch {
       // Nothing to repeat (the items left the set): stay on the done screen.
     } finally {
@@ -415,12 +515,12 @@ function PlayerSession() {
 
   let card: ReactNode = null;
   if (head.kind === "intro" && intro) {
-    card = <NewWordCard word={intro} setTitle={set.title} onNext={() => next()} autoFocus={false} />;
+    card = <NewWordCard word={intro} setTitle={set.title} onNext={() => next()} />;
   } else if (item && head.kind === "item") {
     const misses = result?.misses ?? 0;
     const verdict = tone === "right" ? "right" : tone === "wrong" ? "wrong" : null;
     const onWord =
-      item.type !== "pairs" && item.word_id
+      item.type !== "pairs" && item.word_id && liveWords?.has(item.word_id)
         ? () => {
             hold();
             setWordId(item.word_id);
@@ -586,7 +686,10 @@ function PlayerSession() {
         </div>
       </header>
 
-      <div className="mt-4 flex min-h-0 flex-1 flex-col md:mx-auto md:mt-0 md:w-[640px] md:max-w-[calc(100%-48px)] md:flex-none md:pt-10 xl:w-[720px]">
+      <div
+        ref={stageRef}
+        className="mt-4 flex min-h-0 flex-1 flex-col md:mx-auto md:mt-0 md:w-[640px] md:max-w-[calc(100%-48px)] md:flex-none md:pt-10 xl:w-[720px]"
+      >
         <div key={state.step} className={cx("flex min-h-0 flex-1 flex-col", leaving ? EXIT : ENTER[enter])}>
           {card}
         </div>

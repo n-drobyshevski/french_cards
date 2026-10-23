@@ -1,5 +1,5 @@
 // Pure helpers for the «Упражнения» list (tiles, resume card, waiting line, request summaries).
-import { buildRequestText, scoreRun } from "@/lib/core/exercises";
+import { buildRequestText, runSettled, scoreRun } from "@/lib/core/exercises";
 import type { ExerciseRun, ExerciseSet } from "@/lib/types";
 
 /** Russian plural: [1, 2–4, 5+]. */
@@ -59,18 +59,22 @@ export interface TileState {
   resumeRunId: string | null;
 }
 
-/** A set tile's state from its newest whole-set run (lastRunBySet). */
-export function tileState(set: Pick<ExerciseSet, "items">, run: ExerciseRun | undefined): TileState {
+/**
+ * A set tile's state from its newest whole-set run (lastRunBySet); a run with every item settled
+ * reads as finished. `own`: the runs started on this device; another device's interrupted run
+ * shows as such but is not resumed here (the tile starts a new run).
+ */
+export function tileState(set: Pick<ExerciseSet, "items">, run: ExerciseRun | undefined, own?: ReadonlySet<string>): TileState {
   if (!run) return { label: "Новый", tone: "new", progress: 0, fresh: true, resumeRunId: null };
   const score = scoreRun(run, set);
   const total = score.total || run.total;
-  if (run.finished_at === null) {
+  if (run.finished_at === null && !runSettled(set, run)) {
     return {
       label: `Прервано ${score.answered}/${total}`,
       tone: "ink",
       progress: total ? score.answered / total : 0,
       fresh: false,
-      resumeRunId: run.id,
+      resumeRunId: !own || own.has(run.id) ? run.id : null,
     };
   }
   return { label: `${score.first_try}/${total}`, tone: "ink", progress: 1, fresh: false, resumeRunId: null };

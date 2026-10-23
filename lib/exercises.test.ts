@@ -7,12 +7,16 @@ import {
   contextFromWords,
   deleteSet,
   finishRun,
+  getResumableRun,
   getRun,
   getSet,
   lastRunBySet,
   latestRunFor,
   liveSets,
+  liveWordsById,
+  playContext,
   recordAnswer,
+  resumableRunFor,
   restoreSet,
   savedNewWords,
   scoreRun,
@@ -174,6 +178,38 @@ describe("runs", () => {
     await finishRun(elsewhere.id, at(41));
     expect(await unfinishedRun()).toBeUndefined();
   });
+
+  it("resumes only runs started on this device, with something left to play", async () => {
+    const { set } = await fixture();
+    // A run synced from another device: not in own_runs, so it is never resumed (nor written) here.
+    const base = await startRun(set, {}, at(0));
+    await Promise.all([db.exercise_runs.delete(base.id), db.own_runs.delete(base.id)]);
+    const synced = { ...base, id: "r-elsewhere", started_at: at(50).toISOString() };
+    await db.exercise_runs.put(synced);
+    const mine = await startRun(set, {}, at(10));
+    expect((await unfinishedRun())?.run.id).toBe(mine.id);
+    expect((await resumableRunFor(set))?.id).toBe(mine.id);
+    expect(await getResumableRun(synced.id, set)).toBeUndefined();
+    expect((await getResumableRun(mine.id, set))?.id).toBe(mine.id);
+
+    // Every item settled (left on the last, answered card): nothing to resume, even unfinished.
+    for (const item of set.items) await recordAnswer(mine.id, answer(item.id, 1, "correct"), at(11));
+    expect(await unfinishedRun()).toBeUndefined();
+    expect(await resumableRunFor(set)).toBeUndefined();
+  });
+});
+
+describe("play context", () => {
+  it("blocks words deleted or paused since the set was made, and knows the saved new words", async () => {
+    const { set, words } = await fixture();
+    const [meuf, kiffer] = words;
+    await db.words.put({ ...meuf, muted: true });
+    await db.words.put({ ...kiffer, deleted_at: NOON.toISOString() });
+    const ctx = await playContext(set);
+    expect([...ctx.blocked].sort()).toEqual([meuf.id, kiffer.id].sort());
+    expect([...ctx.savedRefs]).toEqual(["n3"]);
+    expect([...(await liveWordsById([meuf.id, kiffer.id, "nope"])).keys()]).toEqual([meuf.id]);
+  });
 });
 
 describe("new words", () => {
@@ -216,7 +252,17 @@ describe("new words", () => {
     expect([...(await savedNewWords(set)).keys()]).toEqual(["n3"]);
   });
 
-  it("falls back to «Входящие» when the first theme is gone or is the inbox", async () => {
+  it("uses the first theme still live when an earlier one was deleted", async () => {
+    const gone = await createFolder({ name: "Удалённая" }, NOON);
+    await db.folders.put({ ...gone, deleted_at: NOON.toISOString() });
+    const live = await createFolder({ name: "Живая" }, NOON);
+    const { set } = await fixture({ folders: [gone.id, live.id] });
+    expect((await addNewWords(set, ["n1"], at(1))).added[0].folder_id).toBe(live.id);
+    // The inbox named before a live theme is a live choice too.
+    expect((await addNewWords({ ...set, folders: [gone.id, "inbox", live.id] }, ["n2"], at(2))).added[0].folder_id).toBeNull();
+  });
+
+  it("falls back to «Входящие» when no theme is live or the inbox comes first", async () => {
     const theme = await createFolder({ name: "Старое" }, NOON);
     await db.folders.put({ ...theme, deleted_at: NOON.toISOString() });
     const { set } = await fixture({ folders: [theme.id] });

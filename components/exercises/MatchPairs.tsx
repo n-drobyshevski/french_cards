@@ -30,7 +30,7 @@ export function MatchPairs({ board, state, onTap, revealed = false, disabled = f
   const ru = revealed ? board.fr.map((t) => board.ru.find((r) => r.key === t.key) ?? t) : board.ru;
 
   const look = (key: string, side: "fr" | "ru") => {
-    if (matched.has(key)) return "border-good/50 text-muted";
+    if (matched.has(key)) return "border-good text-muted opacity-55";
     if (revealed) return "border-again text-again";
     if (side === "fr" && state.selected === key) return "border-2 border-ink px-[14px] text-ink";
     const flashed = state.flash && (side === "fr" ? state.flash.fr : state.flash.ru) === key;

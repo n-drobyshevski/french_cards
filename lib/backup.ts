@@ -1,6 +1,7 @@
 // JSON export of every table, and import that merges by updated_at (newer row wins).
+import { EXERCISE_ITEM_TYPES } from "./core/exercises";
 import { db, legacyReviewSets } from "./db";
-import { DEFAULT_SETTINGS, SYNC_TABLES, type Settings, type SyncTable, type Syncable } from "./types";
+import { DEFAULT_SETTINGS, SYNC_TABLES, type ExerciseItemType, type Settings, type SyncTable, type Syncable } from "./types";
 
 export const BACKUP_FORMAT = "kartochki-backup";
 export const BACKUP_VERSION = 1;
@@ -94,8 +95,32 @@ const REQUIRED: Record<SyncTable, Record<string, "string" | "number" | "boolean"
   exercise_runs: { kind: "string", item_ids: "array", started_at: "string", answers: "array", total: "number" },
 };
 
+const isText = (v: unknown) => typeof v === "string";
+const isOptionalText = (v: unknown) => v === null || v === undefined || typeof v === "string";
+
+/** An exercise item the player can show: the arrays its type reads, and text where text goes. */
+function isExerciseItem(v: unknown): boolean {
+  if (!isRecord(v) || !isText(v.id) || !EXERCISE_ITEM_TYPES.includes(v.type as ExerciseItemType)) return false;
+  if (![v.answer, v.prompt, v.sentence, v.sentence_ru, v.explain_ru, v.word_id, v.new_ref].every(isOptionalText)) return false;
+  if ((v.type === "choice" || v.type === "cloze") && !(Array.isArray(v.distractors) && v.distractors.every(isText))) return false;
+  if (v.type === "pairs") {
+    const tiles = v.tiles;
+    if (!Array.isArray(v.pairs) || !Array.isArray(tiles)) return false;
+    if (!tiles.every((t) => isRecord(t) && isText(t.key) && isText(t.fr) && isText(t.ru))) return false;
+  }
+  return true;
+}
+
+/** Deeper checks for tables whose rows the UI reads inside (a set's items and new words). */
+const DEEP: Partial<Record<SyncTable, (row: Record<string, unknown>) => boolean>> = {
+  exercise_sets: (row) =>
+    (row.items as unknown[]).every(isExerciseItem) &&
+    (row.new_words as unknown[]).every((w) => isRecord(w) && isText(w.ref) && isText(w.fr) && isText(w.ru)),
+};
+
 function hasFields(table: SyncTable, row: Record<string, unknown>): boolean {
-  return Object.entries(REQUIRED[table]).every(([k, t]) => (t === "array" ? Array.isArray(row[k]) : typeof row[k] === t));
+  const shallow = Object.entries(REQUIRED[table]).every(([k, t]) => (t === "array" ? Array.isArray(row[k]) : typeof row[k] === t));
+  return shallow && (DEEP[table]?.(row) ?? true);
 }
 
 /** Parses and validates a backup file's text or object. Throws BackupError with a Russian message. */

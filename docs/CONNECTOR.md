@@ -46,7 +46,7 @@ An optional skill (`claude/skills/kartochki/`) teaches Claude the card conventio
 | `restore_folder` | write | Brings a deleted theme back and returns its words to it (only those still in «Входящие»). |
 | `exercise_material` | read | What an exercise set should practise: the live, unpaused words of the given themes (or all), weakest first, with `signals` from the last `days` (exercise misses and confusions, reviews graded 1–2, lapses, due, difficult); `topic_matches` (saved words that fit a free-text topic) and `recent_sets`. |
 | `create_exercise_set` | write | Saves one set of 6–20 items (`choice`, `cloze`, `register`, `pairs`) and up to 8 `new_words`, all or nothing. Refusals name every problem by path; `warnings` never block. Idempotent on `client_ref`. Undo: `delete_exercise_set`. |
-| `list_exercise_sets` | read | Sets newest first with counts by type and `last_run` (when, finished, first-try score, missed words with the wrong options picked). |
+| `list_exercise_sets` | read | Sets newest first with counts by type and `last_run` (the newest whole-set run with answers, a finished one first: when, finished, first-try score, missed words with the wrong options picked), plus `last_mistakes_round` when a later «Повторить ошибки» round exists. |
 | `delete_exercise_set` | write | Soft-deletes a set; its runs stay. Undo: `restore_exercise_set`. |
 | `restore_exercise_set` | write | Brings a deleted set back. |
 

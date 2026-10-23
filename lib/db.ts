@@ -17,6 +17,11 @@ export interface LookupEntry {
   context: ContextResponse | null;
 }
 
+/** «Упражнения»: a run started on this device (device-local, never synced): only these resume here. */
+export interface OwnRun {
+  id: string;
+}
+
 /** Local bookkeeping for sync: rows changed since the last successful push. */
 export interface Outbox {
   key: string; // `${table}:${id}`
@@ -36,6 +41,7 @@ export class KartochkiDB extends Dexie {
   exercise_sets!: EntityTable<ExerciseSet, "id">;
   exercise_runs!: EntityTable<ExerciseRun, "id">;
   lookups!: EntityTable<LookupEntry, "key">;
+  own_runs!: EntityTable<OwnRun, "id">;
   settings!: EntityTable<Settings, "id">;
   outbox!: EntityTable<Outbox, "key">;
 
@@ -69,6 +75,9 @@ export class KartochkiDB extends Dexie {
     this.version(4).stores({ lookups: "key, at" });
     // «Упражнения»: sets written by the connector and the runs played on a device (both synced).
     this.version(5).stores({ exercise_sets: "id, created_at, updated_at", exercise_runs: "id, set_id, started_at, updated_at" });
+    // Runs this device started (device-local): a run is resumed only where it was started, so two
+    // devices never write the same run row (its answers would be lost to last-write-wins).
+    this.version(6).stores({ own_runs: "id" });
     // Every write to a synced table queues `${table}:${id}` in outbox, in the same transaction.
     installOutboxTracking(this);
   }

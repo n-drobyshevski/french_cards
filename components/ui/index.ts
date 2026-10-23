@@ -22,5 +22,5 @@ export {
 } from "./Sheet";
 export { SLANG_NAMES_RU, SlangMeter, slangAbbr, slangAriaLabel, type SlangMeterProps } from "./SlangMeter";
 export { Snackbar, SnackbarProvider, usePageHidden, useSnackbar, type SnackbarApi, type SnackbarOptions } from "./Snackbar";
-export { TAB_BAR_HEIGHT, TabBar, hidesTabBar, tabForPath, type TabId } from "./TabBar";
+export { TAB_BAR_HEIGHT, TabBar, hidesTabBar, revealTabBar, tabForPath, type TabId } from "./TabBar";
 export { Toggle, type ToggleProps } from "./Toggle";

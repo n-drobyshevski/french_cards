@@ -162,7 +162,7 @@ export function resultAnnouncement(tone: ResultTone | null, misses = 0, answer: 
 }
 
 /** Text for screen readers and options: Cyrillic means Russian, anything else is French. */
-export const isRussian = (text: string) => /[Ѐ-ӿ]/.test(text);
+export { isRussian } from "@/lib/core/text";
 
 /** The answer row saved for one answer (the run row is upserted with it). */
 export function answerRow(

@@ -114,3 +114,6 @@ export function slugify(input: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, 48);
 }
+
+/** Cyrillic means Russian; anything else is French (exercise options, screen-reader `lang`). */
+export const isRussian = (text: string): boolean => /[Ѐ-ӿ]/.test(text);

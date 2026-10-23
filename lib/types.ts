@@ -359,7 +359,9 @@ export type ExerciseOutcome = "correct" | "wrong" | "dont_know";
 /**
  * One answer in a run. `attempt` is 1 for the first try and grows each time the item comes back.
  * `chosen` is the option text picked (null for «Не знаю»); for pairs, the Russian tile matched with
- * the wrong word, with word_id / new_ref naming that word. `ms` is the time to answer.
+ * the wrong word, with word_id / new_ref naming that word. A pairs board writes its mismatches as
+ * they happen, then one 'correct' row (no word) when every pair is found, or on «Не знаю» one
+ * 'dont_know' row per pair still open, each naming its word. `ms` is the time to answer.
  */
 export interface ExerciseAnswer {
   item_id: string;
@@ -372,7 +374,10 @@ export interface ExerciseAnswer {
   at: string;
 }
 
-/** One playthrough of a set, upserted after every answer by the playing device only. Synced. */
+/**
+ * One playthrough of a set, upserted after every answer by the playing device only (a run is
+ * resumed only on the device that started it: lib/db.ts `own_runs`). Synced.
+ */
 export interface ExerciseRun extends Syncable {
   set_id: string | null;
   /** set: the whole set; mistakes: «Повторить ошибки»; quick: later, a set built on the device. */

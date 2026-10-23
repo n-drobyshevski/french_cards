@@ -41,7 +41,7 @@ export function NewWordCard({ word, setTitle, onNext, autoFocus = false }: NewWo
 
   return (
     <>
-      <article aria-label="Новое слово" className={cx(cardShell, "relative min-h-[300px] flex-1 md:min-h-[360px] md:flex-none")}>
+      <article aria-label="Новое слово" data-exercise-focus="" tabIndex={-1} className={cx(cardShell, "relative min-h-[300px] outline-none flex-1 md:min-h-[360px] md:flex-none")}>
         <CardHeader
           label={
             <span className="inline-flex items-center gap-2">

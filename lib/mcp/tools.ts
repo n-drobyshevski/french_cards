@@ -28,6 +28,7 @@ import {
 import { DEFAULT_FOLDERS, defaultFolderId, nextFolderSort, pickFolderColor, uniqueSlug } from "@/lib/core/folders";
 import {
   ANSWER_MAX,
+  answerWords,
   completeSet,
   contextFromWords,
   EXERCISE_ID_PREFIX,
@@ -37,13 +38,14 @@ import {
   missedWords,
   NEW_WORDS_MAX,
   REF_MAX,
+  runSettled,
   TEXT_MAX,
   TITLE_MAX,
   TOPIC_MAX,
   validateSet,
   warningsFor,
 } from "@/lib/core/exercises";
-import { matchesSearch, normalizeLemma, searchHaystack, searchKey, searchTerms } from "@/lib/core/text";
+import { matchesSearch, normalizeLemma, searchHaystack, searchKey } from "@/lib/core/text";
 import { buildWord, cleanText, directionsOf, isMovable } from "@/lib/core/words";
 import { cleanConjugation, cleanOrigin, conjugate, ORIGIN_MAX, type ConjData } from "@/lib/core/conjugate";
 import conjTable from "@/public/lexique/fr-conj.json";
@@ -1410,11 +1412,32 @@ const noSignals = (): Signals => ({ lapses: 0, due: false, difficult: false, rev
 const later = (a: string | null, b: string) => (a === null || Date.parse(b) > Date.parse(a) ? b : a);
 const weakness = (s: Signals) => s.ex_misses * 3 + s.review_misses * 2 + s.lapses + (s.difficult ? 2 : 0) + (s.due ? 1 : 0);
 
-/** The word an answer is about: its own word_id, else its item's (never a new word's ref). */
-function answerWordId(a: ExerciseRun["answers"][number], set: ExerciseSet | undefined): string | null {
-  if (a.word_id) return a.word_id;
-  if (a.new_ref) return null;
-  return set?.items.find((i) => i.id === a.item_id)?.word_id ?? null;
+/**
+ * The library words an answer is about (answerWords: its own word, else its item's; a pairs row
+ * without a word stands for the whole board). A new word's ref counts for the library word saved
+ * since with the same French form (the set keeps the ref; the app adds the word under a new id).
+ */
+function answerWordIds(a: ExerciseRun["answers"][number], set: ExerciseSet | undefined, savedRefs: ReadonlyMap<string, string>): string[] {
+  const item = set?.items.find((i) => i.id === a.item_id);
+  const refs = new Set(set?.new_words.map((w) => w.ref) ?? []);
+  return answerWords(a, item, refs).flatMap(({ word_id, new_ref }) => {
+    const id = word_id ?? (new_ref && set ? savedRefs.get(`${set.id}\u0000${new_ref}`) : undefined);
+    return id ? [id] : [];
+  });
+}
+
+/** Per set and ref («setId\0ref»), the live library word saved since with the new word's French form. */
+function savedRefIds(sets: ReadonlyMap<string, ExerciseSet>, words: readonly Word[]): Map<string, string> {
+  const byLemma = new Map<string, string>();
+  for (const w of words) if (w.deleted_at === null && !byLemma.has(normalizeLemma(w.fr))) byLemma.set(normalizeLemma(w.fr), w.id);
+  const out = new Map<string, string>();
+  for (const set of sets.values()) {
+    for (const w of set.new_words) {
+      const id = byLemma.get(normalizeLemma(w.fr));
+      if (id) out.set(`${set.id}\u0000${w.ref}`, id);
+    }
+  }
+  return out;
 }
 
 /** Signals per word: exercise answers, poorly graded reviews and the cards' state. */
@@ -1426,6 +1449,7 @@ function weaknessSignals(
   sets: ReadonlyMap<string, ExerciseSet>,
 ): Map<string, Signals> {
   const out = new Map(words.map((w) => [w.id, noSignals()]));
+  const savedRefs = savedRefIds(sets, words);
   for (const w of words) {
     const s = out.get(w.id)!;
     for (const card of ctx.statesByWord.get(w.id) ?? []) {
@@ -1444,30 +1468,60 @@ function weaknessSignals(
     if (run.deleted_at !== null) continue;
     const set = run.set_id ? sets.get(run.set_id) : undefined;
     for (const a of run.answers) {
-      const id = answerWordId(a, set);
-      const s = id ? out.get(id) : undefined;
-      if (!s) continue;
-      s.ex_attempts++;
-      if (a.outcome === "correct") continue;
-      s.ex_misses++;
-      if (a.at) s.last_miss = later(s.last_miss, a.at);
-      if (a.chosen && s.confusions.length < CONFUSIONS_MAX && !s.confusions.includes(a.chosen)) s.confusions.push(a.chosen);
+      // A register miss picked a level label («arg.»): not a confusion to reuse as a distractor.
+      const register = set?.items.find((i) => i.id === a.item_id)?.type === "register";
+      for (const id of answerWordIds(a, set, savedRefs)) {
+        const s = out.get(id);
+        if (!s) continue;
+        s.ex_attempts++;
+        if (a.outcome === "correct") continue;
+        s.ex_misses++;
+        if (a.at) s.last_miss = later(s.last_miss, a.at);
+        if (a.chosen && !register && s.confusions.length < CONFUSIONS_MAX && !s.confusions.includes(a.chosen)) s.confusions.push(a.chosen);
+      }
     }
   }
   return out;
 }
 
 const TOPIC_STOP = new Set(["для", "про", "при", "или", "как", "что", "les", "des", "une", "sur", "pour", "avec", "dans", "the"]);
+const CYRILLIC_END_VOWEL = /[\p{Script=Cyrillic}]{3}[аеиоуыэюяьй]$/u;
 
 /**
- * Saved words that match a free-text topic: each term of the topic (Russian endings trimmed) is
- * looked for in the word's text (fr, ru, note, tags, custom fields) and its theme's name and
- * description, accent-insensitively. Most matching terms first.
+ * A topic term's stem: two letters off a long word, the final vowel off a short Russian one
+ * («баре», «бары» → «бар»), never under three letters.
+ */
+function topicStem(term: string): string {
+  if (term.length > 5) return term.slice(0, -2);
+  if (term.length >= 4 && CYRILLIC_END_VOWEL.test(term)) return term.slice(0, -1);
+  return term;
+}
+
+/** The fields of a library word an exercise is built from (exercise_material's words and topic_matches). */
+const materialWord = (w: Word, live: ReadonlyMap<string, Folder>) => ({
+  id: w.id,
+  fr: w.fr,
+  ru: w.ru,
+  pos: w.pos,
+  gender: w.gender,
+  slang_level: w.slang_level,
+  verlan: w.verlan,
+  example_fr: w.example_fr,
+  example_ru: w.example_ru,
+  folder: folderRef(placeOf(w, live)),
+});
+
+/**
+ * Saved words that match a free-text topic: each term of the topic (punctuation dropped, Russian
+ * endings trimmed) is looked for in the word's text (fr, ru, note, tags, custom fields) and its
+ * theme's name and description, accent-insensitively. Most matching terms first.
  */
 function topicMatches(topic: string, words: readonly Word[], live: ReadonlyMap<string, Folder>) {
-  const terms = searchTerms(topic)
+  const terms = searchKey(topic)
+    .replace(/[^\p{L}\p{N}' ]+/gu, " ")
+    .split(" ")
     .filter((t) => t.length >= 3 && !TOPIC_STOP.has(t))
-    .map((t) => (t.length > 5 ? t.slice(0, t.length - 2) : t));
+    .map(topicStem);
   if (terms.length === 0) return [];
   return words
     .filter((w) => w.deleted_at === null)
@@ -1479,7 +1533,7 @@ function topicMatches(topic: string, words: readonly Word[], live: ReadonlyMap<s
     .filter((m) => m.hits > 0)
     .sort((a, b) => b.hits - a.hits || b.w.created_at.localeCompare(a.w.created_at) || a.w.id.localeCompare(b.w.id))
     .slice(0, TOPIC_MATCHES_MAX)
-    .map(({ w }) => ({ ...brief(w, live), ...(w.muted ? { muted: true } : {}) }));
+    .map(({ w }) => ({ ...materialWord(w, live), ...(w.muted ? { muted: true } : {}) }));
 }
 
 /** The French of the words a set uses, for recent_sets. */
@@ -1492,7 +1546,7 @@ export const exerciseMaterial = tool({
     `Read what an exercise set («Упражнения») should practise, before create_exercise_set. \`words\`: the live words of the given themes (all themes without \`folders\`), weakest first, each with \`signals\` merged from the last \`days\`: exercise answers (ex_attempts, ex_misses, confusions = wrong options the user picked), reviews graded «Снова»/«Трудно» (review_misses), lapses, due today and difficult cards. Words «на паузе» and deleted words are left out. With \`topic\` (a free-text subject like «вечеринка»), \`topic_matches\` lists saved words that fit it: use them by word_id and never put them in new_words (a muted one can't be used at all). \`recent_sets\` are the latest sets with their words, so the next one doesn't repeat them.`,
   input: z.object({
     folders: jsonArray(z.array(folderSelector).max(10)).nullable().optional().describe(`Themes to draw words from (id, slug, name or "${INBOX_SELECTOR}"); default every theme.`),
-    topic: z.string().trim().max(TOPIC_MAX).optional().describe("A free-text topic («вечеринка», «в баре»), when the user asked for one."),
+    topic: z.string().trim().max(TOPIC_MAX).nullable().optional().describe("A free-text topic («вечеринка», «в баре»), when the user asked for one."),
     limit: z.number().int().min(1).max(60).default(30).describe("How many words to return (weakest first)."),
     days: z.number().int().min(1).max(60).default(14).describe("The window for exercise answers and reviews."),
   }),
@@ -1518,21 +1572,12 @@ export const exerciseMaterial = tool({
     const ranked = inScope
       .map((w) => ({ w, s: signals.get(w.id)! }))
       .sort((a, b) => weakness(b.s) - weakness(a.s) || a.s.ex_attempts - b.s.ex_attempts || b.w.created_at.localeCompare(a.w.created_at) || a.w.id.localeCompare(b.w.id));
-    const topic = cleanText(args.topic);
+    const topic = cleanText(args.topic ?? undefined);
     return {
       scope: { folders: targets ? targets.map(folderRef) : "all", ...(topic ? { topic } : {}), days: args.days },
       total: inScope.length,
       words: ranked.slice(0, args.limit).map(({ w, s }) => ({
-        id: w.id,
-        fr: w.fr,
-        ru: w.ru,
-        pos: w.pos,
-        gender: w.gender,
-        slang_level: w.slang_level,
-        verlan: w.verlan,
-        example_fr: w.example_fr,
-        example_ru: w.example_ru,
-        folder: folderRef(placeOf(w, ctx.live)),
+        ...materialWord(w, ctx.live),
         status: wordStatus(ctx.statesByWord.get(w.id) ?? []),
         signals: s,
       })),
@@ -1562,13 +1607,13 @@ const exerciseItemSchema = z.object({
     .describe(
       "choice only (default meaning): meaning = the word ↔ its translation (prompt and answer are written by the server from the word); form = the right French form for a Russian cue; neutral = the neutral equivalent of a slang word; verlan = the verlan form or its source; situation = what you would say in a described situation.",
     ),
-  ask: z.enum(["fr", "ru"]).nullable().optional().describe("choice + meaning: fr (default) shows the French word with Russian options; ru the reverse. Distractors are then in the options' language."),
+  ask: z.enum(["fr", "ru"]).nullable().optional().describe("choice + meaning: fr (default) shows the French word with Russian options; ru the reverse. Distractors must be in the options' language (Russian for fr, French for ru): a mix is refused."),
   word_id: z.string().trim().min(1).max(64).nullable().optional().describe("The library word the item is about (from exercise_material). choice, cloze, register: word_id or new_ref."),
   new_ref: z.string().trim().min(1).max(REF_MAX).nullable().optional().describe("A new_words[].ref instead of word_id, for a word that is not in the library."),
   prompt: exerciseText(TEXT_MAX, "The question on the card (Russian or French). Required for choice skills other than meaning; for cloze and register an optional instruction."),
   sentence: exerciseText(TEXT_MAX, "cloze only: a natural French sentence with exactly one [[…]] gap around the answer: «J'ai trop [[kiffé]] ce concert.»"),
   sentence_ru: exerciseText(TEXT_MAX, "cloze only: a short Russian hint of the situation. It must never translate the missing word."),
-  answer: exerciseText(ANSWER_MAX, "The right option (choice, cloze; a cloze answer defaults to its gap). Left out for meaning, register and pairs: the server writes it."),
+  answer: exerciseText(ANSWER_MAX, "The right option (choice, cloze; a cloze answer defaults to its gap). Left out for meaning, register and pairs: the server writes it (meaning fr→ru: the word's first Russian equivalent, so distractors are single equivalents too)."),
   distractors: jsonArray(z.array(z.string().max(ANSWER_MAX)).max(6))
     .nullable()
     .optional()
@@ -1666,7 +1711,7 @@ export const listExerciseSets = tool({
   name: "list_exercise_sets",
   title: "List exercise sets",
   description:
-    "List the user's exercise sets («Упражнения»), newest first: title, themes, number of questions by type, new words, and `last_run` (the latest playthrough: when, whether it was finished, first-try score, and the words missed with the wrong options picked). Use it for «работа над ошибками» and to find a set's id for delete_exercise_set.",
+    "List the user's exercise sets («Упражнения»), newest first: title, themes, number of questions by type, new words, and `last_run` (the latest playthrough of the whole set that has answers, a finished one first: when, whether it was finished, first-try score, and the words missed with the wrong options picked; register misses carry no options). `last_mistakes_round`, when there is one, is the latest «Повторить ошибки» round in the app over the misses. Use it for «работа над ошибками» and to find a set's id for delete_exercise_set.",
   input: z.object({
     limit: z.number().int().min(1).max(50).default(20),
     include_deleted: z.boolean().default(false).describe("Also list deleted sets (restore_exercise_set brings one back)."),
@@ -1682,32 +1727,41 @@ export const listExerciseSets = tool({
     // A run starts after its set was made; a day of margin covers a device clock running behind.
     const oldest = Math.min(...shown.map((s) => Date.parse(s.created_at)).filter((t) => !Number.isNaN(t)));
     const runs = shown.length > 0 && Number.isFinite(oldest) ? await deps.repo.exerciseRunsSince(new Date(oldest - DAY_MS).toISOString()) : [];
-    const latest = new Map<string, ExerciseRun>();
+    // Per set: its runs newest first. last_run is the newest whole-set run with answers, a finished
+    // one first (a «Повторить ошибки» round or a run opened and left at once would hide the misses).
+    const bySet = new Map<string, ExerciseRun[]>();
     for (const run of runs) {
       if (run.deleted_at !== null || !run.set_id) continue;
-      const prev = latest.get(run.set_id);
-      if (!prev || run.started_at > prev.started_at) latest.set(run.set_id, run);
+      bySet.set(run.set_id, [...(bySet.get(run.set_id) ?? []), run]);
     }
+    for (const list of bySet.values()) list.sort((a, b) => b.started_at.localeCompare(a.started_at) || a.id.localeCompare(b.id));
+    const lastRun = (s: ExerciseSet): ExerciseRun | undefined => {
+      const list = bySet.get(s.id) ?? [];
+      const played = list.filter((r) => r.kind === "set" && r.answers.length > 0);
+      return played.find((r) => r.finished_at !== null || runSettled(s, r)) ?? played[0] ?? list.find((r) => r.kind === "set") ?? list[0];
+    };
+    const runView = (run: ExerciseRun, s: ExerciseSet) => ({
+      at: run.finished_at ?? run.answers.at(-1)?.at ?? run.started_at,
+      kind: run.kind,
+      // Every item settled counts as finished (the app was left on the last, answered card).
+      finished: run.finished_at !== null || runSettled(s, run),
+      first_try: run.first_try,
+      total: run.total,
+      missed: missedWords(run, s).map((m) => ({ ...(m.word_id ? { word_id: m.word_id } : { new_ref: m.new_ref }), fr: m.fr, ru: m.ru, chosen: m.chosen })),
+    });
     return {
       total: sets.filter((s) => args.include_deleted || s.deleted_at === null).length,
       sets: shown.map((s) => {
-        const run = latest.get(s.id);
+        const run = lastRun(s);
+        const mistakes = (bySet.get(s.id) ?? []).find((r) => r.kind === "mistakes" && r.answers.length > 0);
         return {
           ...setSummary(s),
           topic: s.topic,
           folders: setFolders(s, folders),
           created_at: s.created_at,
           ...(s.deleted_at !== null ? { deleted: true } : {}),
-          last_run: run
-            ? {
-                at: run.finished_at ?? run.answers.at(-1)?.at ?? run.started_at,
-                kind: run.kind,
-                finished: run.finished_at !== null,
-                first_try: run.first_try,
-                total: run.total,
-                missed: missedWords(run, s).map((m) => ({ ...(m.word_id ? { word_id: m.word_id } : { new_ref: m.new_ref }), fr: m.fr, ru: m.ru, chosen: m.chosen })),
-              }
-            : null,
+          last_run: run ? runView(run, s) : null,
+          ...(mistakes && mistakes !== run && (!run || mistakes.started_at > run.started_at) ? { last_mistakes_round: runView(mistakes, s) } : {}),
         };
       }),
     };
@@ -1855,7 +1909,7 @@ export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard
 - For a free-text topic, use the saved words in topic_matches by word_id. Words found with web search go in new_words (at most 8, each checked in at least 2 sources, slang_level by the rubric, source_url); never add_words them without the user's OK, since the user adds them from the app.
 - choice and cloze have 4 options: the answer plus 3 distractors of the same part of speech, gender, register and length, with exactly one best answer. A cloze's sentence_ru hints at the situation and never translates the gap.
 - Order the items recognise-before-produce (meaning fr→ru and pairs before ru→fr and cloze), put the weakest words (first in exercise_material) late and twice, keep the same word apart, and use 10–15 items of at least 3 types.
-- «Работа над ошибками»: list_exercise_sets' last_run.missed and exercise_material's signals (ex_misses, confusions) say what to drill; use the confused options as distractors.
+- «Работа над ошибками»: list_exercise_sets' last_run.missed and exercise_material's signals (ex_misses, confusions) say what to drill; reuse a confused option as a distractor only where it is in the item's options' language (a Russian one for meaning fr→ru, a French one for cloze and ru→fr).
 - After saving, give the set's title and number of questions and how to undo it; it shows in «Упражнения» after the app's next sync.
 - Make write calls one at a time, never in parallel: each reads the current rows first, and parallel writes to the same words conflict or slip past the duplicate check.
 - Changes reach the app on its next sync (when it is opened or focused). Reviewing and grading cards happen in the app only.

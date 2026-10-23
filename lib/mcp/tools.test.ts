@@ -1128,7 +1128,8 @@ describe("exercises («Упражнения»)", () => {
       last_run: {
         at: "2026-10-21T09:00:20.000Z",
         kind: "set",
-        finished: false,
+        // Never marked finished, but every item is answered right: the app was left on the last card.
+        finished: true,
         first_try: 1,
         total: 2,
         missed: [{ word_id: "w-meuf", fr: "la meuf", ru: "девушка", chosen: ["мент"] }],
@@ -1192,6 +1193,74 @@ describe("exercises («Упражнения»)", () => {
     const muted = await ok(exerciseMaterial, fake, { topic: "бабки" });
     expect(muted.topic_matches).toEqual([expect.objectContaining({ id: "w-thune", muted: true })]);
     expect(await refused(exerciseMaterial, fake, { folders: ["Старое"] })).toMatch(/deleted/);
+  });
+
+  it("list_exercise_sets keeps the result with the misses ahead of a newer mistakes round or an empty run", async () => {
+    const played = run("r1", "2026-10-21T09:00:00.000Z", [answer("q1", "wrong", "мент", "2026-10-21T09:00:05.000Z"), answer("q2", "correct", null, "2026-10-21T09:00:09.000Z")], {
+      finished_at: "2026-10-21T09:01:00.000Z",
+    });
+    const mistakes = run("r2", "2026-10-21T10:00:00.000Z", [answer("q1", "correct", null, "2026-10-21T10:00:05.000Z")], {
+      kind: "mistakes",
+      item_ids: ["q1"],
+      total: 1,
+      first_try: 1,
+      finished_at: "2026-10-21T10:00:10.000Z",
+    });
+    const empty = run("r3", "2026-10-21T11:00:00.000Z", []);
+    const out = await ok(listExerciseSets, fakeLib({ exercise_sets: [SET], exercise_runs: [played, mistakes, empty] }), {});
+    expect(out.sets[0].last_run).toMatchObject({ kind: "set", finished: true, missed: [{ word_id: "w-meuf", chosen: ["мент"] }] });
+    expect(out.sets[0].last_mistakes_round).toMatchObject({ kind: "mistakes", finished: true, first_try: 1, missed: [] });
+  });
+
+  it("exercise_material counts pairs boards and saved new words for each word, without register labels as confusions", async () => {
+    const pairsSet: ExerciseSet = {
+      ...SET,
+      id: "x-pairs",
+      items: [
+        { ...blankItem("p1", "w-meuf"), type: "pairs", skill: null, ask: null, word_id: null, distractors: [], pairs: ["w-meuf", "w-relou", "n1"], tiles: [] },
+        { ...blankItem("q2", "w-relou"), type: "register", skill: null, ask: null, distractors: [] },
+        { ...blankItem("q3", "w-meuf"), word_id: null, new_ref: "n1" },
+      ],
+      new_words: [{ ref: "n1", fr: "Chelou", ru: "стрёмный", note: null, example_fr: null, example_ru: null, pos: "adj", gender: "none", slang_level: 2, verlan: true, origin: null, source_url: null }],
+    };
+    const t = "2026-10-21T09:00:05.000Z";
+    const fake = fakeLib({
+      exercise_sets: [pairsSet],
+      exercise_runs: [
+        {
+          ...run("r1", "2026-10-21T09:00:00.000Z", [
+            // The final 'correct' of a board names no word: it counts for every word on it.
+            answer("p1", "correct", null, t),
+            answer("q2", "wrong", "arg.", t),
+            { ...answer("q3", "wrong", "бабки", t), new_ref: "n1" },
+          ]),
+          set_id: "x-pairs",
+        },
+      ],
+    });
+    const out = await ok(exerciseMaterial, fake, {});
+    const byId = Object.fromEntries(out.words.map((w: { id: string; signals: unknown }) => [w.id, w.signals]));
+    expect(byId["w-meuf"]).toMatchObject({ ex_attempts: 1, ex_misses: 0 });
+    expect(byId["w-relou"]).toMatchObject({ ex_attempts: 2, ex_misses: 1, confusions: [] });
+    // n1 «Chelou» was saved since as w-chelou: its answers count for it.
+    expect(byId["w-chelou"]).toMatchObject({ ex_attempts: 2, ex_misses: 1, confusions: ["бабки"] });
+  });
+
+  it("exercise_material matches inflected and quoted topics and gives topic matches the full word fields", async () => {
+    const bar = [
+      word("w-rade", "le rade", "бар, кабак", { pos: "noun", gender: "m", slang_level: 1 }),
+      word("w-zinc", "le zinc", "барная стойка", { pos: "noun", gender: "m", slang_level: 1 }),
+      word("w-teuf", "la teuf", "вечеринка", { pos: "noun", gender: "f", slang_level: 1, verlan: true }),
+    ];
+    const fake = createFakeRepo({ folders: FOLDERS, words: [...LIB, ...bar] });
+    const idsFor = async (topic: string) => ((await ok(exerciseMaterial, fake, { topic })).topic_matches ?? []).map((w: { id: string }) => w.id).sort();
+    expect(await idsFor("в баре")).toEqual(["w-rade", "w-zinc"]);
+    expect(await idsFor("бары")).toEqual(["w-rade", "w-zinc"]);
+    expect(await idsFor("«вечеринка»")).toContain("w-teuf");
+    const [match] = (await ok(exerciseMaterial, fake, { topic: "кабак" })).topic_matches!;
+    expect(match).toEqual({ id: "w-rade", fr: "le rade", ru: "бар, кабак", pos: "noun", gender: "m", slang_level: 1, verlan: false, example_fr: null, example_ru: null, folder: expect.anything() });
+    // A null topic is "no topic", as on create_exercise_set.
+    expect(await ok(exerciseMaterial, fake, { folders: null, topic: null })).not.toHaveProperty("topic_matches");
   });
 
   it("takes a rate-limit token for create_exercise_set but not for the read tools", async () => {

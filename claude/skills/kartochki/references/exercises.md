@@ -18,7 +18,7 @@ How to write an exercise set for `create_exercise_set`. The app plays it offline
 
 | Type | You send | The server fills |
 |---|---|---|
-| `choice` + `meaning` | `word_id` or `new_ref`, `ask` (`fr` default, or `ru`), 3 `distractors` in the options' language | `prompt` (the word), `answer` (its translation, or the French for `ask: "ru"`) |
+| `choice` + `meaning` | `word_id` or `new_ref`, `ask` (`fr` default, or `ru`), 3 `distractors` in the options' language (Russian for `fr`, French for `ru`: the server refuses a mix), each a single equivalent like the answer | `prompt` (the word), `answer` (the first of its comma-separated Russian equivalents, or the French for `ask: "ru"`) |
 | `choice` + `form` / `neutral` / `verlan` / `situation` | `word_id` or `new_ref`, `prompt`, `answer`, 3 `distractors` | the word snapshot |
 | `cloze` | `word_id` or `new_ref`, `sentence` with exactly one `[[gap]]`, optional `sentence_ru`, 3 `distractors` | `answer` (the gap, when left out) |
 | `register` | `word_id` or `new_ref` | `answer` (the word's level: нейтр. / fam. / arg. / vulg.) |
@@ -34,7 +34,7 @@ How to write an exercise set for `create_exercise_set`. The app plays it offline
 2. **Same register:** slang answers among slang distractors, neutral among neutral (except in `neutral` items, where the distractors are neutral too and wrong in meaning).
 3. **About the same length:** the answer must not be the longest option in most items (the server warns at 60 %).
 4. **Exactly one best answer.** Every distractor is clearly wrong in this sentence or for this word: no synonyms, no second sense that also fits («la caisse» next to «la bagnole» when the question is «машина на арго»).
-5. **Plausible:** real words the user may know, ideally from the same set or theme, or a past confusion (`confusions`, `last_run.missed[].chosen`). No invented words, no joke options.
+5. **Plausible:** real words the user may know, ideally from the same set or theme, or a past confusion (`confusions`, `last_run.missed[].chosen`) in the options' language (a confusion may be a Russian tile from a pairs board). No invented words, no joke options. For `meaning`, no other equivalent of the word itself (the server refuses «тёлка» for «la meuf» = «девушка, тёлка»).
 6. Distinct from each other and from the answer, ignoring case and accents (the server refuses repeats).
 
 ## Leak checks (run them before saving)

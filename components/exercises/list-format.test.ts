@@ -139,6 +139,17 @@ describe("tileState", () => {
     const answers = ["q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8"].map((id, i) => answer(id, i === 0 ? "wrong" : "correct"));
     expect(tileState(set(), run([...answers, answer("q1", "correct", 2)], true))).toMatchObject({ label: "7/8", progress: 1, resumeRunId: null });
   });
+
+  it("a run left on its last, answered card reads as finished", () => {
+    const answers = ["q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8"].map((id) => answer(id, "correct"));
+    expect(tileState(set(), run(answers, false))).toMatchObject({ label: "8/8", progress: 1, resumeRunId: null });
+  });
+
+  it("another device's interrupted run is shown but not resumed here", () => {
+    const r = run([answer("q1", "correct")], false);
+    expect(tileState(set(), r, new Set())).toMatchObject({ label: "Прервано 1/8", resumeRunId: null });
+    expect(tileState(set(), r, new Set(["r-1"]))).toMatchObject({ resumeRunId: "r-1" });
+  });
 });
 
 describe("requests", () => {

@@ -1,10 +1,12 @@
 // «Упражнения» on the device: the sets Claude wrote through the connector (synced table
 // `exercise_sets`, content read-only here: the app only soft-deletes and restores them) and the
 // runs played on this device (`exercise_runs`, one row upserted after every answer; the outbox
-// coalesces the writes by `${table}:${id}`, so a run queues one push however many answers).
+// coalesces the writes by `${table}:${id}`, so a run queues one push however many answers). A run
+// is resumed only on the device that started it (`own_runs`, device-local): runs synced from
+// another device show their result but are never written here.
 // Exercises never touch review_state or review_log. Pure rules live in lib/core/exercises.ts.
 import { useLiveQuery } from "dexie-react-hooks";
-import { countFirstTry, runItems } from "./core/exercises";
+import { countFirstTry, itemWordKeys, runItems, runSettled } from "./core/exercises";
 import { db, liveRows, newId } from "./db";
 import { findDuplicates, normalizeLemma } from "./text";
 import type { ExerciseAnswer, ExerciseRun, ExerciseSet, Word } from "./types";
@@ -36,10 +38,31 @@ export async function getRun(id: string): Promise<ExerciseRun | undefined> {
   return run && run.deleted_at === null ? run : undefined;
 }
 
+/** Ids of the runs started on this device. */
+export async function ownRunIds(): Promise<Set<string>> {
+  return new Set(await db.own_runs.toCollection().primaryKeys());
+}
+
+/** A run is still to be played here: unfinished, started on this device, and not every item settled. */
+const resumable = (run: ExerciseRun, set: Pick<ExerciseSet, "items">, own: ReadonlySet<string>) =>
+  run.finished_at === null && own.has(run.id) && !runSettled(set, run);
+
 /** The newest live run of a set (of `kind`, default the whole-set runs), finished or not. */
 export async function latestRunFor(setId: string, kind: ExerciseRun["kind"] = "set"): Promise<ExerciseRun | undefined> {
   const runs = await db.exercise_runs.where("set_id").equals(setId).toArray();
   return runs.filter((r) => r.deleted_at === null && r.kind === kind).sort(runsByNewest)[0];
+}
+
+/** The newest whole-set run of a set that this device can resume, if any. */
+export async function resumableRunFor(set: ExerciseSet): Promise<ExerciseRun | undefined> {
+  const [runs, own] = await Promise.all([db.exercise_runs.where("set_id").equals(set.id).toArray(), ownRunIds()]);
+  return runs.filter((r) => r.deleted_at === null && r.kind === "set" && resumable(r, set, own)).sort(runsByNewest)[0];
+}
+
+/** A run by id when this device can resume it. */
+export async function getResumableRun(id: string, set: ExerciseSet): Promise<ExerciseRun | undefined> {
+  const [run, own] = await Promise.all([getRun(id), ownRunIds()]);
+  return run && run.set_id === set.id && resumable(run, set, own) ? run : undefined;
 }
 
 /** Per set id, its newest whole-set run: the list's progress line and «ПРЕРВАНО · 5/12» (use inside useLiveQuery). */
@@ -55,12 +78,49 @@ export function useLastRunBySet(): Map<string, ExerciseRun> | undefined {
   return useLiveQuery(() => lastRunBySet(), []);
 }
 
-/** The newest unfinished run whose set is still live («Продолжить»), with its set. */
+/** The runs started on this device (the tiles offer «Продолжить» only for these). */
+export function useOwnRunIds(): Set<string> | undefined {
+  return useLiveQuery(() => ownRunIds(), []);
+}
+
+/**
+ * The newest unfinished run whose set is still live («Продолжить»), with its set: started on this
+ * device, with something left to play (a run left on its last, answered card counts as finished).
+ */
 export async function unfinishedRun(): Promise<{ run: ExerciseRun; set: ExerciseSet } | undefined> {
-  const [runs, sets] = await Promise.all([liveRows(db.exercise_runs), liveRows(db.exercise_sets)]);
+  const [runs, sets, own] = await Promise.all([liveRows(db.exercise_runs), liveRows(db.exercise_sets), ownRunIds()]);
   const live = new Map(sets.map((s) => [s.id, s]));
-  const run = runs.filter((r) => r.finished_at === null && r.set_id !== null && live.has(r.set_id)).sort(runsByNewest)[0];
+  const run = runs.filter((r) => r.set_id !== null && live.has(r.set_id) && resumable(r, live.get(r.set_id)!, own)).sort(runsByNewest)[0];
   return run ? { run, set: live.get(run.set_id!)! } : undefined;
+}
+
+/** What playing a set needs from the library: its new words already saved, and its words deleted or paused since. */
+export interface PlayContext {
+  /** Refs of the set's new words already in the library (no intro card). */
+  savedRefs: Set<string>;
+  /** Library word ids deleted or «на паузе»: their items are not played. */
+  blocked: Set<string>;
+}
+
+export async function playContext(set: ExerciseSet): Promise<PlayContext> {
+  const refs = new Set(set.new_words.map((w) => w.ref));
+  const ids = [...new Set(set.items.flatMap(itemWordKeys))].filter((k) => !refs.has(k));
+  const [rows, saved] = await Promise.all([db.words.bulkGet(ids), savedNewWords(set)]);
+  // A word not on this device yet (sync still pulling) is not blocked: only an explicit delete or pause is.
+  const blocked = new Set(ids.filter((_, i) => !!rows[i] && (rows[i]!.deleted_at !== null || !!rows[i]!.muted)));
+  return { savedRefs: new Set(saved.keys()), blocked };
+}
+
+/** Live (not deleted) library words by id: «Слово ›» and the done screen's links and meters. */
+export async function liveWordsById(ids: readonly string[]): Promise<Map<string, Word>> {
+  const unique = [...new Set(ids)];
+  const rows = await db.words.bulkGet(unique);
+  return new Map(rows.filter((w): w is Word => !!w && w.deleted_at === null).map((w) => [w.id, w]));
+}
+
+export function useLiveWords(ids: readonly string[]): Map<string, Word> | undefined {
+  const key = [...new Set(ids)].sort().join(",");
+  return useLiveQuery(() => liveWordsById(ids), [key]);
 }
 
 export interface StartRunOptions {
@@ -69,7 +129,7 @@ export interface StartRunOptions {
   itemIds?: readonly string[];
 }
 
-/** Starts a run (saved at once, so × mid-round can resume it). */
+/** Starts a run (saved at once, so × mid-round can resume it; marked as this device's). */
 export async function startRun(set: ExerciseSet, opts: StartRunOptions = {}, now: Date = new Date()): Promise<ExerciseRun> {
   const iso = now.toISOString();
   const wanted = opts.itemIds ? new Set(opts.itemIds) : null;
@@ -89,6 +149,7 @@ export async function startRun(set: ExerciseSet, opts: StartRunOptions = {}, now
     updated_at: iso,
     deleted_at: null,
   };
+  await db.own_runs.put({ id: run.id });
   await db.exercise_runs.put(run);
   return run;
 }
@@ -162,16 +223,22 @@ export interface AddNewWordsResult {
 
 /**
  * «Добавить в библиотеку»: adds the checked new words with their review cards in one transaction
- * (source "chat"), into the set's first theme when it is still live, otherwise «Входящие». Words
- * the library already has are skipped. Undo with `undoAddNewWords(result.undo)`.
+ * (source "chat"), into the set's first theme that is still live («Входящие» when the inbox comes
+ * first or none is). Words the library already has are skipped. Undo with `undoAddNewWords(result.undo)`.
  */
 export async function addNewWords(set: Pick<ExerciseSet, "folders" | "new_words">, refs: readonly string[], now: Date = new Date()): Promise<AddNewWordsResult> {
   return db.transaction("rw", [db.words, db.review_state, db.review_log, db.folders, db.outbox], async () => {
     const wanted = [...new Set(refs)];
     const byRef = new Map(set.new_words.map((w) => [w.ref, w]));
-    const first = set.folders[0];
-    const folder = first ? await db.folders.get(first) : undefined;
-    const folderId = folder && folder.deleted_at === null ? folder.id : null;
+    let folderId: string | null = null;
+    for (const id of set.folders) {
+      if (id === "inbox") break;
+      const folder = await db.folders.get(id);
+      if (folder && folder.deleted_at === null) {
+        folderId = folder.id;
+        break;
+      }
+    }
     const picked = wanted.map((ref) => byRef.get(ref)).filter((w) => !!w);
     const existing = await findDuplicates(picked.map((w) => w.fr));
     const skipped: AddNewWordsResult["skipped"] = wanted.filter((ref) => !byRef.has(ref)).map((ref) => ({ ref, existing: null }));

@@ -14,7 +14,7 @@ export interface ClozeLineProps {
  */
 export function ClozeLine({ sentence, answered }: ClozeLineProps) {
   const parts = clozeParts(sentence);
-  const text = "m-0 font-serif text-[30px] leading-10 font-medium tracking-[-0.01em] md:text-[36px] md:leading-[48px]";
+  const text = "m-0 font-serif text-[28px] leading-10 font-medium tracking-[-0.005em] md:text-[36px] md:leading-[48px] md:tracking-[-0.01em]";
   if (!parts) {
     return (
       <p lang="fr" className={text}>
@@ -31,7 +31,7 @@ export function ClozeLine({ sentence, answered }: ClozeLineProps) {
         </span>
       ) : (
         <span
-          className="relative inline-block h-[1em] w-[4.2em] border-b-2 border-dashed border-muted align-baseline"
+          className="relative mx-1 inline-block h-[1em] w-[3.3em] border-b-2 border-dashed border-muted align-baseline"
           role="img"
           aria-label="пропуск"
         />

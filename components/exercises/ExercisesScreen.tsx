@@ -14,7 +14,7 @@ import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { FlatKey } from "@/components/ui/Kbd";
 import { useSnackbar } from "@/components/ui/Snackbar";
-import { deleteSet, restoreSet, unfinishedRun, useExerciseSets, useLastRunBySet } from "@/lib/exercises";
+import { deleteSet, restoreSet, unfinishedRun, useExerciseSets, useLastRunBySet, useOwnRunIds } from "@/lib/exercises";
 import { listFolders } from "@/lib/folders";
 import { syncNow } from "@/lib/sync";
 import type { ExerciseRun, ExerciseSet } from "@/lib/types";
@@ -46,6 +46,7 @@ export function ExercisesScreen() {
   const snackbar = useSnackbar();
   const sets = useExerciseSets();
   const runs = useLastRunBySet();
+  const ownRuns = useOwnRunIds();
   // null when there is none (undefined is «still loading»).
   const resume = useLiveQuery(async () => (await unfinishedRun()) ?? null, []);
   const themes = useThemeChoices();
@@ -129,7 +130,7 @@ export function ExercisesScreen() {
   };
 
   const menuRun = menu ? runs?.get(menu.id) : undefined;
-  const menuState = menu ? tileState(menu, menuRun) : null;
+  const menuState = menu ? tileState(menu, menuRun, ownRuns) : null;
   const startFromMenu = () => {
     if (!menu || !menuState) return;
     setPendingExercise(menuState.resumeRunId ? { setId: menu.id, runId: menuState.resumeRunId } : { setId: menu.id });
@@ -139,13 +140,13 @@ export function ExercisesScreen() {
 
   const header = (
     <>
-      <header className="mt-4 flex h-11 shrink-0 items-center justify-between gap-3">
+      <header className="mt-4 flex h-11 shrink-0 items-center justify-between gap-3 md:mt-1">
         <div className="flex min-w-0 items-baseline gap-2">
           <h1 className="m-0 shrink-0 font-serif text-[28px] leading-9 font-medium tracking-[-0.015em]">Упражнения</h1>
           <SyncMark />
         </div>
         {!empty && !loading && (
-          <Button variant="secondary" size="sm" onClick={openRequest} className="h-9 px-3">
+          <Button variant="secondary" size="sm" onClick={openRequest} className="h-9 px-3 md:px-3.5 md:text-[14px]">
             Попросить набор
           </Button>
         )}
@@ -245,7 +246,7 @@ export function ExercisesScreen() {
         <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-3">
           {waiting && <SetTileSkeleton />}
           {tiles.map((set) => {
-            const state = tileState(set, runs?.get(set.id));
+            const state = tileState(set, runs?.get(set.id), ownRuns);
             return (
               <SetTile
                 key={set.id}

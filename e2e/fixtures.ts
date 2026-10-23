@@ -578,3 +578,208 @@ export async function holdDatabase(page: Page): Promise<() => Promise<void>> {
     });
   };
 }
+
+// --- «Упражнения» -------------------------------------------------------------------------------
+// Sets are written by the connector and reach the device by sync; e2e puts them straight into the
+// app's IndexedDB (stores exercise_sets / exercise_runs), with the shapes of lib/types.ts.
+
+export interface ExerciseItemSeed {
+  id: string;
+  type: "choice" | "cloze" | "register" | "pairs";
+  skill?: "meaning" | "form" | "neutral" | "verlan" | "situation" | null;
+  ask?: "fr" | "ru" | null;
+  /** A seeded library word by its French form: resolved to its word_id and snapshot in the page. */
+  word?: string;
+  new_ref?: string;
+  prompt?: string | null;
+  sentence?: string | null;
+  sentence_ru?: string | null;
+  answer?: string | null;
+  distractors?: string[];
+  /** Pairs: seeded library words by their French form. */
+  pairs?: string[];
+  explain_ru?: string | null;
+}
+
+export interface ExerciseNewWordSeed {
+  ref: string;
+  fr: string;
+  ru: string;
+  note?: string | null;
+  example_fr?: string | null;
+  example_ru?: string | null;
+  pos?: "noun" | "verb" | "adj" | "adv" | "expression" | "other";
+  gender?: "m" | "f" | "mf" | "none";
+  slang_level?: 0 | 1 | 2 | 3;
+  verlan?: boolean;
+  source_url?: string | null;
+}
+
+export interface ExerciseSetSeed {
+  id: string;
+  title: string;
+  topic?: string | null;
+  /** Theme slugs (resolved to folder ids), or "inbox". */
+  folders?: string[];
+  created_at?: string;
+  items: ExerciseItemSeed[];
+  new_words?: ExerciseNewWordSeed[];
+}
+
+/**
+ * Puts exercise sets into the app's database (after first-run seeding: open a page and wait for it
+ * first). Library words are named by their French form. Reload or navigate afterwards: the app's
+ * live queries do not see writes made outside Dexie.
+ */
+export async function seedExerciseSets(page: Page, sets: readonly ExerciseSetSeed[]) {
+  await page.evaluate(
+    (seeds) =>
+      new Promise<void>((resolve, reject) => {
+        const open = indexedDB.open("kartochki");
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const db = open.result;
+          const tx = db.transaction(["words", "folders", "exercise_sets"], "readwrite");
+          const words = tx.objectStore("words").getAll();
+          const folders = tx.objectStore("folders").getAll();
+          folders.onsuccess = () => {
+            try {
+              put();
+            } catch (error) {
+              reject(error);
+              tx.abort();
+            }
+          };
+          const put = () => {
+            type W = { id: string; fr: string; ru: string; pos: string; gender: string; slang_level: number; verlan: boolean; deleted_at: string | null };
+            const live = (words.result as W[]).filter((w) => !w.deleted_at);
+            const bySlug = new Map((folders.result as { id: string; slug: string }[]).map((f) => [f.slug, f.id]));
+            const word = (fr: string) => {
+              const w = live.find((x) => x.fr === fr);
+              if (!w) throw new Error(`seedExerciseSets: no word «${fr}»`);
+              return w;
+            };
+            const snapshot = (w: W) => ({ fr: w.fr, ru: w.ru, pos: w.pos, gender: w.gender, slang_level: w.slang_level, verlan: w.verlan });
+            const now = new Date().toISOString();
+            for (const s of seeds) {
+              const newWords = (s.new_words ?? []).map((n) => ({
+                note: null,
+                example_fr: null,
+                example_ru: null,
+                pos: "expression",
+                gender: "none",
+                slang_level: 1,
+                verlan: false,
+                origin: null,
+                source_url: null,
+                ...n,
+              }));
+              const items = s.items.map((it) => {
+                const w = it.word ? word(it.word) : null;
+                const n = it.new_ref ? newWords.find((x) => x.ref === it.new_ref) : null;
+                const pairs = (it.pairs ?? []).map(word);
+                return {
+                  id: it.id,
+                  type: it.type,
+                  skill: it.skill ?? (it.type === "choice" ? "meaning" : null),
+                  ask: it.ask ?? (it.type === "choice" ? "fr" : null),
+                  word_id: w?.id ?? null,
+                  new_ref: it.new_ref ?? null,
+                  prompt: it.prompt ?? null,
+                  sentence: it.sentence ?? null,
+                  sentence_ru: it.sentence_ru ?? null,
+                  answer: it.answer ?? null,
+                  distractors: it.distractors ?? [],
+                  pairs: pairs.map((p) => p.id),
+                  tiles: pairs.map((p) => ({ key: p.id, fr: p.fr, ru: p.ru })),
+                  explain_ru: it.explain_ru ?? null,
+                  word: w ? snapshot(w) : n ? { fr: n.fr, ru: n.ru, pos: n.pos, gender: n.gender, slang_level: n.slang_level, verlan: n.verlan } : null,
+                };
+              });
+              tx.objectStore("exercise_sets").put({
+                id: s.id,
+                title: s.title,
+                topic: s.topic ?? null,
+                folders: (s.folders ?? []).map((f) => (f === "inbox" ? f : (bySlug.get(f) ?? f))),
+                items,
+                new_words: newWords,
+                source: "chat",
+                created_at: s.created_at ?? now,
+                updated_at: s.created_at ?? now,
+                deleted_at: null,
+              });
+            }
+          };
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => reject(tx.error);
+          tx.onabort = () => reject(tx.error);
+        };
+      }),
+    sets,
+  );
+}
+
+/** Rows of a store in the app's database (exercise_runs, words…), deleted ones included. */
+export async function dbRows<T = Record<string, unknown>>(page: Page, store: string): Promise<T[]> {
+  return page.evaluate(
+    (name) =>
+      new Promise<T[]>((resolve, reject) => {
+        const open = indexedDB.open("kartochki");
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const all = open.result.transaction(name).objectStore(name).getAll();
+          all.onerror = () => reject(all.error);
+          all.onsuccess = () => {
+            resolve(all.result as T[]);
+            open.result.close();
+          };
+        };
+      }),
+    store,
+  );
+}
+
+/** «Сленг на каждый день»: choice, cloze, register, pairs and a new web word, on the first-run seed words. */
+export const SLANG_SET: ExerciseSetSeed = {
+  id: "x-e2e-slang",
+  title: "Сленг на каждый день",
+  folders: ["povsednevnoe", "politsiya"],
+  created_at: "2026-10-22T09:00:00.000Z",
+  new_words: [
+    {
+      ref: "flemme",
+      fr: "avoir la flemme",
+      ru: "лениться, неохота",
+      note: "Говорят о себе: j'ai la flemme — «мне лень».",
+      example_fr: "J'ai la flemme de sortir ce soir.",
+      example_ru: "Неохота мне сегодня никуда идти.",
+      pos: "expression",
+      slang_level: 1,
+      source_url: "https://www.lalanguefrancaise.com/expressions/avoir-la-flemme",
+    },
+  ],
+  items: [
+    { id: "q1", type: "choice", word: "les flics", prompt: "les flics", answer: "копы", distractors: ["шутка", "жир", "давай"], explain_ru: "flic — разговорное «полицейский»" },
+    {
+      id: "q2",
+      type: "cloze",
+      word: "vas-y",
+      sentence: "Allez, [[vas-y]], on t'attend !",
+      sentence_ru: "Ну же, мы тебя ждём!",
+      answer: "vas-y",
+      distractors: ["arrête", "dépêche-toi", "une blague"],
+    },
+    { id: "q3", type: "register", word: "se casser", answer: "arg." },
+    { id: "q4", type: "pairs", pairs: ["une blague", "le gras", "arrête", "c'est dur"] },
+    { id: "q5", type: "choice", new_ref: "flemme", prompt: "avoir la flemme", answer: "лениться, неохота", distractors: ["торопиться", "злиться", "веселиться"] },
+  ],
+};
+
+/** The player's question card (data-exercise-card = its type). */
+export const exerciseCard = (page: Page) => page.locator("[data-exercise-card]");
+/** An option tile by its text; `not` picks the first tile that is not it. */
+export const optionTile = (page: Page, text: string) => page.locator("button[data-option]", { hasText: text });
+export const wrongOption = (page: Page, right: string) => page.locator("button[data-option]").filter({ hasNotText: right }).first();

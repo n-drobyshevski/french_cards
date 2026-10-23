@@ -161,7 +161,7 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
               icon={on ? "check" : undefined}
               count={variant === "page" ? undefined : t.count}
               onClick={() => toggleTheme(t.key)}
-              className="h-9 gap-1.5 px-3"
+              className="!h-9 gap-1.5 px-3"
             >
               {t.name}
             </Chip>
@@ -175,7 +175,7 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
             focusTopic.current = !topicOpen;
             setTopicOpen((open) => !open);
           }}
-          className="h-9 px-3 aria-pressed:border-ink aria-pressed:font-medium"
+          className="!h-9 px-3 aria-pressed:border-ink aria-pressed:font-medium"
         >
           + своя тема
         </Chip>
@@ -224,7 +224,6 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
           onChange={setSize}
           ariaLabelledby={`${ids}-size`}
           mono
-          className="-mr-0.5"
         />
       </div>
 

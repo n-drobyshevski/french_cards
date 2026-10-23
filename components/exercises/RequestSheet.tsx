@@ -20,7 +20,8 @@ export interface RequestSheetProps {
 export function RequestSheet({ open, onOpenChange, themes, sets, online, onCopied }: RequestSheetProps) {
   const [help, setHelp] = useState(false);
   return (
-    <Sheet open={open} onOpenChange={onOpenChange} dialogWidth={520} description="Запрос для чата Claude">
+    // Paper under white chips, toggle and request box (Exercise-S-Request-Sheet).
+    <Sheet open={open} onOpenChange={onOpenChange} dialogWidth={520} description="Запрос для чата Claude" className="!bg-paper">
       <div className="flex h-11 shrink-0 items-center gap-2 pr-1 pl-4 md:mt-2 md:pl-6">
         <SheetTitle className="min-w-0 flex-1 truncate">Попросить набор</SheetTitle>
         <SheetCloseButton />
