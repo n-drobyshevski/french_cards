@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { reviewKeyAction } from "@/components/review/keys";
-import { blocksGlobalKeys, globalKeyAction, isModifierKey, type GlobalKeyLike } from "./keys";
+import { blocksGlobalKeys, GO_TARGETS, globalKeyAction, isModifierKey, type GlobalKeyLike } from "./keys";
+import { SHORTCUT_COLUMNS } from "./ShortcutsDialog";
 
 const key = (code: string, k: string, extra: Partial<GlobalKeyLike> = {}): GlobalKeyLike => ({ code, key: k, ...extra });
 
@@ -18,8 +19,12 @@ describe("globalKeyAction", () => {
     expect(globalKeyAction(key("KeyG", "g"))).toEqual({ type: "sequence" });
   });
 
-  it("finishes G sequences with R, L or I", () => {
+  it("finishes G sequences with R, E, L, C or I", () => {
     expect(globalKeyAction(key("KeyR", "r"), true)).toEqual({ type: "go", href: "/" });
+    expect(globalKeyAction(key("KeyE", "e"), true)).toEqual({ type: "go", href: "/exercises" });
+    expect(globalKeyAction(key("KeyE", "у"), true)).toEqual({ type: "go", href: "/exercises" });
+    expect(globalKeyAction(key("KeyE", "E", { shiftKey: true }), true)).toBeNull();
+    expect(globalKeyAction(key("KeyE", "e"))).toBeNull();
     expect(globalKeyAction(key("KeyL", "д"), true)).toEqual({ type: "go", href: "/library" });
     expect(globalKeyAction(key("KeyI", "i"), true)).toEqual({ type: "go", href: "/import" });
     expect(globalKeyAction(key("KeyC", "с"), true)).toEqual({ type: "go", href: "/context" });
@@ -48,6 +53,26 @@ describe("globalKeyAction", () => {
     for (const ev of [key("KeyN", "n"), key("KeyG", "g"), key("BracketLeft", "["), key("Slash", "/")]) {
       expect(reviewKeyAction(ev, { revealed: true, gradeButtons: 3 })).toBeNull();
     }
+  });
+});
+
+describe("«Клавиши» overlay", () => {
+  const groups = SHORTCUT_COLUMNS.flat();
+
+  it("lists every G target under «Везде»", () => {
+    const all = groups.find((g) => g.id === "all")!;
+    for (const code of Object.keys(GO_TARGETS)) {
+      const letter = code.replace("Key", "");
+      expect(all.rows.some((r) => r.keys[0] === "G" && r.keys[2] === letter), `G → ${letter}`).toBe(true);
+    }
+    expect(all.rows.find((r) => r.label === "Упражнения")?.keys).toEqual(["G", { then: true }, "E"]);
+  });
+
+  it("has the «Упражнения» group (DESKTOP-SPEC §4)", () => {
+    const ex = groups.find((g) => g.id === "exercises");
+    expect(ex?.title).toBe("Упражнения");
+    expect(ex?.rows.map((r) => r.keys)).toEqual([["J", "K"], ["1", "2", "3", "4"], ["0"], ["Enter"], ["Escape"]]);
+    expect(new Set(groups.map((g) => g.id)).size).toBe(groups.length);
   });
 });
 

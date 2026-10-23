@@ -1,10 +1,14 @@
 // Data for the desktop sidebar and rail: counts, themes with guide words, the active item and the
 // sync line. Pure builders are unit-tested; loadShellData runs inside useLiveQuery.
+import { useLiveQuery } from "dexie-react-hooks";
+import { plural } from "@/components/library/format";
 import type { SyncLine, SyncLineInput } from "@/components/settings/format";
 import { db, liveRows } from "@/lib/db";
+import { lastRunBySet, liveSets } from "@/lib/exercises";
 import { libraryStatsFrom, listFolders, type LibraryStats } from "@/lib/folders";
 import { compareFrKeyed, frSortKey } from "@/lib/text";
-import type { Word } from "@/lib/types";
+import type { ExerciseSet, Word } from "@/lib/types";
+import { useLayoutClass } from "@/lib/use-media";
 
 export interface ShellTheme {
   /** Folder id; null for «Входящие». */
@@ -92,13 +96,38 @@ export async function loadShellData(now: Date = new Date()): Promise<ShellData> 
   return buildShellData(libraryStatsFrom(folders, words, states, now), words);
 }
 
+/** Sets not played yet (no whole-set run on any device): the ink count beside «Упражнения». */
+export function unplayedSetCount(sets: readonly Pick<ExerciseSet, "id">[], runsBySet: ReadonlyMap<string, unknown>): number {
+  let n = 0;
+  for (const set of sets) if (!runsBySet.has(set.id)) n++;
+  return n;
+}
+
+/** «2 новых набора» (the rail item's accessible name). */
+export const unplayedLabel = (n: number) => `${n} ${plural(n, ["новый набор", "новых набора", "новых наборов"])}`;
+
+export async function loadUnplayedSets(): Promise<number> {
+  const [sets, runs] = await Promise.all([liveSets(), lastRunBySet()]);
+  return unplayedSetCount(sets, runs);
+}
+
+/**
+ * «Упражнения» count for the sidebar and rail; not loaded on phones. Its own live query (two small
+ * tables), so an answer saved in the player does not re-read the words for the rest of the shell.
+ */
+export function useUnplayedSets(): number | undefined {
+  const layout = useLayoutClass();
+  return useLiveQuery(() => (layout === "compact" ? undefined : loadUnplayedSets()), [layout]);
+}
+
 /** Nav item for a path: a section, «inbox», or `theme:<id>`. */
-export type NavKey = "review" | "library" | "context" | "import" | "settings" | "inbox" | `theme:${string}`;
+export type NavKey = "review" | "exercises" | "library" | "context" | "import" | "settings" | "inbox" | `theme:${string}`;
 
 /** Which nav item a path activates (exactly one; a shown theme instead of «Библиотека»). */
 export function navKeyForPath(pathname: string | null): NavKey | null {
   if (!pathname) return null;
   if (pathname === "/" || pathname.startsWith("/done")) return "review";
+  if (pathname === "/exercises" || pathname.startsWith("/exercises/")) return "exercises";
   if (pathname.startsWith("/import")) return "import";
   if (pathname.startsWith("/context")) return "context";
   if (pathname.startsWith("/settings")) return "settings";

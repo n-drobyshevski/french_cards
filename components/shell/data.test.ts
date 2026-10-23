@@ -4,7 +4,8 @@ import { db } from "@/lib/db";
 import { createFolder, deleteFolder } from "@/lib/folders";
 import { addWord, gradeCard } from "@/lib/words";
 import { syncLine, type SyncLineInput } from "@/components/settings/format";
-import { guideWords, loadShellData, navKeyForPath, resolveNavKey, sidebarSyncLine } from "./data";
+import type { ExerciseRun, ExerciseSet } from "@/lib/types";
+import { guideWords, loadShellData, loadUnplayedSets, navKeyForPath, resolveNavKey, sidebarSyncLine, unplayedLabel, unplayedSetCount } from "./data";
 
 /** Local noon, 21 Oct 2026. */
 const NOON = new Date(2026, 9, 21, 12, 0, 0);
@@ -53,6 +54,53 @@ describe("loadShellData", () => {
   });
 });
 
+describe("unplayed sets («Упражнения» count)", () => {
+  const set = (id: string, created_at: string, deleted_at: string | null = null): ExerciseSet => ({
+    id,
+    title: `Набор ${id}`,
+    topic: null,
+    folders: [],
+    items: [],
+    new_words: [],
+    source: "claude",
+    created_at,
+    updated_at: created_at,
+    deleted_at,
+  });
+  const run = (id: string, set_id: string, kind: ExerciseRun["kind"] = "set", finished = false): ExerciseRun => ({
+    id,
+    set_id,
+    kind,
+    item_ids: [],
+    started_at: NOON.toISOString(),
+    finished_at: finished ? NOON.toISOString() : null,
+    answers: [],
+    total: 8,
+    first_try: 0,
+    updated_at: NOON.toISOString(),
+    deleted_at: null,
+  });
+
+  it("counts live sets without a run, played or interrupted ones aside", async () => {
+    const iso = NOON.toISOString();
+    await db.exercise_sets.bulkPut([set("a", iso), set("b", iso), set("c", iso), set("gone", iso, iso)]);
+    await db.exercise_runs.bulkPut([run("r1", "a", "set", true), run("r2", "b")]);
+    expect(await loadUnplayedSets()).toBe(1);
+  });
+
+  it("is zero with no sets", async () => {
+    expect(await loadUnplayedSets()).toBe(0);
+    expect(unplayedSetCount([{ id: "a" }, { id: "b" }], new Map([["a", null]]))).toBe(1);
+  });
+
+  it("names the count with the Russian plural", () => {
+    expect(unplayedLabel(1)).toBe("1 новый набор");
+    expect(unplayedLabel(2)).toBe("2 новых набора");
+    expect(unplayedLabel(5)).toBe("5 новых наборов");
+    expect(unplayedLabel(21)).toBe("21 новый набор");
+  });
+});
+
 describe("navKeyForPath", () => {
   it("activates exactly one item per route", () => {
     expect(navKeyForPath("/")).toBe("review");
@@ -61,6 +109,8 @@ describe("navKeyForPath", () => {
     expect(navKeyForPath("/library/abc-1")).toBe("theme:abc-1");
     expect(navKeyForPath("/import")).toBe("import");
     expect(navKeyForPath("/context")).toBe("context");
+    expect(navKeyForPath("/exercises")).toBe("exercises");
+    expect(navKeyForPath("/exercises/play")).toBe("exercises");
     expect(navKeyForPath("/settings")).toBe("settings");
     expect(navKeyForPath("/login")).toBeNull();
     expect(navKeyForPath(null)).toBeNull();

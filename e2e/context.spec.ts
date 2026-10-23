@@ -89,9 +89,14 @@ async function searchFor(page: Page, q: string) {
 
 test("kiffer: translations, the meaning chips filter the examples, synonyms, conjugation; Back steps through queries", async ({ page }) => {
   const calls = await mockAll(page);
-  await page.goto("/context");
-  await expect(tabBar(page).getByRole("link", { name: "Контекст" })).toHaveAttribute("aria-current", "page");
+  // No tab of its own on phones: the magnifier left of the gear in the Library header opens it, and
+  // Библиотека stays the active tab.
+  await page.goto("/library");
+  await expect(tabBar(page).getByRole("link", { name: "Контекст" })).toHaveCount(0);
+  await page.getByRole("link", { name: "Контекст", exact: true }).click();
+  await expect(page).toHaveURL(/\/context$/);
   await expect(page.getByRole("heading", { level: 1, name: "Контекст" })).toBeVisible();
+  await expect(tabBar(page).getByRole("link", { name: "Библиотека" })).toHaveAttribute("aria-current", "page");
 
   await searchFor(page, "kiffer");
   await expect(page).toHaveURL(/\/context\?q=kiffer$/);
@@ -140,6 +145,13 @@ test("kiffer: translations, the meaning chips filter the examples, synonyms, con
   await page.goBack();
   await expect(page.getByRole("heading", { level: 1, name: "kiffer" })).toBeVisible();
   expect(calls.lookup).toEqual(["kiffer", "triper"]);
+
+  // The header's back arrow steps back the same way: home, then the Library (mono label «Библиотека»).
+  await page.getByRole("button", { name: "Назад", exact: true }).click();
+  await expect(page).toHaveURL(/\/context$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Контекст" })).toBeVisible();
+  await page.getByRole("button", { name: "Назад в библиотеку" }).click();
+  await expect(page).toHaveURL(/\/library$/);
 });
 
 test("an example goes into the saved word's card", async ({ page }) => {

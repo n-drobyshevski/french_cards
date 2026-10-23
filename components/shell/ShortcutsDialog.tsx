@@ -35,6 +35,7 @@ export const SHORTCUT_COLUMNS: ShortcutGroup[][] = [
         { label: "Поиск в библиотеке", keys: ["/"] },
         { label: "Все клавиши", keys: ["?"] },
         { label: "Повторение", keys: ["G", THEN, "R"] },
+        { label: "Упражнения", keys: ["G", THEN, "E"] },
         { label: "Библиотека", keys: ["G", THEN, "L"] },
         { label: "Контекст", keys: ["G", THEN, "C"] },
         { label: "Импорт", keys: ["G", THEN, "I"] },
@@ -84,6 +85,18 @@ export const SHORTCUT_COLUMNS: ShortcutGroup[][] = [
         { label: "Выбрать подсказку", keys: ["Enter"] },
         { label: "Добавить", keys: ["Mod+Enter"] },
         { label: "Добавить и ещё", keys: ["Shift+Mod+Enter"] },
+      ],
+    },
+    {
+      // DESKTOP-SPEC §4 «Упражнения»: components/exercises/player-keys.ts and the list's J / K.
+      id: "exercises",
+      title: "Упражнения",
+      rows: [
+        { label: "Следующий / предыдущий набор", keys: ["J", "K"] },
+        { label: "Выбрать ответ", keys: ["1", "2", "3", "4"] },
+        { label: "Не знаю", keys: ["0"] },
+        { label: "Дальше", keys: ["Enter"] },
+        { label: "Выйти", keys: ["Escape"] },
       ],
     },
   ],

@@ -59,7 +59,7 @@ test("the tab marker moves to a tapped tab before its route commits", async ({ p
   await expect(marker).toHaveCount(1);
   const at = () => marker.evaluate((el) => new DOMMatrix(getComputedStyle(el).transform).m41);
   const width = await marker.evaluate((el) => el.getBoundingClientRect().width);
-  // Повторение · Добавить · Контекст · Библиотека: the library is the fourth column.
+  // Повторение · Упражнения · Добавить · Библиотека: the library is the fourth column.
   await expect.poll(at).toBeCloseTo(width * 3, 0);
   expect(await marker.evaluate((el) => getComputedStyle(el).transitionProperty)).toBe("transform");
 

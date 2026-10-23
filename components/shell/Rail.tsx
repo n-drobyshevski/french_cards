@@ -9,7 +9,7 @@ import { CardGlyph } from "@/components/ui/AppMark";
 import { cx } from "@/components/ui/cx";
 import { Icon, type IconName } from "@/components/ui/Icons";
 import { useLayoutClass } from "@/lib/use-media";
-import { INBOX_NAME, navKeyForPath, themeHref, type NavKey, type ShellData } from "./data";
+import { INBOX_NAME, navKeyForPath, themeHref, unplayedLabel, useUnplayedSets, type NavKey, type ShellData } from "./data";
 import { useThemeDrop } from "./dnd";
 import { ActiveBar, DropLight, dropClasses, PendingTick, useSidebarSyncLine } from "./NavParts";
 import { useShortcutsEnabled } from "./ShellContext";
@@ -125,6 +125,7 @@ function RailView({ data, active }: { data: ShellData | undefined; active: NavKe
   const shortcuts = useShortcutsEnabled();
   const layout = useLayoutClass();
   const library = active === "library" || !!active?.startsWith("theme:");
+  const unplayed = useUnplayedSets();
 
   return (
     <nav
@@ -158,6 +159,14 @@ function RailView({ data, active }: { data: ShellData | undefined; active: NavKe
           count={data?.due ?? null}
           ariaLabel={data?.due ? `Повторение, ${data.due} к повторению` : undefined}
         />
+        <RailLink
+          href="/exercises"
+          icon="exercise"
+          label="Упражнения"
+          active={active === "exercises"}
+          count={unplayed ?? null}
+          ariaLabel={unplayed ? `Упражнения, ${unplayedLabel(unplayed)}` : undefined}
+        />
         <RailLink href="/library" icon="library" label="Библиотека" active={library} />
         <RailLink href="/context" icon="search" label="Контекст" active={active === "context"} />
         <RailLink href="/import" icon="image" label="Импорт" active={active === "import"} />
@@ -176,7 +185,7 @@ function RoutedRail({ data }: { data: ShellData | undefined }) {
   return <RailView data={data} active={navKeyForPath(pathname)} />;
 }
 
-/** Rail 72px for 768–1199: «Добавить», Повторение / Библиотека / Контекст / Импорт / Входящие, «Настройки». */
+/** Rail 72px for 768–1199: «Добавить», Повторение / Упражнения / Библиотека / Контекст / Импорт / Входящие, «Настройки». */
 export function Rail({ data }: { data: ShellData | undefined }) {
   return (
     <Suspense fallback={<RailView data={data} active={null} />}>

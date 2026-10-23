@@ -256,8 +256,14 @@ function ContextView({ q }: { q: string }) {
 
   return (
     <>
-      {q && <Header eyebrow="Контекст" fallbackHref="/context" />}
-      <main className={cx("flex flex-1 flex-col px-4 pb-10", q ? "pt-1" : "pt-5")}>
+      {/* Phones open Контекст from the Library header (no tab since 2026-10-23). Back steps through
+          the queries, then home, then the Library; opened from a link, it lands in the Library. */}
+      {q ? (
+        <Header eyebrow="Контекст" fallbackHref="/library" />
+      ) : (
+        <Header eyebrow="Библиотека" backLabel="Назад в библиотеку" fallbackHref="/library" />
+      )}
+      <main className="flex flex-1 flex-col px-4 pt-1 pb-10">
         {!q && <Intro />}
         <div className={cx(!q && "mt-4")}>{field}</div>
         {q ? results : home}

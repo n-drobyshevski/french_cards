@@ -213,6 +213,16 @@ const PATHS = {
       <path d="M5 5h14l2 8v6H3v-6z" />
     </>
   ),
+  /** «Упражнения» (tab bar, rail): a sheet with a ticked line and answer lines. Not the spark. */
+  exercise: (
+    <>
+      <rect x="4" y="3.5" width="16" height="17" rx="1.5" />
+      <path d="m7.5 9 1.5 1.5 3-3" />
+      <path d="M14 9h3" />
+      <path d="M7.5 15h2" />
+      <path d="M14 15h3" />
+    </>
+  ),
   /** «Импорт» (screenshot) in the desktop rail. */
   image: (
     <>

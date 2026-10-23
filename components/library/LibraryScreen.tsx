@@ -253,13 +253,23 @@ function PhoneLibrary() {
           <h1 className="m-0 shrink-0 font-serif text-[28px] leading-9 font-medium tracking-[-0.015em]">Библиотека</h1>
           <SyncMark />
         </div>
-        <Link
-          href="/settings"
-          aria-label="Настройки"
-          className="-mr-3 inline-flex size-11 items-center justify-center rounded-chip text-ink active:bg-surface-2"
-        >
-          <Icon name="gear" size={20} strokeWidth={1.5} />
-        </Link>
+        {/* «Контекст» lives here on phones since 2026-10-23 (no tab of its own). */}
+        <div className="-mr-3 flex shrink-0 items-center">
+          <Link
+            href="/context"
+            aria-label="Контекст"
+            className="inline-flex size-11 items-center justify-center rounded-chip text-ink active:bg-surface-2"
+          >
+            <Icon name="search" size={20} strokeWidth={1.5} />
+          </Link>
+          <Link
+            href="/settings"
+            aria-label="Настройки"
+            className="inline-flex size-11 items-center justify-center rounded-chip text-ink active:bg-surface-2"
+          >
+            <Icon name="gear" size={20} strokeWidth={1.5} />
+          </Link>
+        </div>
       </header>
 
       {/* Ledger strip: the counts are also the quickest filters */}

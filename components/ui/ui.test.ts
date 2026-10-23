@@ -145,12 +145,20 @@ describe("TabBar routing", () => {
     expect(tabForPath("/library")).toBe("library");
     expect(tabForPath("/library/abc")).toBe("library");
     expect(tabForPath("/settings")).toBe("library");
-    expect(tabForPath("/context")).toBe("context");
+    // «Контекст» opens from the Library header, so Библиотека stays active there.
+    expect(tabForPath("/context")).toBe("library");
+    expect(tabForPath("/exercises")).toBe("exercises");
+    expect(tabForPath("/exercises/play")).toBe("exercises");
     expect(tabForPath("/import")).toBeNull();
+    expect(tabForPath(null)).toBeNull();
   });
 
-  it("hides on full-screen import", () => {
+  it("hides on full-screen import and the exercise player", () => {
     expect(hidesTabBar("/import")).toBe(true);
+    expect(hidesTabBar("/exercises/play")).toBe(true);
+    expect(hidesTabBar("/exercises")).toBe(false);
     expect(hidesTabBar("/library")).toBe(false);
+    expect(hidesTabBar("/context")).toBe(false);
+    expect(hidesTabBar(null)).toBe(false);
   });
 });
