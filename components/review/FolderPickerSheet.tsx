@@ -43,6 +43,7 @@ export interface FolderPickerSheetProps {
 
 function statsLine(stats: FolderStats | undefined): string {
   if (!stats) return "";
+  if (stats.total > 0 && stats.paused === stats.total) return `${stats.total} · на паузе`;
   return stats.due > 0 ? `${stats.total} · ${stats.due} к повт.` : String(stats.total);
 }
 

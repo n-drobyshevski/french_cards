@@ -10,6 +10,7 @@ import { updateFolder } from "@/lib/folders";
 import { getSessionCounts } from "@/lib/session";
 import type { Folder } from "@/lib/types";
 import { folderHref, nWords, practiceHref, reviewHref } from "./format";
+import { THEME_PAUSE_CAPTION, useThemePause } from "./theme-pause";
 
 const ROW = "flex h-[52px] items-center gap-3 border-t border-rule bg-transparent text-left text-[15px] no-underline active:bg-surface-2";
 
@@ -28,11 +29,13 @@ export interface FolderMenuSheetProps {
 }
 
 /**
- * Actions on a theme: open and review it (from the library), practise all of it, edit, pin, disband, delete. The theme screen
+ * Actions on a theme: open and review it (from the library), practise all of it, edit, pin, pause, disband, delete. The theme screen
  * opens it from «⋯», the phone library from a long press on the theme tile.
  */
 export function FolderMenuSheet({ open, onOpenChange, folder, navigation = false, words = 0, onEdit, onDisband, onDelete }: FolderMenuSheetProps) {
   const lockLabelId = `lock-${folder.id}`;
+  const pauseLabelId = `pause-${folder.id}`;
+  const setPaused = useThemePause();
   const cards = useLiveQuery(async () => {
     if (!open || !navigation) return null;
     const c = await getSessionCounts({ folderId: folder.id });
@@ -60,7 +63,7 @@ export function FolderMenuSheet({ open, onOpenChange, folder, navigation = false
             )}
           </>
         )}
-        {words > 0 && (
+        {words > 0 && !folder.muted && (
           <Link
             href={practiceHref(folder.id)}
             onClick={() => onOpenChange(false)}
@@ -95,6 +98,15 @@ export function FolderMenuSheet({ open, onOpenChange, folder, navigation = false
             onCheckedChange={(locked) => void updateFolder(folder.id, { locked })}
             aria-labelledby={lockLabelId}
           />
+        </div>
+        <div className="flex items-center gap-3 border-t border-rule py-1.5">
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span id={pauseLabelId} className="text-[15px] leading-5">
+              На паузе
+            </span>
+            <span className="text-[12px] leading-4 text-muted">{THEME_PAUSE_CAPTION}</span>
+          </span>
+          <Toggle checked={!!folder.muted} onCheckedChange={(muted) => void setPaused(folder, muted)} aria-labelledby={pauseLabelId} />
         </div>
         {onDisband && (
           <button

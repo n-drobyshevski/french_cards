@@ -63,3 +63,30 @@ test("the phone filter sheet lists «На паузе» once a word is paused", a
   await sheet.getByRole("button", { name: /Показать/ }).click();
   await expect(page.getByText(fr, { exact: true })).toBeVisible();
 });
+
+test("a theme «на паузе» leaves review until «Вернуть в повторения» on its page", async ({ page }) => {
+  await openReview(page);
+  await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
+
+  await page.goto("/library");
+  // The context-menu event (a long press) opens the theme's actions.
+  await page.getByRole("link", { name: /^Эмоции:/ }).dispatchEvent("contextmenu");
+  const menu = page.getByRole("dialog", { name: "Эмоции" });
+  await menu.getByRole("switch", { name: "На паузе" }).click();
+  await expect(page.getByText("Тема «Эмоции» на паузе")).toBeVisible();
+  await expect(menu.getByRole("link", { name: /Повторить тему/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("link", { name: /^Эмоции: .*, на паузе,/ })).toBeVisible();
+
+  await openReview(page);
+  await expect(page.getByText(/^00 \/ (\d+)$/)).not.toHaveText("00 / 11");
+
+  await page.goto("/library");
+  await page.getByRole("link", { name: /^Эмоции:/ }).click();
+  await expect(page.getByText("на паузе", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Вернуть в повторения" }).click();
+  await expect(page.getByRole("link", { name: /Повторить тему/ })).toBeVisible();
+
+  await openReview(page);
+  await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
+});

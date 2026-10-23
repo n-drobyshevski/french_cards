@@ -4,7 +4,7 @@ import { toDrafts, type ExampleDraft } from "@/components/examples/ExampleList";
 import { examplesPatch, wordExamples } from "@/lib/examples";
 import type { WordPatch } from "@/lib/core/words";
 import { cleanConjugation } from "@/lib/core/conjugate";
-import type { Conjugation, FieldDef, SlangLevel, Word } from "@/lib/types";
+import type { Conjugation, FieldDef, Gender, PartOfSpeech, SlangLevel, Word } from "@/lib/types";
 import { fieldRows, rowsToValues, sameFieldValues, type FieldRow } from "./word-fields";
 
 export type Editing = null | "entry" | "note" | "origin" | "example" | "fields" | "conjugation";
@@ -14,6 +14,9 @@ export interface Draft {
   ru: string;
   slang_level: SlangLevel;
   verlan: boolean;
+  /** Set by «Определить» only; the form shows them as a caption. */
+  pos: PartOfSpeech;
+  gender: Gender;
   note: string;
   /** «Происхождение»: one line (also written from the chat). */
   origin: string;
@@ -71,6 +74,8 @@ export const draftOf = (w: Word, defs: readonly FieldDef[]): Draft => ({
   ru: w.ru,
   slang_level: w.slang_level,
   verlan: w.verlan,
+  pos: w.pos,
+  gender: w.gender,
   note: w.note ?? "",
   origin: w.origin ?? "",
   examples: toDrafts(wordExamples(w)),
@@ -82,7 +87,7 @@ export const draftOf = (w: Word, defs: readonly FieldDef[]): Draft => ({
 });
 
 export function patchFor(editing: Exclude<Editing, null>, draft: Draft): WordPatch {
-  if (editing === "entry") return { fr: draft.fr, ru: draft.ru, slang_level: draft.slang_level, verlan: draft.verlan };
+  if (editing === "entry") return { fr: draft.fr, ru: draft.ru, slang_level: draft.slang_level, verlan: draft.verlan, pos: draft.pos, gender: draft.gender };
   if (editing === "note") return { note: draft.note };
   if (editing === "origin") return { origin: draft.origin };
   if (editing === "fields") return { custom_fields: rowsToValues(draft.fields) };

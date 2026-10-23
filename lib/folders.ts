@@ -1,5 +1,6 @@
 // Folders («темы»): CRUD, the default set, and per-folder counts for the library.
 import { DEFAULT_FOLDERS, defaultFolderId, nextFolderSort, pickFolderColor, uniqueSlug } from "./core/folders";
+import { isPaused, pausedFolderIds } from "./core/words";
 import { db, liveRows, newId } from "./db";
 import { cardMastery, cardStatus, wordStatus } from "./scheduler";
 import { endOfStudyDay, startOfStudyDay } from "./session";
@@ -98,7 +99,7 @@ export async function createFolder(input: NewFolderInput, now: Date = new Date()
   });
 }
 
-export type FolderPatch = Partial<Pick<Folder, "name" | "description" | "color" | "locked" | "sort" | "created_by">>;
+export type FolderPatch = Partial<Pick<Folder, "name" | "description" | "color" | "locked" | "muted" | "sort" | "created_by">>;
 
 /** Renames/recolors/locks a folder. The slug stays stable. */
 export async function updateFolder(id: string, patch: FolderPatch, now: Date = new Date()): Promise<Folder> {
@@ -231,7 +232,7 @@ export interface FolderStats {
   difficult: number;
   /** Words never reviewed (and not «на паузе»). */
   fresh: number;
-  /** Words «на паузе» (Word.muted): out of review, so not in due, fresh or difficult either. */
+  /** Words «на паузе» (Word.muted, or the theme is): out of review, so not in due, fresh or difficult either. */
   paused: number;
   /** Words with at least one card past «new», paused or not (library KPI «повторено»). */
   reviewed: number;
@@ -298,6 +299,7 @@ export function libraryStatsFrom(
   };
   const total = acc("__all__");
   const folderIds = new Set(folders.map((f) => f.id));
+  const paused = pausedFolderIds(folders);
   const dayStart = startOfStudyDay(now).getTime();
   // Newest first, so each folder's samples are its latest words (a copy: callers reuse their array).
   const words = [...rows].sort((a, b) => b.created_at.localeCompare(a.created_at));
@@ -305,7 +307,8 @@ export function libraryStatsFrom(
     const key = w.folder_id !== null && folderIds.has(w.folder_id) ? w.folder_id : null;
     const ws = statesByWord.get(w.id) ?? [];
     const status = wordStatus(ws);
-    const due = !w.muted && ws.some((s) => isDueToday(s, now));
+    const muted = isPaused(w, paused);
+    const due = !muted && ws.some((s) => isDueToday(s, now));
     const m = ws.reduce((sum, s) => sum + cardMastery(s), 0);
     const neverReviewed = ws.every((s) => cardStatus(s) === "new");
     const today = ws.some((s) => s.last_review !== null && Date.parse(s.last_review) >= dayStart);
@@ -313,9 +316,9 @@ export function libraryStatsFrom(
       a.stats.total++;
       if (a.stats.samples.length < SAMPLE_WORDS) a.stats.samples.push(w.fr);
       if (due) a.stats.due++;
-      if (w.muted) a.stats.paused++;
+      if (muted) a.stats.paused++;
       else if (status === "difficult") a.stats.difficult++;
-      if (!w.muted && neverReviewed) a.stats.fresh++;
+      if (!muted && neverReviewed) a.stats.fresh++;
       if (!neverReviewed) a.stats.reviewed++;
       if (today) a.stats.reviewedToday++;
       a.masterySum += m;

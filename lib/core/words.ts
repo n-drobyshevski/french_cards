@@ -4,7 +4,7 @@ import { cleanExamples } from "../examples";
 import { cleanConjugation, cleanOrigin } from "./conjugate";
 import { cleanCustomFields } from "./custom-fields";
 import { newId } from "../id";
-import type { Direction, Word } from "../types";
+import type { Direction, Folder, Word } from "../types";
 
 export type WordFields = Omit<Word, "id" | "created_at" | "updated_at" | "deleted_at">;
 
@@ -56,6 +56,16 @@ export function buildWord(input: NewWordInput, now: Date): Word {
 }
 
 /** Card directions a word should have: fr_ru, plus ru_fr when `both_directions`. */
+/** Ids of the live themes «на паузе». */
+export function pausedFolderIds(folders: readonly Pick<Folder, "id" | "muted" | "deleted_at">[]): Set<string> {
+  return new Set(folders.filter((f) => f.muted && f.deleted_at === null).map((f) => f.id));
+}
+
+/** «На паузе»: the word itself, or its theme (`pausedFolders`, see `pausedFolderIds`). Out of every review and practice round. */
+export function isPaused(word: Pick<Word, "muted" | "folder_id">, pausedFolders: ReadonlySet<string>): boolean {
+  return !!word.muted || (word.folder_id !== null && pausedFolders.has(word.folder_id));
+}
+
 export function directionsOf(word: Pick<Word, "both_directions">): Direction[] {
   return word.both_directions ? ["fr_ru", "ru_fr"] : ["fr_ru"];
 }

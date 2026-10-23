@@ -33,10 +33,19 @@ test("kiffer: the table, the chips, synonyms and conjugation in the rail, an exa
 
   const rail = page.getByRole("complementary", { name: "Синонимы и спряжение" });
   await expect(rail.getByRole("button", { name: "surkiffer — дико тащиться" })).toBeVisible();
-  await expect(rail.getByText("kiffons")).toBeVisible();
-  await expect(rail.getByText("kifferont")).toBeHidden();
-  await rail.getByRole("button", { name: /Все времена/ }).click();
-  await expect(rail.getByText("kifferont")).toBeVisible();
+  // The rail has the présent; «Таблица спряжения» opens all four tenses.
+  await expect(rail.getByRole("listitem").filter({ hasText: "nous kiffons" })).toBeVisible();
+  await expect(rail.getByText("kifferont")).toHaveCount(0);
+  await rail.getByRole("button", { name: "Таблица спряжения — 4 времени" }).click();
+  const table = page.getByRole("dialog");
+  await expect(table.getByRole("cell", { name: "ils kifferont" })).toBeVisible();
+  await expect(table.getByRole("columnheader", { name: /Imparfait/ })).toContainText("фон, привычка в прошлом");
+  await table.getByRole("button", { name: "Проверь себя" }).click();
+  await expect(table.getByRole("button", { name: /^Показать форму/ })).toHaveCount(24);
+  await table.getByRole("button", { name: "Показать всё" }).click();
+  await expect(table.getByRole("button", { name: /^Показать форму/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(table).toBeHidden();
 
   await page.getByRole("button", { name: `В карточку: ${KIFFER_EXAMPLES[0].fr}` }).click();
   const dialog = page.getByRole("dialog", { name: "Пример" });

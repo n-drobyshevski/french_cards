@@ -1,5 +1,6 @@
 // Daily review sessions: today's queue (due first, then new up to the daily limit), header counts,
 // the end-of-session summary and practice rounds that never touch scheduling.
+import { isPaused, pausedFolderIds } from "./core/words";
 import { db, liveRows } from "./db";
 import { reviewStateId, wordStatus } from "./scheduler";
 import { getSettings } from "./settings";
@@ -85,30 +86,35 @@ export interface SessionData {
   states: readonly ReviewState[];
   /** Live folder ids (a word in any other folder counts as «Входящие»). */
   liveFolderIds: ReadonlySet<string>;
+  /** Live themes «на паузе»: their words never reach a session. */
+  pausedFolderIds: ReadonlySet<string>;
 }
 
-export async function liveFolderIds(): Promise<Set<string>> {
-  return new Set((await liveRows(db.folders)).map((f) => f.id));
+/** Live folder ids, and the ones «на паузе». */
+async function folderSets(): Promise<{ live: Set<string>; paused: Set<string> }> {
+  const folders = await liveRows(db.folders);
+  return { live: new Set(folders.map((f) => f.id)), paused: pausedFolderIds(folders) };
 }
 
-/** Reads every live word, card and folder id once (pass it to loadSession and friends). */
+/** Reads every live word, card and folder once (pass it to loadSession and friends). */
 export async function loadSessionData(): Promise<SessionData> {
-  const [words, states, folders] = await Promise.all([liveRows(db.words), liveRows(db.review_state), liveFolderIds()]);
-  return { words, states, liveFolderIds: folders };
+  const [words, states, folders] = await Promise.all([liveRows(db.words), liveRows(db.review_state), folderSets()]);
+  return { words, states, liveFolderIds: folders.live, pausedFolderIds: folders.paused };
 }
 
-const needsLiveFolders = (filter: SessionFilter) => filter.folderId === null || (filter.folderIds?.includes(null) ?? false);
+const NO_IDS: ReadonlySet<string> = new Set();
 
 /**
  * Words among `all` (live words) matching the filter: folder (or a set's folders), slang, statuses
  * and age. Words whose folder is not in `liveFolderIds` count as «Входящие». `states` (live cards)
- * is only read for a statuses filter.
+ * is only read for a statuses filter. Words «на паузе», or in a theme in `pausedFolderIds`, never match.
  */
 export function matchWords(
   all: readonly Word[],
   states: readonly ReviewState[],
   liveFolderIds: ReadonlySet<string> | null,
   filter: SessionFilter,
+  pausedFolderIds: ReadonlySet<string> = NO_IDS,
 ): Map<string, Word> {
   const inInbox = (w: Word) => w.folder_id === null || !liveFolderIds!.has(w.folder_id);
   let inFolder: (w: Word) => boolean = () => true;
@@ -123,8 +129,8 @@ export function matchWords(
   }
   const slang = filter.slang ?? [];
   const since = filter.addedSince;
-  // Words «на паузе» never reach a session, a practice round or the counts.
-  let words = all.filter((w) => w.deleted_at === null && !w.muted && inFolder(w) && matchesSlangKeys(w, slang) && (!since || w.created_at >= since));
+  // Words «на паузе» (or in a theme on pause) never reach a session, a practice round or the counts.
+  let words = all.filter((w) => w.deleted_at === null && !isPaused(w, pausedFolderIds) && inFolder(w) && matchesSlangKeys(w, slang) && (!since || w.created_at >= since));
   if (filter.statuses && filter.statuses.length > 0) {
     const wanted = new Set(filter.statuses);
     const ids = new Set(words.map((w) => w.id));
@@ -148,13 +154,13 @@ function candidateWords(filter: SessionFilter): Promise<Word[]> {
 
 /** Live words matching the filter (see `matchWords`); derived from `pre` when given. */
 export async function liveWords(filter: SessionFilter, pre?: SessionData): Promise<Map<string, Word>> {
-  if (pre) return matchWords(pre.words, pre.states, pre.liveFolderIds, filter);
-  const [words, states, live] = await Promise.all([
+  if (pre) return matchWords(pre.words, pre.states, pre.liveFolderIds, filter, pre.pausedFolderIds);
+  const [words, states, folders] = await Promise.all([
     candidateWords(filter),
     filter.statuses && filter.statuses.length > 0 ? liveRows(db.review_state) : [],
-    needsLiveFolders(filter) ? liveFolderIds() : null,
+    folderSets(),
   ]);
-  return matchWords(words, states, live, filter);
+  return matchWords(words, states, folders.live, filter, folders.paused);
 }
 
 /** Matching words plus every live card, reading each table once. */
@@ -163,13 +169,9 @@ async function wordsWithStates(
   pending?: SessionData | Promise<SessionData>,
 ): Promise<{ words: Map<string, Word>; states: readonly ReviewState[] }> {
   const pre = await pending;
-  if (pre) return { words: matchWords(pre.words, pre.states, pre.liveFolderIds, filter), states: pre.states };
-  const [words, states, live] = await Promise.all([
-    candidateWords(filter),
-    liveRows(db.review_state),
-    needsLiveFolders(filter) ? liveFolderIds() : null,
-  ]);
-  return { words: matchWords(words, states, live, filter), states };
+  if (pre) return { words: matchWords(pre.words, pre.states, pre.liveFolderIds, filter, pre.pausedFolderIds), states: pre.states };
+  const [words, states, folders] = await Promise.all([candidateWords(filter), liveRows(db.review_state), folderSets()]);
+  return { words: matchWords(words, states, folders.live, filter, folders.paused), states };
 }
 
 /** Live review-log rows reviewed in [from, to). */

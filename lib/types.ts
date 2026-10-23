@@ -27,6 +27,8 @@ export interface Folder extends Syncable {
   created_by: "user" | "auto";
   locked: boolean; // auto-sort never renames/deletes/moves words out
   sort: number;
+  /** «На паузе»: every word of the theme stays out of review and practice. Missing on older rows (= false). */
+  muted?: boolean;
 }
 
 /** One example sentence and its translation. */
@@ -239,7 +241,7 @@ export const DEFAULT_SETTINGS: Settings = {
 /*
  * «Упражнения»: exercise sets that Claude writes through the connector (create_exercise_set in
  * lib/mcp/tools.ts) and the app plays offline (lib/exercises.ts, pure rules in lib/core/exercises.ts).
- * Rows of the synced `exercise_sets` / `exercise_runs` tables (migration 0010_exercises.sql).
+ * Rows of the synced `exercise_sets` / `exercise_runs` tables (migration 0011_exercises.sql).
  *
  * ITEM CONTRACT. An item is one flat JSON object (a `type` enum, not a discriminated union). Every
  * field is always present in a stored row: absent text is `null` and absent lists are `[]`, so rows

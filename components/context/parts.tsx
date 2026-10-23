@@ -1,17 +1,25 @@
 "use client";
 
-import { Fragment, useId, useState, type MouseEvent, type ReactNode, type Ref } from "react";
+import { Fragment, useId, type MouseEvent, type ReactNode, type Ref } from "react";
 import { posAbbr } from "@/components/add/match";
 import { AbbrHint } from "@/components/ui/AbbrHint";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { Collapse } from "@/components/ui/Collapse";
 import { cx } from "@/components/ui/cx";
+import {
+  ConjugationBrief,
+  ConjugationCards,
+  QuizIconButton,
+  QuizStatus,
+  useConjQuiz,
+  useConjugationView,
+  type ConjSentence,
+} from "@/components/conjugation/ConjugationViews";
 import { Icon } from "@/components/ui/Icons";
 import { SkeletonRows } from "@/components/ui/Skeleton";
 import { SlangMeter } from "@/components/ui/SlangMeter";
 import { StatusLine } from "@/components/ui/StatusLine";
-import { CONJ_TENSES } from "@/lib/ai/constants";
 import type { Conjugation, ContextExample, LookupResponse } from "@/lib/ai/schemas";
 import { detectDirection } from "@/lib/ai/normalize";
 import type { LookupEntry } from "@/lib/db";
@@ -24,8 +32,6 @@ import {
   KIND_LABELS,
   shareWidth,
   splitHit,
-  splitPronoun,
-  TENSE_NAMES,
   translationLine,
   type MeaningChip,
   type SynonymCell,
@@ -769,108 +775,63 @@ export function SynonymList({
 // ---------------------------------------------------------------------------------------------
 // Conjugation
 
-function Forms({ forms, order }: { forms: readonly string[]; order?: readonly number[] }) {
-  const list = order ? order.map((i) => forms[i]).filter((f) => f !== undefined) : forms;
-  return (
-    <ul lang="fr" className={cx("m-0 list-none p-0", order && "grid grid-cols-2 gap-x-4")}>
-      {list.map((form, i) => {
-        const [pronoun, verb] = splitPronoun(form);
-        return (
-          <li key={i} className="flex min-h-7 items-center border-b border-surface-2 py-0.5 font-serif text-[16px] leading-5">
-            {/* «j'ai» stays together; other pronouns keep their space. */}
-            {pronoun && <span className={cx("text-muted", !/['’]$/.test(pronoun) && "mr-1.5")}>{pronoun.trim()}</span>}
-            <span className="font-medium">{verb}</span>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
-
-function ConjRemark({ conj }: { conj: Conjugation }) {
-  return (
-    <p className="m-0 text-[13px] leading-[18px] text-muted">
-      {conj.remark ? `${conj.remark} · ` : ""}вспомогательный{" "}
-      <span lang="fr" className="font-serif text-[15px] text-ink italic">
-        {conj.auxiliary}
-      </span>
-    </p>
-  );
-}
-
-/** Phone: collapsed to a one-line présent preview; open, a 2×2 grid of tenses. */
-export function ConjugationSection({ conj }: { conj: Conjugation }) {
-  const [open, setOpen] = useState(false);
+/**
+ * Phone: collapsed to a one-line présent preview; open, a card per tense (ConjugationCards). The
+ * eye beside the heading («Проверь себя», F4) opens it with the forms hidden.
+ */
+export function ConjugationSection({ conj, sentences }: { conj: Conjugation; sentences: readonly ConjSentence[] }) {
+  const view = useConjugationView();
+  const open = view.expanded;
   const bodyId = useId();
   const headingId = useId();
   return (
     <section aria-labelledby={headingId} className="mt-8">
-      <h2 id={headingId} className="m-0">
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={bodyId}
-          onClick={() => setOpen((o) => !o)}
-          className="flex min-h-11 w-full items-end justify-between gap-3 border-b border-ink bg-transparent p-0 pb-2 text-left text-ink"
-        >
-          <span className="font-serif text-[22px] leading-7 font-medium">Спряжение</span>
-          <span className="meta mb-1 inline-flex items-center gap-1">
-            {open ? "свернуть" : "4 времени"}
-            <Icon name={open ? "chevron-up" : "chevron"} size={14} />
-          </span>
-        </button>
-      </h2>
+      <div className="flex items-end gap-1 border-b border-ink">
+        <h2 id={headingId} className="m-0 min-w-0 flex-1">
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls={bodyId}
+            onClick={() => view.setExpanded(!open)}
+            className="flex min-h-11 w-full items-end justify-between gap-3 bg-transparent p-0 pb-2 text-left text-ink"
+          >
+            <span className="font-serif text-[22px] leading-7 font-medium">Спряжение</span>
+            <span className="meta mb-1 inline-flex items-center gap-1">
+              {open ? "свернуть" : "4 времени"}
+              <Icon name={open ? "chevron-up" : "chevron"} size={14} />
+            </span>
+          </button>
+        </h2>
+        <QuizIconButton on={view.quiz.on} onClick={view.toggleQuiz} className="-mr-2 mb-0.5" />
+      </div>
+      <QuizStatus quiz={view.quiz} className="mt-2.5" />
       {!open && (
         <p lang="fr" className="m-0 mt-2.5 font-serif text-[16px] leading-[22px] text-muted">
           {conjugationPreview(conj.tenses.present)}
         </p>
       )}
       <Collapse open={open} innerClassName="px-px">
-        <div id={bodyId} className="pt-2.5">
-          <ConjRemark conj={conj} />
-          <div className="grid grid-cols-2 gap-x-4">
-            {CONJ_TENSES.map((t) => (
-              <div key={t} className="mt-3.5 min-w-0">
-                <h3 className="m-0 border-b border-rule pb-1.5 font-mono text-[11px] leading-4 font-medium tracking-[.06em] uppercase">{TENSE_NAMES[t]}</h3>
-                <Forms forms={conj.tenses[t]} />
-              </div>
-            ))}
-          </div>
+        <div id={bodyId} className="pt-3">
+          {open && <ConjugationCards conj={conj} sentences={sentences} quiz={view.quiz} />}
         </div>
       </Collapse>
     </section>
   );
 }
 
-/** je / nous, tu / vous, il / ils: the two-column order of the desktop grid. */
-const PAIRED = [0, 3, 1, 4, 2, 5] as const;
-
-/** Desktop rail: présent, then the other tenses on demand. */
-export function ConjugationAside({ conj }: { conj: Conjugation }) {
-  const [all, setAll] = useState(false);
+/** Desktop rail: the présent and «Таблица спряжения» (ConjugationBrief), the eye beside the heading. */
+export function ConjugationAside({ conj, sentences, word }: { conj: Conjugation; sentences: readonly ConjSentence[]; word: string }) {
   const headingId = useId();
-  const restId = useId();
+  const quiz = useConjQuiz();
   return (
     <section aria-labelledby={headingId} className="mt-7">
-      <h2 id={headingId} className="m-0 flex items-baseline justify-between border-b border-ink pb-1.5 font-serif text-[20px] leading-7 font-medium">
-        Спряжение
-        <span className="meta font-sans font-normal">{TENSE_NAMES.present}</span>
-      </h2>
-      <Forms forms={conj.tenses.present} order={PAIRED} />
-      <div id={restId} hidden={!all}>
-        {CONJ_TENSES.filter((t) => t !== "present").map((t) => (
-          <div key={t} className="mt-4">
-            <h3 className="m-0 border-b border-rule pb-1 font-mono text-[11px] leading-4 font-medium tracking-[.06em] uppercase">{TENSE_NAMES[t]}</h3>
-            <Forms forms={conj.tenses[t]} order={PAIRED} />
-          </div>
-        ))}
+      <div className="flex items-center gap-1 border-b border-ink pb-1">
+        <h2 id={headingId} className="m-0 flex-1 font-serif text-[20px] leading-7 font-medium">
+          Спряжение
+        </h2>
+        <QuizIconButton on={quiz.on} onClick={quiz.toggle} className="-mr-1 md:size-8" />
       </div>
-      <div className="mt-2">
-        <ConjRemark conj={conj} />
-      </div>
-      <Button variant="tertiary" size="sm" className="mt-1 -ml-0.5 h-9 px-0 text-[14px]" aria-expanded={all} aria-controls={restId} onClick={() => setAll((a) => !a)}>
-        {all ? "Только présent" : "Все времена — passé composé, imparfait, futur"}
-      </Button>
+      <ConjugationBrief conj={conj} sentences={sentences} word={word} quiz={quiz} className="mt-2" />
     </section>
   );
 }

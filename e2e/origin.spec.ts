@@ -104,6 +104,20 @@ test("the conjugation is edited by hand in the word card and goes back to the di
   const card = page.getByRole("dialog", { name: "Карточка слова" });
   await expect(card.getByText("je me casse · tu te casses · il se casse…")).toBeVisible();
   await expect(card.getByText("из словаря · être")).toBeVisible();
+  // «Все формы»: a card per tense, the endings apart.
+  await card.getByRole("button", { name: "Все формы — 4 времени" }).click();
+  await expect(card.getByRole("article", { name: "Futur" })).toContainText("ils se casseront");
+  await card.getByRole("button", { name: "Свернуть" }).click();
+  await expect(card.getByRole("article", { name: "Futur" })).toHaveCount(0);
+  // The eye beside the pencil («Проверь себя») opens all the forms behind blanks; «Выйти» shows them.
+  await card.getByRole("button", { name: "Проверь себя" }).click();
+  await expect(card.getByRole("button", { name: "Проверь себя" })).toHaveAttribute("aria-pressed", "true");
+  await expect(card.getByRole("article", { name: "Futur" }).getByRole("button", { name: /^Показать форму/ })).toHaveCount(6);
+  await card.getByRole("article", { name: "Futur" }).getByRole("button", { name: "Показать форму: ils se" }).click();
+  await expect(card.getByText("открыто 1 из 24", { exact: false })).toBeVisible();
+  await card.getByRole("button", { name: "Выйти" }).click();
+  await expect(card.getByRole("article", { name: "Futur" })).toContainText("ils se casseront");
+  await card.getByRole("button", { name: "Свернуть" }).click();
 
   await card.getByRole("button", { name: "Изменить спряжение" }).click();
   const first = card.getByRole("textbox", { name: "Présent, je" });

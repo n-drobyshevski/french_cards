@@ -46,7 +46,7 @@ import {
   warningsFor,
 } from "@/lib/core/exercises";
 import { matchesSearch, normalizeLemma, searchHaystack, searchKey } from "@/lib/core/text";
-import { buildWord, cleanText, directionsOf, isMovable } from "@/lib/core/words";
+import { buildWord, cleanText, directionsOf, isMovable, isPaused, pausedFolderIds } from "@/lib/core/words";
 import { cleanConjugation, cleanOrigin, conjugate, ORIGIN_MAX, type ConjData } from "@/lib/core/conjugate";
 import conjTable from "@/public/lexique/fr-conj.json";
 import { newId } from "@/lib/id";
@@ -135,6 +135,8 @@ const placeOf = (w: Pick<Word, "folder_id">, live: ReadonlyMap<string, Folder>):
 
 interface ViewContext {
   live: Map<string, Folder>;
+  /** Live themes «на паузе». */
+  paused: Set<string>;
   statesByWord: Map<string, ReviewState[]>;
   dayEnd: number;
   /** Custom-field definitions (tombstones included), for the fields' current names. */
@@ -151,6 +153,7 @@ function viewContext(folders: readonly Folder[], states: readonly ReviewState[],
   }
   return {
     live: new Map(liveFolders(folders).map((f) => [f.id, f])),
+    paused: pausedFolderIds(folders),
     statesByWord,
     dayEnd: studyDay(deps.now(), deps.timeZone).end.getTime(),
     defs,
@@ -186,6 +189,7 @@ function conjugationView(w: Word): Record<string, unknown> {
 function wordView(w: Word, ctx: ViewContext) {
   const states = ctx.statesByWord.get(w.id) ?? [];
   const fields = customFieldsView(w, ctx.defs);
+  const paused = isPaused(w, ctx.paused);
   return {
     id: w.id,
     fr: w.fr,
@@ -208,7 +212,8 @@ function wordView(w: Word, ctx: ViewContext) {
     both_directions: w.both_directions,
     status: wordStatus(states),
     ...(w.muted ? { muted: true } : {}),
-    due_today: !w.muted && states.some((s) => isDueToday(s, ctx.dayEnd)),
+    ...(paused && !w.muted ? { theme_muted: true } : {}),
+    due_today: !paused && states.some((s) => isDueToday(s, ctx.dayEnd)),
     created_at: w.created_at,
   };
 }
@@ -451,7 +456,7 @@ export const searchWords = tool({
   name: "search_words",
   title: "Search words",
   description:
-    "Search the user's saved French words. Every term of `query` must match the French, the Russian, the note, a tag or a custom field's value, ignoring accents and case; an empty query lists words. Filter by theme and learning status. Newest first; `total` counts all matches, and `next_offset` (when not null) fetches the next page. A word's custom fields («Свои поля») come as `custom_fields` (name → value), only when it has any; `origin` when it has one; `muted: true` for a word «на паузе» (kept, but never in review); for verbs, the saved `conjugation`, or `conjugation_builtin` (true when the app builds it on the device, false when it has none). Use it before add_words to avoid duplicates, and to find ids for update_word, move_words and delete_words.",
+    "Search the user's saved French words. Every term of `query` must match the French, the Russian, the note, a tag or a custom field's value, ignoring accents and case; an empty query lists words. Filter by theme and learning status. Newest first; `total` counts all matches, and `next_offset` (when not null) fetches the next page. A word's custom fields («Свои поля») come as `custom_fields` (name → value), only when it has any; `origin` when it has one; `muted: true` for a word «на паузе» (kept, but never in review), `theme_muted: true` when its theme is; for verbs, the saved `conjugation`, or `conjugation_builtin` (true when the app builds it on the device, false when it has none). Use it before add_words to avoid duplicates, and to find ids for update_word, move_words and delete_words.",
   input: z.object({
     query: z.string().max(200).optional().describe("Words to look for (French or Russian). Empty = all."),
     folder: folderSelector.optional(),
@@ -491,24 +496,28 @@ export const searchWords = tool({
 export const listFolders = tool({
   name: "list_folders",
   title: "List themes",
-  description: `List the themes («темы») in display order with their word counts and how many words are due for review today, plus «${INBOX_NAME}» (words without a theme). Pass a theme's id, slug or name as \`folder\` to the other tools.`,
+  description: `List the themes («темы») in display order with their descriptions, word counts, how many words are due for review today and how many were never reviewed (\`new\`), plus «${INBOX_NAME}» (words without a theme). A theme «на паузе» carries \`muted: true\`: its words stay but never come up in review (update_folder sets it). Pass a theme's id, slug or name as \`folder\` to the other tools.`,
   input: z.object({}),
   write: false,
   annotations: READ,
   async run(deps) {
     const [folders, words, states] = await Promise.all([deps.repo.folders(), deps.repo.words(), deps.repo.states()]);
     const ctx = viewContext(folders, states, [], deps);
-    const counts = new Map<string | null, { words: number; due: number }>();
-    const total = { words: 0, due: 0 };
+    const counts = new Map<string | null, { words: number; due: number; new: number }>();
+    const total = { words: 0, due: 0, new: 0 };
     for (const w of words) {
       if (w.deleted_at !== null) continue;
       const key = placeOf(w, ctx.live)?.id ?? null;
-      const c = counts.get(key) ?? { words: 0, due: 0 };
-      const due = !w.muted && (ctx.statesByWord.get(w.id) ?? []).some((s) => isDueToday(s, ctx.dayEnd)) ? 1 : 0;
+      const c = counts.get(key) ?? { words: 0, due: 0, new: 0 };
+      const states = ctx.statesByWord.get(w.id) ?? [];
+      const due = !isPaused(w, ctx.paused) && states.some((s) => isDueToday(s, ctx.dayEnd)) ? 1 : 0;
+      const fresh = states.every((s) => s.state === 0) ? 1 : 0;
       c.words++;
       c.due += due;
+      c.new += fresh;
       total.words++;
       total.due += due;
+      total.new += fresh;
       counts.set(key, c);
     }
     return {
@@ -518,9 +527,10 @@ export const listFolders = tool({
         name: f.name,
         description: f.description,
         locked: f.locked,
-        ...(counts.get(f.id) ?? { words: 0, due: 0 }),
+        ...(f.muted ? { muted: true } : {}),
+        ...(counts.get(f.id) ?? { words: 0, due: 0, new: 0 }),
       })),
-      inbox: { id: null, slug: INBOX_SELECTOR, name: INBOX_NAME, ...(counts.get(null) ?? { words: 0, due: 0 }) },
+      inbox: { id: null, slug: INBOX_SELECTOR, name: INBOX_NAME, ...(counts.get(null) ?? { words: 0, due: 0, new: 0 }) },
       total,
     };
   },
@@ -690,7 +700,7 @@ export const studySummary = tool({
   name: "study_summary",
   title: "Today's study summary",
   description:
-    "Today's review numbers: cards due, new cards still available, reviews done today, words by learning status, and the words due soonest. The daily limit of new cards is a device setting this tool can't see (default 15); pass new_per_day if the user changed it. The exact queue is built by the app on the device, and reviewing happens there.",
+    "Today's review numbers: cards due, new cards still available, reviews done today, words by learning status, the themes «на паузе» (`muted_themes`, left out of review), and the words due soonest. The daily limit of new cards is a device setting this tool can't see (default 15); pass new_per_day if the user changed it. The exact queue is built by the app on the device, and reviewing happens there.",
   input: z.object({
     new_per_day: z.number().int().min(0).max(500).default(DEFAULT_NEW_PER_DAY).describe("The app's «Новых в день» setting."),
   }),
@@ -710,8 +720,9 @@ export const studySummary = tool({
     const wordsById = new Map(words.filter((w) => w.deleted_at === null).map((w) => [w.id, w]));
     const cards = states.filter((s) => s.deleted_at === null && wordsById.has(s.word_id));
     const byKey = new Map(cards.map((s) => [s.id, s]));
-    // Words «на паузе» are never shown in review: not due, not new.
-    const inReview = cards.filter((s) => !wordsById.get(s.word_id)!.muted);
+    // Words «на паузе» (themselves or their theme) are never shown in review: not due, not new.
+    const paused = pausedFolderIds(folders);
+    const inReview = cards.filter((s) => !isPaused(wordsById.get(s.word_id)!, paused));
     // As in loadSession: the daily new-card allowance counts every review of the day, also of words
     // deleted since; «reviewed today» counts only live words' reviews.
     const dayLogs = logs.filter((l) => l.deleted_at === null && Date.parse(l.review) < dayEnd);
@@ -750,6 +761,7 @@ export const studySummary = tool({
       new_cards_ready: fresh.length,
       reviewed_today: today.length,
       words: { total: wordsById.size, ...byStatus },
+      ...(paused.size > 0 ? { muted_themes: [...live.values()].filter((f) => paused.has(f.id)).map((f) => f.name) } : {}),
       due_soonest: dueWords,
       note: "Counts come from the synced copy: reviews not yet synced from the device are missing. The app builds the exact queue.",
     };
@@ -1201,7 +1213,7 @@ export const createFolder = tool({
   },
 });
 
-const folderView = (f: Folder) => ({ id: f.id, slug: f.slug, name: f.name, description: f.description, locked: f.locked });
+const folderView = (f: Folder) => ({ id: f.id, slug: f.slug, name: f.name, description: f.description, locked: f.locked, muted: !!f.muted });
 
 /** A live theme (not «Входящие», which is built in). */
 function resolveTheme(selector: string, folders: readonly Folder[]): Folder {
@@ -1221,12 +1233,16 @@ export const updateFolder = tool({
   name: "update_folder",
   title: "Change a theme",
   description:
-    "Rename a theme, change its description (automatic sorting reads it), lock or unlock it (automatic sorting never moves words into or out of a locked theme), or move it to another place in the list (position 1 = first). Its words stay. Undo by calling update_folder again with the returned `previous` values.",
+    "Rename a theme, change its description (automatic sorting reads it), lock or unlock it (automatic sorting never moves words into or out of a locked theme), put it «на паузе» or bring it back (`muted`), or move it to another place in the list (position 1 = first). Its words stay. Undo by calling update_folder again with the returned `previous` values.",
   input: z.object({
     folder: folderSelector.describe("The theme: its id, slug or current Russian name (from list_folders)."),
     name: z.string().trim().min(1).max(60).optional().describe("New Russian name."),
     description: z.string().max(300).nullable().optional().describe("New description; null removes it."),
     locked: z.boolean().optional(),
+    muted: z
+      .boolean()
+      .optional()
+      .describe("true puts the theme «на паузе»: its words stay in the library but none of them comes up in review or practice until it is set back to false (progress kept)."),
     position: z.number().int().min(1).max(200).optional().describe("New place in the list, 1-based."),
   }),
   write: true,
@@ -1247,6 +1263,8 @@ export const updateFolder = tool({
     }
     if (args.description !== undefined) next.description = cleanText(args.description);
     if (args.locked !== undefined) next.locked = args.locked;
+    // Missing on older rows reads as false, so «not set» never counts as a change.
+    if (args.muted !== undefined && args.muted !== !!current.muted) next.muted = args.muted;
     const others: Folder[] = [];
     if (args.position !== undefined) {
       const order = live.filter((f) => f.id !== current.id);
@@ -1257,7 +1275,7 @@ export const updateFolder = tool({
       });
     }
     const position = (f: Folder, list: readonly Folder[]) => list.findIndex((x) => x.id === f.id) + 1;
-    const changed = (["name", "description", "locked", "sort"] as const).some((k) => next[k] !== current[k]);
+    const changed = (["name", "description", "locked", "muted", "sort"] as const).some((k) => next[k] !== current[k]);
     if (!changed) return { folder: { ...folderView(current), position: position(current, live) }, result: "unchanged" };
     next.updated_at = stampAfter(now, current.updated_at);
     if (others.length > 0) await deps.repo.upsert("folders", others);
@@ -1265,7 +1283,7 @@ export const updateFolder = tool({
     const after = liveFolders(live.map((f) => (f.id === stored.id ? stored : (others.find((o) => o.id === f.id) ?? f))));
     return {
       folder: { ...folderView(stored), position: position(stored, after) },
-      previous: { name: current.name, description: current.description, locked: current.locked, position: position(current, live) },
+      previous: { name: current.name, description: current.description, locked: current.locked, muted: !!current.muted, position: position(current, live) },
       note: SYNC_NOTE,
     };
   },
@@ -1543,7 +1561,7 @@ export const exerciseMaterial = tool({
   name: "exercise_material",
   title: "Material for an exercise",
   description:
-    `Read what an exercise set («Упражнения») should practise, before create_exercise_set. \`words\`: the live words of the given themes (all themes without \`folders\`), weakest first, each with \`signals\` merged from the last \`days\`: exercise answers (ex_attempts, ex_misses, confusions = wrong options the user picked), reviews graded «Снова»/«Трудно» (review_misses), lapses, due today and difficult cards. Words «на паузе» and deleted words are left out. With \`topic\` (a free-text subject like «вечеринка»), \`topic_matches\` lists saved words that fit it: use them by word_id and never put them in new_words (a muted one can't be used at all). \`recent_sets\` are the latest sets with their words, so the next one doesn't repeat them.`,
+    `Read what an exercise set («Упражнения») should practise, before create_exercise_set. \`words\`: the live words of the given themes (all themes without \`folders\`), weakest first, each with \`signals\` merged from the last \`days\`: exercise answers (ex_attempts, ex_misses, confusions = wrong options the user picked), reviews graded «Снова»/«Трудно» (review_misses), lapses, due today and difficult cards. Words «на паузе» and deleted words are left out, and so are themes «на паузе» unless named in \`folders\`. With \`topic\` (a free-text subject like «вечеринка»), \`topic_matches\` lists saved words that fit it: use them by word_id and never put them in new_words (a muted one can't be used at all). \`recent_sets\` are the latest sets with their words, so the next one doesn't repeat them.`,
   input: z.object({
     folders: jsonArray(z.array(folderSelector).max(10)).nullable().optional().describe(`Themes to draw words from (id, slug, name or "${INBOX_SELECTOR}"); default every theme.`),
     topic: z.string().trim().max(TOPIC_MAX).nullable().optional().describe("A free-text topic («вечеринка», «в баре»), when the user asked for one."),
@@ -1566,7 +1584,8 @@ export const exerciseMaterial = tool({
     const targets = args.folders?.length ? [...new Map(args.folders.map((s) => resolveFolder(s, folders)).map((f) => [f?.id ?? null, f])).values()] : null;
     const targetIds = targets ? new Set(targets.map((f) => f?.id ?? null)) : null;
     const ctx = viewContext(folders, states, [], deps);
-    const inScope = words.filter((w) => w.deleted_at === null && !w.muted && (!targetIds || targetIds.has(placeOf(w, ctx.live)?.id ?? null)));
+    // A paused theme («на паузе») is left out of «all themes», but a theme named in `folders` is used as asked.
+    const inScope = words.filter((w) => w.deleted_at === null && !w.muted && (targetIds ? targetIds.has(placeOf(w, ctx.live)?.id ?? null) : !isPaused(w, ctx.paused)));
     const liveSets = sets.filter((s) => s.deleted_at === null);
     const signals = weaknessSignals(inScope, ctx, logs, runs, new Map(sets.map((s) => [s.id, s])));
     const ranked = inScope
@@ -1903,7 +1922,8 @@ export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard
 - Set folder_chosen_by_user to true only when the user named the theme; otherwise pick a fitting theme yourself, or leave the word in the inbox.
 - A word can carry origin («Происхождение»: one Russian line, e.g. «верлан от lourd», «от volonté „воля“ + -aire») and, for verbs, a conjugation (présent, passé composé, imparfait, futur; six forms each with pronouns). The app builds most conjugations itself from Lexique: search_words shows conjugation_builtin false where it cannot. Fill them with update_word when the user asks (e.g. «заполни происхождение для слов из темы X»), checking forms you are not sure of; never overwrite an existing origin or conjugation unless asked.
 - Cards can carry the user's custom fields («Свои поля»): list_fields shows the shared ones and what to write in each. Set them by name with custom_fields in add_words or update_word (null clears one); search_words shows them. Use a name not in list_fields only when the user asks for a field on that one word. create_field, update_field and delete_field manage the shared fields; ask the user before creating or deleting one.
-- Before adding more than 5 words, and before any move, delete, or renaming or deleting a theme (update_folder, delete_folder), list what will change and wait for the user's OK.
+- Before adding more than 5 words, and before any move, delete, or renaming, pausing or deleting a theme (update_folder, delete_folder), list what will change and wait for the user's OK.
+- «На паузе»: a theme (update_folder \`muted\`) or a word (update_word \`muted\`) stays in the library with its progress but never comes up in review or practice; \`false\` brings it back. When list_folders shows many themes with words still \`new\` and some of them look like later steps of a sequence (levels, lessons, chapters, a course or book order) or like topics the user said can wait, suggest pausing those so only the current ones reach review: name the themes to pause and the ones that stay, and wait for the OK. When the user moves on, suggest bringing the next ones back. Never pause or unpause on your own.
 - After a change, say what changed and how to undo it with the result's \`undo\` (delete_words, restore_words, restore_moves, restore_folder, delete_field, restore_field, delete_exercise_set or restore_exercise_set).
 - Exercises («Упражнения»: «сделай упражнение / тест / квиз по теме …»): call exercise_material first, then save the whole set with exactly one create_exercise_set call. Never write the questions into the chat instead; the app plays the set offline and it never changes the review schedule.
 - For a free-text topic, use the saved words in topic_matches by word_id. Words found with web search go in new_words (at most 8, each checked in at least 2 sources, slang_level by the rubric, source_url); never add_words them without the user's OK, since the user adds them from the app.

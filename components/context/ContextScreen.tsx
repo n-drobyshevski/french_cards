@@ -14,7 +14,7 @@ import { cx } from "@/components/ui/cx";
 import type { LookupResponse } from "@/lib/ai/schemas";
 import { cleanQuery, clearHistory, deleteLookup, useContextSearch, useLookupHistory, type ContextSearchState } from "@/lib/context";
 import { db, type LookupEntry } from "@/lib/db";
-import { ExampleError, requestExample } from "@/lib/examples";
+import { ExampleError, requestExample, wordExamples } from "@/lib/examples";
 import { loadWordMorpho, type Morpho } from "@/lib/morpho";
 import { cleanConjugation } from "@/lib/core/conjugate";
 import { getSettings } from "@/lib/settings";
@@ -383,6 +383,8 @@ function Results(props: ResultsProps) {
   // What the chat saved on the word (connector) wins over what the device and the lookup give.
   const conj = cleanConjugation(saved?.word.conjugation) ?? lookup.conjugation;
   const origin = saved?.word.origin || lookup.origin;
+  // The conjugation's per-tense examples come from the word's own sentences, then the found ones.
+  const sentences = [...(saved ? wordExamples(saved.word) : []), ...all.map((e) => ({ fr: e.fr, ru: e.ru }))];
 
   if (wide) {
     return (
@@ -405,7 +407,7 @@ function Results(props: ResultsProps) {
           <aside aria-label="Синонимы и спряжение" className="max-w-[360px] min-w-0 flex-[1_1_280px]">
             <WordMakeup origin={origin} morpho={props.morpho} onOpen={props.onGo} wide />
             {hasSynonyms && <SynonymList columns={columns} onOpen={props.onGo} onAdd={props.onAddSynonym} />}
-            {conj && <ConjugationAside conj={conj} />}
+            {conj && <ConjugationAside conj={conj} sentences={sentences} word={lookup.fr} />}
           </aside>
         </div>
       </>
@@ -432,7 +434,7 @@ function Results(props: ResultsProps) {
       </section>
 
       {hasSynonyms && <SynonymScale columns={columns} onOpen={props.onGo} onAdd={props.onAddSynonym} />}
-      {conj && <ConjugationSection conj={conj} />}
+      {conj && <ConjugationSection conj={conj} sentences={sentences} />}
     </>
   );
 }

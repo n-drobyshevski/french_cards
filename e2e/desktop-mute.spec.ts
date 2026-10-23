@@ -22,3 +22,19 @@ test("a word paused from the detail pane shows under «На паузе» and com
   await pane(page).getByRole("button", { name: "Вернуть", exact: true }).click();
   await expect(pane(page).getByText("На паузе — не показывается в повторениях")).toHaveCount(0);
 });
+
+test("a theme paused from its «⋯» menu offers «Вернуть в повторения» instead of review", async ({ page }) => {
+  await page.goto("/library");
+  await page.getByRole("complementary", { name: "Разделы" }).getByRole("list", { name: "Темы" }).getByRole("link", { name: /^Эмоции/ }).click();
+  await expect(page.getByRole("heading", { name: "Эмоции", level: 1 })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Повторить тему/ })).toBeVisible();
+  await page.getByRole("button", { name: "Ещё действия с темой" }).click();
+  await page.getByRole("menu", { name: "Действия с темой" }).getByRole("menuitemcheckbox", { name: /На паузе/ }).click();
+  await expect(page.getByText("Тема «Эмоции» на паузе")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("link", { name: /Повторить тему/ })).toHaveCount(0);
+  await expect(grid(page).getByRole("row", { name: / — / }).first()).toContainText("на паузе");
+
+  await page.getByRole("button", { name: "Вернуть в повторения" }).click();
+  await expect(page.getByRole("link", { name: /Повторить тему/ })).toBeVisible();
+});

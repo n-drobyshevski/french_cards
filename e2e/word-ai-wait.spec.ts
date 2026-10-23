@@ -1,24 +1,8 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { enriched, gateSuggest, type EnrichWordWire, type SuggestionWire } from "./fixtures";
+import { enriched, mockSuggest, type EnrichWordWire, type SuggestionWire } from "./fixtures";
 
-// AI on words already in the library (mockups/MOTION-SPEC.md E1, E2): «Обновить перевод и заметку»
-// in the word sheet and the «Дополнить карточки» plan.
-
-/** Records every paper fade that starts from now on, by the lit element's `data-refresh` fields. */
-async function watchSpotlights(page: Page): Promise<() => Promise<string[]>> {
-  await page.evaluate(() => {
-    const seen: string[] = [];
-    (window as unknown as { __spots: string[] }).__spots = seen;
-    document.addEventListener(
-      "animationstart",
-      (e) => {
-        if (e.animationName === "spotlight") seen.push(...((e.target as HTMLElement).dataset.refresh?.split(" ") ?? []));
-      },
-      true,
-    );
-  });
-  return () => page.evaluate(() => [...(window as unknown as { __spots: string[] }).__spots]);
-}
+// AI on words already in the library (mockups/MOTION-SPEC.md E2): «Заполнить автоматически» in the
+// note form and «Определить уровень и часть речи» in the word form, and the «Дополнить карточки» plan.
 
 const FLICS: SuggestionWire = {
   fr: "les flics",
@@ -43,39 +27,33 @@ async function openFlics(page: Page) {
   return page.getByRole("dialog", { name: "Карточка слова" });
 }
 
-test("«Обновить перевод и заметку»: «Подбираем…» at once with «Отмена»; a slow wait gets the status line", async ({ page }, testInfo) => {
-  const suggest = await gateSuggest(page, () => [FLICS]);
+test("the note and the word form fill from the word's suggestion; nothing is saved until ✓", async ({ page }, testInfo) => {
+  const asked: unknown[] = [];
+  await mockSuggest(page, [{ ...FLICS, slang_level: 2, gender: "mf" }], (body) => asked.push(body));
   const card = await openFlics(page);
-  await card.getByRole("button", { name: "Обновить перевод и заметку" }).click();
 
-  const pending = card.getByRole("button", { name: "Подбираем…" });
-  await expect(pending).toHaveAttribute("aria-busy", "true");
-  const cancel = card.getByRole("button", { name: "Отмена", exact: true });
-  await expect(cancel).toBeVisible();
-  // After 1.5 s (not before): the status line under the button row.
-  const line = card.getByText("Подбираем перевод и заметку").first();
-  const slot = line.locator("xpath=ancestor::*[@data-state][1]");
-  await expect(slot).toHaveAttribute("data-state", "closed");
-  await expect(slot).toHaveAttribute("data-state", "open");
-  await expect(line).toBeVisible();
-  await page.screenshot({ path: testInfo.outputPath("refresh-waiting.png") });
+  // «Заметка»: the suggestion's note fills the open form.
+  await card.getByRole("button", { name: "Изменить заметку" }).click();
+  const noteForm = card.getByRole("form", { name: "Изменить заметку" });
+  await noteForm.getByRole("button", { name: "Заполнить автоматически" }).click();
+  await expect(noteForm.getByRole("textbox", { name: "Заметка" })).toHaveValue(FLICS.note!);
+  expect(asked).toEqual([expect.objectContaining({ q: "les flics", direction: "fr" })]);
+  await noteForm.getByRole("button", { name: "Сохранить" }).click();
+  await expect(noteForm).toHaveCount(0);
+  await expect(card.getByText(FLICS.note!)).toBeVisible();
 
-  // «Отмена» stops at once and keeps the word as it is.
-  await cancel.click();
-  await expect(card.getByRole("button", { name: "Обновить перевод и заметку" })).not.toHaveAttribute("aria-busy", "true");
-  await expect(cancel).toHaveCount(0);
+  // «Определить»: the slang level, verlan and part of speech (shown as a caption until saved).
+  await card.getByRole("button", { name: "Изменить слово и перевод" }).click();
+  const entry = card.getByRole("form", { name: "Изменить слово" });
+  await expect(entry.getByRole("radio", { name: "fam." })).toHaveAttribute("aria-checked", "true");
+  await entry.getByRole("button", { name: "Определить уровень и часть речи" }).click();
+  await expect(entry.getByRole("radio", { name: "arg." })).toHaveAttribute("aria-checked", "true");
+  await expect(entry.getByRole("status").filter({ hasText: "Часть речи" })).toContainText("n. m. et f.");
+  await page.screenshot({ path: testInfo.outputPath("detect-entry.png") });
+  await entry.getByRole("button", { name: "Сохранить" }).click();
+  await expect(entry).toHaveCount(0);
+  await expect(card.getByText("n. m. et f.").first()).toBeVisible();
   await expect(card.getByText("копы", { exact: true })).toBeVisible();
-
-  // Again, answered: the changes open in place of the button; accepted fields are lit.
-  await card.getByRole("button", { name: "Обновить перевод и заметку" }).click();
-  suggest.release();
-  const diff = card.getByRole("region", { name: "Предлагаемые изменения" }).or(card.locator('section[aria-label="Предлагаемые изменения"]'));
-  await expect(diff).toBeVisible();
-  const spots = await watchSpotlights(page);
-  await diff.getByRole("button", { name: /Принять/ }).click();
-  await expect(card.locator('[data-refresh~="ru"]')).toHaveText("менты, копы");
-  await expect.poll(spots).toEqual(expect.arrayContaining(["ru", "note", "example"]));
-  await expect(card.getByText("Перевод и заметка обновлены")).toBeVisible();
 });
 
 test("«Дополнить карточки»: steps, a bar per batch and «Применить» disabled with its reason until the plan is ready", async ({ page }, testInfo) => {

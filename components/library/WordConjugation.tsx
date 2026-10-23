@@ -3,13 +3,23 @@
 // «Спряжение» in the word's view (the phone sheet and the desktop pane): a one-line présent preview
 // with where it comes from («своё» — saved on the word by hand or from the chat; «из словаря» —
 // built on the device from Lexique), and the form that edits the four tenses.
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { TENSE_NAMES } from "@/components/context/data";
+import {
+  ConjugationBrief,
+  ConjugationCards,
+  QuizIconButton,
+  QuizStatus,
+  useConjugationView,
+} from "@/components/conjugation/ConjugationViews";
+
+export type ConjugationViewState = ReturnType<typeof useConjugationView>;
 import { useUndoSnackbar } from "@/components/library/undo";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import { autofillConjugation } from "@/lib/autofill";
 import { loadConjData } from "@/lib/conjugation";
+import { wordExamples } from "@/lib/examples";
 import { cleanConjugation, conjugate } from "@/lib/core/conjugate";
 import type { Conjugation, Word } from "@/lib/types";
 import { updateWord } from "@/lib/words";
@@ -63,6 +73,64 @@ export function ConjugationPreview({ saved, builtin, size }: { saved: Conjugatio
 }
 
 /**
+ * The field's view. Phone sheet: the one-line preview and «Все формы» opening a card per tense
+ * (ConjugationCards); the eye («Проверь себя») is in the sheet field's header, so the state comes
+ * from there (`view`). Desktop pane: «своё / из словаря · aux», the eye and the pencil, then
+ * ConjugationBrief (the présent and the full table in a dialog).
+ */
+export function ConjugationShown({
+  word,
+  builtin,
+  size,
+  onEdit,
+  view,
+}: {
+  word: Word;
+  builtin: Conjugation | null | undefined;
+  size: "sheet" | "pane";
+  onEdit?: ReactNode;
+  view?: ConjugationViewState;
+}) {
+  const own = useConjugationView();
+  const { quiz, expanded: open, setExpanded } = view ?? own;
+  const saved = cleanConjugation(word.conjugation);
+  const conj = saved ?? builtin ?? null;
+  const sentences = wordExamples(word);
+  if (size === "pane") {
+    return (
+      <div className="flex flex-col">
+        <div className="flex items-center gap-2">
+          <span className="meta shrink-0">Спряжение</span>
+          <span className="min-w-0 flex-1 truncate text-[12px] leading-4 text-muted">
+            {conj ? `${saved ? "своё" : "из словаря"} · ${conj.auxiliary}` : builtin === undefined ? "…" : "Нет спряжения — можно заполнить"}
+          </span>
+          {conj && <QuizIconButton on={quiz.on} onClick={quiz.toggle} className="size-8! pointer-coarse:size-11!" />}
+          {onEdit}
+        </div>
+        {conj && <ConjugationBrief conj={conj} sentences={sentences} word={word.fr} quiz={quiz} className="mt-1" />}
+      </div>
+    );
+  }
+  return (
+    <>
+      <QuizStatus quiz={quiz} className="my-1" />
+      <ConjugationPreview saved={saved} builtin={builtin} size="sheet" />
+      {conj && (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setExpanded(!open)}
+          className="-my-1 inline-flex h-11 items-center gap-1 self-start bg-transparent p-0 text-[14px] font-medium text-ink underline decoration-1 underline-offset-4"
+        >
+          {open ? "Свернуть" : "Все формы — 4 времени"}
+        </button>
+      )}
+      {open && conj && <ConjugationCards conj={conj} sentences={sentences} quiz={quiz} className="mt-1" />}
+    </>
+  );
+}
+
+/**
  * Four tenses × six forms and the auxiliary; «Вернуть из словаря» when the word has its own, and
  * «Заполнить автоматически» when the dictionary does not know the verb.
  */
@@ -76,9 +144,10 @@ export function ConjugationForm({
 }: {
   draft: ConjDraft;
   onChange: (next: ConjDraft) => void;
-  word: Word;
+  /** The saved word, or the add form's draft (no id: no «Вернуть из словаря»). */
+  word: Pick<Word, "fr" | "ru" | "pos"> & Partial<Pick<Word, "id" | "conjugation">>;
   /** After «Вернуть из словаря» (the form closes). */
-  onReset: () => void;
+  onReset?: () => void;
   /** Offer «Заполнить автоматически» (/api/ai/fill): the dictionary has no conjugation for the verb. */
   autofill?: boolean;
   size: "sheet" | "pane";
@@ -93,10 +162,12 @@ export function ConjugationForm({
     onChange({ ...draft, tenses: { ...draft.tenses, [tense]: draft.tenses[tense].map((f, j) => (j === i ? value : f)) } });
 
   const reset = async () => {
+    const id = word.id;
+    if (!id) return;
     const before = word.conjugation ?? null;
-    await updateWord(word.id, { conjugation: null });
-    onReset();
-    showUndo({ message: "Спряжение из словаря", undo: () => void updateWord(word.id, { conjugation: before }).catch(() => {}) });
+    await updateWord(id, { conjugation: null });
+    onReset?.();
+    showUndo({ message: "Спряжение из словаря", undo: () => void updateWord(id, { conjugation: before }).catch(() => {}) });
   };
 
   return (
@@ -143,7 +214,7 @@ export function ConjugationForm({
           </fieldset>
         ))}
       </div>
-      {own && (
+      {own && word.id && (
         <Button type="button" variant="tertiary" size="sm" className="self-start text-[13px]" onClick={() => void reset()}>
           Вернуть из словаря
         </Button>

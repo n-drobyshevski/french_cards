@@ -339,6 +339,8 @@ export interface DialogChromeProps {
   label?: ReactNode;
   /** Extra tools after the label (text links, icon buttons). */
   tools?: ReactNode;
+  /** Icon buttons at the right, before the close button. */
+  actions?: ReactNode;
   /** Newsreader 28/36 dialog title (the accessible name). */
   title: ReactNode;
   className?: string;
@@ -348,7 +350,7 @@ export interface DialogChromeProps {
  * Desktop dialog header (DESKTOP-SPEC §3 dialog): 48px chrome (label/tools left, close right), the
  * title, and the 2px red rule edge to edge 16px under it. Pass it as <Sheet header={…}>.
  */
-export function DialogChrome({ label, tools, title, className }: DialogChromeProps) {
+export function DialogChrome({ label, tools, actions, title, className }: DialogChromeProps) {
   return (
     <div className={className}>
       <div className="px-6">
@@ -356,6 +358,7 @@ export function DialogChrome({ label, tools, title, className }: DialogChromePro
           {label != null && <span className="font-mono text-[11px] text-muted tabular-nums">{label}</span>}
           {tools}
           <span className="flex-1" />
+          {actions}
           <DialogCloseButton className="-mr-2" />
         </div>
         <Dialog.Title className="m-0 font-serif text-[28px] leading-9 font-medium tracking-[-0.015em]">{title}</Dialog.Title>

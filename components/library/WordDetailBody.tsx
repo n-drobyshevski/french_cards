@@ -14,9 +14,7 @@ import {
 } from "react";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
-import { Collapse } from "@/components/ui/Collapse";
-import { StatusLine } from "@/components/ui/StatusLine";
-import { Icon } from "@/components/ui/Icons";
+import { Icon, type IconName } from "@/components/ui/Icons";
 import { Kbd } from "@/components/ui/Kbd";
 import { Segmented } from "@/components/ui/Segmented";
 import { SheetCloseButton } from "@/components/ui/Sheet";
@@ -25,15 +23,12 @@ import { AbbrHint } from "@/components/ui/AbbrHint";
 import { SlangMeter } from "@/components/ui/SlangMeter";
 import { Toggle } from "@/components/ui/Toggle";
 import { cx } from "@/components/ui/cx";
-import { autofillOrigin } from "@/lib/autofill";
+import { autofillNote, autofillOrigin, detectEntry } from "@/lib/autofill";
 import { ORIGIN_MAX } from "@/lib/core/conjugate";
-import { readNdjson } from "@/lib/ai/ndjson";
-import type { AiErrorBody, SuggestLine, Suggestion } from "@/lib/ai/schemas";
 import { db } from "@/lib/db";
 import { listFolders } from "@/lib/folders";
 import { useFormatKeys } from "@/lib/key-names";
 import { spotlight } from "@/lib/motion";
-import { useDelayedFlag } from "@/lib/use-delayed-flag";
 import { formatDueIn, formatStability, wordStatus, type CardStatus } from "@/lib/scheduler";
 import { findDuplicate, normalizeLemma } from "@/lib/text";
 import { FIELD_LABEL_MAX, FIELD_VALUE_MAX, useFieldDefs } from "@/lib/custom-fields";
@@ -60,15 +55,17 @@ import { INBOX_KEY, MoveMenu, ThemeSquare } from "./MoveMenu";
 import { alphaOrder, catalogNumbers, neighboursAt, type Neighbour } from "./table";
 import { folderOptions, TargetPickerSheet } from "./TargetPickerSheet";
 import { TextOptions } from "./TextOptions";
+import { useThemePause } from "./theme-pause";
 import { useTranslationProposal, type TranslationProposal } from "./translation-proposal";
 import { useUndoSnackbar } from "./undo";
 import { LifeExamplesLink } from "@/components/context/ContextLink";
 import { ExampleList, toDrafts, type ExampleDraft } from "@/components/examples/ExampleList";
 import { examplesPatch, wordExamples } from "@/lib/examples";
 import { conjDraftError, draftOf, isDirty, patchFor, undoFor, withConjugationDraft, type Draft, type Editing } from "./word-editor";
-import { Menu, MenuItem } from "./Menu";
+import { QuizIconButton, useConjugationView } from "@/components/conjugation/ConjugationViews";
+import { AddFieldButton, type FieldKind } from "./AddFieldButton";
 import { AutoFillButton } from "./AutoFill";
-import { conjugationShown, ConjugationForm, ConjugationPreview, offersConjugation, useBuiltinConjugation } from "./WordConjugation";
+import { conjugationShown, ConjugationForm, ConjugationShown, offersConjugation, useBuiltinConjugation } from "./WordConjugation";
 import { cleanConjugation, cleanOrigin } from "@/lib/core/conjugate";
 import { canAddField, fieldRows, fieldRowsError, newFieldRow, type FieldRow } from "./word-fields";
 
@@ -324,16 +321,37 @@ function useWordActions(word: Word | null, folders: readonly Folder[], onDeleted
     });
   };
 
-  return { folder, changeFolder, reset, remove, setMuted };
+  const setThemePaused = useThemePause();
+  /** «Вернуть тему»: the word's theme is «на паузе». */
+  const unpauseTheme = () => (folder ? setThemePaused(folder, false) : Promise.resolve());
+
+  return { folder, changeFolder, reset, remove, setMuted, unpauseTheme };
+}
+
+/** «Повторение»'s notice for a word «на паузе», itself or through its theme. */
+function PauseNotice({ word, folder, actions, size }: { word: Word; folder: Folder | undefined; actions: ReturnType<typeof useWordActions>; size: "sheet" | "pane" }) {
+  if (word.muted) return <MutedNotice size={size} onUnmute={() => void actions.setMuted(false)} />;
+  if (folder?.muted) return <MutedNotice size={size} text={`Тема «${folder.name}» на паузе`} action="Вернуть тему" onUnmute={() => void actions.unpauseTheme()} />;
+  return null;
 }
 
 /** Under «Повторение» while the word is «на паузе»: what that means and the way back. */
-function MutedNotice({ onUnmute, size }: { onUnmute: () => void; size: "sheet" | "pane" }) {
+function MutedNotice({
+  onUnmute,
+  size,
+  text = "На паузе — не показывается в повторениях",
+  action = "Вернуть",
+}: {
+  onUnmute: () => void;
+  size: "sheet" | "pane";
+  text?: string;
+  action?: string;
+}) {
   return (
     <div className={cx("flex items-center justify-between gap-3 border-b border-rule", size === "sheet" ? "min-h-11 py-1" : "min-h-9 py-1")}>
       <span className={cx("flex min-w-0 items-center gap-2 text-muted", size === "sheet" ? "text-[14px]" : "text-[13px]")}>
         <Icon name="mute" size={16} strokeWidth={1.5} className="shrink-0" />
-        На паузе — не показывается в повторениях
+        {text}
       </span>
       <button
         type="button"
@@ -343,7 +361,7 @@ function MutedNotice({ onUnmute, size }: { onUnmute: () => void; size: "sheet" |
           size === "sheet" ? "h-11 text-[14px]" : "h-8 text-[13px] pointer-coarse:h-11",
         )}
       >
-        Вернуть
+        {action}
       </button>
     </div>
   );
@@ -397,6 +415,8 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
   const defs = useFieldDefs();
   const editor = useWordEditor(word, folders, defs);
   const builtin = useBuiltinConjugation(word ?? NO_WORD);
+  // «Спряжение»: «Все формы» and «Проверь себя» (the eye in the field's header) share this state.
+  const conjView = useConjugationView();
   const actions = useWordActions(word, folders, onClose);
   const saveExamples = useExampleSaver(word);
   const proposal = useTranslationProposal(editor.draft?.fr ?? "", editor.draft?.ru ?? "", editor.editing === "entry");
@@ -429,16 +449,12 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
     if (what && (await editor.save())) litSaved(what);
   };
 
-  const editActions = (
-    <div className="mt-3 flex items-center gap-2">
-      <Button type="submit" size="md" pending={editor.saving} pendingLabel="Сохраняем…">
-        {editor.dupConfirm ? "Сохранить всё равно" : "Сохранить"}
-      </Button>
-      <Button variant="tertiary" size="md" onClick={editor.cancel}>
-        Отмена
-      </Button>
-    </div>
+  // Mockups: canvas «Правка полей — мокапы», H4 (chosen 2026-10-23): ✕ and ✓ at the bottom right of
+  // the field being edited; inside the box of a one-input field (note, origin), under a larger form.
+  const editPair = (className?: string) => (
+    <EditPair className={className} saving={editor.saving} dupConfirm={!!editor.dupConfirm} onCancel={editor.cancel} />
   );
+  const editActions = editPair("mt-3");
   const errorLine = editor.formError && (
     <p role="alert" className="m-0 mt-2 text-[13px] leading-5 text-again">
       {editor.formError}
@@ -476,13 +492,17 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
           <label htmlFor={`${id}-ru`} className="meta mt-4">
             Русский
           </label>
-          <input
-            id={`${id}-ru`}
-            value={draft.ru}
-            onChange={(e) => set("ru", e.target.value)}
-            autoComplete="off"
-            className="mt-2 h-12 rounded-chip border border-rule bg-surface px-3 text-[16px] text-ink outline-none focus:border-ink"
-          />
+          {/* H4: the form's ✕ / ✓ sit inside «Русский», the last box of the form. */}
+          <div className="mt-2 flex items-center rounded-chip border border-rule bg-surface pr-1 focus-within:border-ink">
+            <input
+              id={`${id}-ru`}
+              value={draft.ru}
+              onChange={(e) => set("ru", e.target.value)}
+              autoComplete="off"
+              className="h-12 min-w-0 flex-1 bg-transparent px-3 text-[16px] text-ink outline-none!"
+            />
+            {editPair()}
+          </div>
           <ProposalLine proposal={proposal} onUse={(ru) => set("ru", ru)} />
           <span id={`${id}-slang`} className="meta mt-4">
             Уровень сленга
@@ -504,8 +524,8 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
               <Toggle checked={draft.verlan} onCheckedChange={(v) => set("verlan", v)} aria-labelledby={`${id}-verl`} />
             </span>
           </div>
+          <DetectEntry word={w} draft={draft} set={set} />
           {errorLine}
-          {editActions}
         </form>
       ) : (
         <>
@@ -515,7 +535,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             </h2>
             <IconButton icon="pencil" label="Изменить слово и перевод" className="-mr-3 text-muted" onClick={() => editor.start("entry")} />
           </div>
-          <div data-refresh="slang pos" data-edited="entry" className="mt-2 flex h-5 items-center gap-2">
+          <div data-edited="entry" className="mt-2 flex h-5 items-center gap-2">
             {abbr && (
               <>
                 <AbbrHint abbr={abbr} className="text-[15px] leading-5" />
@@ -526,7 +546,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             )}
             <SlangMeter level={w.slang_level} verlan={w.verlan} hints />
           </div>
-          <p data-refresh="ru" data-edited="entry" className="m-0 mt-1 text-[18px] leading-6">
+          <p data-edited="entry" className="m-0 mt-1 text-[18px] leading-6">
             {w.ru}
           </p>
         </>
@@ -536,22 +556,25 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
       <div className="mt-6 flex flex-col">
         <SheetField
           label="Заметка"
-          refresh="note"
+          edited="note"
           editLabel="Изменить заметку"
           editing={editing === "note"}
           onEdit={() => editor.start("note")}
           form={
             draft && (
               <form onSubmit={save} className="flex flex-col" aria-label="Изменить заметку">
-                <textarea
-                  aria-label="Заметка"
-                  value={draft.note}
-                  onChange={(e) => set("note", e.target.value)}
-                  rows={3}
-                  className="mt-1 resize-none rounded-chip border border-rule bg-surface px-3 py-2.5 text-[15px] leading-[22px] text-ink outline-none focus:border-ink pointer-coarse:text-[16px]"
-                />
+                <div className="mt-1 flex flex-col rounded-chip border border-rule bg-surface focus-within:border-ink">
+                  <textarea
+                    aria-label="Заметка"
+                    value={draft.note}
+                    onChange={(e) => set("note", e.target.value)}
+                    rows={3}
+                    className="resize-none rounded-chip bg-transparent px-3 pt-2.5 pb-0.5 text-[15px] leading-[22px] text-ink outline-none! pointer-coarse:text-[16px]"
+                  />
+                  {editPair("px-1 pb-1")}
+                </div>
+                <AutoFillButton className="mt-1" fill={(o) => autofillNote(draft, o)} onFill={(v) => set("note", v)} />
                 {errorLine}
-                {editActions}
               </form>
             )
           }
@@ -571,18 +594,20 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
           form={
             draft && (
               <form onSubmit={save} className="flex flex-col" aria-label="Изменить происхождение">
-                <input
-                  aria-label="Происхождение"
-                  value={draft.origin}
-                  onChange={(e) => set("origin", e.target.value)}
-                  maxLength={ORIGIN_MAX}
-                  placeholder="Например: верлан от lourd"
-                  autoFocus
-                  className="mt-1 h-11 rounded-chip border border-rule bg-surface px-3 text-[15px] text-ink outline-none placeholder:text-muted focus:border-ink pointer-coarse:text-[16px]"
-                />
+                <div className="mt-1 flex items-center rounded-chip border border-rule bg-surface pr-1 focus-within:border-ink">
+                  <input
+                    aria-label="Происхождение"
+                    value={draft.origin}
+                    onChange={(e) => set("origin", e.target.value)}
+                    maxLength={ORIGIN_MAX}
+                    placeholder="Например: верлан от lourd"
+                    autoFocus
+                    className="h-12 min-w-0 flex-1 bg-transparent px-3 text-[15px] text-ink outline-none! placeholder:text-muted pointer-coarse:text-[16px]"
+                  />
+                  {editPair()}
+                </div>
                 <AutoFillButton className="mt-1" fill={(o) => autofillOrigin(w, o)} onFill={(v) => set("origin", v)} />
                 {errorLine}
-                {editActions}
               </form>
             )
           }
@@ -595,6 +620,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             label="Спряжение"
             editLabel="Изменить спряжение"
             editing={editing === "conjugation"}
+            tools={(cleanConjugation(w.conjugation) ?? builtin) && <QuizIconButton on={conjView.quiz.on} onClick={conjView.toggleQuiz} />}
             onEdit={() => editor.start("conjugation", withConjugationDraft(draftOf(w, defs), cleanConjugation(w.conjugation) ?? builtin))}
             form={
               draft && (
@@ -606,12 +632,12 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
               )
             }
           >
-            <ConjugationPreview saved={cleanConjugation(w.conjugation)} builtin={builtin} size="sheet" />
+            <ConjugationShown word={w} builtin={builtin} size="sheet" view={conjView} />
           </SheetField>
         )}
         <SheetField
           label="Пример"
-          refresh="example"
+          edited="example"
           editLabel="Изменить пример"
           editing={editing === "example"}
           onEdit={() => editor.start("example")}
@@ -625,9 +651,9 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
                   onChange={(next) => set("examples", next)}
                   frInputClass="mt-1 h-11 rounded-chip border border-rule bg-surface px-3 font-serif text-[17px] text-ink italic outline-none placeholder:text-muted focus:border-ink"
                   ruInputClass="mt-2 h-11 rounded-chip border border-rule bg-surface px-3 text-[15px] text-ink outline-none placeholder:text-muted focus:border-ink pointer-coarse:text-[16px]"
+                  trailing={editPair()}
                 />
                 {errorLine}
-                {editActions}
               </form>
             )
           }
@@ -644,9 +670,15 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             <span className="meta">Свои поля</span>
             {editing === "fields" && draft ? (
               <form onSubmit={save} className="flex flex-col" aria-label="Изменить свои поля">
-                <FieldsForm size="sheet" rows={draft.fields} focusKey={fieldFocus} onChange={(rows) => set("fields", rows)} onFocusKey={setFieldFocus} />
+                <FieldsForm
+                  size="sheet"
+                  rows={draft.fields}
+                  focusKey={fieldFocus}
+                  onChange={(rows) => set("fields", rows)}
+                  onFocusKey={setFieldFocus}
+                  trailing={editPair()}
+                />
                 {errorLine}
-                {editActions}
               </form>
             ) : (
               <FieldsView size="sheet" rows={shownFields} onEdit={editFields} extras={fieldKinds} />
@@ -666,7 +698,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
         </span>
       </div>
       <div className="mt-1 flex flex-col">
-        {w.muted && <MutedNotice size="sheet" onUnmute={() => void actions.setMuted(false)} />}
+        <PauseNotice word={w} folder={actions.folder} actions={actions} size="sheet" />
         {schedule.map((s) => (
           <div
             key={s.direction}
@@ -681,23 +713,22 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
 
       <HistoryStrip history={[...history].reverse()} />
 
-      {/* Actions */}
-      <SheetRefresh word={w} />
-      <div className="mt-2 flex flex-wrap justify-between gap-x-2">
-        <Button variant="tertiary" size="md" className="-ml-1 px-1 text-[14px] font-normal no-underline" onClick={() => void actions.reset()}>
+      {/* Actions (K1): ruled rows, an icon, the label and a muted caption; «Удалить» last, in red. */}
+      <div className="mt-6 flex flex-col border-t border-rule">
+        <SheetAction icon="reset" caption="начать заново" onClick={() => void actions.reset()}>
           Сбросить прогресс
-        </Button>
+        </SheetAction>
         {!w.muted && (
-          <Button variant="tertiary" size="md" className="px-1 text-[14px] font-normal no-underline" onClick={() => void actions.setMuted(true)}>
+          <SheetAction icon="mute" caption="не повторять" onClick={() => void actions.setMuted(true)}>
             На паузу
-          </Button>
+          </SheetAction>
         )}
-        <Button variant="danger" size="md" className="-mr-1 px-1 text-[14px]" onClick={() => void actions.remove()}>
+        <SheetAction icon="trash" danger onClick={() => void actions.remove()}>
           Удалить слово
-        </Button>
+        </SheetAction>
       </div>
 
-      <p className="meta m-0 mt-4 border-t border-rule pt-3">
+      <p className="meta m-0 mt-4">
         Добавлено {formatDate(w.created_at)} · {SOURCE_LABELS[w.source]}
       </p>
 
@@ -715,18 +746,82 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
   );
 }
 
+/** A row of the word's actions (K1): phone sheet and touch panes 52 px, the desktop pane 40 px. */
+function SheetAction({
+  size = "sheet",
+  icon,
+  caption,
+  danger,
+  onClick,
+  children,
+}: {
+  size?: "sheet" | "pane";
+  icon: IconName;
+  caption?: string;
+  danger?: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cx(
+        "flex items-center border-b border-rule bg-transparent p-0 text-left hoverable:bg-hover active:bg-hover",
+        size === "sheet" ? "h-[52px] gap-3.5 text-[16px]" : "h-10 gap-3 text-[14px]",
+        danger ? "text-again" : "text-ink",
+      )}
+    >
+      <Icon name={icon} size={size === "sheet" ? 20 : 16} strokeWidth={1.5} />
+      <span className="min-w-0 flex-1">{children}</span>
+      {caption && <span className={cx("text-muted", size === "sheet" ? "text-[13px]" : "text-[12px]")}>{caption}</span>}
+    </button>
+  );
+}
+
+/**
+ * «Определить» under the entry form's slang level: the level, verlan and part of speech from the
+ * word's suggestion. A part of speech that changes shows as a caption (the form has no control for it).
+ */
+function DetectEntry({ word, draft, set }: { word: Word; draft: Draft; set: <K extends keyof Draft>(key: K, value: Draft[K]) => void }) {
+  const next = posAbbr({ fr: draft.fr, pos: draft.pos, gender: draft.gender });
+  const changed = next !== posAbbr(word);
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-x-3">
+      <AutoFillButton
+        label="Определить уровень и часть речи"
+        fill={(o) => detectEntry(draft, o)}
+        onFill={(g) => {
+          set("slang_level", g.slang_level);
+          set("verlan", g.verlan);
+          set("pos", g.pos);
+          set("gender", g.gender);
+        }}
+      />
+      {changed && next && (
+        <span role="status" className="text-[13px] leading-5 text-muted">
+          Часть речи: <span lang="fr" className="abbr text-ink">{next}</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
 function SheetField({
   label,
-  refresh,
+  edited,
   editLabel,
   editing,
   onEdit,
   form,
+  tools,
   children,
 }: {
   label: string;
-  /** Lit when «Обновить перевод и заметку» rewrites it (data-refresh). */
-  refresh?: DiffField;
+  /** Lit after its form saves (data-edited). */
+  edited?: Exclude<Editing, null>;
+  /** Icon buttons before the pencil («Проверь себя» on «Спряжение»). */
+  tools?: ReactNode;
   editLabel: string;
   editing: boolean;
   onEdit: () => void;
@@ -734,24 +829,31 @@ function SheetField({
   children: ReactNode;
 }) {
   return (
-    <div data-refresh={refresh} data-edited={refresh} className="flex items-start gap-2 border-t border-rule py-3">
+    <div data-edited={edited} className="flex items-start gap-2 border-t border-rule py-3">
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="meta">{label}</span>
         {editing ? form : children}
       </div>
-      {!editing && <IconButton icon="pencil" label={editLabel} className="-mt-1 -mr-3 text-muted" onClick={onEdit} />}
+      {!editing && (
+        <div className="-mt-1 -mr-3 flex shrink-0">
+          {tools}
+          <IconButton icon="pencil" label={editLabel} className="text-muted" onClick={onEdit} />
+        </div>
+      )}
     </div>
   );
 }
 
 /**
  * «Вариант» under «Русский»: the translation proposed for the French as it is now, with «Подставить».
- * Its row is kept while proposals are on, so the form does not move when one arrives; a request
- * that takes a while shows a static bar (MOTION-SPEC §3.1), never «думает…».
+ * The row shows only while there is something in it (a proposal, or a request on its way, a static
+ * bar per MOTION-SPEC §3.1, never «думает…»), so an untouched form has no gap above «Уровень сленга».
  */
 function ProposalLine({ proposal, onUse }: { proposal: TranslationProposal; onUse: (ru: string) => void }) {
-  if (!proposal.enabled) return null;
   const { ru } = proposal;
+  if (!proposal.enabled) return null;
+  // Empty, the live region stays (zero height) so a proposal that arrives is still announced.
+  if (!ru && !proposal.pending) return <div role="status" />;
   return (
     <div role="status" className="mt-2 flex min-h-8 items-center gap-3">
       {ru ? (
@@ -876,8 +978,6 @@ function PaneContent({
   const builtin = useBuiltinConjugation(word);
   const [fieldFocus, setFieldFocus] = useState<string | null>(null);
   const actions = useWordActions(word, folders, onClose);
-  const refreshAnchor = useRef<HTMLButtonElement>(null);
-  const refresh = useRefresh(word, refreshAnchor);
   const showUndo = useUndoSnackbar();
   const saveExamples = useExampleSaver(word);
   const proposal = useTranslationProposal(editor.draft?.fr ?? "", editor.draft?.ru ?? "", editor.editing === "entry");
@@ -1009,13 +1109,13 @@ function PaneContent({
   );
 
   const note = (
-    <div data-refresh="note" data-edited="note" className="flex items-start gap-2">
+    <div data-edited="note" className="flex items-start gap-2">
       <p className={cx("m-0 min-w-0 flex-1 text-[14px] leading-5 whitespace-pre-line", !w.note && "text-muted")}>{w.note || "Нет заметки"}</p>
       {!editing && pencil("Изменить заметку", () => editor.start("note"))}
     </div>
   );
   const origin = (
-    <div data-refresh="origin" data-edited="origin" className="flex items-start gap-2">
+    <div data-edited="origin" className="flex items-start gap-2">
       <p className="m-0 min-w-0 flex-1 text-[14px] leading-5">
         <span className="meta mr-1.5">Откуда</span>
         {w.origin}
@@ -1024,7 +1124,7 @@ function PaneContent({
     </div>
   );
   const example = (
-    <div data-refresh="example" data-edited="example" className="flex items-start gap-2">
+    <div data-edited="example" className="flex items-start gap-2">
       <ExampleList
         size="pane"
         card={w}
@@ -1098,7 +1198,7 @@ function PaneContent({
         aria-labelledby={`${id}-head`}
         className="mt-4 flex flex-col rounded-[6px] border border-rule bg-surface focus-visible:outline-offset-2"
       >
-        <div data-refresh="slang" data-edited="entry" className="flex h-10 items-center justify-between px-5">
+        <div data-edited="entry" className="flex h-10 items-center justify-between px-5">
           <span className="font-mono text-[11px] text-muted tabular-nums">FR · {cardNumber(data.number ?? 1)}</span>
           <SlangMeter level={w.slang_level} verlan={false} hints hintAlign="end" />
         </div>
@@ -1158,6 +1258,7 @@ function PaneContent({
                   </span>
                 </button>
               </div>
+              <DetectEntry word={w} draft={draft} set={set} />
               {formActions}
             </form>
           ) : (
@@ -1174,7 +1275,7 @@ function PaneContent({
                 <span className="mt-1.5">{pencil("Изменить слово и перевод", () => editor.start("entry"), "E")}</span>
               </div>
               {showGrammar && (
-                <p data-refresh="pos slang" data-edited="entry" className="m-0 mt-1 flex flex-wrap items-baseline gap-x-1 text-[15px] leading-5">
+                <p data-edited="entry" className="m-0 mt-1 flex flex-wrap items-baseline gap-x-1 text-[15px] leading-5">
                   {abbr && <AbbrHint abbr={abbr} />}
                   {!coarse && (
                     <>
@@ -1188,10 +1289,9 @@ function PaneContent({
                   )}
                 </p>
               )}
-              <p data-refresh="ru" data-edited="entry" className="m-0 mt-2 text-[18px] leading-6 font-medium">
+              <p data-edited="entry" className="m-0 mt-2 text-[18px] leading-6 font-medium">
                 {w.ru}
               </p>
-              <RefreshResult refresh={refresh} />
             </>
           )}
 
@@ -1221,6 +1321,7 @@ function PaneContent({
                     autoFocus
                     className={cx(fieldInput, "h-auto resize-none py-2 text-[14px] leading-5 focus:py-[7px]")}
                   />
+                  <AutoFillButton className="mt-1" fill={(o) => autofillNote(draft, o)} onFill={(v) => set("note", v)} />
                   {formActions}
                 </form>
               ) : (
@@ -1250,12 +1351,13 @@ function PaneContent({
                     {formActions}
                   </form>
                 ) : (
-                  <div data-edited="conjugation" className="flex items-start gap-2">
-                    <div className="flex min-w-0 flex-1 items-baseline gap-1.5">
-                      <span className="meta shrink-0">Спряжение</span>
-                      <ConjugationPreview saved={cleanConjugation(w.conjugation)} builtin={builtin} size="pane" />
-                    </div>
-                    {!editing && pencil("Изменить спряжение", () => editor.start("conjugation", withConjugationDraft(draftOf(w, defs), cleanConjugation(w.conjugation) ?? builtin)))}
+                  <div data-edited="conjugation">
+                    <ConjugationShown
+                      word={w}
+                      builtin={builtin}
+                      size="pane"
+                      onEdit={!editing && pencil("Изменить спряжение", () => editor.start("conjugation", withConjugationDraft(draftOf(w, defs), cleanConjugation(w.conjugation) ?? builtin)))}
+                    />
                   </div>
                 ))}
               {editing === "example" && draft ? (
@@ -1299,7 +1401,7 @@ function PaneContent({
             {STATUS_LABELS[data.status]} · {data.reviews} {plural(data.reviews, ["показ", "показа", "показов"])}
           </span>
         </div>
-        {w.muted && <MutedNotice size="pane" onUnmute={() => void actions.setMuted(false)} />}
+        <PauseNotice word={w} folder={actions.folder} actions={actions} size="pane" />
         {data.schedule.map((s) => (
           <div key={s.direction} className="flex h-9 items-center gap-4 border-b border-rule">
             <span className="w-14 shrink-0 font-mono text-[12px]">{DIRECTION_LABEL[s.direction]}</span>
@@ -1355,53 +1457,19 @@ function PaneContent({
         </p>
       )}
 
-      {/* Actions */}
-      <div className="mt-5 flex flex-col items-start gap-1">
-        {/* E1: «Подбираем…» at once (it always waits on the network), «Отмена» next to it for the
-            whole wait, the ink run under the row after 1.5 s. */}
-        <div className="flex items-center gap-4">
-          <button
-            ref={refreshAnchor}
-            type="button"
-            aria-busy={refresh.loading || undefined}
-            aria-disabled={refresh.loading || undefined}
-            onClick={() => !refresh.loading && void refresh.run()}
-            className={cx(paneAction(coarse), refresh.loading && "cursor-default")}
-          >
-            <Icon name="spark" size={16} strokeWidth={1.5} />
-            <span className="grid">
-              <span className={cx("col-start-1 row-start-1", refresh.loading && "invisible")}>Обновить перевод и заметку</span>
-              <span aria-hidden={!refresh.loading || undefined} className={cx("col-start-1 row-start-1", !refresh.loading && "invisible")}>
-                Подбираем…
-              </span>
-            </span>
-          </button>
-          {refresh.loading && (
-            <button
-              type="button"
-              onClick={refresh.cancel}
-              className={cx(paneAction(coarse), "animate-[fade-in_var(--dur-quick)_var(--ease-enter)] underline decoration-1 underline-offset-4")}
-            >
-              Отмена
-            </button>
-          )}
-        </div>
-        <RefreshWait refresh={refresh} className="w-full" />
-        <div className="flex items-center gap-5">
-          <button type="button" onClick={() => void actions.reset()} className={paneAction(coarse)}>
-            Сбросить прогресс
-          </button>
-          {!w.muted && (
-            <button type="button" onClick={() => void actions.setMuted(true)} className={paneAction(coarse)}>
-              <Icon name="mute" size={14} />
-              На паузу
-            </button>
-          )}
-          <button type="button" onClick={() => void actions.remove()} className={paneAction(coarse)}>
-            <Icon name="trash" size={14} />
-            Удалить слово
-          </button>
-        </div>
+      {/* Actions (K1, as on phones) */}
+      <div className="mt-5 flex flex-col border-t border-rule">
+        <SheetAction size={coarse ? "sheet" : "pane"} icon="reset" caption="начать заново" onClick={() => void actions.reset()}>
+          Сбросить прогресс
+        </SheetAction>
+        {!w.muted && (
+          <SheetAction size={coarse ? "sheet" : "pane"} icon="mute" caption="не повторять" onClick={() => void actions.setMuted(true)}>
+            На паузу
+          </SheetAction>
+        )}
+        <SheetAction size={coarse ? "sheet" : "pane"} icon="trash" danger onClick={() => void actions.remove()}>
+          Удалить слово
+        </SheetAction>
       </div>
 
       <p className="m-0 mt-6 font-mono text-[11px] text-muted tabular-nums">
@@ -1437,12 +1505,6 @@ function SlangHints({ word }: { word: Pick<Word, "slang_level" | "verlan"> }) {
     </>
   );
 }
-
-const paneAction = (coarse: boolean) =>
-  cx(
-    "-mx-1 inline-flex items-center gap-2 rounded-[4px] bg-transparent px-1 text-[13px] font-medium text-ink hoverable:bg-hover",
-    coarse ? "h-11" : "h-8",
-  );
 
 function shortDate(iso: string): string {
   const d = new Date(iso);
@@ -1486,392 +1548,6 @@ function NavButton({
 }
 
 // ---------------------------------------------------------------------------------------------
-// «Обновить перевод и заметку»: fetch fresh variants for this word and show what would change.
-
-type DiffField = "ru" | "note" | "example" | "slang" | "pos";
-
-interface DiffRow {
-  field: DiffField;
-  label: string;
-  before: ReactNode;
-  after: ReactNode;
-  patch: WordPatch;
-  undo: WordPatch;
-}
-
-type RefreshState =
-  | { status: "idle" }
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "same" }
-  | { status: "diff"; rows: DiffRow[]; picked: DiffField[] };
-
-const SUGGEST_ERRORS: Record<string, string> = {
-  unauthenticated: "Войдите, чтобы обновлять перевод.",
-  forbidden_email: "Обновление перевода недоступно для этого аккаунта.",
-  local_only_mode: "Обновление перевода сейчас недоступно.",
-  not_configured: "Обновление перевода сейчас недоступно.",
-  rate_limited: "Слишком много запросов. Попробуйте через минуту.",
-};
-
-function buildDiff(word: Word, s: Suggestion): DiffRow[] {
-  const rows: DiffRow[] = [];
-  const empty = <span className="text-muted">—</span>;
-  if (s.ru && s.ru !== word.ru) {
-    rows.push({ field: "ru", label: "Перевод", before: word.ru, after: s.ru, patch: { ru: s.ru }, undo: { ru: word.ru } });
-  }
-  if (s.note && s.note !== word.note) {
-    rows.push({ field: "note", label: "Заметка", before: word.note ?? empty, after: s.note, patch: { note: s.note }, undo: { note: word.note } });
-  }
-  if (s.example_fr && (s.example_fr !== word.example_fr || (s.example_ru ?? null) !== word.example_ru)) {
-    const show = (fr: string | null, ru: string | null) =>
-      fr ? (
-        <>
-          <span lang="fr" className="font-serif italic">
-            {fr}
-          </span>
-          {ru && <span className="text-muted"> — {ru}</span>}
-        </>
-      ) : (
-        empty
-      );
-    rows.push({
-      field: "example",
-      label: "Пример",
-      before: show(word.example_fr, word.example_ru),
-      after: show(s.example_fr, s.example_ru),
-      patch: { example_fr: s.example_fr, example_ru: s.example_ru },
-      undo: { example_fr: word.example_fr, example_ru: word.example_ru },
-    });
-  }
-  if (s.slang_level !== word.slang_level || s.verlan !== word.verlan) {
-    rows.push({
-      field: "slang",
-      label: "Уровень сленга",
-      before: <SlangMeter level={word.slang_level} verlan={word.verlan} size="sm" />,
-      after: <SlangMeter level={s.slang_level} verlan={s.verlan} size="sm" />,
-      patch: { slang_level: s.slang_level, verlan: s.verlan },
-      undo: { slang_level: word.slang_level, verlan: word.verlan },
-    });
-  }
-  const nextAbbr = posAbbr({ ...word, pos: s.pos, gender: s.gender });
-  if ((s.pos !== word.pos || s.gender !== word.gender) && nextAbbr !== posAbbr(word)) {
-    const abbr = (a: string | null) => (a ? <span lang="fr" className="abbr">{a}</span> : empty);
-    rows.push({
-      field: "pos",
-      label: "Часть речи",
-      before: abbr(posAbbr(word)),
-      after: abbr(nextAbbr),
-      patch: { pos: s.pos, gender: s.gender },
-      undo: { pos: word.pos, gender: word.gender },
-    });
-  }
-  return rows;
-}
-
-async function fetchSuggestion(fr: string, signal: AbortSignal): Promise<Suggestion | null> {
-  let res: Response;
-  try {
-    res = await fetch("/api/ai/suggest", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ q: fr.slice(0, 80), direction: "fr" }),
-      signal,
-    });
-  } catch (e) {
-    if (signal.aborted) throw e;
-    throw new Error(navigator.onLine === false ? "Нет сети. Попробуйте, когда появится интернет." : "Не получилось обновить. Попробуйте ещё раз.");
-  }
-  if (!res.ok) {
-    let code = "";
-    try {
-      code = ((await res.json()) as AiErrorBody).error;
-    } catch {
-      // not JSON
-    }
-    throw new Error(SUGGEST_ERRORS[code] ?? "Не получилось обновить. Попробуйте ещё раз.");
-  }
-  const key = normalizeLemma(fr);
-  const found: Suggestion[] = [];
-  for await (const line of readNdjson<SuggestLine>(res, signal)) {
-    if (line.type === "suggestion") {
-      found.push(line.suggestion);
-      if (normalizeLemma(line.suggestion.fr) === key) return line.suggestion;
-    } else if (line.type === "error" && found.length === 0) {
-      throw new Error("Не получилось обновить. Попробуйте ещё раз.");
-    }
-  }
-  return found[0] ?? null;
-}
-
-/**
- * `anchor`: any element inside the word's view; the accepted fields are found from it
- * (`[data-word-detail] [data-refresh~=field]`) and lit.
- */
-function useRefresh(word: Word | null, anchor: RefObject<HTMLElement | null>) {
-  const showUndo = useUndoSnackbar();
-  const [state, setState] = useState<RefreshState>({ status: "idle" });
-  const abort = useRef<AbortController | null>(null);
-  // The diff just shown, kept while its block closes (Collapse).
-  const [kept, setKept] = useState<Extract<RefreshState, { status: "diff" }> | null>(null);
-  if (state.status === "diff" && kept !== state) setKept(state);
-
-  useEffect(() => () => abort.current?.abort(), []);
-
-  const run = async () => {
-    if (!word) return;
-    abort.current?.abort();
-    const controller = new AbortController();
-    abort.current = controller;
-    setState({ status: "loading" });
-    try {
-      const suggestion = await fetchSuggestion(word.fr, controller.signal);
-      if (controller.signal.aborted) return;
-      if (!suggestion) {
-        setState({ status: "error", message: "Вариантов не нашлось." });
-        return;
-      }
-      const rows = buildDiff(word, suggestion);
-      setState(rows.length ? { status: "diff", rows, picked: rows.map((r) => r.field) } : { status: "same" });
-    } catch (e) {
-      if (controller.signal.aborted) return;
-      setState({ status: "error", message: e instanceof Error ? e.message : "Не получилось обновить." });
-    }
-  };
-
-  /** «Отмена» (§3.9): stops the request at once; the word keeps its values. */
-  const cancel = () => {
-    abort.current?.abort();
-    abort.current = null;
-    setState({ status: "idle" });
-  };
-
-  const accept = async () => {
-    if (!word || state.status !== "diff") return;
-    const chosen = state.rows.filter((r) => state.picked.includes(r.field));
-    if (chosen.length === 0) return;
-    const patch = Object.assign({}, ...chosen.map((r) => r.patch)) as WordPatch;
-    const undo = Object.assign({}, ...chosen.map((r) => r.undo)) as WordPatch;
-    try {
-      await updateWord(word.id, patch);
-      setState({ status: "idle" });
-      // The rewritten fields are lit together, one region (§5.14).
-      const root = anchor.current?.closest("[data-word-detail]");
-      const lit = new Set<Element>();
-      for (const r of chosen) root?.querySelectorAll(`[data-refresh~="${r.field}"]`).forEach((el) => lit.add(el));
-      lit.forEach((el) => spotlight(el));
-      showUndo({ message: "Перевод и заметка обновлены", undo: () => void updateWord(word.id, undo).catch(() => {}) });
-    } catch (e) {
-      setState({ status: "error", message: e instanceof Error ? e.message : "Не получилось сохранить" });
-    }
-  };
-
-  const toggle = (field: DiffField) =>
-    setState((s) =>
-      s.status === "diff" ? { ...s, picked: s.picked.includes(field) ? s.picked.filter((f) => f !== field) : [...s.picked, field] } : s,
-    );
-
-  return {
-    state,
-    loading: state.status === "loading",
-    /** The last diff, also while its block is closing. */
-    diff: state.status === "diff" ? state : kept,
-    run,
-    cancel,
-    accept,
-    toggle,
-    dismiss: () => setState({ status: "idle" }),
-  };
-}
-
-type Refresh = ReturnType<typeof useRefresh>;
-
-/** Waits over 1.5 s get the status line's ink run under the button row (E1); elapsed after 3 s. */
-const REFRESH_SLOW_MS = 1500;
-
-function RefreshWait({ refresh, className }: { refresh: Refresh; className?: string }) {
-  const slow = useDelayedFlag(refresh.loading, { delay: REFRESH_SLOW_MS, min: 0 });
-  return (
-    // The line is mounted (closed) for the whole wait, so its own 1.5 s ink-run delay ends as it opens.
-    <Collapse open={slow && refresh.loading} className={className}>
-      <StatusLine className="pt-2" text="Подбираем перевод и заметку" active={refresh.loading} />
-    </Collapse>
-  );
-}
-
-/** Sheet: the secondary button; the proposed changes open in place of it (Collapse). */
-function SheetRefresh({ word }: { word: Word }) {
-  const anchor = useRef<HTMLDivElement>(null);
-  const refresh = useRefresh(word, anchor);
-  const { state, diff } = refresh;
-  const showDiff = state.status === "diff";
-
-  return (
-    <div ref={anchor} className="mt-6 flex flex-col">
-      <Collapse open={!showDiff}>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="secondary"
-            icon="spark"
-            className="min-w-0 flex-1"
-            pending={refresh.loading}
-            pendingLabel="Подбираем…"
-            pendingDelay={0}
-            onClick={() => void refresh.run()}
-          >
-            Обновить перевод и заметку
-          </Button>
-          {refresh.loading && (
-            <Button variant="tertiary" className="animate-[fade-in_var(--dur-quick)_var(--ease-enter)] px-3" onClick={refresh.cancel}>
-              Отмена
-            </Button>
-          )}
-        </div>
-        <RefreshWait refresh={refresh} />
-        {state.status === "error" && (
-          <p role="alert" className="m-0 mt-2 text-[13px] leading-5 text-again">
-            {state.message}
-          </p>
-        )}
-        {state.status === "same" && (
-          <p role="status" className="m-0 mt-2 text-[13px] leading-5 text-muted">
-            Перевод и заметка уже актуальны.
-          </p>
-        )}
-      </Collapse>
-      <Collapse open={showDiff} innerClassName="px-px pb-px">
-        {diff && (
-          <section aria-label="Предлагаемые изменения" className="rounded-card border border-ink">
-            <p className="meta m-0 border-b border-rule px-3 py-2">
-              <span className="font-medium text-ink">Предлагаемые изменения</span>
-            </p>
-            <ul className="m-0 list-none p-0">
-              {diff.rows.map((r) => {
-                const on = diff.picked.includes(r.field);
-                return (
-                  <li key={r.field} className="border-b border-rule last:border-b-0">
-                    <label className="flex cursor-pointer items-start gap-3 px-3 py-2.5">
-                      <input
-                        type="checkbox"
-                        checked={on}
-                        onChange={() => refresh.toggle(r.field)}
-                        className="mt-0.5 size-[18px] shrink-0 accent-[var(--ink)]"
-                      />
-                      <span className="flex min-w-0 flex-1 flex-col gap-1">
-                        <span className="meta">{r.label}</span>
-                        <span className="text-[14px] leading-5 text-muted line-through decoration-1">{r.before}</span>
-                        <span className="text-[15px] leading-[22px] text-ink">{r.after}</span>
-                      </span>
-                    </label>
-                  </li>
-                );
-              })}
-            </ul>
-            <div className="flex items-center gap-2 border-t border-rule p-3">
-              <Button size="md" disabled={diff.picked.length === 0} onClick={() => void refresh.accept()} trailing={diff.picked.length}>
-                Принять
-              </Button>
-              <Button variant="tertiary" size="md" onClick={refresh.dismiss}>
-                Оставить как есть
-              </Button>
-            </div>
-          </section>
-        )}
-      </Collapse>
-    </div>
-  );
-}
-
-const ALL_FIELDS: { field: DiffField; label: string }[] = [
-  { field: "ru", label: "Перевод" },
-  { field: "note", label: "Заметка" },
-];
-
-/** Pane: the proposed changes open inside the card, under the translation (D-Library-Refresh, Collapse). */
-function RefreshResult({ refresh }: { refresh: Refresh }) {
-  const { state, diff } = refresh;
-  if (state.status === "error" || state.status === "same") {
-    return (
-      <p role={state.status === "error" ? "alert" : "status"} className="m-0 mt-3 text-[13px] leading-5 text-muted">
-        {state.status === "error" ? state.message : "Перевод и заметка уже актуальны."}
-      </p>
-    );
-  }
-  return (
-    <Collapse open={state.status === "diff"} innerClassName="px-px pb-px">
-      {diff && <RefreshDiff refresh={refresh} rows={diff.rows} picked={diff.picked} />}
-    </Collapse>
-  );
-}
-
-function RefreshDiff({ refresh, rows, picked }: { refresh: Refresh; rows: DiffRow[]; picked: DiffField[] }) {
-  // «Перевод» and «Заметка» always show, «без изменений» when the same.
-  const unchanged = ALL_FIELDS.filter((f) => !rows.some((r) => r.field === f.field));
-  const n = picked.length;
-  return (
-    <section aria-label="Предлагаемые изменения" className="mt-4 rounded-[6px] border border-ink p-3">
-      <h3 className="m-0 border-b border-rule pb-2 text-[13px] leading-5 font-medium">Предлагаемые изменения</h3>
-      <ul className="m-0 list-none p-0">
-        {rows.map((r) => {
-          const on = picked.includes(r.field);
-          return (
-            <li key={r.field} className="border-b border-rule">
-              <button
-                type="button"
-                role="checkbox"
-                aria-checked={on}
-                onClick={() => refresh.toggle(r.field)}
-                className="flex w-full items-start gap-3 bg-transparent py-2.5 text-left text-ink"
-              >
-                <CheckMark checked={on} className="mt-0.5" />
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className="text-[12px] leading-4 text-muted">{r.label}</span>
-                  <span className="text-[13px] leading-5 text-muted line-through decoration-1">{r.before}</span>
-                  <span className="text-[14px] leading-5 font-medium">
-                    <span aria-hidden="true">→ </span>
-                    {r.after}
-                  </span>
-                </span>
-              </button>
-            </li>
-          );
-        })}
-        {unchanged.map((f) => (
-          <li key={f.field} className="flex items-start gap-3 border-b border-rule py-2.5">
-            <CheckMark checked={false} className="mt-0.5 opacity-40" />
-            <span className="flex flex-col">
-              <span className="text-[12px] leading-4 text-muted">{f.label}</span>
-              <span className="text-[13px] leading-5 text-muted">без изменений</span>
-            </span>
-          </li>
-        ))}
-      </ul>
-      <div className="mt-3 flex items-center gap-4">
-        <button
-          type="button"
-          aria-disabled={n === 0 || undefined}
-          title={n === 0 ? "Отметьте хотя бы одно поле" : undefined}
-          onClick={() => n > 0 && void refresh.accept()}
-          className={cx(
-            "inline-flex h-9 items-center gap-2 rounded-[6px] border px-4 text-[14px] font-medium",
-            n === 0 ? "cursor-default border-rule bg-transparent text-boundary" : "border-ink bg-ink text-on-ink",
-          )}
-        >
-          Принять <span className="font-mono text-[13px]">{n}</span>
-        </button>
-        <button
-          type="button"
-          onClick={refresh.dismiss}
-          className="inline-flex h-9 items-center bg-transparent px-1 text-[14px] font-medium text-ink hoverable:underline"
-        >
-          Оставить как есть
-        </button>
-      </div>
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------------------------
 // «Свои поля» (both layouts): shared fields always listed, empty ones as a muted «Добавить»; the
 // word's one-off fields after them; «+ Поле» adds a one-off field. Edited as one block, saved as
 // one `custom_fields` patch.
@@ -1898,49 +1574,6 @@ function addableKinds(
     });
   }
   return out;
-}
-
-/** A field the word card can add besides a one-off «своё поле»: shown in the «+ Поле» menu. */
-interface FieldKind {
-  label: string;
-  caption: string;
-  onSelect: () => void;
-}
-
-/**
- * «+ Поле». With other kinds to offer (origin, a verb's conjugation) it opens a menu of them and
- * «Своё поле»; otherwise it adds a one-off field straight away (`onCustom`, null at the 12-field cap).
- */
-function AddFieldButton({ onClick, onCustom, extras = [] }: { onClick?: () => void; onCustom?: (() => void) | null; extras?: readonly FieldKind[] }) {
-  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const custom = onCustom === undefined ? onClick : (onCustom ?? undefined);
-  const menu = extras.length > 0;
-  return (
-    <>
-      <button
-        type="button"
-        aria-haspopup={menu ? "menu" : undefined}
-        aria-expanded={menu ? !!anchor : undefined}
-        onClick={(e) => (menu ? setAnchor(anchor ? null : e.currentTarget) : custom?.())}
-        className="relative mt-1 inline-flex h-9 items-center gap-1.5 self-start bg-transparent text-[13px] leading-5 font-medium text-ink before:absolute before:-inset-y-1 before:inset-x-0"
-      >
-        <Icon name="plus" size={14} strokeWidth={1.75} />
-        Поле
-      </button>
-      {menu && (
-        <Menu open={!!anchor} anchor={anchor ? { element: anchor } : null} onClose={() => setAnchor(null)} label="Какое поле" width={240}>
-          {extras.map((k) => (
-            <MenuItem key={k.label} caption={k.caption} onSelect={k.onSelect}>
-              {k.label}
-            </MenuItem>
-          ))}
-          <MenuItem caption={custom ? "название и значение" : "не больше 12 полей"} disabled={!custom} onSelect={() => custom?.()}>
-            Своё поле
-          </MenuItem>
-        </Menu>
-      )}
-    </>
-  );
 }
 
 /** The fields as label / value rows. Without `onEdit` (the desktop card while its entry is edited) only filled ones, read-only. */
@@ -2007,12 +1640,15 @@ function FieldsForm({
   focusKey,
   onChange,
   onFocusKey,
+  trailing,
 }: {
   size: FieldsSize;
   rows: FieldRow[];
   focusKey: string | null;
   onChange: (rows: FieldRow[]) => void;
   onFocusKey: (key: string) => void;
+  /** At the right end of the «+ Поле» row (the sheet's ✕ / ✓). */
+  trailing?: ReactNode;
 }) {
   const id = useId();
   const pane = size === "pane";
@@ -2082,16 +1718,53 @@ function FieldsForm({
           </div>
         );
       })}
-      {canAddField(rows) && (
-        <AddFieldButton
-          onClick={() => {
-            const row = newFieldRow();
-            onFocusKey(row.key);
-            onChange([...rows, row]);
-          }}
-        />
+      {(canAddField(rows) || trailing) && (
+        <div className="flex items-center gap-3">
+          {canAddField(rows) && (
+            <AddFieldButton
+              onClick={() => {
+                const row = newFieldRow();
+                onFocusKey(row.key);
+                onChange([...rows, row]);
+              }}
+            />
+          )}
+          {trailing && <span className="mt-1 ml-auto">{trailing}</span>}
+        </div>
       )}
     </div>
   );
 }
 
+/** H4: ✕ (muted) and ✓ (an ink disc) for the field being edited on phones; «Сохранить всё равно» spelled out. */
+function EditPair({ saving, dupConfirm, onCancel, className }: { saving: boolean; dupConfirm: boolean; onCancel: () => void; className?: string }) {
+  return (
+    <div className={cx("flex shrink-0 items-center justify-end gap-1", className)}>
+      <button
+        type="button"
+        aria-label="Отмена"
+        title="Отмена"
+        onClick={onCancel}
+        className="press-sm inline-flex size-10 items-center justify-center rounded-full bg-transparent text-muted active:bg-surface-2 hoverable:bg-hover-surface hoverable:text-ink"
+      >
+        <Icon name="close" size={20} />
+      </button>
+      {dupConfirm ? (
+        <button type="submit" disabled={saving} className="press-sm h-10 rounded-full bg-ink px-4 text-[14px] font-medium text-on-ink disabled:opacity-60">
+          Сохранить всё равно
+        </button>
+      ) : (
+        <button
+          type="submit"
+          aria-label={saving ? "Сохраняем…" : "Сохранить"}
+          title="Сохранить"
+          aria-busy={saving || undefined}
+          disabled={saving}
+          className="press-sm inline-flex size-10 items-center justify-center rounded-full bg-ink text-on-ink disabled:opacity-60"
+        >
+          <Icon name={saving ? "refresh" : "check"} size={20} strokeWidth={2} className={cx(saving && "animate-spin")} />
+        </button>
+      )}
+    </div>
+  );
+}
