@@ -37,6 +37,8 @@ export interface ExampleListProps {
   emptyText?: string;
   /** Beside «+ Ещё пример» (the word card's «Примеры из жизни ›»). */
   aside?: ReactNode;
+  /** At the right end of the «+ Ещё пример» row (the word sheet's ✕ / ✓ while editing). */
+  trailing?: ReactNode;
   className?: string;
 }
 
@@ -56,6 +58,7 @@ export function ExampleList({
   layout = "stack",
   emptyText = "Нет примера",
   aside,
+  trailing,
   className,
 }: ExampleListProps) {
   const settings = useLiveQuery(getSettings);
@@ -174,7 +177,7 @@ export function ExampleList({
         </div>
       ))}
 
-      {(canAdd || aside) && (
+      {(canAdd || aside || trailing) && (
         <div className="flex flex-wrap items-center gap-x-3">
           {canAdd && <AddExampleButton onClick={add} busy={busy} ready={ready} empty={list.length === 0} />}
           {canAdd && aside && (
@@ -183,6 +186,7 @@ export function ExampleList({
             </span>
           )}
           {aside}
+          {trailing && <span className="mt-1 ml-auto">{trailing}</span>}
         </div>
       )}
       {error && (

@@ -654,9 +654,9 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
                   onChange={(next) => set("examples", next)}
                   frInputClass="mt-1 h-11 rounded-chip border border-rule bg-surface px-3 font-serif text-[17px] text-ink italic outline-none placeholder:text-muted focus:border-ink"
                   ruInputClass="mt-2 h-11 rounded-chip border border-rule bg-surface px-3 text-[15px] text-ink outline-none placeholder:text-muted focus:border-ink pointer-coarse:text-[16px]"
+                  trailing={editPair()}
                 />
                 {errorLine}
-                {editActions}
               </form>
             )
           }
@@ -673,9 +673,15 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             <span className="meta">Свои поля</span>
             {editing === "fields" && draft ? (
               <form onSubmit={save} className="flex flex-col" aria-label="Изменить свои поля">
-                <FieldsForm size="sheet" rows={draft.fields} focusKey={fieldFocus} onChange={(rows) => set("fields", rows)} onFocusKey={setFieldFocus} />
+                <FieldsForm
+                  size="sheet"
+                  rows={draft.fields}
+                  focusKey={fieldFocus}
+                  onChange={(rows) => set("fields", rows)}
+                  onFocusKey={setFieldFocus}
+                  trailing={editPair()}
+                />
                 {errorLine}
-                {editActions}
               </form>
             ) : (
               <FieldsView size="sheet" rows={shownFields} onEdit={editFields} extras={fieldKinds} />
@@ -2004,12 +2010,15 @@ function FieldsForm({
   focusKey,
   onChange,
   onFocusKey,
+  trailing,
 }: {
   size: FieldsSize;
   rows: FieldRow[];
   focusKey: string | null;
   onChange: (rows: FieldRow[]) => void;
   onFocusKey: (key: string) => void;
+  /** At the right end of the «+ Поле» row (the sheet's ✕ / ✓). */
+  trailing?: ReactNode;
 }) {
   const id = useId();
   const pane = size === "pane";
@@ -2079,14 +2088,19 @@ function FieldsForm({
           </div>
         );
       })}
-      {canAddField(rows) && (
-        <AddFieldButton
-          onClick={() => {
-            const row = newFieldRow();
-            onFocusKey(row.key);
-            onChange([...rows, row]);
-          }}
-        />
+      {(canAddField(rows) || trailing) && (
+        <div className="flex items-center gap-3">
+          {canAddField(rows) && (
+            <AddFieldButton
+              onClick={() => {
+                const row = newFieldRow();
+                onFocusKey(row.key);
+                onChange([...rows, row]);
+              }}
+            />
+          )}
+          {trailing && <span className="mt-1 ml-auto">{trailing}</span>}
+        </div>
       )}
     </div>
   );
