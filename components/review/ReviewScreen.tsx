@@ -16,6 +16,7 @@ import { useFieldDefs } from "@/lib/custom-fields";
 import { listFolders } from "@/lib/folders";
 import { haptic, type HapticKind } from "@/lib/haptics";
 import { tokenMs } from "@/lib/motion";
+import { LEARN_AHEAD_MS } from "@/lib/core/plan";
 import { previewIntervals, reviewStateId, type Rating } from "@/lib/scheduler";
 import { advancePractice, buildPracticeQueue, sessionFilterKey, startOfStudyDay, type QueueItem, type SessionFilter } from "@/lib/session";
 import { listReviewSets, setIdOf, setSessionFilter } from "@/lib/review-sets";
@@ -29,13 +30,16 @@ import { EmptyFolder, EmptyLibrary } from "./EmptyStates";
 import { effectiveDirection, nextDirection, toSessionFilter, type FolderChoice } from "./filter";
 import { WordDetailSheet } from "@/components/library/WordDetailSheet";
 import { FolderPickerSheet } from "./FolderPickerSheet";
-import { DIRECTION_LABELS, DIRECTION_NAMES, GRADE_LABELS, formatProgress, progressRatio, queueSummary } from "./format";
+import { DIRECTION_LABELS, DIRECTION_NAMES, GRADE_LABELS, formatProgress, progressRatio, queueSummaryParts } from "./format";
 import { GradeBar } from "./GradeBar";
 import { HINT_LINE_CSS, HintLine } from "./HintLine";
 import { isTypingTarget, keepsActivationKeys, reviewKeyAction } from "./keys";
 import { CardDeck, LeavingCard, REVIEW_DESK_CSS, ReviewCard, ReviewCardPlaceholder, WRITE_IN, type CardFace } from "./ReviewCard";
 import { PENDING_PROGRESS, ReviewTopBar, type GradeEcho, type ReviewProgress } from "./ReviewTopBar";
 import { SessionDone } from "./SessionDone";
+import { PlanPopover, PlanSheet, PlanSubline, type PlanData } from "./PlanParts";
+import { newTicks, queueNew, summaryAria, waitingSummary } from "./plan-format";
+import { WaitScreen } from "./WaitScreen";
 import { useInlineSnackbar } from "./useInlineSnackbar";
 import { useReviewFilter } from "./useReviewFilter";
 import { onThemePractice, takeThemePractice } from "./practice-request";
@@ -143,6 +147,14 @@ export function ReviewScreen() {
   const [pickerOpen, setPickerOpen] = useState(false);
   /** «Изменить карточку»: the word whose sheet is open over the card. */
   const [editId, setEditId] = useState<string | null>(null);
+  /** «План на сегодня»: the sheet (phones) or the popover under the summary (desktop). */
+  const [planOpen, setPlanOpen] = useState(false);
+  const summaryRef = useRef<HTMLButtonElement>(null);
+  /**
+   * «Готово на сегодня» from the wait screen: the cards that were waiting (per filter). The done
+   * screen stays while only they are left; they come back on the next visit.
+   */
+  const [skipWait, setSkipWait] = useState<{ filter: string; keys: ReadonlySet<string> } | null>(null);
   const [pinned, setPinned] = useState<Pinned | null>(null);
   const [awaiting, setAwaiting] = useState<Awaiting | null>(null);
   const [instance, setInstance] = useState(0);
@@ -227,6 +239,17 @@ export function ReviewScreen() {
     };
   }, []);
 
+  // The wait screen returns to the cards by itself: re-read when the first waiting card comes
+  // within the learn-ahead window (it then joins the queue).
+  const nextWaitDue = data?.session.queue.length === 0 ? data.session.nextDue : null;
+  useEffect(() => {
+    if (!nextWaitDue) return;
+    const delay = Date.parse(nextWaitDue) - LEARN_AHEAD_MS - Date.now() + 250;
+    if (delay > 2 ** 31 - 1) return;
+    const timer = window.setTimeout(() => setTick((t) => t + 1), Math.max(0, delay));
+    return () => window.clearTimeout(timer);
+  }, [nextWaitDue]);
+
   const live = isFresh(data, awaiting) ? data : undefined;
   if (awaiting?.hold && live) {
     // The newer read is in: move on in this render, before anything paints.
@@ -268,7 +291,18 @@ export function ReviewScreen() {
   // While a card is held the screen stays as it was (e.g. «Готово на сегодня» until an undo lands).
   const emptyLibrary = !practice && !!shown && shown.libraryWords === 0;
   const emptyFolder = !practice && !!shown && !emptyLibrary && shown.filterWords === 0;
-  const done = !practice && !!shown && !emptyLibrary && !emptyFolder && shown.session.queue.length === 0;
+  const settled = !practice && !!shown && !emptyLibrary && !emptyFolder;
+  const session = shown?.session;
+  const queueEmpty = !!session && session.queue.length === 0;
+  // After «Готово на сегодня» on the wait screen, only the cards that were waiting are left.
+  const skipped =
+    !!session &&
+    !!skipWait &&
+    skipWait.filter === filterKey &&
+    [...session.queue, ...session.waiting].every((item) => skipWait.keys.has(item.key));
+  /** Nothing to show now, but learning cards come back later today (Review-Wait). */
+  const waitShown = settled && queueEmpty && !!session && session.waiting.length > 0 && !skipped;
+  const done = settled && !waitShown && (queueEmpty || skipped);
 
   // «Готово на сегодня» reads its summary as soon as the session is done, during the hold below, so
   // it never opens on a blank frame (R10).
@@ -277,15 +311,16 @@ export function ReviewScreen() {
   // R8 / §5.12: the last grade of a session fills the progress line; the card layout holds it
   // --dur-done-hold, then «Готово на сегодня» plays its moment — once: not on a cold open, not back
   // from a practice round, not again after an undo and a new last grade.
-  const view = practice ? "practice" : loading ? "loading" : emptyLibrary || emptyFolder ? "empty" : done ? "done" : "cards";
+  const view = practice ? "practice" : loading ? "loading" : emptyLibrary || emptyFolder ? "empty" : done ? "done" : waitShown ? "wait" : "cards";
   const [lastView, setLastView] = useState(view);
   const [finishing, setFinishing] = useState(false);
   const [moment, setMoment] = useState(false);
   const [momentPlayed, setMomentPlayed] = useState(false);
   if (view !== lastView) {
     setLastView(view);
-    const finished = view === "done" && lastView === "cards";
-    setFinishing(finished);
+    const finished = view === "done" && (lastView === "cards" || lastView === "wait");
+    // The last grade's hold is for a card that just left; from the wait screen the moment plays at once.
+    setFinishing(finished && lastView === "cards");
     if (finished && !momentPlayed) {
       setMoment(true);
       setMomentPlayed(true);
@@ -330,7 +365,7 @@ export function ReviewScreen() {
   const wordOf = (item: QueueItem) => (storedWord?.id === item.word.id ? storedWord : item.word);
   const faceOf = (item: QueueItem): CardFace => {
     const ordinal = ordinals?.get(item.word.id);
-    return { word: wordOf(item), direction: item.direction, number: ordinal ? cardNumber(ordinal) : undefined, fieldDefs };
+    return { word: wordOf(item), direction: item.direction, number: ordinal ? cardNumber(ordinal) : undefined, fieldDefs, isNew: item.isNew };
   };
   const folderOf = (item: QueueItem) => {
     const word = wordOf(item);
@@ -697,7 +732,7 @@ export function ReviewScreen() {
   });
 
   /** The card layout: the session's cards, or the last grade's hold before «Готово на сегодня». */
-  const cardsShown = (!loading && !emptyLibrary && !emptyFolder && !done) || finishingView;
+  const cardsShown = (!loading && !emptyLibrary && !emptyFolder && !done && !waitShown) || finishingView;
 
   let progress: ReviewProgress | null = null;
   if (practice) {
@@ -714,15 +749,33 @@ export function ReviewScreen() {
       ratio: progressRatio(cleared, practice.total),
       echo: lastGrade?.practice ? lastGrade : null,
     };
-  } else if (shown && cardsShown) {
+  } else if (shown && waitShown) {
     const c = shown.session.counts;
     progress = {
-      left: queueSummary(c.due, c.new),
+      left: waitingSummary(shown.session.waiting.length),
       right: formatProgress(c.done, c.total),
       ratio: progressRatio(c.done, c.total),
       echo: lastGrade && !lastGrade.practice ? lastGrade : null,
     };
+  } else if (shown && cardsShown) {
+    const { counts: c, queue: q, plan } = shown.session;
+    const split = queueNew(q, plan, direction === "both" ? undefined : direction);
+    const parts = queueSummaryParts(c.due, split.fresh, split.reverse);
+    progress = {
+      left: parts.join(" · "),
+      right: formatProgress(c.done, c.total),
+      ratio: progressRatio(c.done, c.total),
+      echo: lastGrade && !lastGrade.practice ? lastGrade : null,
+      ticks: newTicks(q, c.done, c.total),
+      summary: { label: summaryAria(parts), open: planOpen, onOpen: () => setPlanOpen(!planOpen) },
+      summaryRef,
+    };
   }
+  /** «План на сегодня» and the reason subline: the day as planned (every theme), the session's due count. */
+  const planData: PlanData | null =
+    !practice && shown ? { due: shown.session.counts.due, day: shown.session.day, plan: shown.session.plan } : null;
+  const planShown = !!planData && cardsShown && !finishingView;
+  if (planOpen && !planShown) setPlanOpen(false);
 
   /** Cards after this one (the desktop stack shows up to two outlines). */
   const remaining = queue && current ? new Set(queue.map((i) => i.key)).size - 1 : 0;
@@ -763,8 +816,9 @@ export function ReviewScreen() {
         // «Готово на сегодня» keeps the running head (without counts): what to review next, the
         // direction and undo stay one click away, as on phones.
         hideOnDesktop={emptyLibrary}
-        progress={loading ? PENDING_PROGRESS : cardsShown ? progress : null}
+        progress={loading ? PENDING_PROGRESS : cardsShown || waitShown ? progress : null}
         heading={cardsShown ? <h1 className="sr-only">Повторение</h1> : null}
+        subline={planShown && planData ? <PlanSubline day={planData.day} /> : null}
       >
         {practice ? (
           <Chip
@@ -806,6 +860,14 @@ export function ReviewScreen() {
 
       {emptyFolder && <EmptyFolder folderName={folderLabel} onShowAll={() => setFolder("all")} onAdd={() => addSheet.open()} />}
 
+      {waitShown && session && (
+        <WaitScreen
+          waiting={session.waiting}
+          desktop={desktop}
+          onDone={() => setSkipWait({ filter: filterKey, keys: new Set(session.waiting.map((item) => item.key)) })}
+        />
+      )}
+
       {doneShown &&
         (doneData ? (
           <SessionDone
@@ -820,6 +882,7 @@ export function ReviewScreen() {
             onAddWords={() => addSheet.open()}
             snackbar={snackbar.render("mb-4", "done")}
             onExerciseNotice={snackbar.show}
+            plan={shown?.session.plan}
           />
         ) : (
           <div className="flex-1" />
@@ -889,9 +952,24 @@ export function ReviewScreen() {
             </div>
           </div>
           {keyHints && card && (
-            <HintLine revealed={revealed} practice={!!practice} letters={letters} gradeButtons={gradeButtons} />
+            <HintLine revealed={revealed} practice={!!practice} letters={letters} gradeButtons={gradeButtons} planOpen={desktop && planOpen} />
           )}
         </div>
+      )}
+
+      {/* «План на сегодня»: a sheet on phones, the popover under the summary from 768. */}
+      {desktop ? (
+        <PlanPopover
+          open={planOpen && planShown}
+          anchorRef={summaryRef}
+          data={planData}
+          onClose={(refocus) => {
+            setPlanOpen(false);
+            if (refocus) summaryRef.current?.focus({ preventScroll: true });
+          }}
+        />
+      ) : (
+        <PlanSheet open={planOpen && planShown} onOpenChange={setPlanOpen} data={planData} />
       )}
 
       {/* Editing never grades: the sheet closes back onto the same card, still unanswered. */}

@@ -7,6 +7,10 @@ export type Direction = "fr_ru" | "ru_fr";
 export type SlangLevel = 0 | 1 | 2 | 3;
 export const SLANG_LABELS = ["нейтр.", "fam.", "arg.", "vulg."] as const;
 
+/** «Уровень языка» (CEFR A1…C2) and who stored it; defined with the level rules in lib/core/level.ts. */
+export type { Cefr, StoredLevelSource } from "./core/level";
+import type { Cefr, StoredLevelSource } from "./core/level";
+
 export type PartOfSpeech = "noun" | "verb" | "adj" | "adv" | "expression" | "other";
 export type Gender = "m" | "f" | "mf" | "none";
 export type Confidence = "high" | "med" | "low";
@@ -82,6 +86,13 @@ export interface Word extends Syncable {
   conjugation?: Conjugation | null;
   /** «На паузе»: kept in the library but left out of every review and practice round. Missing on older rows (= false). */
   muted?: boolean;
+  /**
+   * «Уровень языка» stored on the word: null = none (the app estimates one, lib/core/level.ts; the
+   * estimate is never stored). Missing on older rows (= null).
+   */
+  cefr?: Cefr | null;
+  /** Who stored `cefr`: the user, Claude in the chat, or the app's AI. Null with no stored level. */
+  cefr_source?: StoredLevelSource | null;
   pos: PartOfSpeech;
   gender: Gender;
   slang_level: SlangLevel;

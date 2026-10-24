@@ -7,6 +7,10 @@ export interface TextOption<T extends string | number> {
   value: T;
   label: string;
   lang?: string;
+  /** When the visible label is not the whole name («B1, сейчас оценка»). */
+  ariaLabel?: string;
+  /** A dotted underline under an unselected option (the estimate in «Уровень языка»). */
+  dotted?: boolean;
 }
 
 /**
@@ -52,12 +56,14 @@ export function TextOptions<T extends string | number>({
               role="radio"
               aria-checked={selected}
               tabIndex={selected ? 0 : -1}
+              aria-label={o.ariaLabel}
               lang={o.lang}
               onClick={() => onChange(o.value)}
               onKeyDown={(e) => onKeyDown(e, i)}
               className={cx(
                 "h-8 bg-transparent px-3 text-[14px] underline-offset-4",
                 selected ? "font-semibold text-ink underline decoration-1" : "font-medium text-muted hoverable:text-ink",
+                !selected && o.dotted && "underline decoration-dotted decoration-1",
                 i === 0 && "pl-0",
                 itemClassName,
               )}

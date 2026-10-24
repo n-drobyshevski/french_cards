@@ -2,10 +2,14 @@
 // sorting, fluid column rules, selection ranges, the cursor after a removal, alphabetical
 // neighbours and the list-region key map. Pure, unit-tested; the components wire them up.
 import { compareFrKeyed, frSortKey } from "@/lib/text";
+import { levelRank } from "./level";
 import type { LibraryWord } from "./useLibraryWords";
 
-/** Column heads, plus the phone's two orders that have no column: «Сначала новые», «Сначала трудные». */
-export type SortKey = "fr" | "ru" | "level" | "theme" | "due" | "added" | "difficult";
+/**
+ * Column heads, plus the phone's two orders that have no column: «Сначала новые», «Сначала трудные».
+ * "level" is the slang column («Сленг»), "cefr" the «Ур.» column («Уровень языка»).
+ */
+export type SortKey = "fr" | "ru" | "cefr" | "level" | "theme" | "due" | "added" | "difficult";
 export type SortDir = 1 | -1;
 export interface SortState {
   key: SortKey;
@@ -14,7 +18,7 @@ export interface SortState {
 
 export const DEFAULT_SORT: SortState = { key: "fr", dir: 1 };
 
-export const SORT_KEYS: readonly SortKey[] = ["fr", "ru", "level", "theme", "due", "added", "difficult"];
+export const SORT_KEYS: readonly SortKey[] = ["fr", "ru", "cefr", "level", "theme", "due", "added", "difficult"];
 
 /** «Порядок ▾» in the filter strip: the phone's «Фильтр и порядок» orders, same names. */
 export const ORDER_MENU: readonly { key: SortKey; label: string }[] = [
@@ -22,6 +26,7 @@ export const ORDER_MENU: readonly { key: SortKey; label: string }[] = [
   { key: "due", label: "По следующему показу" },
   { key: "fr", label: "По алфавиту" },
   { key: "difficult", label: "Сначала трудные" },
+  { key: "cefr", label: "По уровню языка" },
 ];
 
 /** The strip's name for the current order (a column head picked in the table counts too). */
@@ -31,7 +36,8 @@ export function orderLabel(sort: SortState): string {
   const column: Record<SortKey, string> = {
     fr: "По алфавиту",
     ru: "По переводу",
-    level: "По уровню",
+    cefr: "По уровню языка",
+    level: "По сленгу",
     theme: "По теме",
     due: "По следующему показу",
     added: "Сначала новые",
@@ -60,6 +66,9 @@ export function sortWords(items: readonly LibraryWord[], sort: SortState, folder
     switch (sort.key) {
       case "ru":
         return ruCollator.compare(a.word.ru, b.word.ru);
+      case "cefr":
+        // A1 → C2 (words without a level are put last below).
+        return levelRank(a.level) - levelRank(b.level);
       case "level":
         return a.word.slang_level - b.word.slang_level || Number(a.word.verlan) - Number(b.word.verlan);
       case "theme": {
@@ -82,7 +91,12 @@ export function sortWords(items: readonly LibraryWord[], sort: SortState, folder
     }
   };
   const keyed = items.map((item) => ({ item, fr: item.word.fr, key: frSortKey(item.word.fr) }));
-  keyed.sort((a, b) => sort.dir * (compare(a.item, b.item) || compareKeyed(a, b)) || a.item.word.id.localeCompare(b.item.word.id));
+  // «без уровня» stays last in both directions of «Ур.».
+  const last = (item: LibraryWord) => (sort.key === "cefr" && !item.level ? 1 : 0);
+  keyed.sort(
+    (a, b) =>
+      last(a.item) - last(b.item) || sort.dir * (compare(a.item, b.item) || compareKeyed(a, b)) || a.item.word.id.localeCompare(b.item.word.id),
+  );
   return keyed.map((k) => k.item);
 }
 
@@ -108,7 +122,7 @@ export interface ColumnInput {
 export interface Columns {
   select: number;
   theme: boolean;
-  /** meter: segments + italic abbreviation; abbr: the abbreviation only. */
+  /** «Сленг» — meter: segments + italic abbreviation; abbr: the abbreviation only. */
   level: "meter" | "abbr";
   levelWidth: number;
   dueWidth: number;
@@ -117,6 +131,9 @@ export interface Columns {
   /** CSS grid-template-columns. */
   template: string;
 }
+
+/** The «Ур.» («Уровень языка») column. */
+export const CEFR_WIDTH = 44;
 
 /** Inner width assumed until the list is measured (the desk's first frame and DeskPlaceholder). */
 export const INITIAL_TABLE_INNER = 744;
@@ -131,8 +148,9 @@ export function tableColumns({ inner, layout, coarse, themeColumn }: ColumnInput
   const levelWidth = abbr ? (coarse ? 64 : 56) : 112;
   const dueCompact = !coarse && medium && inner < 760;
   const dueWidth = coarse ? 152 : dueCompact ? 72 : 120;
-  const text = medium ? "minmax(150px,1fr)" : "minmax(160px,1fr)";
-  const template = [`${select}px`, text, text, `${levelWidth}px`, theme ? "112px" : null, `${dueWidth}px`].filter(Boolean).join(" ");
+  // «Ур.» (44) always stays: narrow lists give it room from Слово / Перевод.
+  const text = abbr ? "minmax(140px,1fr)" : medium ? "minmax(150px,1fr)" : "minmax(160px,1fr)";
+  const template = [`${select}px`, text, text, `${CEFR_WIDTH}px`, `${levelWidth}px`, theme ? "112px" : null, `${dueWidth}px`].filter(Boolean).join(" ");
   return { select, theme, level, levelWidth, dueWidth, dueCompact, template };
 }
 

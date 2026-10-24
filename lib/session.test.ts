@@ -16,9 +16,16 @@ import {
   startOfStudyDay,
   type SessionFilter,
 } from "./session";
+import { createFakeRepo } from "./mcp/fake-repo";
+import { callTool, studySummary } from "./mcp/tools";
 import { updateSettings } from "./settings";
 import type { Direction, ReviewState, Word } from "./types";
-import { addWord, gradeCard, softDeleteWord, undoLastReview } from "./words";
+import { DEFAULT_STUDY_PLAN, LEGACY_STUDY_PLAN, setNewOverride, setStudyPlan, STUDY_PLAN_PREF, type StudyPlan } from "./user-prefs";
+import { addWord, gradeCard, softDeleteWord, undoLastReview, updateWord } from "./words";
+import { createCefrData } from "./core/level";
+import { createLexique, setCefrDataForTesting, setLexiqueForTesting, type LexiqueEntry } from "./lexique";
+import cefrFile from "@/public/lexique/fr-cefr.json";
+import lemmas from "@/public/lexique/fr-lemmas.json";
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -52,9 +59,15 @@ async function setReview(w: Word, direction: Direction, due: Date, extra: Partia
 
 const keys = (q: { key: string }[]) => q.map((i) => i.key);
 
+/** The plan as the queue was before «План дня» (new cards oldest first, after the reviews, «Назавтра»). */
+const legacyPlan = (newPerDay: number) => setStudyPlan({ ...LEGACY_STUDY_PLAN, new_words: newPerDay }, NOON);
+/** Counts with nothing deferred by the cap and nothing waiting. */
+const plain = (c: { due: number; new: number; done: number; total: number }) => ({ ...c, deferred: 0, waiting: 0 });
+
 beforeEach(async () => {
   seq = 0;
   await Promise.all(db.tables.map((t) => t.clear()));
+  await legacyPlan(15);
 });
 
 describe("study day", () => {
@@ -68,7 +81,7 @@ describe("study day", () => {
 
 describe("loadSession", () => {
   it("puts due cards first, then new cards up to the daily limit", async () => {
-    await updateSettings({ new_per_day: 2 });
+    await legacyPlan(2);
     const a = await word("a", { both_directions: false });
     const b = await word("b", { both_directions: false });
     const c = await word("c", { both_directions: false });
@@ -80,12 +93,12 @@ describe("loadSession", () => {
     expect(queue[0].isNew).toBe(false);
     expect(queue[1].isNew).toBe(true);
     expect(queue[1].word.fr).toBe("a");
-    expect(counts).toEqual({ due: 1, new: 2, done: 0, total: 3 });
+    expect(counts).toEqual(plain({ due: 1, new: 2, done: 0, total: 3 }));
     expect(c).toBeDefined();
   });
 
   it("leaves words «на паузе» out of the session, its counts and practice rounds", async () => {
-    await updateSettings({ new_per_day: 5 });
+    await legacyPlan(5);
     const a = await word("a", { both_directions: false });
     const muted = await word("muted", { both_directions: false, muted: true });
     const mutedDue = await word("muted-due", { both_directions: false, muted: true });
@@ -93,23 +106,23 @@ describe("loadSession", () => {
 
     const { queue, counts } = await loadSession({}, NOON);
     expect(keys(queue)).toEqual([`${a.id}:fr_ru`]);
-    expect(counts).toEqual({ due: 0, new: 1, done: 0, total: 1 });
+    expect(counts).toEqual(plain({ due: 0, new: 1, done: 0, total: 1 }));
     expect(keys(await buildPracticeQueue({ scope: "all" }, NOON))).toEqual([`${a.id}:fr_ru`]);
     expect(muted.muted).toBe(true);
   });
 
   it("leaves the words of a theme «на паузе» out of every session, even the theme's own", async () => {
-    await updateSettings({ new_per_day: 5 });
+    await legacyPlan(5);
     const later = await createFolder({ name: "Потом" }, NOON);
     const a = await word("a", { both_directions: false });
     const b = await word("b", { both_directions: false, folder_id: later.id });
     await setReview(b, "fr_ru", at(-DAY));
-    expect((await loadSession({}, NOON)).counts).toEqual({ due: 1, new: 1, done: 0, total: 2 });
+    expect((await loadSession({}, NOON)).counts).toEqual(plain({ due: 1, new: 1, done: 0, total: 2 }));
 
     await updateFolder(later.id, { muted: true }, NOON);
     const { queue, counts } = await loadSession({}, NOON);
     expect(keys(queue)).toEqual([`${a.id}:fr_ru`]);
-    expect(counts).toEqual({ due: 0, new: 1, done: 0, total: 1 });
+    expect(counts).toEqual(plain({ due: 0, new: 1, done: 0, total: 1 }));
     expect((await loadSession({ folderId: later.id }, NOON)).queue).toEqual([]);
     expect(keys(await buildPracticeQueue({ scope: "all", folderId: later.id }, NOON))).toEqual([]);
     const pre = await loadSessionData();
@@ -130,7 +143,7 @@ describe("loadSession", () => {
   });
 
   it("counts today's new cards against the limit and moves learning cards behind new ones", async () => {
-    await updateSettings({ new_per_day: 3 });
+    await legacyPlan(3);
     const ws = [];
     for (const fr of ["a", "b", "c", "d"]) ws.push(await word(fr, { both_directions: false }));
     await gradeCard(ws[0].id, "fr_ru", 1, at(-5 * MIN));
@@ -139,33 +152,33 @@ describe("loadSession", () => {
     // a was introduced today and is waiting for its 1-minute step (already passed → due now)
     expect(keys(queue)).toEqual([`${ws[0].id}:fr_ru`, `${ws[1].id}:fr_ru`, `${ws[2].id}:fr_ru`]);
     // a was already reviewed today, so its second showing does not grow the denominator
-    expect(counts).toEqual({ due: 1, new: 2, done: 1, total: 3 });
+    expect(counts).toEqual(plain({ due: 1, new: 2, done: 1, total: 3 }));
 
     await gradeCard(ws[0].id, "fr_ru", 3, NOON);
     const after = await loadSession({}, NOON);
     // a's next step is 10 minutes away: it goes after the new cards
     expect(keys(after.queue)).toEqual([`${ws[1].id}:fr_ru`, `${ws[2].id}:fr_ru`, `${ws[0].id}:fr_ru`]);
-    expect(after.counts).toEqual({ due: 1, new: 2, done: 2, total: 4 });
+    expect(after.counts).toEqual(plain({ due: 1, new: 2, done: 2, total: 4 }));
   });
 
   it("ends the day when nothing is due and the new limit is used up", async () => {
-    await updateSettings({ new_per_day: 1 });
+    await legacyPlan(1);
     const a = await word("a", { both_directions: false });
     await word("b", { both_directions: false });
     await gradeCard(a.id, "fr_ru", 4, NOON); // Easy → graduates for days
     const { queue, counts } = await loadSession({}, at(MIN));
     expect(queue).toEqual([]);
-    expect(counts).toEqual({ due: 0, new: 0, done: 1, total: 1 });
+    expect(counts).toEqual(plain({ due: 0, new: 0, done: 1, total: 1 }));
   });
 
   it("undone reviews do not count as done or as introduced", async () => {
-    await updateSettings({ new_per_day: 1 });
+    await legacyPlan(1);
     const a = await word("a", { both_directions: false });
     await gradeCard(a.id, "fr_ru", 4, NOON);
     await undoLastReview({}, at(MIN));
     const { queue, counts } = await loadSession({}, at(MIN));
     expect(keys(queue)).toEqual([`${a.id}:fr_ru`]);
-    expect(counts).toEqual({ due: 0, new: 1, done: 0, total: 1 });
+    expect(counts).toEqual(plain({ due: 0, new: 1, done: 0, total: 1 }));
   });
 
   it("holds new ru_fr cards until fr_ru was learned on an earlier day", async () => {
@@ -224,6 +237,105 @@ describe("loadSession", () => {
   });
 });
 
+describe("loadSession: «План дня»", () => {
+  const planWith = (over: Partial<StudyPlan>) => setStudyPlan({ ...DEFAULT_STUDY_PLAN, new_order: "added", ...over }, at(MIN));
+
+  it("without a saved plan: the defaults, with the device's cards a day halved into words", async () => {
+    await db.user_prefs.delete(STUDY_PLAN_PREF);
+    await updateSettings({ new_per_day: 6 });
+    for (let i = 0; i < 5; i++) await word(`w${i}`);
+    const s = await loadSession({}, NOON);
+    expect(s.plan).toEqual({ ...DEFAULT_STUDY_PLAN, new_words: 3 });
+    expect(s.counts.new).toBe(3);
+    expect(s.queue.every((i) => i.direction === "fr_ru")).toBe(true);
+    expect(s.day).toMatchObject({ ceiling: 3, budget: 3, reason: "limit", backlog: false });
+  });
+
+  it("over the cap: defers reviews and adds no new words, unless «Всё равно добавить новые» is on today", async () => {
+    await planWith({ review_cap: 50, new_words: 3 });
+    for (let i = 0; i < 52; i++) await setReview(await word(`r${i}`, { both_directions: false }), "fr_ru", at(-DAY - i * MIN));
+    for (let i = 0; i < 4; i++) await word(`n${i}`, { both_directions: false });
+    let s = await loadSession({}, NOON);
+    expect(s.day).toMatchObject({ backlog: true, budget: 0, reason: "backlog", canOverride: true, deferred: 2 });
+    expect(s.counts).toMatchObject({ due: 50, new: 0, deferred: 2, total: 50 });
+
+    await setNewOverride(startOfStudyDay(NOON));
+    s = await loadSession({}, NOON);
+    expect(s.day).toMatchObject({ override: true, budget: 3, canOverride: false });
+    expect(s.counts.new).toBe(3);
+    // The next study day it is off again.
+    expect((await loadSession({}, at(DAY))).day.override).toBe(false);
+  });
+
+  it("learning cards due more than 20 min out wait: counted, not queued", async () => {
+    await planWith({ new_words: 0 });
+    const a = await word("a", { both_directions: false });
+    await setReview(a, "fr_ru", at(30 * MIN), { state: 1, stability: 0.5, scheduled_days: 0 });
+    const s = await loadSession({}, NOON);
+    expect(s.queue).toEqual([]);
+    expect(s.counts).toEqual({ due: 1, new: 0, done: 0, total: 1, deferred: 0, waiting: 1 });
+    expect(keys(s.waiting)).toEqual([`${a.id}:fr_ru`]);
+    expect(s.nextDue).toBe(at(30 * MIN).toISOString());
+    expect(keys((await loadSession({}, at(11 * MIN))).queue)).toEqual([`${a.id}:fr_ru`]);
+  });
+
+  it("the new-word budget is global: a theme session only narrows the pick", async () => {
+    await planWith({ new_words: 3, ru_fr: "after" });
+    const a = await createFolder({ name: "А" }, NOON);
+    const b = await createFolder({ name: "Б" }, NOON);
+    const inA = [await word("a1", { folder_id: a.id }), await word("a2", { folder_id: a.id })];
+    const inB = [await word("b1", { folder_id: b.id }), await word("b2", { folder_id: b.id })];
+    for (const w of inA) await gradeCard(w.id, "fr_ru", 4, at(-HOUR));
+    const s = await loadSession({ folderId: b.id }, NOON);
+    expect(keys(s.queue)).toEqual([`${inB[0].id}:fr_ru`]);
+    expect(s.day).toMatchObject({ budget: 3, newToday: 2, newLeft: 1 });
+  });
+
+  it("«По уровню языка» orders new words by the FLELex / Lexique level; a stored level wins", async () => {
+    setCefrDataForTesting(createCefrData(cefrFile));
+    setLexiqueForTesting(createLexique(lemmas as unknown as LexiqueEntry[], { prefolded: true }));
+    try {
+      await planWith({ new_words: 4, new_order: "level", mix: "after", ru_fr: "after", review_cap: null });
+      const relou = await word("relou", { slang_level: 2, verlan: true, both_directions: false });
+      const demarche = await word("la démarche", { pos: "noun", both_directions: false });
+      const loyer = await word("le loyer", { pos: "noun", both_directions: false });
+      const maison = await word("la maison", { pos: "noun", both_directions: false });
+      const s = await loadSession({}, NOON);
+      expect(s.queue.map((i) => i.word.fr)).toEqual([maison.fr, loyer.fr, demarche.fr, relou.fr]);
+      // A stored level wins over the estimate.
+      await updateWord(maison.id, { cefr: "C1" }, NOON);
+      expect((await loadSession({}, NOON)).queue.map((i) => i.word.fr)).toEqual([loyer.fr, demarche.fr, relou.fr, maison.fr]);
+    } finally {
+      setCefrDataForTesting(null);
+      setLexiqueForTesting(null);
+    }
+  });
+
+  it("gives the same day as the connector's study_summary", async () => {
+    await planWith({ new_words: 4, new_order: "level", mix: "mixed", ru_fr: "after", review_cap: null });
+    const f = await createFolder({ name: "Тема" }, NOON);
+    for (let i = 0; i < 6; i++) await word(`n${i}`, { folder_id: i % 2 ? f.id : null });
+    for (let i = 0; i < 5; i++) await setReview(await word(`r${i}`, { folder_id: f.id }), "fr_ru", at(-i * HOUR));
+    const [first] = (await loadSession({}, NOON)).queue;
+    await gradeCard(first.word.id, first.direction, 3, at(-MIN));
+
+    const session = await loadSession({}, NOON);
+    const fake = createFakeRepo({
+      folders: await db.folders.toArray(),
+      words: await db.words.toArray(),
+      review_state: await db.review_state.toArray(),
+      review_log: await db.review_log.toArray(),
+      user_prefs: await db.user_prefs.toArray(),
+    });
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const res = await callTool(studySummary, { repo: fake.repo, userId: "u", timeZone, now: () => NOON }, {});
+    const out = res.structuredContent as { due_cards: number; new_cards_available: number; plan: Record<string, unknown> };
+    expect(out.due_cards).toBe(session.counts.due);
+    expect(out.new_cards_available).toBe(session.counts.new);
+    expect(out.plan).toMatchObject({ new_words_today: session.day.budget, new_words_left: session.day.newLeft, ceiling: 4, reason: session.day.reason });
+  });
+});
+
 describe("getDaySummary", () => {
   it("summarizes today's reviews", async () => {
     const a = await word("a", { both_directions: false });
@@ -234,8 +346,9 @@ describe("getDaySummary", () => {
     await gradeCard(a.id, "fr_ru", 3, at(-2 * HOUR));
     await gradeCard(b.id, "fr_ru", 2, at(-90 * MIN));
     await gradeCard(c.id, "fr_ru", 3, at(-HOUR));
-    const tomorrow = await word("t", { both_directions: false });
+    const tomorrow = await word("t");
     await setReview(tomorrow, "fr_ru", at(20 * HOUR));
+    await setReview(tomorrow, "ru_fr", at(21 * HOUR));
 
     const s = await getDaySummary({}, NOON);
     expect(s.reviewed).toBe(4);
@@ -243,7 +356,18 @@ describe("getDaySummary", () => {
     expect(s.correctRate).toBeCloseTo(3 / 4);
     expect(s.hardWords.map((w) => w.fr)).toEqual(["b", "a"]);
     expect(s.mistakes).toBe(1);
-    expect(s.dueTomorrow).toBe(1);
+    expect(s.dueTomorrow).toBe(1); // words, not cards
+  });
+
+  it("counts review cards held for tomorrow (buried, deferred by the cap) as due tomorrow", async () => {
+    const b = await word("b");
+    await setReview(b, "fr_ru", at(HOUR));
+    await setReview(b, "ru_fr", at(2 * HOUR));
+    await gradeCard(b.id, "fr_ru", 3, at(HOUR));
+    const later = at(2 * HOUR);
+    // Its RU→FR side is buried until tomorrow: the session is done.
+    expect((await loadSession({}, later)).queue).toEqual([]);
+    expect((await getDaySummary({}, later)).dueTomorrow).toBe(1);
   });
 
   it("returns a null rate when nothing was reviewed", async () => {

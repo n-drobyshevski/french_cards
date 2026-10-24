@@ -73,7 +73,7 @@ export function DeskPlaceholder({ title, scope = "all" }: { title: string; scope
               <Icon name="search" size={16} />
               Поиск по FR и RU
             </span>
-            <FilterStrip status="all" onStatus={noop} slang={[]} onSlang={noop} dueCount={0} difficultCount={0} newCount={0} sort={null} onOrder={noop} />
+            <FilterStrip status="all" onStatus={noop} slang={[]} onSlang={noop} cefr={[]} onCefr={noop} dueCount={0} difficultCount={0} newCount={0} sort={null} onOrder={noop} />
           </div>
         </header>
         <div className="mt-3 flex min-h-0 flex-1 flex-col">

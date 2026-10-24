@@ -75,7 +75,7 @@ test("multi-select, bulk move to a theme and undo with Z", async ({ page }) => {
 
   await page.keyboard.press("z");
   await expect(themes(page).getByRole("link", { name: /^Полиция, 1 слово/ })).toBeVisible();
-  await expect(row(page, "arrête").getByRole("gridcell").nth(4)).toHaveText("Повседневное");
+  await expect(row(page, "arrête").getByRole("gridcell").nth(5)).toHaveText("Повседневное");
 });
 
 test("Delete removes the current word and «Отменить» brings it back", async ({ page }) => {
@@ -112,7 +112,7 @@ test("dragging a row onto a sidebar theme moves it there", async ({ page }) => {
   await row(page, "vas-y").dragTo(eda);
   await expect(themes(page).getByRole("link", { name: /^Еда, 2 слова/ })).toBeVisible();
   await expect(page.getByText("Перемещено в «Еда»")).toBeVisible();
-  await expect(row(page, "vas-y").getByRole("gridcell").nth(4)).toHaveText("Еда");
+  await expect(row(page, "vas-y").getByRole("gridcell").nth(5)).toHaveText("Еда");
 });
 
 test("a theme page: header, «Повторить тему» with R, theme menu", async ({ page }) => {

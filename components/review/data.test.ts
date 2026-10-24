@@ -2,6 +2,7 @@ import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
 import { db } from "@/lib/db";
 import { createFolder, deleteFolder } from "@/lib/folders";
+import { endOfStudyDay } from "@/lib/session";
 import { addWord, gradeCard } from "@/lib/words";
 import { loadDoneScreen, loadReviewScreen, wordOrdinals } from "./data";
 
@@ -70,5 +71,19 @@ describe("loadDoneScreen", () => {
 
     const otherDirection = await loadDoneScreen({ direction: "ru_fr" }, later);
     expect(otherDirection.nextDue).toBeNull();
+  });
+
+  it("a review card held for tomorrow (buried) is next shown when the day ends", async () => {
+    const w = await addWord({ fr: "relou", ru: "занудный", both_directions: true }, new Date(NOON.getTime() - 30 * DAY));
+    for (const [direction, h] of [["fr_ru", 1], ["ru_fr", 2]] as const) {
+      const cur = (await db.review_state.get(`${w.id}:${direction}`))!;
+      const due = new Date(NOON.getTime() + h * 3_600_000);
+      await db.review_state.put({ ...cur, state: 2, stability: 5, difficulty: 5, reps: 3, scheduled_days: 5, last_review: new Date(due.getTime() - 5 * DAY).toISOString(), due: due.toISOString() });
+    }
+    await gradeCard(w.id, "fr_ru", 3, new Date(NOON.getTime() + 3_600_000));
+    const later = new Date(NOON.getTime() + 2 * 3_600_000);
+    const done = await loadDoneScreen({}, later);
+    expect(done.summary.dueTomorrow).toBe(1);
+    expect(done.nextDue).toBe(endOfStudyDay(later).toISOString());
   });
 });

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DAY_START_HOUR as DEVICE_DAY_START } from "@/lib/session";
-import { DAY_START_HOUR, studyDay } from "./study-day";
+import { DAY_START_HOUR, studyDay, studyDayStartBefore } from "./study-day";
 
 const iso = (d: Date) => d.toISOString();
 const day = (now: string, zone: string) => {
@@ -35,5 +35,16 @@ describe("studyDay", () => {
   it("crosses month and year ends, and works east of UTC", () => {
     expect(day("2026-01-01T00:30:00Z", "Europe/Paris")).toEqual(["2025-12-31T03:00:00.000Z", "2026-01-01T03:00:00.000Z"]);
     expect(day("2026-07-01T00:30:00Z", "Asia/Tokyo")).toEqual(["2026-06-30T19:00:00.000Z", "2026-07-01T19:00:00.000Z"]);
+  });
+
+  it("goes back whole calendar days, 04:00 to 04:00, across DST", () => {
+    // Paris after the clocks go back (2026-10-25): 7 days before is 169 h back, in CEST.
+    const after = studyDay(new Date("2026-10-28T12:00:00Z"), "Europe/Paris").start;
+    expect(iso(studyDayStartBefore(after, 7, "Europe/Paris"))).toBe("2026-10-21T02:00:00.000Z");
+    expect(after.getTime() - studyDayStartBefore(after, 7, "Europe/Paris").getTime()).toBe(169 * 3_600_000);
+    // After the clocks go forward: 167 h.
+    const spring = studyDay(new Date("2026-04-01T12:00:00Z"), "Europe/Paris").start;
+    expect(iso(studyDayStartBefore(spring, 7, "Europe/Paris"))).toBe("2026-03-25T03:00:00.000Z");
+    expect(iso(studyDayStartBefore(new Date("2026-01-03T03:00:00Z"), 7, "Europe/Paris"))).toBe("2025-12-27T03:00:00.000Z");
   });
 });

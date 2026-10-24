@@ -13,6 +13,8 @@ import { useShowOrigin } from "@/lib/use-show-origin";
 import type { Folder, Word } from "@/lib/types";
 import { moveWords, restoreMoves, restoreWords, softDeleteWords } from "@/lib/words";
 import { posAbbr, STATUS_DOT, STATUS_LABELS } from "./format";
+import { levelRowText } from "./level";
+import { LevelMark } from "./LevelMark";
 import { markLeaving, markReturning, useLeavingList } from "./leaving";
 import { SwipeRow } from "./SwipeRow";
 import { folderOptions, TargetPickerSheet } from "./TargetPickerSheet";
@@ -22,7 +24,7 @@ import { WordDetailSheet } from "./WordDetailSheet";
 const ACTIONS_WIDTH = 160;
 
 /**
- * Row body: status dot, French headword with its abbreviation, Russian, slang meter and «к повт.».
+ * Row body: status dot, French headword with its abbreviation, Russian, slang meter, «Уровень языка» and «к повт.».
  * `struck`: deleted — a 1px ink line draws across the word and its translation (--dur-exit, linear).
  */
 export function WordRowContent({ item, showFolder, struck = false }: { item: LibraryWord; showFolder?: boolean; struck?: boolean }) {
@@ -57,7 +59,11 @@ export function WordRowContent({ item, showFolder, struck = false }: { item: Lib
         </span>
       </span>
       <span className="flex shrink-0 flex-col items-end gap-2">
-        <SlangMeter level={word.slang_level} verlan={word.verlan} showLabel={false} />
+        {/* D5 A: the slang meter, then «Уровень языка» (mono, 30px, right-aligned). */}
+        <span className="inline-flex items-center gap-2">
+          <SlangMeter level={word.slang_level} verlan={word.verlan} showLabel={false} />
+          <LevelMark info={item.level} />
+        </span>
         <span
           className={cx(
             "font-mono text-[11px] leading-4 tracking-[.06em] uppercase",
@@ -74,10 +80,10 @@ export function WordRowContent({ item, showFolder, struck = false }: { item: Lib
   );
 }
 
-/** Accessible row name: «la thune — бабки, деньги, arg., выучено, следующий показ через 4 д». */
+/** Accessible row name: «la thune — бабки, деньги, arg., без уровня, выучено, следующий показ через 4 д». */
 export function rowLabel(item: LibraryWord, showFolder?: boolean): string {
   const { word, schedule } = item;
-  const parts = [`${word.fr} — ${word.ru}`, slangAbbr(word.slang_level, word.verlan), STATUS_LABELS[schedule.status]];
+  const parts = [`${word.fr} — ${word.ru}`, slangAbbr(word.slang_level, word.verlan), levelRowText(item.level), STATUS_LABELS[schedule.status]];
   if (schedule.tone === "due") parts.push("к повторению");
   else if (schedule.tone === "later") parts.push(`следующий показ ${schedule.dueLabel}`);
   else if (schedule.tone === "paused") parts.push("на паузе");

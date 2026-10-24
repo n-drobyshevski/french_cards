@@ -74,9 +74,11 @@ export async function loadDoneScreen(filter: SessionFilter, now: Date = new Date
   const ids = new Set(wordsMatching(filter, pre).filter((w) => !isPaused(w, pre.pausedFolderIds)).map((w) => w.id));
   let nextDue: string | null = null;
   for (const s of pre.states) {
-    if (s.state === 0 || s.due < dayEnd) continue;
+    if (s.state === 0 || (s.due < dayEnd && s.state !== 2)) continue;
     if (!ids.has(s.word_id) || (filter.direction && s.direction !== filter.direction)) continue;
-    if (nextDue === null || s.due < nextDue) nextDue = s.due;
+    // A review card still due today was held for tomorrow (the cap, burying): next shown then.
+    const due = s.due < dayEnd ? dayEnd : s.due;
+    if (nextDue === null || due < nextDue) nextDue = due;
   }
   return { summary, nextDue, at: now.toISOString() };
 }

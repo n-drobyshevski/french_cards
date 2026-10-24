@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 
@@ -8,13 +9,15 @@ export interface StepperProps {
   max?: number;
   label: string;
   disabled?: boolean;
+  /** Shown in place of the number (e.g. «∞» for «без лимита»). */
+  display?: ReactNode;
 }
 
 /**
  * Outlined − value + stepper (30px box, 44px hit areas). Press (T4): the pressed half of the box
  * tints --surface-2 and the button scales .96; the number is a plain tabular swap.
  */
-export function Stepper({ value, onStep, min = 0, max = Infinity, label, disabled }: StepperProps) {
+export function Stepper({ value, onStep, min = 0, max = Infinity, label, disabled, display }: StepperProps) {
   // The tint fills the pressed half inside the box's 1px outline (box: 6px in, 7px down, 30px tall).
   const btn = cx(
     "press-sm relative flex size-11 items-center justify-center bg-transparent p-0 text-ink disabled:opacity-40",
@@ -37,7 +40,7 @@ export function Stepper({ value, onStep, min = 0, max = Infinity, label, disable
         aria-live="polite"
         className="relative flex h-[30px] min-w-8 items-center justify-center border-x border-rule px-1 font-mono text-[14px] font-medium tabular-nums"
       >
-        {value}
+        {display ?? value}
       </output>
       <button
         type="button"

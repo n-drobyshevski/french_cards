@@ -2,7 +2,8 @@
 // (lib/outbox.ts, installed in lib/db.ts) queues each written row for sync.
 import { cleanConjugation, cleanOrigin } from "./core/conjugate";
 import { cleanCustomFields } from "./core/custom-fields";
-import { buildWord, cleanText, directionsOf, type NewWordInput, type WordPatch } from "./core/words";
+import { isCefr } from "./core/level";
+import { buildWord, cleanLevel, cleanText, directionsOf, type NewWordInput, type WordPatch } from "./core/words";
 import { db, liveRows } from "./db";
 import { cleanExamples } from "./examples";
 import { fromSnapshot, grade, newReviewState, resetState, reviewStateId, type GradeResult, type Rating } from "./scheduler";
@@ -115,6 +116,13 @@ export function applyWordPatch(current: Word, patch: WordPatch, now: Date): Word
   if ("custom_fields" in patch) next.custom_fields = cleanCustomFields(patch.custom_fields);
   if ("origin" in patch) next.origin = cleanOrigin(patch.origin);
   if ("conjugation" in patch) next.conjugation = cleanConjugation(patch.conjugation);
+  // «Уровень языка»: null clears the level and its source («Авто»); a level alone is the user's.
+  // A source alone re-labels the stored level; undefined means no change.
+  if (patch.cefr !== undefined) Object.assign(next, cleanLevel(patch.cefr, patch.cefr_source));
+  else if ("cefr" in patch || "cefr_source" in patch) {
+    const kept = isCefr(current.cefr) ? current.cefr : null;
+    Object.assign(next, cleanLevel(kept, patch.cefr_source ?? current.cefr_source));
+  }
   if (patch.tags) next.tags = [...new Set(patch.tags.map((t) => t.trim()).filter(Boolean))];
   if ("folder_id" in patch && patch.folder_id !== current.folder_id) {
     if (patch.folder_source === undefined) next.folder_source = "user";

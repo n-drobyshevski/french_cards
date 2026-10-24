@@ -19,6 +19,7 @@ import { isSyncTable, skipOutboxFor } from "./outbox";
 import { getSupabaseBrowserClient } from "./supabase/client";
 import { isSupabaseConfigured } from "./supabase/config";
 import { SYNC_TABLES, type Settings, type SyncTable } from "./types";
+import { saveMigratedStudyPlan } from "./user-prefs";
 
 export { fromRemoteRow, REMOTE_COLUMNS, toRemoteRow } from "./core/rows";
 
@@ -418,6 +419,8 @@ async function cycle(opts: SyncOptions): Promise<SyncResult> {
       return { ok: true, state: "idle", pushed: result.pushed, pulled: 0, rejected: 0 };
     }
     failures = 0;
+    // Pulled: a device that never saved «План повторения» shares the plan it migrated (lib/user-prefs.ts).
+    if (result.lastSyncAt) await saveMigratedStudyPlan().catch(() => {});
     const state: SyncState = result.rejected > 0 ? "error" : "idle";
     setStatus({
       state,

@@ -1,5 +1,19 @@
 import { expect, test, type Page } from "@playwright/test";
-import { addSheet, gateSuggest, LA_THUNE, mockEnrich, mockSuggest, openReview, questionCard, seedCardStates, seedExerciseSets, SEED_WORDS, SLANG_SET } from "./fixtures";
+import {
+  addSheet,
+  dbRows,
+  gateSuggest,
+  LA_THUNE,
+  mockEnrich,
+  mockSuggest,
+  openReview,
+  questionCard,
+  seedCardStates,
+  seedExerciseSets,
+  seedStudyPlan,
+  SEED_WORDS,
+  SLANG_SET,
+} from "./fixtures";
 
 // What phones can do, desktop can do too (parity audit 2026-10-22): the done screen keeps its
 // running head, the library's «Новые» filter and phone orders, theme actions from the sidebar and
@@ -55,7 +69,7 @@ test("library: «Новые» filter and the phone's orders in «Порядок 
   const order = strip.getByRole("button", { name: /^Порядок: По алфавиту/ });
   await order.click();
   const menu = page.getByRole("menu", { name: "Порядок" });
-  await expect(menu.getByRole("menuitemradio")).toHaveText(["Сначала новые", "По следующему показу", "По алфавиту", "Сначала трудные"]);
+  await expect(menu.getByRole("menuitemradio")).toHaveText(["Сначала новые", "По следующему показу", "По алфавиту", "Сначала трудные", "По уровню языка"]);
   await menu.getByRole("menuitemradio", { name: "Сначала новые" }).click();
   await expect(strip.getByRole("button", { name: /^Порядок: Сначала новые/ })).toBeVisible();
   await expect(grid(page).getByRole("columnheader", { name: /Слово/ })).toHaveAttribute("aria-sort", "none");
@@ -208,4 +222,67 @@ test("«Упражнение по трудным словам»: the panel's «�
   await page.getByRole("button", { name: /^Упражнение по трудным словам/ }).click();
   expect(await clipboard()).toBe(difficultText);
   await expect(page.getByText("Запрос скопирован", { exact: true })).toBeVisible();
+});
+
+test("«План дня»: the summary opens the plan popover; «Изменить план» opens the settings sub-page", async ({ page }) => {
+  // The app's defaults with 10 new words a day (lib/core/study-plan.ts DEFAULT_STUDY_PLAN).
+  await seedStudyPlan(page, { new_words: 10, review_cap: 200, new_order: "level", mix: "mixed", ru_fr: "after" });
+  await openReview(page);
+  const summary = page.getByRole("button", { name: "План на сегодня: 10 новых" });
+  await expect(summary).toHaveAttribute("aria-haspopup", "dialog");
+  await summary.click();
+  const popover = page.getByRole("dialog", { name: "План на сегодня" });
+  await expect(popover).toBeVisible();
+  await expect(summary).toHaveAttribute("aria-expanded", "true");
+  // Under the summary, 360 wide.
+  const [s, p] = [(await summary.boundingBox())!, (await popover.boundingBox())!];
+  expect(p.y).toBeGreaterThan(s.y + s.height - 1);
+  expect(Math.round(p.width)).toBe(360);
+  await expect(popover.getByText("10 из 10")).toBeVisible();
+  await expect(popover.getByText("Отложено")).toBeVisible();
+  await expect(popover.getByText("10 слов · до 200")).toBeVisible();
+  await expect(page.getByText("закрыть план")).toBeVisible();
+
+  // The review keys are off while it is open; Esc closes it and focus returns to the summary.
+  await page.keyboard.press("Space");
+  await expect(page.locator("[data-review-answer]")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(popover).toBeHidden();
+  await expect(summary).toBeFocused();
+  await expect(page.getByText("закрыть план")).toHaveCount(0);
+
+  // A click outside closes it too.
+  await summary.click();
+  await expect(popover).toBeVisible();
+  await page.mouse.click(1300, 700);
+  await expect(popover).toBeHidden();
+
+  await summary.click();
+  await popover.getByRole("link", { name: /Изменить план/ }).click();
+  await expect(page).toHaveURL(/\/settings\/plan$/);
+  const nav = page.getByRole("navigation", { name: "Разделы настроек" });
+  await expect(nav.getByRole("link", { name: "План повторения" })).toHaveAttribute("aria-current", "page");
+  await expect(page.getByRole("heading", { level: 2, name: "План повторения" })).toBeVisible();
+  await expect(page.getByText("10 слов в день · до 200 повторений", { exact: true })).toBeVisible();
+
+  const fresh = page.getByRole("spinbutton", { name: "Новых слов в день" });
+  await expect(fresh).toHaveAttribute("aria-valuenow", "10");
+  await fresh.press("ArrowUp");
+  await expect(fresh).toHaveAttribute("aria-valuenow", "11");
+  await page.locator("label", { hasText: "По темам" }).click();
+  await expect(page.getByRole("radio", { name: /^По темам/ })).toBeChecked();
+  await page.getByRole("radiogroup", { name: "Новые в сессии" }).getByRole("radio", { name: "После повторения" }).click();
+  await expect.poll(async () => (await dbRows<{ id: string; value: Record<string, unknown> }>(page, "user_prefs")).find((r) => r.id === "study_plan")?.value).toEqual({
+    new_words: 11,
+    review_cap: 200,
+    new_order: "themes",
+    mix: "after",
+    ru_fr: "after",
+  });
+  await expect(page.getByText("Настройка общая для всех устройств — Claude тоже её видит.")).toBeVisible();
+
+  // Back to «Повторение»: the row carries the new summary.
+  await page.getByRole("link", { name: "Повторение", exact: true }).last().click();
+  await expect(page).toHaveURL(/\/settings#set-review$/);
+  await expect(page.locator("#set-review").getByRole("link", { name: /^План повторения/ })).toContainText("11 слов в день · до 200 повторений");
 });

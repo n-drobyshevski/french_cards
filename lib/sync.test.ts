@@ -257,6 +257,15 @@ describe("row mapping", () => {
     expect(remote).toMatchObject({ id: "w1", fr: "la thune", tags: [] });
   });
 
+  it("round-trips the stored «Уровень языка» (migration 0014)", () => {
+    const row = { ...word("w1"), cefr: "B1", cefr_source: "chat" };
+    const remote = toRemoteRow("words", row);
+    expect(remote).toMatchObject({ cefr: "B1", cefr_source: "chat" });
+    expect(fromRemoteRow("words", { ...remote, user_id: "u1" })).toMatchObject({ cefr: "B1", cefr_source: "chat" });
+    const cleared = toRemoteRow("words", { ...word("w2"), cefr: null, cefr_source: null });
+    expect(cleared).toMatchObject({ cefr: null, cefr_source: null });
+  });
+
   it("drops server columns and normalizes timestamps to toISOString()", () => {
     const local = fromRemoteRow("review_state", {
       id: "w1:fr_ru",

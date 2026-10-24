@@ -12,10 +12,11 @@ import { Menu, MenuItem } from "./Menu";
 import { useLongPress } from "./use-long-press";
 import { INBOX_KEY, ThemeSquare } from "./MoveMenu";
 import { SLANG_KEYS, slangKeyLabel, slangChipLabel, type SlangKey } from "./SlangFilter";
+import { LEVEL_FILTER_HINT, LEVEL_KEYS, levelChipLabel, toggleLevelKey, type LevelKey } from "./level";
 import { DEFAULT_SORT, ORDER_MENU, orderLabel, type SortKey, type SortState } from "./table";
 
 // Pieces of the desktop library (DESKTOP-SPEC §5 #6–10): the text filter strip with its «Сленг ▾»
-// popover, the bulk bar, the selection summary and the empty detail pane.
+// and «Уровень языка ▾» popovers, the bulk bar, the selection summary and the empty detail pane.
 
 export type StatusFilter = "all" | "due" | "difficult" | "new" | "paused";
 
@@ -80,7 +81,7 @@ function StripItem({
 }
 
 /**
- * «Все · К повторению 23 · Трудные 9 · Новые 4 · Сленг ▾ · Порядок ▾» (text filter strip token): the
+ * «Все · К повторению 23 · Трудные 9 · Новые 4 · Сленг ▾ · Уровень языка ▾ · Порядок ▾» (text filter strip token): the
  * phone's ledger strip and «Фильтр и порядок» sheet in one row.
  */
 export function FilterStrip({
@@ -88,6 +89,9 @@ export function FilterStrip({
   onStatus,
   slang,
   onSlang,
+  cefr,
+  onCefr,
+  cefrCounts,
   dueCount,
   difficultCount,
   newCount,
@@ -100,6 +104,10 @@ export function FilterStrip({
   onStatus: (s: StatusFilter) => void;
   slang: SlangKey[];
   onSlang: (keys: SlangKey[]) => void;
+  /** «Уровень языка ▾»: the chosen levels and their counts (D7 C: the only level counts). */
+  cefr: LevelKey[];
+  onCefr: (keys: LevelKey[]) => void;
+  cefrCounts?: Record<LevelKey, number>;
   dueCount: number;
   difficultCount: number;
   newCount: number;
@@ -114,19 +122,17 @@ export function FilterStrip({
    */
   onStatusMenu?: (status: "due" | "difficult", anchor: HTMLElement) => void;
 }) {
-  const popId = useId();
-  const wrap = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useOpenState(wrap);
   const orderId = useId();
   const [orderAnchor, setOrderAnchor] = useState<HTMLElement | null>(null);
 
   return (
     <div role="group" aria-label="Фильтр" className="flex min-w-0 items-center gap-5">
       <StripItem
-        active={status === "all" && slang.length === 0}
+        active={status === "all" && slang.length === 0 && cefr.length === 0}
         onClick={() => {
           onStatus("all");
           onSlang([]);
+          onCefr([]);
         }}
       >
         Все
@@ -155,56 +161,49 @@ export function FilterStrip({
           На паузе
         </StripItem>
       )}
-      <div ref={wrap} className="relative">
-        <StripItem active={slang.length > 0} aria-expanded={open} aria-haspopup="dialog" aria-controls={popId} onClick={() => setOpen(!open)}>
-          <span className="inline-flex items-center gap-1">
-            {slangChipLabel(slang)}
-            <Icon name="chevron" size={14} />
-          </span>
-        </StripItem>
-        {open && (
-          <div
-            id={popId}
-            role="dialog"
-            aria-label="Уровень сленга"
-            onKeyDown={(e) => {
-              if (e.key === "Escape") {
-                e.stopPropagation();
-                setOpen(false);
-                wrap.current?.querySelector<HTMLButtonElement>("button[aria-expanded]")?.focus();
-              }
-            }}
-            className="absolute top-full left-0 z-30 mt-1 w-[280px] rounded-[6px] border border-ink bg-surface p-3"
-          >
-            <div className="flex h-6 items-center justify-between">
-              <span className="text-[13px] font-medium">Уровень сленга</span>
-              {slang.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => onSlang([])}
-                  className="bg-transparent p-0 text-[13px] text-ink underline decoration-1 underline-offset-4"
-                >
-                  Сбросить
-                </button>
-              )}
-            </div>
-            <div className="mt-2 flex flex-wrap gap-1">
-              {SLANG_KEYS.map((k) => (
-                <Chip
-                  key={String(k)}
-                  role="checkbox"
-                  selected={slang.includes(k)}
-                  onClick={() => onSlang(slang.includes(k) ? slang.filter((x) => x !== k) : SLANG_KEYS.filter((x) => x === k || slang.includes(x)))}
-                  lang={k === 0 ? undefined : "fr"}
-                  className="font-serif text-[14px] italic"
-                >
-                  {slangKeyLabel(k)}
-                </Chip>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      <StripPopover
+        label={slangChipLabel(slang)}
+        title="Сленг"
+        active={slang.length > 0}
+        onReset={() => onSlang([])}
+      >
+        <div className="mt-2 flex flex-wrap gap-1">
+          {SLANG_KEYS.map((k) => (
+            <Chip
+              key={String(k)}
+              role="checkbox"
+              selected={slang.includes(k)}
+              onClick={() => onSlang(slang.includes(k) ? slang.filter((x) => x !== k) : SLANG_KEYS.filter((x) => x === k || slang.includes(x)))}
+              lang={k === 0 ? undefined : "fr"}
+              className="font-serif text-[14px] italic"
+            >
+              {slangKeyLabel(k)}
+            </Chip>
+          ))}
+        </div>
+      </StripPopover>
+      <StripPopover label={levelChipLabel(cefr)} title="Уровень языка" active={cefr.length > 0} onReset={() => onCefr([])}>
+        <div className="mt-2 flex flex-wrap gap-1">
+          {LEVEL_KEYS.map((k) => {
+            const name = k === "none" ? "без уровня" : k;
+            return (
+              <Chip
+                key={k}
+                role="checkbox"
+                selected={cefr.includes(k)}
+                dashed={k === "none"}
+                count={cefrCounts?.[k]}
+                aria-label={cefrCounts ? `${name}, ${cefrCounts[k]}` : undefined}
+                onClick={() => onCefr(toggleLevelKey(cefr, k))}
+                className={k === "none" ? undefined : "font-mono text-[12px] font-medium tracking-[.04em]"}
+              >
+                {name}
+              </Chip>
+            );
+          })}
+        </div>
+        <p className="m-0 mt-2 text-[12px] leading-4 text-muted">{LEVEL_FILTER_HINT}</p>
+      </StripPopover>
       {/* «Порядок»: a compact button (the strip shares its row with the search); the order is named
           in its tooltip and in the menu. Ink while the order is not the default one. */}
       <button
@@ -229,6 +228,60 @@ export function FilterStrip({
           </MenuItem>
         ))}
       </Menu>
+    </div>
+  );
+}
+
+/** A strip item with a 280px popover under it: «Сленг ▾», «Уровень языка ▾». Esc and a click outside close it. */
+function StripPopover({
+  label,
+  title,
+  active,
+  onReset,
+  children,
+}: {
+  label: string;
+  title: string;
+  active: boolean;
+  onReset: () => void;
+  children: ReactNode;
+}) {
+  const popId = useId();
+  const wrap = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useOpenState(wrap);
+  return (
+    <div ref={wrap} className="relative">
+      <StripItem active={active} aria-expanded={open} aria-haspopup="dialog" aria-controls={popId} onClick={() => setOpen(!open)}>
+        <span className="inline-flex items-center gap-1">
+          {label}
+          <Icon name="chevron" size={14} />
+        </span>
+      </StripItem>
+      {open && (
+        <div
+          id={popId}
+          role="dialog"
+          aria-label={title}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.stopPropagation();
+              setOpen(false);
+              wrap.current?.querySelector<HTMLButtonElement>("button[aria-expanded]")?.focus();
+            }
+          }}
+          className="absolute top-full left-0 z-30 mt-1 w-[280px] rounded-[6px] border border-ink bg-surface p-3"
+        >
+          <div className="flex h-6 items-center justify-between">
+            <span className="text-[13px] font-medium">{title}</span>
+            {active && (
+              <button type="button" onClick={onReset} className="bg-transparent p-0 text-[13px] text-ink underline decoration-1 underline-offset-4">
+                Сбросить
+              </button>
+            )}
+          </div>
+          {children}
+        </div>
+      )}
     </div>
   );
 }

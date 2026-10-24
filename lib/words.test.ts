@@ -34,6 +34,14 @@ beforeEach(async () => {
 });
 
 describe("addWord", () => {
+  it("keeps a valid level (a level without a source is the user's) and refuses junk", async () => {
+    const w = await addWord({ fr: "la démarche", ru: "процедура", cefr: "B2" }, T0);
+    expect([w.cefr, w.cefr_source]).toEqual(["B2", "user"]);
+    const chat = await addWord({ fr: "le titre de séjour", ru: "вид на жительство", cefr: "B1", cefr_source: "chat" }, T0);
+    expect([chat.cefr, chat.cefr_source]).toEqual(["B1", "chat"]);
+    await expect(addWord({ fr: "x", ru: "y", cefr: "b1" as never })).rejects.toThrow();
+  });
+
   it("creates the word with defaults and both review cards", async () => {
     const w = await addWord({ fr: "  la   thune ", ru: "бабки, деньги" }, T0);
     expect(w).toMatchObject({
@@ -122,6 +130,23 @@ describe("updateWord", () => {
     expect(revived?.deleted_at).toBeNull();
     expect(revived?.reps).toBe(graded?.reps);
     expect(revived?.state).toBe(graded?.state);
+  });
+
+  it("stores «Уровень языка» with its source; null («Авто») clears both; junk is refused", async () => {
+    const w = await addWord({ fr: "le loyer", ru: "квартплата" }, T0);
+    expect([w.cefr, w.cefr_source]).toEqual([null, null]);
+    const picked = await updateWord(w.id, { cefr: "B1" }, at(MIN));
+    expect([picked.cefr, picked.cefr_source]).toEqual(["B1", "user"]);
+    const ai = await updateWord(w.id, { cefr: "A2", cefr_source: "ai" }, at(2 * MIN));
+    expect([ai.cefr, ai.cefr_source]).toEqual(["A2", "ai"]);
+    // Another edit leaves the level alone; a source alone re-labels it.
+    expect((await updateWord(w.id, { note: "x" }, at(3 * MIN))).cefr_source).toBe("ai");
+    expect((await updateWord(w.id, { cefr_source: "user" }, at(4 * MIN))).cefr_source).toBe("user");
+    const auto = await updateWord(w.id, { cefr: null }, at(5 * MIN));
+    expect([auto.cefr, auto.cefr_source]).toEqual([null, null]);
+    // No level → no source, whatever the patch says.
+    expect((await updateWord(w.id, { cefr_source: "chat" }, at(6 * MIN))).cefr_source).toBeNull();
+    await expect(updateWord(w.id, { cefr: "B3" as never })).rejects.toThrow("уровень");
   });
 
   it("rejects missing words and empty fields", async () => {

@@ -104,11 +104,12 @@ menu or pane.
 | Dialogs | add 640, sort plan 760, shortcuts 800, theme form / zoom 440 / 720 | same | same | max = window − 48 |
 
 ### Library table columns (fluid)
-`select 32 · Слово minmax(160px,1fr) · Перевод minmax(160px,1fr) · Уровень 112 (Firefox sets «нейтр.» wider than Chromium) · Тема 112 · Показ 120`
-(Показ right-aligned). Rules by **inner list width**: < 720 → drop «Тема»; < 680 → «Уровень» = italic abbr only,
-56 wide, no meter. Single theme / «Входящие» shown → no «Тема». Medium: Слово/Перевод `minmax(150px,1fr)`,
+`select 32 · Слово minmax(160px,1fr) · Перевод minmax(160px,1fr) · Ур. 44 · Сленг 112 (Firefox sets «нейтр.» wider than Chromium) · Тема 112 · Показ 120`
+(Показ right-aligned; «Ур.» = «Уровень языка», mono 12 «≈B1», added 2026-10-24, and «Сленг» was «Уровень» until
+then, §8 «Уровень языка»). Rules by **inner list width**: < 720 → drop «Тема»; < 680 → «Сленг» = italic abbr only,
+56 wide, no meter; «Ур.» always stays, and Слово/Перевод give it room down to `minmax(140px,1fr)`. Single theme / «Входящие» shown → no «Тема». Medium: Слово/Перевод `minmax(150px,1fr)`,
 drop «Тема» below 960 inner, «Показ» → 72 (mono interval only, «трудн.» moves to the tooltip) below 760 inner.
-At 1440: inner 744 → Слово 188 · Перевод 188. At 1200: inner 544 → no Тема, Уровень 56, Слово/Перевод 168.
+At 1440: inner 744 → Слово 188 · Перевод 188. At 1200: inner 544 → no Тема, Сленг 56, Ур. 44, Слово/Перевод 146 (140 min).
 Status: no dot column. «Показ» cell = Plex 13 «к повт.» (ink 500) / «новое» (ink 500) / «через 4 д» (muted),
 then, for difficult words, 6px + Newsreader italic 13 muted «трудн.». The row's `aria-label` carries the full
 status («трудное», «учится», «выучено», «новое»).
@@ -792,7 +793,8 @@ Red marks: bar, Входящие = 2.
 - **Form** x 520, 640. Sections: Plex 500 13 heading + 1px ink rule, 24px between sections; rows 44 hairlines.
   - Повторение: «Направление по умолчанию» → select «FR → RU ▾» (popover 2 rows 44: mono `FR → RU` + 13 muted «с
     французского на русский» (checked), `RU → FR` + «с русского на французский»); «Новых карточек в день» →
-    stepper (− mono 15 +, 32 buttons, 1px `#8a8a85`, aria «Меньше»/«Больше»); «Кнопки оценки» → text options
+    stepper (− mono 15 +, 32 buttons, 1px `#8a8a85`, aria «Меньше»/«Больше»; replaced 2026-10-24 by the row
+    «План повторения ›», §8 «План дня»); «Кнопки оценки» → text options
     2 | 3 (3 selected); option row ☑ «Свайпы для оценки» (on: a mouse drags the card too: click and hold, then sideways past
     min(⅓ card, 200px) or a flick; a vertical drag still selects text; a short drag springs back, a click flips;
     «Вибрация при свайпах» hidden on desktop).
@@ -989,9 +991,10 @@ Everything phones can do, desktop can do too. Where the boards above differ, thi
   the review card's tracings, and next to «Французский» in the add form. Icon-only buttons name themselves in
   a hover tooltip (`IconButton` sets `title`); keyed ones add the key («Изменить карточку (E)» only while
   single-letter keys are on). The review hint line adds «E изменить» on the answer side.
-- **Library filter strip**: «Все · К повторению N · Трудные N · Новые N · Сленг ▾ · ⇅». «Новые» = never
+- **Library filter strip**: «Все · К повторению N · Трудные N · Новые N · Сленг ▾ · Уровень языка ▾ · ⇅»
+  («Уровень языка ▾» added 2026-10-24, see «Уровень языка» below). «Новые» = never
   reviewed. ⇅ is a 36px icon button (tooltip and name «Порядок: …») opening a menu with the phone's orders —
-  «Сначала новые», «По следующему показу», «По алфавиту», «Сначала трудные»; a column head click still sorts by
+  «Сначала новые», «По следующему показу», «По алфавиту», «Сначала трудные», «По уровню языка»; a column head click still sorts by
   that column (the tooltip then names it, e.g. «По переводу»). The search is 220–300px wide; a list too narrow
   for search + strip puts the strip on a second row.
 - **Theme actions from the sidebar**: a right click, a long press or the menu key on a sidebar theme opens the
@@ -1027,6 +1030,62 @@ Everything phones can do, desktop can do too. Where the boards above differ, thi
   filter strip opens a menu «Показать в библиотеке» / «Упражнение по ним в Claude»; a click stays the filter. «Готово на
   сегодня» shows the row «Упражнение по трудным словам · N ›» under «Трудные». Copies end in the snackbar «Запрос
   скопирован» with «Открыть Claude ↗».
+- **«План дня»** (added 2026-10-24; SPEC.md «План дня и уровень языка», picks R22 D1 C, D2 A+B, D3 B, D4 A;
+  boards `D-Review-Settings`, `D-Review-Plan`): the same plan, numbers and copy as on phones.
+  - **Settings sub-page**: in Settings «Повторение» the stepper «Новых карточек в день» becomes the button row
+    «План повторения» with the summary (13 muted «10 слов в день · до 200 повторений») and a chevron. The section
+    nav gets the indented item «План повторения» under «Повторение» (13px, padding-left 28, `aria-current` on its
+    page). The page sits in the 640 form column: a back link «‹ Повторение» (13 500 muted), h2 Newsreader 24 «План
+    повторения» with the summary at its right, then three sections (Plex 500 13 heading + 1px ink rule):
+    - «Темп»: «Новых слов в день» and «Повторений в день» («до» + stepper) with the phone's captions; the second
+      reads «Остальные — на следующий день, расписание не меняется».
+    - «Новые слова»: «Порядок новых» as option rows like «Чаще в упражнениях» (round radio mark, caption in 12
+      muted lowercase: «сначала A1–B2, частые раньше», «01 → 35, по порядку тем», «старые сначала»), then «Новые в
+      сессии» with text options «Вперемешку с повторением | После повторения».
+    - «Обратная сторона · RU → FR»: «Когда показывать» with the same option rows «После 3 дней узнавания» /
+      «Назавтра» / «Только узнавание».
+    - The footnote «Настройка общая для всех устройств — Claude тоже её видит.» (13 muted, sync glyph).
+  - **Plan popover**: in the running head the summary «27 к повторению · 4 новых · 6 обратных» is a 30px text
+    button (hover and open: `#e8e8e4` fill, radius 4; `aria-haspopup="dialog"`, aria «План на сегодня: …»). It
+    opens a 360px popover under it (white, 1px ink border, radius 6, no shadow; §3 menu motion): a 52px title row
+    «План на сегодня» Newsreader 20 with × (32px, Esc) over an ink rule; the phone's receipt as 40px rows (label 14,
+    mono right); the reason line; the secondary «Всё равно добавить новые» with «Только на сегодня. Завтра план
+    снова подстроится.» (same rule as phones: only while the day's new words are below the ceiling); and the row
+    «Изменить план ›» with mono «10 слов · до 200» → the settings sub-page. While it is open the hint line ends
+    with «Esc закрыть план» and the review keys are off. The reason subline (D2 A; not drawn) sits under the running-head
+    rule, left-aligned with the card column, 12 muted sentence case («Новых 4 из 10 · точность за неделю 74 %»),
+    only while new words are held back.
+  - **Session**: new cards carry the outlined «НОВОЕ» tag at the right of the card header (question side), and the
+    new-card ticks sit under the running-head rule (not drawn). The wait screen is the phone's in the 720 column («Ещё 3
+    карточки — через 12 мин», the rows, «Упражнения ›», «Готово на сегодня»). «Готово на сегодня» keeps «22 октября
+    · Следующие 18 слов — завтра» and adds the row «План: 10 слов в день · до 200 повторений · Изменить ›» under it.
+- **«Уровень языка»** (added 2026-10-24; SPEC.md «План дня и уровень языка», picks R23 D5 A, D6 A, D7 C; boards
+  `D-Level-Library`, `D-Level-Word`): the same levels, «≈» rule and source captions as on phones.
+  - **Library column «Ур.»**: 44px between «Перевод» and «Сленг» (§2), mono 12 «≈B1» (estimate muted, the user's
+    ink 500, «—» muted with no level). The column head sorts («Ур. ▲» = A1 → C2, no level last; the tooltip «По
+    уровню языка»), and so does ⇅ «По уровню языка». Sorted by level, the header's right end shows 13 muted «A1 →
+    C2 · без уровня в конце» where the guide words go. The slang column and its strip item are «Сленг», and the
+    «Сленг ▾» popover is titled «Сленг» (was «Уровень сленга»). The row `aria-label` adds the level («…, ≈B1,
+    учится» / «…, без уровня, …»).
+  - **Strip filter «Уровень языка ▾»**: after «Сленг ▾». It opens a 280px popover like «Сленг ▾»: Plex 500 13
+    «Уровень языка» + the tertiary «Сбросить»; toggle chips A1 … C2 with mono counts and a dashed «без уровня»
+    (aria «A1, 142»); under them 12 muted «≈ — оценка по словарю FLELex, точна примерно в половине случаев.». The
+    item then reads «Уровень языка: B1, B2» (or «Уровень языка: 2» when it does not fit). No level counts
+    elsewhere (D7 C).
+  - **Word pane**: the index card header shows mono «≈B1» at the right, after the slang meter. Under the card, a
+    section «Уровень языка» (Plex 500 13 heading, the source caption 12 muted at its right — «по словарю FLELex» /
+    «по частотности» / «от Claude» — and an ink rule) holds mono «≈B1», the hint «≈ B1 — оценка по словарю FLELex,
+    точна примерно в половине случаев.» and the tertiary «Изменить». For the user's level it reads «B1 · вы
+    указали · Изменить», with no hint. «Изменить» (`aria-expanded`) opens, in place, a radiogroup «Уровень
+    языка» of text options A1 A2 B1 B2 C1 C2 · Авто (←/→ move). «Авто» is checked while there is no level of the
+    user's; the estimate's option has a dotted underline and the aria «B1, сейчас оценка». Under it the caption
+    «подобрано автоматически · «Авто» вернёт оценку». A pick saves like the pane's other fields (Esc cancels, ⌘↵
+    saves; leaving the word saves it, «Сохранено · Отменить»). The «Повторение» row of an RU→FR card still
+    waiting reads «откроется после 3 дней узнавания».
+  - **Review card**: the answer side's header adds «· ≈B1» after the slang abbreviation; the question side never
+    shows it.
+  - **«Определить уровень языка»** (not drawn): the phone's quiet row and plan sheet («Уровень языка для 98 слов»), as a 760
+    dialog like «Предлагаемые перемещения», with the footer «Отмена Esc» / «Сохранить уровни 90 ⌘↵».
 - «Вибрация при свайпах» stays phone-only (§5 #20); the offline page is 560px wide from 768 and says
   «…не сохранена на устройстве».
 

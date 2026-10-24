@@ -1,6 +1,7 @@
 // Phone library filters (mockups: Library «C · Под пальцем»): the ledger strip sets the status,
-// the «Фильтр и порядок» sheet sets status, slang, theme and order. Pure, unit-tested.
+// the «Фильтр и порядок» sheet sets status, «Уровень языка», slang, theme and order. Pure, unit-tested.
 import { matchesSearch } from "@/lib/text";
+import { matchesLevel, type LevelKey } from "./level";
 import { matchesSlang, type SlangKey } from "./SlangFilter";
 import { DEFAULT_SORT, sortWords } from "./table";
 import type { LibraryWord } from "./useLibraryWords";
@@ -12,33 +13,37 @@ export type ThemeFilter = string;
 export const ALL_THEMES: ThemeFilter = "all";
 export const INBOX_THEME: ThemeFilter = "inbox";
 
-export type PhoneOrder = "added" | "due" | "fr" | "difficult";
+export type PhoneOrder = "added" | "due" | "fr" | "difficult" | "cefr";
 
 export const ORDER_OPTIONS: readonly { value: PhoneOrder; label: string }[] = [
   { value: "added", label: "Сначала новые" },
   { value: "due", label: "По следующему показу" },
   { value: "fr", label: "По алфавиту" },
   { value: "difficult", label: "Сначала трудные" },
+  { value: "cefr", label: "По уровню языка" },
 ];
 
 export interface PhoneFilter {
   status: StatusFilter;
+  /** «Уровень языка»: levels (stored or estimated) and «без уровня», OR-ed. */
+  cefr: LevelKey[];
   slang: SlangKey[];
   theme: ThemeFilter;
   order: PhoneOrder;
 }
 
-export const DEFAULT_PHONE_FILTER: PhoneFilter = { status: "all", slang: [], theme: ALL_THEMES, order: "added" };
+export const DEFAULT_PHONE_FILTER: PhoneFilter = { status: "all", cefr: [], slang: [], theme: ALL_THEMES, order: "added" };
 
 /** True when the filter narrows the words (the order alone does not). */
 export function narrows(filter: PhoneFilter): boolean {
-  return filter.status !== "all" || filter.slang.length > 0 || filter.theme !== ALL_THEMES;
+  return filter.status !== "all" || filter.cefr.length > 0 || filter.slang.length > 0 || filter.theme !== ALL_THEMES;
 }
 
 /** Badge on the filter button: what the sheet changed that the ledger strip does not show. */
 export function sheetFilterCount(filter: PhoneFilter): number {
   return (
     Number(filter.status === "new" || filter.status === "paused") +
+    Number(filter.cefr.length > 0) +
     Number(filter.slang.length > 0) +
     Number(filter.theme !== ALL_THEMES) +
     Number(filter.order !== DEFAULT_PHONE_FILTER.order)
@@ -74,6 +79,7 @@ export function filterPhoneWords(items: readonly LibraryWord[], filter: PhoneFil
   const rows = items.filter(
     (item) =>
       matchesStatus(item, filter.status) &&
+      matchesLevel(item.level, filter.cefr) &&
       matchesSlang(item.word, filter.slang) &&
       matchesTheme(item, filter.theme) &&
       matchesSearch(item.word, query),
@@ -83,6 +89,8 @@ export function filterPhoneWords(items: readonly LibraryWord[], filter: PhoneFil
       return sortWords(rows, { key: "due", dir: 1 });
     case "fr":
       return sortWords(rows, DEFAULT_SORT);
+    case "cefr":
+      return sortWords(rows, { key: "cefr", dir: 1 });
     case "difficult":
       // Stable sort keeps «newest first» inside each group.
       return [...rows].sort((a, b) => Number(b.schedule.status === "difficult") - Number(a.schedule.status === "difficult"));

@@ -295,3 +295,29 @@ describe("import", () => {
     expect(() => parseBackup({ format: "kartochki-backup", version: 1, tables: { words: {} } })).toThrow(BackupError);
   });
 });
+
+
+describe("«Уровень языка» in backups", () => {
+  it("keeps a stored level and fills older rows with none", async () => {
+    const w = await addWord({ fr: "le loyer", ru: "квартплата", cefr: "B1", cefr_source: "ai" }, T0);
+    const json = await exportBackupJson(later(30));
+    await clearAll();
+    await importBackup(json);
+    expect(await db.words.get(w.id)).toMatchObject({ cefr: "B1", cefr_source: "ai" });
+
+    // A row from before migration 0014, and one with junk in the columns.
+    const old: Partial<Word> = { ...w };
+    delete old.cefr;
+    delete old.cefr_source;
+    await clearAll();
+    await importBackup({
+      format: "kartochki-backup",
+      version: 1,
+      exported_at: T0.toISOString(),
+      tables: { words: [{ ...old, id: "w-old" }, { ...old, id: "w-junk", cefr: "B9", cefr_source: "who" }, { ...old, id: "w-nosrc", cefr: "C1" }] },
+    });
+    expect(await db.words.get("w-old")).toMatchObject({ cefr: null, cefr_source: null });
+    expect(await db.words.get("w-junk")).toMatchObject({ cefr: null, cefr_source: null });
+    expect(await db.words.get("w-nosrc")).toMatchObject({ cefr: "C1", cefr_source: "user" });
+  });
+});

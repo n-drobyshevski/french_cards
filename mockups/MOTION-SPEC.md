@@ -603,6 +603,18 @@ A tap on an option is the answer (no «Проверить»). Sequence on phones
   place (`--dur-quick`).
 - Never: confetti, combo counters, streak flames, sound, a shake on a wrong answer.
 
+### 5.16 «План дня» and «Уровень языка» (added 2026-10-24; SPEC.md «План дня и уровень языка»; no motion board)
+Nothing new moves; these reuse the catalogue.
+- «План на сегодня»: the phone sheet is §5.7 (A1); the desktop popover is a menu (D6: fade + 4 px from the
+  summary `--dur-quick`, out `--dur-exit`).
+- The reason subline under the progress line, the summary and the receipt numbers are plain text swaps (§5.5):
+  no slide, no count-up. «Всё равно добавить новые» closes nothing: the button and its caption leave with the
+  row collapse of §5.10, the numbers swap, and the new cards join the queue unseen (no insert animation).
+- Wait screen: the minutes swap once a minute; no seconds, ring or progress bar. When the first card comes due,
+  the card enters as after a grade (R5 settle). Reduced motion: a 110 ms fade in place.
+- «НОВОЕ» tag, new-card ticks and the level badge: static, part of the card or row. A level saved from the word
+  card swaps in place, with the field spotlight (§5.14).
+
 ---
 
 ## 6. Mockup boards

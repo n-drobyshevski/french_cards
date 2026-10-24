@@ -5,9 +5,9 @@ import { cx } from "./cx";
 /** Full Russian names for screen readers, by level. */
 export const SLANG_NAMES_RU = ["нейтральный", "фамильярный", "арго", "вульгарный"] as const;
 
-/** «Уровень сленга: арго, 3 из 4, верлан» */
+/** «Сленг: арго, 3 из 4, верлан» (was «Уровень сленга: …» before «Уровень языка»). */
 export function slangAriaLabel(level: SlangLevel, verlan = false): string {
-  return `Уровень сленга: ${SLANG_NAMES_RU[level]}, ${level + 1} из 4${verlan ? ", верлан" : ""}`;
+  return `Сленг: ${SLANG_NAMES_RU[level]}, ${level + 1} из 4${verlan ? ", верлан" : ""}`;
 }
 
 /** «arg.» / «fam. · verl.» */

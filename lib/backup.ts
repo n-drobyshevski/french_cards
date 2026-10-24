@@ -1,7 +1,8 @@
 // JSON export of every table, and import that merges by updated_at (newer row wins).
 import { EXERCISE_ITEM_TYPES, EXERCISE_SCOPES } from "./core/exercises";
+import { isCefr, isStoredLevelSource } from "./core/level";
 import { db, legacyReviewSets } from "./db";
-import { DEFAULT_SETTINGS, SYNC_TABLES, type ExerciseItemType, type ExerciseScope, type ExerciseSet, type Settings, type SyncTable, type Syncable } from "./types";
+import { DEFAULT_SETTINGS, SYNC_TABLES, type ExerciseItemType, type ExerciseScope, type ExerciseSet, type Settings, type SyncTable, type Syncable, type Word } from "./types";
 
 export const BACKUP_FORMAT = "kartochki-backup";
 export const BACKUP_VERSION = 1;
@@ -123,6 +124,13 @@ const DEEP: Partial<Record<SyncTable, (row: Record<string, unknown>) => boolean>
 
 /** Fields a table gained later, filled in for rows of older backups. */
 const NORMALIZE: Partial<Record<SyncTable, (row: Syncable) => Record<string, unknown>>> = {
+  // «Уровень языка» came with migration 0014; a junk value is dropped rather than restored.
+  words: (row) => {
+    const w = row as Partial<Word>;
+    return isCefr(w.cefr)
+      ? { cefr: w.cefr, cefr_source: isStoredLevelSource(w.cefr_source) ? w.cefr_source : "user" }
+      : { cefr: null, cefr_source: null };
+  },
   exercise_sets: (row) => ({ scope: (row as Partial<ExerciseSet>).scope ?? null }),
 };
 

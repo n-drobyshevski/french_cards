@@ -1,7 +1,69 @@
-import { expect, type Page, type Route } from "@playwright/test";
+import { expect, test, type Page, type Route } from "@playwright/test";
 
 // Wire formats mirror lib/ai/schemas.ts (SuggestLine, ExtractLine, Suggestion, VocabItem, EnrichResponse, AnkiResponse).
 // Kept as plain objects so e2e does not import app code.
+
+// --- «План повторения» --------------------------------------------------------------------------
+
+/**
+ * The plan the specs were written against: the queue as before «План дня» (new cards oldest
+ * first, after the reviews, RU→FR the day after FR→RU, one allowance of 20 new cards, no cap).
+ * Shape of lib/core/study-plan.ts StudyPlan.
+ */
+export const LEGACY_PLAN = { new_words: 20, review_cap: null, new_order: "added", mix: "after", ru_fr: "together" } as const;
+
+const PLAN_SEEDED_AT = "2000-01-01T00:00:00.000Z";
+
+/**
+ * Before the page loads: when the app opens its database, the synced `study_plan` row is set to
+ * `plan`, in a transaction started before any of the app's, so its first read sees it. A row the
+ * app saved (from Settings) is kept. `explicit` (a spec's own plan) also replaces the seeded
+ * LEGACY_PLAN; without it, `window.__e2eStudyPlan = false` (`withoutLegacyPlan`) skips the seed.
+ */
+async function installStudyPlan(page: Page, plan: Record<string, unknown>, explicit: boolean) {
+  await page.addInitScript(
+    ({ value, explicit, seededAt }) => {
+      const open = IDBFactory.prototype.open;
+      IDBFactory.prototype.open = function (this: IDBFactory, ...args: Parameters<IDBFactory["open"]>) {
+        const request = open.apply(this, args);
+        if (args[0] === "kartochki") {
+          request.addEventListener("success", () => {
+            if (!explicit && (window as unknown as { __e2eStudyPlan?: boolean }).__e2eStudyPlan === false) return;
+            const db = request.result;
+            if (!db.objectStoreNames.contains("user_prefs")) return;
+            const store = db.transaction("user_prefs", "readwrite").objectStore("user_prefs");
+            const get = store.get("study_plan");
+            get.onsuccess = () => {
+              const row = get.result as { value: unknown; updated_at: string } | undefined;
+              const seeded = row && row.updated_at === seededAt && JSON.stringify(row.value) !== JSON.stringify(value);
+              if (!row || (explicit && seeded)) store.put({ id: "study_plan", value, updated_at: seededAt, deleted_at: null });
+            };
+          });
+        }
+        return request;
+      };
+    },
+    { value: plan, explicit, seededAt: PLAN_SEEDED_AT },
+  );
+}
+
+/** A spec's own «План повторения» (lib/core/study-plan.ts StudyPlan), stored before the app reads it. */
+export async function seedStudyPlan(page: Page, plan: Record<string, unknown>) {
+  await installStudyPlan(page, plan, true);
+}
+
+/** For a spec about «План дня» itself: no `study_plan` row is seeded (the app's own defaults). */
+export async function withoutLegacyPlan(page: Page) {
+  await page.addInitScript(() => {
+    (window as unknown as { __e2eStudyPlan?: boolean }).__e2eStudyPlan = false;
+  });
+}
+
+// Every test of a spec that imports this file starts with LEGACY_PLAN, so the specs written before
+// «План дня» keep their queue. The hook registers on the spec being loaded; Node caches modules per
+// worker, so the file drops itself from the cache to run (and register) again for the next spec.
+test.beforeEach(async ({ page }) => installStudyPlan(page, LEGACY_PLAN, false));
+if (typeof require !== "undefined" && typeof __filename !== "undefined") delete require.cache[__filename];
 
 export const NDJSON = "application/x-ndjson; charset=utf-8";
 
@@ -843,6 +905,56 @@ export async function seedCardStates(page: Page, states: Record<string, "difficu
 }
 
 /** The first-run seed's 11 words. */
+/** Puts a seeded word's FR→RU card in learning, due `minutes` from now. Reload afterwards. */
+export async function seedLearningCard(page: Page, fr: string, minutes: number) {
+  await page.evaluate(
+    ({ fr, minutes }) =>
+      new Promise<void>((resolve, reject) => {
+        const open = indexedDB.open("kartochki");
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const db = open.result;
+          const tx = db.transaction(["words", "review_state"], "readwrite");
+          const words = tx.objectStore("words").getAll();
+          words.onsuccess = () => {
+            const word = (words.result as { id: string; fr: string; deleted_at: string | null }[]).find((w) => w.fr === fr && !w.deleted_at);
+            if (!word) {
+              reject(new Error(`seedLearningCard: no word ${fr}`));
+              tx.abort();
+              return;
+            }
+            const cards = tx.objectStore("review_state");
+            const get = cards.get(`${word.id}:fr_ru`);
+            get.onsuccess = () => {
+              const now = Date.now();
+              const iso = (ms: number) => new Date(ms).toISOString();
+              cards.put({
+                ...get.result,
+                state: 1,
+                learning_steps: 1,
+                reps: 1,
+                lapses: 0,
+                stability: 0.5,
+                difficulty: 5,
+                due: iso(now + minutes * 60_000),
+                last_review: iso(now - 60_000),
+                scheduled_days: 0,
+                elapsed_days: 0,
+                updated_at: iso(now),
+              });
+            };
+          };
+          tx.oncomplete = () => {
+            db.close();
+            resolve();
+          };
+          tx.onerror = () => reject(tx.error);
+        };
+      }),
+    { fr, minutes },
+  );
+}
+
 export const SEED_WORDS = [
   "une blague",
   "le gras",

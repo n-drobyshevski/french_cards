@@ -196,7 +196,7 @@ function PhoneFolder({ id }: { id: string | null }) {
         {expectWords && (
           <div aria-hidden="true" className="meta mt-6 flex justify-between border-b border-ink pb-2">
             <span>Слово</span>
-            <span>Уровень · показ</span>
+            <span>Сленг · ур. · показ</span>
           </div>
         )}
 

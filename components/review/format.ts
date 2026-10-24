@@ -82,12 +82,21 @@ export function formatDateStamp(date: Date): string {
   return `${String(date.getDate()).padStart(2, "0")}.${String(date.getMonth() + 1).padStart(2, "0")}`;
 }
 
-/** Left part of the progress row: «23 к повторению · 4 новых». */
-export function queueSummary(due: number, fresh: number): string {
+/**
+ * Parts of the progress row's summary: «27 к повторению», «4 новых», «6 обратных» (RU→FR sides
+ * new today, «План дня»). A part at 0 is left out; with nothing at all, «0 к повторению».
+ */
+export function queueSummaryParts(due: number, fresh: number, reverse = 0): string[] {
   const parts: string[] = [];
-  if (due > 0 || fresh === 0) parts.push(`${due} к повторению`);
+  if (due > 0 || fresh + reverse === 0) parts.push(`${due} к повторению`);
   if (fresh > 0) parts.push(`${fresh} ${pluralRu(fresh, ["новая", "новых", "новых"])}`);
-  return parts.join(" · ");
+  if (reverse > 0) parts.push(`${reverse} ${pluralRu(reverse, ["обратная", "обратных", "обратных"])}`);
+  return parts;
+}
+
+/** Left part of the progress row: «23 к повторению · 4 новых · 6 обратных». */
+export function queueSummary(due: number, fresh: number, reverse = 0): string {
+  return queueSummaryParts(due, fresh, reverse).join(" · ");
 }
 
 /**

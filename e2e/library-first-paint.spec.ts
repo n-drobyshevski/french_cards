@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+// The e2e «План повторения» (LEGACY_PLAN, seeded before each test): the stepper below counts its cards.
+import "./fixtures";
 
 // First paint without flashes (mockups/MOTION-SPEC.md §3.1, L2, T1): stored choices are on screen
 // from the first client frame (localStorage mirror), never the defaults first.
@@ -56,11 +58,14 @@ test("a theme page opens with its title, numbers and «Повторить тем
 });
 
 test("settings show the stored values from the first painted frame after a reload", async ({ page }) => {
-  await page.goto("/settings");
+  // «План повторения» is synced (user_prefs, no localStorage mirror): until it is read its stepper is
+  // drawn valueless, never with a wrong number. The e2e plan counts cards («Назавтра»): 20 a day.
+  await page.goto("/settings/plan");
   const stepper = page.getByRole("group", { name: "Новых карточек в день" });
-  await expect(stepper.locator("output")).toHaveText("15");
-  await stepper.getByRole("button", { name: "Больше" }).click();
   await expect(stepper.locator("output")).toHaveText("20");
+  await stepper.getByRole("button", { name: "Больше" }).click();
+  await expect(stepper.locator("output")).toHaveText("21");
+  await page.goto("/settings");
   await page.getByRole("radiogroup", { name: "Кнопки оценки" }).getByRole("radio", { name: /^Две кнопки/ }).click();
 
   // Every painted frame: the stepper number as it is visible (transparent = valueless, allowed).
@@ -79,7 +84,8 @@ test("settings show the stored values from the first painted frame after a reloa
     requestAnimationFrame(sample);
   });
   await page.reload();
-  await expect(page.getByRole("group", { name: "Новых карточек в день" }).locator("output")).toHaveText("20");
   await expect(page.getByRole("radiogroup", { name: "Кнопки оценки" }).getByRole("radio", { name: /^Две кнопки/ })).toBeChecked();
-  expect(await page.evaluate(() => (window as unknown as { __seen: string[] }).__seen)).toEqual(["20"]);
+  await page.goto("/settings/plan");
+  await expect(page.getByRole("group", { name: "Новых карточек в день" }).locator("output")).toHaveText("21");
+  expect(await page.evaluate(() => (window as unknown as { __seen: string[] }).__seen)).toEqual(["21"]);
 });

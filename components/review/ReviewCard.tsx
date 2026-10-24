@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type Ref } from "react";
+import { memo, useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type Ref } from "react";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { AbbrHint } from "@/components/ui/AbbrHint";
@@ -8,6 +8,8 @@ import { IconButton } from "@/components/ui/Button";
 import { Kbd } from "@/components/ui/Kbd";
 import { SkeletonBar } from "@/components/ui/Skeleton";
 import { SlangMeter } from "@/components/ui/SlangMeter";
+import { LevelMark } from "@/components/library/LevelMark";
+import { useLevelData } from "@/lib/use-level-data";
 import { REDUCED_MOTION_QUERY, tokenMs } from "@/lib/motion";
 import { useMediaQuery } from "@/lib/use-media";
 import { fieldsForDisplay } from "@/lib/core/custom-fields";
@@ -170,6 +172,8 @@ export interface CardFace {
   number?: string;
   /** Shared «Свои поля» definitions, for the answer side (its shared fields under their current names). */
   fieldDefs?: readonly FieldDef[];
+  /** A card never reviewed: the question side carries the outlined «НОВОЕ» tag (D3 B). */
+  isNew?: boolean;
 }
 
 /** «Свои поля» the answer side lists; the rest are counted («+2 поля»). */
@@ -215,10 +219,14 @@ const QuestionFace = memo(function QuestionFace({
   word,
   direction,
   number,
+  isNew = false,
+  newId,
   headRef,
   writeIn,
   footerIn,
 }: CardFace & {
+  /** The live card's tag id: the question button is described by it («новая карточка»). */
+  newId?: string;
   /** The prompt and its POS line, which glide between the two sides (R3). */
   headRef?: Ref<HTMLSpanElement>;
   /** Text written in over the loading placeholder's frame (R1). */
@@ -238,7 +246,23 @@ const QuestionFace = memo(function QuestionFace({
             <CallNumber side={fromFr ? "FR" : "RU"} number={number} />
           </span>
         }
-      />
+      >
+        {isNew && (
+          <span
+            className={cx(
+              "inline-flex h-5 items-center rounded-[2px] border border-ink px-1.5 font-mono text-[11px] font-medium tracking-[.06em] text-ink",
+              writeIn,
+            )}
+          >
+            <span aria-hidden="true">НОВОЕ</span>
+            {newId && (
+              <span id={newId} className="sr-only">
+                новая карточка
+              </span>
+            )}
+          </span>
+        )}
+      </CardHeader>
       <span className={questionBody}>
         <CardRules />
         <span ref={headRef} className="relative flex flex-col">
@@ -327,11 +351,21 @@ const AnswerFace = memo(function AnswerFace({
   const pos = posAbbr(word);
   const step = headwordStep(direction === "fr_ru" ? word.fr : word.ru, word.fr);
   const origin = useShowOrigin() ? word.origin : null;
+  // «Уровень языка» on the answer side only (D5 A): «нейтр. · ≈B1».
+  const level = useLevelData().level(word);
   return (
     <>
       <CardHeader label={<CallNumber side={direction === "fr_ru" ? "FR" : "RU"} number={number} />}>
         <span className={cx("flex items-center gap-1", write)}>
           <SlangMeter level={word.slang_level} verlan={word.verlan} hints hintAlign="end" />
+          {level && (
+            <>
+              <span aria-hidden="true" className="abbr ml-1 text-[15px] leading-5">
+                ·
+              </span>
+              <LevelMark info={level} size="header" className="ml-1" />
+            </>
+          )}
           {(onEdit || onMute || onDelete) && <span aria-hidden="true" className="ml-2 h-5 w-px bg-rule" />}
           {onMute && headerButton("mute", "На паузу", onMute, { title: "На паузу — слово останется в библиотеке, но не будет в повторениях" })}
           {onDelete && headerButton("trash", "Удалить слово", onDelete)}
@@ -522,6 +556,7 @@ export function ReviewCard({
   word,
   direction,
   fieldDefs,
+  isNew = false,
   revealed,
   onReveal,
   onHide,
@@ -561,6 +596,7 @@ export function ReviewCard({
   const questionHeadRef = useRef<HTMLSpanElement>(null);
   const answerHeadRef = useRef<HTMLDivElement>(null);
   const writeIn = enter && WRITE_IN;
+  const newId = useId();
 
   const fromFr = direction === "fr_ru";
   const prompt = fromFr ? word.fr : word.ru;
@@ -630,6 +666,7 @@ export function ReviewCard({
                 onReveal();
               }}
               aria-label={`Карточка ${prompt}, перевернуть`}
+              aria-describedby={isNew ? newId : undefined}
               aria-keyshortcuts="Space"
               data-review-reveal=""
               className={cx(cardShell, "absolute inset-0 text-left", swipeEnabled && "touch-pan-y pointer-coarse:select-none")}
@@ -638,6 +675,8 @@ export function ReviewCard({
                 word={word}
                 direction={direction}
                 number={number}
+                isNew={isNew}
+                newId={newId}
                 headRef={questionHeadRef}
                 writeIn={writeIn}
                 footerIn={flip === "down"}
@@ -695,7 +734,7 @@ export interface LeavingCardProps extends CardFace {
  * inert. It takes over from the live card in the frame of the grade — at the release pose of a
  * swipe — and plays its exit independently of the next card's read, then reports `onDone`.
  */
-export function LeavingCard({ word, direction, number, fieldDefs, revealed, folderName, exit, onDone }: LeavingCardProps) {
+export function LeavingCard({ word, direction, number, fieldDefs, isNew, revealed, folderName, exit, onDone }: LeavingCardProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [start] = useState(() => ({ exit, onDone }));
   useLayoutEffect(() => {
@@ -705,7 +744,7 @@ export function LeavingCard({ word, direction, number, fieldDefs, revealed, fold
     animation.finished.then(start.onDone, () => {});
     return () => animation.cancel();
   }, [start]);
-  const face = { word, direction, number, fieldDefs };
+  const face = { word, direction, number, fieldDefs, isNew };
   return (
     <div
       ref={ref}

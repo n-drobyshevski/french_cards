@@ -3,9 +3,21 @@
 // session and kept in memory. "se casser"/"s'en…" input is matched on the verb and the
 // pronominal prefix is put back on the result; "la thu…"/"l'oseille" input is matched on nouns
 // (of the article's gender) and the article is put back.
+// Also the word level («Уровень языка», lib/core/level.ts): `lookup` gives a lemma's frequency rank,
+// and `loadLevelData` adds the FLELex levels (public/lexique/fr-cefr.json, a separate file under
+// its own licence, built by scripts/build-cefr.mjs).
+import {
+  createCefrData,
+  createLevelResolver,
+  type CefrData,
+  type CefrFile,
+  type LevelResolver,
+  type LexFreq,
+} from "./core/level";
 import type { Gender, PartOfSpeech } from "./types";
 
 export const LEXIQUE_URL = "/lexique/fr-lemmas.json";
+export const CEFR_URL = "/lexique/fr-cefr.json";
 
 /** `key` is the folded lemma, written by the build script only when it differs from `lemma`. */
 export type LexiqueEntry = readonly [lemma: string, pos: PartOfSpeech, gender: Gender, freq: number, key?: string];
@@ -65,9 +77,21 @@ function withArticle(article: string, lemma: string, gender: Gender, key: string
   return `${singular} ${lemma}`;
 }
 
+/** An exact `lookup` hit: the entry plus its frequency rank in the list (1 = most common). */
+export interface LexiqueLookup extends LexFreq {
+  lemma: string;
+  pos: PartOfSpeech;
+  gender: Gender;
+}
+
 export interface Lexique {
   readonly size: number;
   search(q: string, limit?: number): LexiqueHit[];
+  /**
+   * The entry whose folded lemma is exactly `key` (folded here), preferring `pos`, then the most
+   * frequent; no article or pronoun stripping (pass `levelKey(fr)`).
+   */
+  lookup(key: string, pos?: PartOfSpeech): LexiqueLookup | null;
 }
 
 const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -107,8 +131,40 @@ export function createLexique(entries: readonly LexiqueEntry[], { prefolded = fa
     return lo;
   }
 
+  // Frequencies, most common first, for ranks; sorted on the first lookup only.
+  let byFreq: Float64Array | null = null;
+  function rankOf(freq: number): number {
+    if (!byFreq) {
+      byFreq = Float64Array.from(index, (r) => r.e[3]).sort().reverse();
+    }
+    // 1 + the number of entries strictly more frequent.
+    let lo = 0;
+    let hi = byFreq.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (byFreq[mid] > freq) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo + 1;
+  }
+
   return {
     size: index.length,
+    lookup(q: string, pos?: PartOfSpeech): LexiqueLookup | null {
+      const key = foldKey(q);
+      if (!key) return null;
+      // sur / sûr fold alike: the entry of the word's part of speech, else the more common one.
+      const better = (e: LexiqueEntry, than: LexiqueEntry) =>
+        e[1] === pos && than[1] !== pos ? true : e[1] !== pos && than[1] === pos ? false : e[3] > than[3];
+      let best: LexiqueEntry | null = null;
+      for (let i = lowerBound(key); i < keys.length && keys[i] === key; i++) {
+        const e = index[i].e;
+        if (!best || better(e, best)) best = e;
+      }
+      if (!best) return null;
+      const [lemma, entryPos, gender, freq] = best;
+      return { lemma, pos: entryPos, gender, freq, rank: rankOf(freq) };
+    },
     search(q: string, limit = 5): LexiqueHit[] {
       if (limit <= 0) return [];
       // Detect the prefix before trimming, so "se " (typed space) already means pronominal.
@@ -192,4 +248,56 @@ export async function searchLexique(q: string, limit = 5): Promise<LexiqueHit[]>
 export function setLexiqueForTesting(lexique: Lexique | null): void {
   loaded = lexique;
   loading = null;
+  levelData = null;
+}
+
+// --- Word level -------------------------------------------------------------------------------
+
+let cefrLoaded: CefrData | null = null;
+let cefrLoading: Promise<CefrData> | null = null;
+
+/** Fetches the FLELex levels once. A failed load is retried on the next call. */
+export function loadCefrData(fetchImpl: typeof fetch = fetch): Promise<CefrData> {
+  if (cefrLoaded) return Promise.resolve(cefrLoaded);
+  cefrLoading ??= (async () => {
+    const res = await fetchImpl(CEFR_URL, { cache: "force-cache" });
+    if (!res.ok) throw new Error(`cefr: HTTP ${res.status}`);
+    cefrLoaded = createCefrData((await res.json()) as CefrFile);
+    return cefrLoaded;
+  })().catch((error: unknown) => {
+    cefrLoading = null;
+    throw error;
+  });
+  return cefrLoading;
+}
+
+let levelData: LevelResolver | null = null;
+let levelLoading: Promise<LevelResolver> | null = null;
+
+/**
+ * The level resolver over FLELex and Lexique, loaded once. Never rejects: with a file missing
+ * (offline before the service worker cached it) it resolves over what did load, with `ready`
+ * false, and the next call tries again.
+ */
+export function loadLevelData(fetchImpl: typeof fetch = fetch): Promise<LevelResolver> {
+  if (levelData?.ready) return Promise.resolve(levelData);
+  levelLoading ??= Promise.allSettled([loadCefrData(fetchImpl), loadLexique(fetchImpl)]).then(([cefr, lex]) => {
+    const data = cefr.status === "fulfilled" ? cefr.value : null;
+    const lexique = lex.status === "fulfilled" ? lex.value : null;
+    levelData = createLevelResolver(data, lexique ? (key, pos) => lexique.lookup(key, pos) : null, !!(data && lexique));
+    levelLoading = null;
+    return levelData;
+  });
+  return levelLoading;
+}
+
+/** The resolver if `loadLevelData` has finished (possibly not `ready`), else null. */
+export const loadedLevelData = (): LevelResolver | null => levelData;
+
+/** Test helper: install the FLELex data (or clear it with null). */
+export function setCefrDataForTesting(data: CefrData | null): void {
+  cefrLoaded = data;
+  cefrLoading = null;
+  levelData = null;
+  levelLoading = null;
 }

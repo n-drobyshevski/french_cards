@@ -7,7 +7,7 @@ import { shareLibraryWords, type LibraryWord, type LibraryWords } from "./useLib
 const folder = (id: string, name = id): Folder => ({ id, name, sort: 1, locked: false, color: "#000", updated_at: "t0" }) as Folder;
 const schedule = (dueLabel = "новое"): WordSchedule => ({ status: "new", dueLabel, tone: "new", due: false, nextDue: null });
 const word = (id: string, extra: Partial<Word> = {}): Word => ({ id, fr: id, ru: id, tags: ["a"], updated_at: "t0", ...extra }) as Word;
-const row = (w: Word, f?: Folder, s = schedule()): LibraryWord => ({ word: w, folder: f, schedule: s });
+const row = (w: Word, f?: Folder, s = schedule()): LibraryWord => ({ word: w, folder: f, schedule: s, level: null });
 
 /** A fresh read of the same data: new objects with equal values, as Dexie hands them out. */
 const reread = (lib: LibraryWords): LibraryWords => structuredClone(lib);

@@ -6,11 +6,12 @@
 import { z } from "zod";
 import { ANKI_CHUNK_MAX, ANKI_FIELD_CHARS, ANKI_FIELDS_MAX, ANKI_TAGS_MAX, type AnkiItem } from "@/lib/anki/types";
 import { FIELD_HINT_MAX, FIELD_LABEL_MAX, MAX_FIELD_DEFS } from "@/lib/core/custom-fields";
-import type { Confidence, Conjugation, Gender, PartOfSpeech, SlangLevel } from "@/lib/types";
+import type { Cefr, Confidence, Conjugation, Gender, PartOfSpeech, SlangLevel } from "@/lib/types";
 import {
   ASSIGN_CHUNK_MAX,
   CONFIDENCE_VALUES,
   ENRICH_CHUNK_MAX,
+  LEVEL_ANCHORS_MAX,
   EXAMPLE_AVOID_MAX,
   FOLDER_INBOX,
   FOLDER_NEW,
@@ -294,6 +295,7 @@ export interface AnkiModel {
 const SLUG_RE = /^[a-z0-9](?:[a-z0-9-]{0,47})$/;
 const slugInput = z.string().regex(SLUG_RE, "invalid slug");
 const shortText = (max: number) => z.string().trim().max(max);
+const CEFR_VALUES = ["A1", "A2", "B1", "B2", "C1", "C2"] as const satisfies readonly Cefr[];
 
 export const FolderInputSchema = z.object({
   slug: slugInput,
@@ -432,8 +434,45 @@ export const EnrichRequestSchema = z.object({
   /** Custom fields to fill for each word (definitions marked for the automatic fill). */
   fields: customFieldsInput().optional(),
   model: z.enum(MODEL_TIERS).default("fast"),
+  /**
+   * "card" (default): slang level, part of speech, example, theme, custom fields → EnrichResponse.
+   * "level": only a CEFR level per word («Определить уровень языка»), rated against `anchors` → LevelResponse.
+   */
+  scope: z.enum(["card", "level"]).default("card"),
+  /** scope "level": words of known level (stored, or FLELex), the model's yardstick. */
+  anchors: z
+    .array(z.object({ fr: shortText(120).min(1), level: z.enum(CEFR_VALUES) }))
+    .max(LEVEL_ANCHORS_MAX)
+    .optional(),
 });
 export type EnrichRequest = z.input<typeof EnrichRequestSchema>;
+
+/** The model's answer for scope "level": one level per ref, NONE when it gives none. */
+export function buildLevelSchema() {
+  return z.object({
+    items: z
+      .array(
+        z.object({
+          ref: z.string().describe("The word ref from the input, e.g. w3."),
+          level: z.enum([...CEFR_VALUES, "NONE"]).describe("CEFR level of the card, or NONE (argot, vulgar, verlan, a name, or unknown)."),
+        }),
+      )
+      .describe("Exactly one entry per input card, in input order."),
+  });
+}
+export interface LevelModel {
+  items: { ref: string; level: Cefr | "NONE" }[];
+}
+
+/** One word's level from /api/ai/enrich scope "level"; null = the model gave none. */
+export interface LevelResult {
+  id: string;
+  cefr: Cefr | null;
+}
+
+export interface LevelResponse {
+  levels: LevelResult[];
+}
 
 /** POST /api/ai/anki: one chunk of notes from an Anki deck. `ref` is the AnkiNote id. */
 export const AnkiRequestSchema = z.object({

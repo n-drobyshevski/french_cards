@@ -4,10 +4,20 @@ import { toDrafts, type ExampleDraft } from "@/components/examples/ExampleList";
 import { examplesPatch, wordExamples } from "@/lib/examples";
 import type { WordPatch } from "@/lib/core/words";
 import { cleanConjugation } from "@/lib/core/conjugate";
+import { isCefr, type Cefr } from "@/lib/core/level";
 import type { Conjugation, FieldDef, Gender, PartOfSpeech, SlangLevel, Word } from "@/lib/types";
 import { fieldRows, rowsToValues, sameFieldValues, type FieldRow } from "./word-fields";
 
-export type Editing = null | "entry" | "note" | "origin" | "example" | "fields" | "conjugation";
+/** "level": «Уровень языка» alone (the desktop pane's in-place options; on phones it is in "entry"). */
+export type Editing = null | "entry" | "level" | "note" | "origin" | "example" | "fields" | "conjugation";
+
+/** «Уровень языка» in the form: the user's own level, or «Авто» (the estimate, or a level from Claude). */
+export type LevelChoice = Cefr | "auto";
+
+/** «Авто» unless the user set the level themselves. */
+export function levelChoiceOf(w: Pick<Word, "cefr" | "cefr_source">): LevelChoice {
+  return isCefr(w.cefr) && (w.cefr_source ?? "user") === "user" ? w.cefr : "auto";
+}
 
 export interface Draft {
   fr: string;
@@ -27,6 +37,9 @@ export interface Draft {
   conjugation: ConjDraft;
   /** The forms the form opened with, to tell an edit from an untouched copy of the dictionary's. */
   conjugationBase: string;
+  /** «Уровень языка» A1…C2 / «Авто», and what the form opened with (an untouched «Авто» saves nothing). */
+  cefr: LevelChoice;
+  cefrBase: LevelChoice;
 }
 
 export const CONJ_TENSE_KEYS = ["present", "passe_compose", "imparfait", "futur"] as const;
@@ -80,14 +93,28 @@ export const draftOf = (w: Word, defs: readonly FieldDef[]): Draft => ({
   origin: w.origin ?? "",
   examples: toDrafts(wordExamples(w)),
   fields: fieldRows(w, defs),
+  cefr: levelChoiceOf(w),
+  cefrBase: levelChoiceOf(w),
   ...(() => {
     const conjugation = conjDraftOf(w.conjugation);
     return { conjugation, conjugationBase: conjKey(conjugation) };
   })(),
 });
 
+/**
+ * The level part of a save: a pick is the user's level; «Авто» over the user's level clears it
+ * (back to the estimate); an untouched choice changes nothing (a level from Claude stays).
+ */
+export function levelPatch(draft: Pick<Draft, "cefr" | "cefrBase">): WordPatch {
+  if (draft.cefr === draft.cefrBase) return {};
+  return draft.cefr === "auto" ? { cefr: null, cefr_source: null } : { cefr: draft.cefr, cefr_source: "user" };
+}
+
 export function patchFor(editing: Exclude<Editing, null>, draft: Draft): WordPatch {
-  if (editing === "entry") return { fr: draft.fr, ru: draft.ru, slang_level: draft.slang_level, verlan: draft.verlan, pos: draft.pos, gender: draft.gender };
+  if (editing === "entry") {
+    return { fr: draft.fr, ru: draft.ru, slang_level: draft.slang_level, verlan: draft.verlan, pos: draft.pos, gender: draft.gender, ...levelPatch(draft) };
+  }
+  if (editing === "level") return levelPatch(draft);
   if (editing === "note") return { note: draft.note };
   if (editing === "origin") return { origin: draft.origin };
   if (editing === "fields") return { custom_fields: rowsToValues(draft.fields) };
@@ -101,7 +128,14 @@ export function patchFor(editing: Exclude<Editing, null>, draft: Draft): WordPat
 /** The word's current values of the fields a patch touches (to undo it). */
 export function undoFor(word: Word, patch: WordPatch): WordPatch {
   const undo: Record<string, unknown> = {};
-  const current = { ...word, extra_examples: word.extra_examples ?? [], custom_fields: word.custom_fields ?? [] };
+  const current = {
+    ...word,
+    extra_examples: word.extra_examples ?? [],
+    custom_fields: word.custom_fields ?? [],
+    // A row from before «Уровень языка» has no level: undoing puts none back (undefined would keep the new one).
+    cefr: word.cefr ?? null,
+    cefr_source: word.cefr_source ?? null,
+  };
   for (const key of Object.keys(patch)) undo[key] = current[key as keyof Word];
   return undo as WordPatch;
 }

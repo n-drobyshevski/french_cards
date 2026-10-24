@@ -1,11 +1,12 @@
-// Post-processing for /api/ai/enrich. The model sees short refs (w1, w2…) instead of word ids and
+// Post-processing for /api/ai/enrich (and its scope "level", `finalizeLevels`). The model sees short refs (w1, w2…) instead of word ids and
 // (f1, f2…) instead of custom field ids; this maps them back, cleans the text, keeps theme picks
 // inside the learner's slugs and keeps one result per word. Words the model skipped get no result
 // (the client leaves them as they are).
 import { cleanFieldValue } from "@/lib/core/custom-fields";
+import { isCefr } from "@/lib/core/level";
 import { refMap } from "./classify";
 import { cleanText, pickAlternatives, pickFolder, slangLevelFromCode, type FolderRef } from "./normalize";
-import { fieldRefFor, type CustomFill, type CustomModel, type EnrichmentModel, type EnrichResult } from "./schemas";
+import { fieldRefFor, type CustomFill, type CustomModel, type EnrichmentModel, type EnrichResult, type LevelModel, type LevelResult } from "./schemas";
 
 /** Short field ref (f1…) → the definition id it stands for. */
 export function fieldRefMap(fields: readonly { id: string }[]): Map<string, string> {
@@ -65,6 +66,21 @@ export function finalizeEnrichment(
       new_folder: theme.new_folder,
       custom: finalizeCustom(item.custom, fieldRefs),
     });
+  }
+  return words.flatMap((w) => byId.get(w.id) ?? []);
+}
+
+/**
+ * The model's levels (scope "level") by word id: unknown refs and repeats (the first wins) are
+ * dropped, NONE or junk becomes null. Words the model skipped get no result.
+ */
+export function finalizeLevels(raw: LevelModel, words: readonly { id: string }[]): LevelResult[] {
+  const refs = refMap(words);
+  const byId = new Map<string, LevelResult>();
+  for (const item of raw.items ?? []) {
+    const word = typeof item?.ref === "string" ? refs.get(item.ref.trim()) : undefined;
+    if (!word || byId.has(word.id)) continue;
+    byId.set(word.id, { id: word.id, cefr: isCefr(item.level) ? item.level : null });
   }
   return words.flatMap((w) => byId.get(w.id) ?? []);
 }

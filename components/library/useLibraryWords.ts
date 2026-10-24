@@ -2,8 +2,10 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import { useRef } from "react";
+import type { LevelInfo } from "@/lib/core/level";
 import { db } from "@/lib/db";
 import { listFolders } from "@/lib/folders";
+import { useLevelData } from "@/lib/use-level-data";
 import type { Folder, ReviewState, Word } from "@/lib/types";
 import { wordSchedule, type WordSchedule } from "./format";
 
@@ -12,6 +14,8 @@ export interface LibraryWord {
   schedule: WordSchedule;
   /** Live folder the word is in; undefined = «Входящие». */
   folder?: Folder;
+  /** «Уровень языка»: stored, else estimated (only stored ones until the dictionaries load); null = none. */
+  level: LevelInfo | null;
 }
 
 export interface LibraryWords {
@@ -27,6 +31,8 @@ export interface LibraryWords {
 export function useLibraryWords(folderId?: string | null, enabled = true): LibraryWords | null | undefined {
   // The previous result, so unchanged rows keep their identity across re-reads (memoised rows skip).
   const last = useRef<LibraryWords | null>(null);
+  // A new resolver (the dictionaries came in) re-reads, so the rows get their estimates.
+  const levels = useLevelData();
   return useLiveQuery(async () => {
     if (!enabled) return null;
     const now = new Date();
@@ -49,13 +55,18 @@ export function useLibraryWords(folderId?: string | null, enabled = true): Libra
       if (word.deleted_at !== null) continue;
       const folder = word.folder_id !== null ? byId.get(word.folder_id) : undefined;
       if (folderId === null && folder) continue;
-      rows.push({ word, folder, schedule: wordSchedule(statesByWord.get(word.id) ?? [], now, !!word.muted || !!folder?.muted) });
+      rows.push({
+        word,
+        folder,
+        schedule: wordSchedule(statesByWord.get(word.id) ?? [], now, !!word.muted || !!folder?.muted),
+        level: levels.level(word),
+      });
     }
     rows.sort((a, b) => b.word.created_at.localeCompare(a.word.created_at));
     const result = shareLibraryWords(last.current, { folders, words: rows });
     last.current = result;
     return result;
-  }, [folderId, enabled]);
+  }, [folderId, enabled, levels]);
 }
 
 /**
@@ -79,7 +90,7 @@ export function shareLibraryWords(prev: LibraryWords | null, next: LibraryWords)
     next.words.map((r) => {
       const folder = r.folder && shared.get(r.folder.id);
       const old = oldRows.get(r.word.id);
-      if (old && old.folder === folder && sameSchedule(old.schedule, r.schedule) && sameRecord(old.word, r.word)) return old;
+      if (old && old.folder === folder && sameSchedule(old.schedule, r.schedule) && sameLevel(old.level, r.level) && sameRecord(old.word, r.word)) return old;
       return folder === r.folder ? r : { ...r, folder };
     }),
   );
@@ -93,6 +104,10 @@ function sameItems<T>(prev: T[], next: T[]): T[] {
 
 function sameSchedule(a: WordSchedule, b: WordSchedule): boolean {
   return a.status === b.status && a.dueLabel === b.dueLabel && a.tone === b.tone && a.due === b.due && a.nextDue === b.nextDue;
+}
+
+function sameLevel(a: LevelInfo | null, b: LevelInfo | null): boolean {
+  return a === b || (!!a && !!b && a.level === b.level && a.source === b.source);
 }
 
 /** Same own keys and values; arrays and objects (tags, examples) by their JSON. */

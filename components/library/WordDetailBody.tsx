@@ -61,7 +61,13 @@ import { useUndoSnackbar } from "./undo";
 import { LifeExamplesLink } from "@/components/context/ContextLink";
 import { ExampleList, toDrafts, type ExampleDraft } from "@/components/examples/ExampleList";
 import { examplesPatch, wordExamples } from "@/lib/examples";
-import { conjDraftError, draftOf, isDirty, patchFor, undoFor, withConjugationDraft, type Draft, type Editing } from "./word-editor";
+import { conjDraftError, draftOf, isDirty, levelChoiceOf, patchFor, undoFor, withConjugationDraft, type Draft, type Editing, type LevelChoice } from "./word-editor";
+import { CEFR_LEVELS, type LevelInfo } from "@/lib/core/level";
+import { RU_FR_UNLOCK_DAYS } from "@/lib/core/plan";
+import { useLevelData } from "@/lib/use-level-data";
+import { getStudyPlan } from "@/lib/user-prefs";
+import { LEVEL_SOURCE_CAPTIONS, levelHint, levelText } from "./level";
+import { LevelMark } from "./LevelMark";
 import { QuizIconButton, useConjugationView } from "@/components/conjugation/ConjugationViews";
 import { AddFieldButton, type FieldKind } from "./AddFieldButton";
 import { AutoFillButton } from "./AutoFill";
@@ -123,14 +129,22 @@ function useWordDetail(wordId: string) {
     const now = new Date();
     const word = await db.words.get(wordId);
     if (!word || word.deleted_at !== null) return { word: null };
-    const [states, history, reviews, folders] = await Promise.all([
+    const [states, history, reviews, folders, plan] = await Promise.all([
       getWordStates(wordId),
       getWordHistory(wordId, HISTORY_SLOTS),
       db.review_log.where("word_id").equals(wordId).filter((l) => l.deleted_at === null).count(),
       listFolders(),
+      getStudyPlan(),
     ]);
+    // «После 3 дней узнавания»: a new RU→FR card waits until FR→RU has held for 3 days.
+    const frRu = states.find((s) => s.direction === "fr_ru");
+    const ruLocked = plan.ru_fr === "after" && !(frRu && frRu.state === 2 && frRu.stability >= RU_FR_UNLOCK_DAYS);
     const schedule = states.map((s, i) => {
       const due = formatDueIn(s, now);
+      if (s.state === 0 && s.direction === "ru_fr" && ruLocked) {
+        const waits = `откроется после ${RU_FR_UNLOCK_DAYS} дней узнавания`;
+        return { direction: s.direction, text: waits, full: waits, stability: formatStability(s) };
+      }
       const text = s.state === 0 ? "новая карточка" : due === "сейчас" ? "пора повторить" : i === 0 ? `следующий показ ${due}` : due;
       const full = s.state === 0 ? "ещё не показывалось" : due === "сейчас" ? "к повторению" : `следующий показ ${due}`;
       return { direction: s.direction, text, full, stability: formatStability(s) };
@@ -419,6 +433,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
   const conjView = useConjugationView();
   const actions = useWordActions(word, folders, onClose);
   const saveExamples = useExampleSaver(word);
+  const levels = useLevelData();
   const proposal = useTranslationProposal(editor.draft?.fr ?? "", editor.draft?.ru ?? "", editor.editing === "entry");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [fieldFocus, setFieldFocus] = useState<string | null>(null);
@@ -433,6 +448,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
   }
   const { schedule, history, reviews } = data;
   const w = data.word;
+  const level = levels.level(w);
   const { folder } = actions;
   const { editing, draft, set } = editor;
   const abbr = posAbbr(w);
@@ -505,7 +521,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
           </div>
           <ProposalLine proposal={proposal} onUse={(ru) => set("ru", ru)} />
           <span id={`${id}-slang`} className="meta mt-4">
-            Уровень сленга
+            Сленг
           </span>
           <div className="mt-2 flex items-center gap-2">
             <Segmented
@@ -525,6 +541,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             </span>
           </div>
           <DetectEntry word={w} draft={draft} set={set} />
+          <LevelEditRow id={`${id}-cefr`} word={w} draft={draft} set={set} size="sheet" />
           {errorLine}
         </form>
       ) : (
@@ -545,6 +562,14 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
               </>
             )}
             <SlangMeter level={w.slang_level} verlan={w.verlan} hints />
+            {level && (
+              <>
+                <span aria-hidden="true" className="abbr">
+                  ·
+                </span>
+                <LevelMark info={level} size="header" />
+              </>
+            )}
           </div>
           <p data-edited="entry" className="m-0 mt-1 text-[18px] leading-6">
             {w.ru}
@@ -554,6 +579,12 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
 
       {/* Editable fields */}
       <div className="mt-6 flex flex-col">
+        {/* «Уровень языка» (Level-Word): edited in the entry form (Level-Edit). */}
+        {editing !== "entry" && (
+          <SheetField label="Уровень языка" edited="entry" editLabel="Изменить уровень языка" editing={false} onEdit={() => editor.start("entry")} form={null}>
+            <LevelShown info={level} ready={levels.ready} onChange={() => editor.start("entry")} size="sheet" />
+          </SheetField>
+        )}
         <SheetField
           label="Заметка"
           edited="note"
@@ -807,6 +838,157 @@ function DetectEntry({ word, draft, set }: { word: Word; draft: Draft; set: <K e
   );
 }
 
+/**
+ * «Уровень языка» shown (Level-Word, D-Level-Word): mono «≈B1» with its source, the hint with
+ * «Изменить»; the user's own level reads «B1 · вы указали · Изменить», with no hint. In the pane the
+ * source is in the section's head: the 20px level, the hint beside it; `expanded` while the options
+ * are open. Until the dictionaries are in (`ready`; never when they could not load), a word with no
+ * stored level is unknown rather than «нет в словаре»: «—» with no caption and no hint.
+ */
+function LevelShown({
+  info,
+  ready,
+  onChange,
+  size,
+  expanded = false,
+}: {
+  info: LevelInfo | null;
+  ready: boolean;
+  onChange?: () => void;
+  size: "sheet" | "pane";
+  expanded?: boolean;
+}) {
+  const unknown = !info && !ready;
+  const own = !!info && !info.estimated;
+  const hint = info ? levelHint(info) : unknown ? null : "Слова нет в словаре — уровень можно указать самим.";
+  const change = onChange && (
+    <button
+      type="button"
+      aria-expanded={size === "pane" ? expanded : undefined}
+      onClick={onChange}
+      // 18px line + 13px above and below: a 44px hit area.
+      className="relative bg-transparent p-0 text-[13px] leading-[18px] font-medium text-ink underline decoration-1 underline-offset-[3px] before:absolute before:-inset-y-[13px] before:inset-x-0"
+    >
+      Изменить
+    </button>
+  );
+  if (size === "pane") {
+    return (
+      <div className="flex items-baseline gap-3">
+        <span className={cx("shrink-0 font-mono text-[20px] leading-6 font-medium", !info && "text-boundary")}>{levelText(info)}</span>
+        <span className="min-w-0 flex-1 text-[13px] leading-5 text-muted">
+          {own ? (
+            <>
+              · вы указали{change && <> · {change}</>}
+            </>
+          ) : (
+            <>
+              {hint}
+              {hint && change && " "}
+              {change}
+            </>
+          )}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="flex flex-wrap items-baseline gap-2">
+        <span className={cx("font-mono font-medium", size === "sheet" ? "text-[15px] leading-[22px]" : "text-[14px] leading-5", !info && "text-boundary")}>
+          {levelText(info)}
+        </span>
+        {!unknown && <span className="text-[13px] leading-[18px] text-muted">· {info ? LEVEL_SOURCE_CAPTIONS[info.source] : "без уровня"}</span>}
+        {!hint && change}
+      </span>
+      {hint && (
+        <span className="text-[13px] leading-[18px] text-muted">
+          {hint} {change}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The edit row (Level-Edit, D-Level-Word): A1 … C2 + «Авто». «Авто» is checked while the level is
+ * not the user's; the option «Авто» would give has a dotted underline («B1, сейчас оценка»).
+ */
+function LevelEditRow({
+  id,
+  word,
+  draft,
+  set,
+  size,
+  autoFocus = false,
+}: {
+  id: string;
+  word: Word;
+  draft: Draft;
+  set: <K extends keyof Draft>(key: K, value: Draft[K]) => void;
+  size: "sheet" | "pane";
+  /** The checked option takes focus when the row opens (the pane, where the row is the whole form). */
+  autoFocus?: boolean;
+}) {
+  const levels = useLevelData();
+  const groupRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (autoFocus) groupRef.current?.querySelector<HTMLElement>('[role="radio"][tabindex="0"]')?.focus({ preventScroll: true });
+  }, [autoFocus]);
+  // What «Авто» gives: a level from Claude stays; else the estimate for the form's slang level.
+  const kept = levelChoiceOf(word) === "auto" ? word : { ...word, cefr: null, cefr_source: null };
+  const auto = levels.level({ ...kept, slang_level: draft.slang_level, verlan: draft.verlan });
+  const label = (v: LevelChoice) => (v === "auto" ? "Авто" : v);
+  // The levels in mono, «Авто» in the text face (Level-Edit).
+  const AUTO = <span className="font-sans text-[14px] font-medium tracking-normal">Авто</span>;
+  const options = [...CEFR_LEVELS, "auto" as const].map((v) => ({
+    value: v as LevelChoice,
+    label: v === auto?.level ? <span className="underline decoration-dotted decoration-1 underline-offset-[3px]">{v}</span> : v === "auto" ? AUTO : label(v),
+    ariaLabel: v === auto?.level ? `${v}, сейчас оценка` : label(v),
+  }));
+  const caption = draft.cefr === "auto" ? `подобрано автоматически · ${auto ? `${levelText(auto)} ${LEVEL_SOURCE_CAPTIONS[auto.source]}` : "без уровня"}` : null;
+  return (
+    <>
+      <span id={id} className={size === "sheet" ? "meta mt-4" : "sr-only"}>
+        Уровень языка
+      </span>
+      {size === "sheet" ? (
+        <Segmented
+          variant="block"
+          options={options}
+          value={draft.cefr}
+          onChange={(v) => set("cefr", v)}
+          ariaLabelledby={id}
+          itemClassName="font-mono text-[13px] tracking-[.04em]"
+          className="mt-2"
+        />
+      ) : (
+        <div ref={groupRef} className="mt-2.5">
+          <Segmented
+            variant="block"
+            options={options}
+            value={draft.cefr}
+            onChange={(v) => set("cefr", v)}
+            ariaLabelledby={id}
+            itemClassName="font-mono text-[12px] tracking-[.04em]"
+            className="h-8!"
+          />
+        </div>
+      )}
+      {size === "sheet" ? (
+        <>
+          {caption && <span className="mt-1.5 text-[12px] leading-4 text-muted">{caption}</span>}
+          <span className="mt-0.5 text-[12px] leading-4 text-muted">Свой уровень — без «≈»; «Авто» вернёт оценку.</span>
+        </>
+      ) : (
+        <span className="mt-1.5 text-[12px] leading-4 text-muted">
+          {draft.cefr === "auto" ? "подобрано автоматически · «Авто» вернёт оценку" : "«Авто» вернёт оценку."}
+        </span>
+      )}
+    </>
+  );
+}
+
 function SheetField({
   label,
   edited,
@@ -980,6 +1162,7 @@ function PaneContent({
   const actions = useWordActions(word, folders, onClose);
   const showUndo = useUndoSnackbar();
   const saveExamples = useExampleSaver(word);
+  const levels = useLevelData();
   const proposal = useTranslationProposal(editor.draft?.fr ?? "", editor.draft?.ru ?? "", editor.editing === "entry");
   const [themeMenu, setThemeMenu] = useState<HTMLElement | null>(null);
   const ruRef = useRef<HTMLInputElement>(null);
@@ -1021,6 +1204,7 @@ function PaneContent({
   );
 
   const w = data.word;
+  const level = levels.level(w);
   const { folder } = actions;
   const { editing, draft, set } = editor;
   const abbr = posAbbr(w);
@@ -1037,11 +1221,15 @@ function PaneContent({
   };
   // Esc discards the edit; «Вернуть» brings the draft back.
   const discard = () => {
+    drop();
+    cardRef?.current?.focus({ preventScroll: true });
+  };
+  // The same, with focus left where it is («Изменить» under «Уровень языка» closes its options).
+  const drop = () => {
     const what = editing;
     const kept = draft;
     const dirty = editor.dirty;
     editor.cancel();
-    cardRef?.current?.focus({ preventScroll: true });
     if (!dirty || !what || !kept) return;
     showUndo({
       message: "Изменения не сохранены",
@@ -1200,7 +1388,10 @@ function PaneContent({
       >
         <div data-edited="entry" className="flex h-10 items-center justify-between px-5">
           <span className="font-mono text-[11px] text-muted tabular-nums">FR · {cardNumber(data.number ?? 1)}</span>
-          <SlangMeter level={w.slang_level} verlan={false} hints hintAlign="end" />
+          <span className="flex items-center gap-3">
+            <SlangMeter level={w.slang_level} verlan={false} hints hintAlign="end" />
+            {level && <LevelMark info={level} size="header" />}
+          </span>
         </div>
         <div aria-hidden="true" className="h-0.5 bg-red" />
         <div className="flex flex-col p-5">
@@ -1235,7 +1426,7 @@ function PaneContent({
               />
               <ProposalLine proposal={proposal} onUse={(ru) => set("ru", ru)} />
               <span id={`${id}-slang`} className="mt-4 text-[12px] leading-4 text-muted">
-                Уровень сленга
+                Сленг
               </span>
               <div className="mt-1 flex flex-wrap items-center gap-x-4">
                 <TextOptions
@@ -1390,6 +1581,33 @@ function PaneContent({
           )}
         </div>
       </article>
+
+      {/* Уровень языка (D-Level-Word) */}
+      <section aria-labelledby={`${id}-lvl`} data-edited="level" className="mt-5">
+        <div className="flex items-baseline justify-between border-b border-ink pb-1.5">
+          <h3 id={`${id}-lvl`} className="m-0 text-[13px] leading-5 font-medium">
+            Уровень языка
+          </h3>
+          {/* The user's own level says «вы указали» by the level itself (D-Level-Library). */}
+          {level?.estimated && <span className="text-[12px] leading-4 text-muted">{LEVEL_SOURCE_CAPTIONS[level.source]}</span>}
+        </div>
+        <div className="pt-2.5">
+          {/* «Изменить» stays while the options are open (aria-expanded) and closes them again. */}
+          <LevelShown
+            info={level}
+            ready={levels.ready}
+            onChange={editing === "level" ? drop : editing ? undefined : () => editor.start("level")}
+            size="pane"
+            expanded={editing === "level"}
+          />
+          {editing === "level" && draft && (
+            <form onSubmit={(e) => void submit(e)} onKeyDown={formKeys} aria-label="Изменить уровень языка" className="flex flex-col">
+              <LevelEditRow id={`${id}-cefr`} word={w} draft={draft} set={set} size="pane" autoFocus />
+              {formActions}
+            </form>
+          )}
+        </div>
+      </section>
 
       {/* Повторение */}
       <section aria-labelledby={`${id}-rep`} className="mt-5">

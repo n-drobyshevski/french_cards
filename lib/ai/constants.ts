@@ -29,6 +29,9 @@ export const TAXONOMY_MAX = 25;
 export const NEW_FOLDER_MIN_WORDS = 3;
 export const ASSIGN_CHUNK_MAX = 150;
 export const ENRICH_CHUNK_MAX = 50;
+/** «Определить уровень языка» (enrich scope "level"): cards per request, and anchor words of known level sent with each. */
+export const LEVEL_CHUNK_MAX = 20;
+export const LEVEL_ANCHORS_MAX = 60;
 
 /** How many existing examples the client may list for «другой пример» to avoid. */
 export const EXAMPLE_AVOID_MAX = 6;

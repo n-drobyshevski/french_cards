@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { compareFr } from "@/lib/text";
+import type { LevelInfo } from "@/lib/core/level";
 import type { Folder, Word } from "@/lib/types";
 import type { WordSchedule } from "./format";
 import {
@@ -22,12 +23,13 @@ const folder = (id: string, sort: number) => ({ id, sort, name: id }) as Folder;
 
 function item(
   fr: string,
-  opts: { ru?: string; level?: 0 | 1 | 2 | 3; folder?: Folder; schedule?: Partial<WordSchedule>; added?: string } = {},
+  opts: { ru?: string; level?: 0 | 1 | 2 | 3; folder?: Folder; schedule?: Partial<WordSchedule>; added?: string; cefr?: LevelInfo | null } = {},
 ): LibraryWord {
   return {
     word: { id: fr, fr, ru: opts.ru ?? fr, slang_level: opts.level ?? 0, verlan: false, created_at: opts.added ?? "2026-10-01T00:00:00Z" } as Word,
     folder: opts.folder,
     schedule: { status: "new", dueLabel: "новое", tone: "new", due: false, nextDue: null, ...opts.schedule },
+    level: opts.cefr ?? null,
   };
 }
 
@@ -95,12 +97,13 @@ describe("tableColumns", () => {
   it("keeps every column at 1440 (inner 744)", () => {
     const c = tableColumns({ inner: 744, layout: "expanded", coarse: false, themeColumn: true });
     expect(c).toMatchObject({ theme: true, level: "meter", dueWidth: 120 });
-    expect(c.template).toBe("32px minmax(160px,1fr) minmax(160px,1fr) 112px 112px 120px");
+    expect(c.template).toBe("32px minmax(160px,1fr) minmax(160px,1fr) 44px 112px 112px 120px");
   });
 
-  it("drops «Тема» and shortens «Уровень» at 1200 (inner 544)", () => {
+  it("drops «Тема» and shortens «Сленг» at 1200 (inner 544); «Ур.» stays", () => {
     const c = tableColumns({ inner: 544, layout: "expanded", coarse: false, themeColumn: true });
     expect(c).toMatchObject({ theme: false, level: "abbr", levelWidth: 56 });
+    expect(c.template).toBe("32px minmax(140px,1fr) minmax(140px,1fr) 44px 56px 120px");
   });
 
   it("never shows «Тема» inside a theme", () => {
@@ -115,7 +118,7 @@ describe("tableColumns", () => {
 
   it("coarse pointer: 40px gutter, «Показ» 152 with its ⋯", () => {
     const c = tableColumns({ inner: 660, layout: "medium", coarse: true, themeColumn: true });
-    expect(c.template).toBe("40px minmax(150px,1fr) minmax(150px,1fr) 64px 152px");
+    expect(c.template).toBe("40px minmax(140px,1fr) minmax(140px,1fr) 44px 64px 152px");
   });
 });
 
@@ -232,5 +235,20 @@ describe("listKeyAction", () => {
     expect(listKeyAction(key("KeyJ", { keyCode: 229 }), true)).toBeNull();
     expect(listKeyAction(key("KeyX", { repeat: true }), true)).toBeNull();
     expect(listKeyAction(key("KeyJ", { repeat: true }), true)).toBe("next");
+  });
+});
+
+describe("sorting by «Ур.» («Уровень языка»)", () => {
+  const lv = (level: "A1" | "B2" | "C1"): LevelInfo => ({ level, source: "flelex", estimated: true });
+  const rows = [item("zut", { cefr: lv("C1") }), item("ouf"), item("aller", { cefr: lv("A1") }), item("bref", { cefr: lv("B2") })];
+
+  it("goes A1 → C2 with no level last, and keeps no level last when reversed", () => {
+    expect(frs(sortWords(rows, { key: "cefr", dir: 1 }))).toEqual(["aller", "bref", "zut", "ouf"]);
+    expect(frs(sortWords(rows, { key: "cefr", dir: -1 }))).toEqual(["zut", "bref", "aller", "ouf"]);
+  });
+
+  it("names the orders: «По уровню языка», and «По сленгу» for the slang column", () => {
+    expect(orderLabel({ key: "cefr", dir: 1 })).toBe("По уровню языка");
+    expect(orderLabel({ key: "level", dir: 1 })).toBe("По сленгу");
   });
 });

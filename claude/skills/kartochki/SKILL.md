@@ -1,6 +1,6 @@
 ---
 name: kartochki
-description: Conventions for the user's «Карточки» flashcard app for colloquial French (the user is a Russian speaker). Use whenever the user wants to add, find, fix, sort, pause or delete French words, slang or themes, asks what to review today («что повторить сегодня»), sends a French text, chat, song or screenshot to turn into cards, asks for an exercise («упражнение», тест, квиз, QCM, по трудным словам), or mentions карточки, темы or «Входящие». Covers card format, the slang level rubric 0–3 with verlan, theme choice, when to ask first, exercise rules, and recipes for the Kartochki connector tools (search_words, add_words, update_word, move_words, restore_moves, delete_words, restore_words, create/update/delete/restore_folder, list_folders, list_fields, create/update/delete/restore_field, study_summary, exercise_material, create_exercise_set, list_exercise_sets, delete/restore_exercise_set). Needs the Kartochki connector (else: say to add it).
+description: Conventions for the user's «Карточки» flashcard app for colloquial French (the user is a Russian speaker). Use whenever the user wants to add, find, fix, sort, pause or delete French words, slang or themes, asks what to review today («что повторить сегодня»), sends a French text, chat, song or screenshot to turn into cards, asks for an exercise («упражнение», тест, квиз, QCM, по трудным словам), or mentions карточки, темы or «Входящие». Covers card format, the slang level rubric 0–3 with verlan, theme choice, when to ask first, exercise rules, and recipes for the Kartochki connector tools (search_words, add_words, update_word, set_word_levels, move_words, restore_moves, delete_words, restore_words, create/update/delete/restore_folder, list_folders, list_fields, create/update/delete/restore_field, study_summary, exercise_material, create_exercise_set, list_exercise_sets, delete/restore_exercise_set). Needs the Kartochki connector (else: say to add it).
 ---
 
 # Карточки: working with the user's French cards
@@ -29,6 +29,10 @@ Vulgar and offensive words are legitimate vocabulary here. Translate them with a
 ### Origin and conjugation
 
 A word can carry `origin` («Происхождение»: one short Russian line that helps remember it — «верлан от lourd», «от volonté „воля“ + -aire», «из арабского kif „кайф“») and, for verbs, a `conjugation` (présent, passé composé, imparfait, futur; six forms je → ils with pronouns, plus `auxiliary`). The app builds most conjugations itself; `search_words` shows `conjugation_builtin: false` for verbs it cannot conjugate — fill those when asked. Set both with `update_word` (or `add_words`); write only what you are sure of (check unusual forms on the web), and never overwrite an existing value unless the user asks. When asked to fill origins for many words, list them first and wait for the OK, as for other bulk changes.
+
+### «Уровень языка» (CEFR A1…C2)
+
+Every word shows a level: `search_words` gives `level` (null = none) and `level_source`. Most are estimates the app computes from its dictionary (`flelex`) or from word frequency (`freq`); leave those alone. `chat` is a level you set, `ai` one from the app, `user` one the user picked: **never change a `user` level unless the user asks**. You may give `cefr` in `add_words` when you are fairly sure; otherwise leave it out and the app estimates one. Rate a word as a textbook or a DELF / TCF list would: A1 basic everyday words (maison, manger), A2 common ones (le loyer, se dépêcher), B1 (la démarche, constater), B2 (s'en sortir, néanmoins), C1–C2 rare, literary or very specific. Argot, vulgar words and verlan get no level unless the user asks. The level only orders new words in review; it never locks anything.
 
 ### Custom fields («Свои поля»)
 
@@ -72,10 +76,11 @@ The connector's write tools normally ask the user for approval in the chat. Stil
 - **Adding more than 5 words:** show the list first (fr — ru, level, theme) and wait for «да», «ок» or edits.
 - **Moving or deleting any words:** always list what will change and wait for an OK.
 - **Editing a word:** fine without asking when the user asked for that edit; otherwise propose it.
+- **Setting levels for several words** (`set_word_levels`): list the words with the levels you propose and wait for the OK, as for other bulk changes.
 - **Up to 5 words the user asked to add:** add them directly.
 - **An exercise set the user asked for:** save it directly; it adds no words and never changes the review schedule.
 
-After every change, report what was done in one or two lines and how to undo it: `delete_words` with the returned ids after adding, `restore_words` after deleting, `restore_moves` with the returned `undo.moves` after moving (never a move back with `move_words`: it would change how automatic sorting treats the words), `delete_exercise_set` after saving an exercise set and `restore_exercise_set` after deleting one. Mention that the app shows the change after its next sync (open the app or switch back to it).
+After every change, report what was done in one or two lines and how to undo it: `delete_words` with the returned ids after adding, `restore_words` after deleting, `restore_moves` with the returned `undo.moves` after moving (never a move back with `move_words`: it would change how automatic sorting treats the words), `set_word_levels` with the returned `undo` after setting levels, `delete_exercise_set` after saving an exercise set and `restore_exercise_set` after deleting one. Mention that the app shows the change after its next sync (open the app or switch back to it).
 
 Make write calls one at a time, never in parallel, even for different fields of the same word.
 
@@ -106,6 +111,12 @@ Make write calls one at a time, never in parallel, even for different fields of 
 2. Propose a theme for each word by meaning, plus at most one or two new themes when at least 3 words would go there. Leave unclear words in the inbox.
 3. Show the plan grouped by theme and wait for the OK.
 4. Create any approved new themes, then `move_words` per theme with `mode: "auto"`. Auto mode never moves words the user placed by hand or words in locked themes; report the ones it skipped.
+
+### «Определи уровень слов» / fill missing levels
+
+1. `search_words` with `level: "none"` (and the theme, if the user named one), `limit: 100`; page with `next_offset`.
+2. Propose a level for each word (skip argot, vulgar words and verlan), grouped by level, and wait for the OK.
+3. `set_word_levels` in batches of 10–15, rating each batch against a few words of known level (from the same search without `level`). Report `skipped_user` and `conflicts`, and the undo.
 
 ### Fix or delete a word
 

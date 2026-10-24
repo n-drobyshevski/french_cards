@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 // Service worker, bundled by @serwist/turbopack (see app/serwist/[path]/route.ts) and served at /serwist/sw.js.
-// - Precaches the build's static assets, public/ (icons, lexique) and the offline page.
+// - Precaches the build's static assets, public/ (icons, lexique: fr-lemmas, fr-conj, fr-morpho and the
+//   FLELex levels fr-cefr.json) and the offline page.
 // - Shell routes open from the HTML warmShell cached for this deploy and refresh it in the background;
 //   other pages are network first with a 1 s timeout. Cached copies offline, /~offline as a last resort.
 // - Never touches /api/* or cross-origin requests (Supabase), so they always hit the network uncached.
@@ -21,7 +22,7 @@ const DEV = process.env.NODE_ENV !== "production";
 
 const PAGES_CACHE = "pages";
 /** App routes whose HTML is fetched on install, so the app opens offline right after it's installed. */
-const SHELL_ROUTES = ["/", "/exercises", "/exercises/play", "/library", "/context", "/settings", "/import", "/login"];
+const SHELL_ROUTES = ["/", "/exercises", "/exercises/play", "/library", "/context", "/settings", "/settings/plan", "/import", "/login"];
 
 const DAY = 24 * 60 * 60;
 

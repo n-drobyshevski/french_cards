@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, type ReactNode } from "react";
+import { useState, type ReactNode, type Ref } from "react";
 import { useShell } from "@/components/shell/ShellContext";
 import { IconButton } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
@@ -18,6 +18,19 @@ export interface ReviewProgress {
   pending?: boolean;
   /** The latest grade (R12): the progress step it causes echoes its tone. */
   echo?: GradeEcho | null;
+  /** Where the queue's new cards sit (0..1): 1×4 muted ticks under the line (D3 B, aria-hidden). */
+  ticks?: readonly number[];
+  /** «План дня»: `left` is a button that opens «План на сегодня» (D2 B). */
+  summary?: SummaryAction | null;
+  /** The summary button (the desktop popover hangs under it). */
+  summaryRef?: Ref<HTMLButtonElement>;
+}
+
+export interface SummaryAction {
+  /** The button's name: «План на сегодня: 27 к повторению, 4 новых». */
+  label: string;
+  open: boolean;
+  onOpen: () => void;
 }
 
 /** A grade for the progress echo; `seq` tells two grades of the same tone apart. */
@@ -39,6 +52,9 @@ interface EchoSegment {
   seq: number;
 }
 
+/** The progress row's left text (summary): truncated on phones, 13px sentence case in the running head. */
+const LEFT = "min-w-0 truncate md:order-2 md:font-sans md:text-[13px] md:leading-5 md:tracking-normal md:normal-case md:tabular-nums";
+
 /** The progress row while the queue loads; the counts write in when it arrives. */
 export const PENDING_PROGRESS: ReviewProgress = { left: null, right: "", ratio: 0, pending: true };
 
@@ -55,6 +71,11 @@ export interface ReviewTopBarProps {
   hideOnDesktop?: boolean;
   /** Chips on the left of the row (direction + theme, or the practice exit). */
   children?: ReactNode;
+  /**
+   * Under the progress line: the «План дня» reason subline (phones 8px below the line; from 768
+   * under the running-head rule, left-aligned with the card column).
+   */
+  subline?: ReactNode;
 }
 
 /**
@@ -65,7 +86,7 @@ export interface ReviewTopBarProps {
  * right. Its bottom rule doubles as the progress line (a 2px ink fill over the hairline). The phone
  * rows turn into `display: contents`, so there is a single copy of every control and count.
  */
-export function ReviewTopBar({ canUndo, onUndo, letters = true, progress, heading, hideOnDesktop, children }: ReviewTopBarProps) {
+export function ReviewTopBar({ canUndo, onUndo, letters = true, progress, heading, hideOnDesktop, children, subline }: ReviewTopBarProps) {
   const { openShortcuts } = useShell();
   return (
     <div
@@ -112,6 +133,7 @@ export function ReviewTopBar({ canUndo, onUndo, letters = true, progress, headin
       </header>
       {heading}
       {progress && <ProgressLine {...progress} />}
+      {subline}
     </div>
   );
 }
@@ -122,7 +144,7 @@ export function ReviewTopBar({ canUndo, onUndo, letters = true, progress, headin
  * The fill steps as `scaleX` from the left and the phone's tick with `translateX` (never width or
  * left), --dur-move --ease-standard; the counter is a plain tabular swap (MOTION-SPEC R8, §5.5).
  */
-export function ProgressLine({ left, right, ratio, pending, echo }: ReviewProgress) {
+export function ProgressLine({ left, right, ratio, pending, echo, ticks, summary, summaryRef }: ReviewProgress) {
   const p = Math.max(0, Math.min(1, ratio));
 
   // R12, the last-grade echo: the step a grade causes is drawn in the grade's tone (good / again; ink
@@ -141,14 +163,33 @@ export function ProgressLine({ left, right, ratio, pending, echo }: ReviewProgre
   return (
     <>
       <div className="mt-4 flex h-4 shrink-0 items-baseline justify-between gap-3 font-mono text-[11px] leading-4 tracking-[.06em] uppercase md:contents">
-        <span
-          className={cx(
-            "min-w-0 truncate text-muted md:order-2 md:font-sans md:text-[13px] md:leading-5 md:tracking-normal md:normal-case md:tabular-nums",
-            !pending && WRITE_IN,
-          )}
-        >
-          {left}
-        </span>
+        {summary ? (
+          // D2 B: phones ink, underlined in --boundary (offset 3), then the 14px chevron (up while open);
+          // a 44px hit area from padding that its negative margin takes back, so the row stays 16px.
+          // From 768 a 30px text button.
+          <button
+            ref={summaryRef}
+            type="button"
+            data-plan-summary=""
+            aria-haspopup="dialog"
+            aria-expanded={summary.open}
+            aria-label={summary.label}
+            onClick={summary.onOpen}
+            className={cx(
+              LEFT,
+              "-my-3.5 flex cursor-pointer items-center gap-1 border-0 bg-transparent px-0 py-3.5 text-left text-ink uppercase",
+              "md:my-0 md:-ml-1.5 md:inline-flex md:h-[30px] md:items-center md:gap-1 md:overflow-visible md:rounded-[4px] md:px-1.5 md:py-0 hoverable:bg-hover aria-expanded:md:bg-hover",
+              !pending && WRITE_IN,
+            )}
+          >
+            <span className="min-w-0 truncate underline decoration-boundary decoration-1 underline-offset-[3px] md:decoration-ink md:decoration-dotted md:underline-offset-4">
+              {left}
+            </span>
+            <Icon name={summary.open ? "chevron-up" : "chevron"} size={14} className="shrink-0 text-muted" />
+          </button>
+        ) : (
+          <span className={cx(LEFT, "text-muted", !pending && WRITE_IN)}>{left}</span>
+        )}
         <span
           className={cx(
             "shrink-0 font-medium text-ink tabular-nums md:order-3 md:ml-auto md:text-[13px] md:leading-5 md:tracking-normal",
@@ -188,6 +229,14 @@ export function ProgressLine({ left, right, ratio, pending, echo }: ReviewProgre
             >
               <div className="h-[5px] w-px bg-ink" />
             </div>
+            {/* D3 B: where the new cards sit, under the line (they hang below its 5px box; nothing moves). */}
+            {ticks && ticks.length > 0 && (
+              <div data-new-ticks="" className="absolute top-[5px] right-px left-0 h-1 md:top-0.5 md:right-0">
+                {ticks.map((t, i) => (
+                  <div key={i} className="absolute top-0 h-1 w-px bg-muted" style={{ left: `${(Math.max(0, Math.min(1, t)) * 100).toFixed(2)}%` }} />
+                ))}
+              </div>
+            )}
           </>
         )}
       </div>

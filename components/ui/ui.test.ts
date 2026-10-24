@@ -14,9 +14,9 @@ const count = (html: string, needle: string) => html.split(needle).length - 1;
 
 describe("SlangMeter", () => {
   it("labels levels in Russian with position and verlan", () => {
-    expect(slangAriaLabel(2)).toBe("Уровень сленга: арго, 3 из 4");
-    expect(slangAriaLabel(1, true)).toBe("Уровень сленга: фамильярный, 2 из 4, верлан");
-    expect(slangAriaLabel(0)).toBe("Уровень сленга: нейтральный, 1 из 4");
+    expect(slangAriaLabel(2)).toBe("Сленг: арго, 3 из 4");
+    expect(slangAriaLabel(1, true)).toBe("Сленг: фамильярный, 2 из 4, верлан");
+    expect(slangAriaLabel(0)).toBe("Сленг: нейтральный, 1 из 4");
   });
 
   it("abbreviates like a dictionary entry", () => {
@@ -39,7 +39,7 @@ describe("SlangMeter", () => {
   it("can render the meter alone", () => {
     const html = renderToStaticMarkup(h(SlangMeter, { level: 1, verlan: true, showLabel: false }));
     expect(html).not.toContain("fam.");
-    expect(html).toContain('aria-label="Уровень сленга: фамильярный, 2 из 4, верлан"');
+    expect(html).toContain('aria-label="Сленг: фамильярный, 2 из 4, верлан"');
   });
 });
 

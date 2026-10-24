@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, type CSSProperties, type ReactNode } from "react";
 import { useCopyScopeRequest, type ScopeCopyNotice } from "@/components/exercises/scope-request";
 import { Button } from "@/components/ui/Button";
@@ -10,10 +11,12 @@ import { SlangMeter } from "@/components/ui/SlangMeter";
 import { useScopeCounts } from "@/lib/exercises";
 import { haptic } from "@/lib/haptics";
 import { prefersReducedMotion } from "@/lib/motion";
+import type { StudyPlan } from "@/lib/core/study-plan";
 import { formatInterval } from "@/lib/scheduler";
 import { useDelayedFlag } from "@/lib/use-delayed-flag";
 import type { DoneScreenData } from "./data";
 import { countWords, formatDateStamp, formatDayMonth, formatPercent, pluralRu } from "./format";
+import { PLAN_SETTINGS_HREF, planSummary } from "./plan-format";
 
 const HARD_LIMIT = 5;
 
@@ -49,6 +52,8 @@ export interface SessionDoneProps {
    * the request for a Claude chat and hands the snackbar's content here.
    */
   onExerciseNotice?: (notice: ScopeCopyNotice) => void;
+  /** «План повторения»: the quiet row «План: 10 слов в день · до 200 повторений · Изменить ›» (D4 A). */
+  plan?: StudyPlan | null;
 }
 
 /** A receipt row; the first and last carry the table's ink rules, so they rule in with their rows. */
@@ -105,6 +110,7 @@ export function SessionDone({
   desktop = false,
   letters = true,
   onExerciseNotice,
+  plan,
 }: SessionDoneProps) {
   const columnRef = useRef<HTMLDivElement>(null);
 
@@ -207,6 +213,7 @@ export function SessionDone({
         <p style={fade(1400)} className="mt-3 mb-0 text-[13px] leading-5 text-muted tabular-nums max-md:hidden">
           {next ? `${day} · ${next}` : day}
         </p>
+        {plan && <PlanRow plan={plan} style={fade(1400)} />}
 
         {hard.length > 0 && (
           <section aria-labelledby="hard-title" style={rise(840)} className="mt-8 md:order-2 md:mt-10">
@@ -325,6 +332,37 @@ export function SessionDone({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * D4 A: under «Следующие N слов — завтра», 13 muted «План: 10 слов в день · до 200 повторений» and
+ * «Изменить ›» (13 500 ink), which opens «План повторения». Phones: a ruled 44px row; from 768 a
+ * line under the date line.
+ */
+function PlanRow({ plan, style }: { plan: StudyPlan; style?: CSSProperties }) {
+  return (
+    <div
+      data-done-plan=""
+      style={style}
+      className="mt-3 flex h-11 shrink-0 items-center gap-3 border-y border-rule md:mt-1 md:h-5 md:justify-start md:gap-1 md:border-0"
+    >
+      <span className="min-w-0 flex-1 truncate text-[13px] leading-5 text-muted md:flex-none">
+        План: {planSummary(plan)}
+        <span aria-hidden="true" className="max-md:hidden">
+          {" "}
+          ·
+        </span>
+      </span>
+      <Link
+        href={PLAN_SETTINGS_HREF}
+        aria-label="Изменить план повторения"
+        className="relative inline-flex shrink-0 items-center gap-0.5 text-[13px] leading-5 font-medium whitespace-nowrap text-ink no-underline before:absolute before:-inset-y-3 before:-inset-x-2 before:content-[''] md:rounded-[4px] md:before:hidden hoverable:underline hoverable:underline-offset-4"
+      >
+        Изменить
+        <Icon name="chevron-right" size={14} strokeWidth={1.75} />
+      </Link>
     </div>
   );
 }

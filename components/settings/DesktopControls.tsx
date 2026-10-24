@@ -150,12 +150,18 @@ export function CheckboxRow({
 export function RadioRow({
   name,
   label,
+  caption,
   checked,
   disabled,
+  dense = false,
   onSelect,
 }: {
   name: string;
   label: ReactNode;
+  /** 12 muted, on the label's line after it («сначала A1–B2, частые раньше»). */
+  caption?: ReactNode;
+  /** 40px rows with a 14px label (D-Review-Settings), for lists of captioned options. */
+  dense?: boolean;
   checked: boolean;
   disabled?: boolean;
   onSelect: () => void;
@@ -163,7 +169,8 @@ export function RadioRow({
   return (
     <label
       className={cx(
-        "relative -mx-2 flex min-h-11 items-center gap-3 rounded-[4px] px-2 has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-ink",
+        "relative -mx-2 flex items-center gap-3 rounded-[4px] px-2 has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-ink",
+        dense ? "min-h-10" : "min-h-11",
         disabled ? "cursor-default" : "cursor-pointer hoverable:bg-hover",
       )}
     >
@@ -186,9 +193,18 @@ export function RadioRow({
       >
         {checked && <span className="size-1.5 rounded-full bg-ink" />}
       </span>
-      <span className={cx("min-w-0 flex-1 truncate text-[15px] leading-5", disabled ? "text-boundary" : "text-ink", checked && "font-medium")}>
+      <span
+        className={cx(
+          "min-w-0 truncate leading-5",
+          dense ? "text-[14px]" : "text-[15px]",
+          caption == null && "flex-1",
+          disabled ? "text-boundary" : "text-ink",
+          checked && "font-medium",
+        )}
+      >
         {label}
       </span>
+      {caption != null && <span className="min-w-0 flex-1 truncate text-[12px] leading-4 text-muted">{caption}</span>}
       <span aria-hidden="true" className="absolute inset-x-2 bottom-0 h-px bg-rule" />
     </label>
   );
@@ -274,6 +290,8 @@ export function DeskStepper({
   max = Infinity,
   labelledBy,
   disabled,
+  display,
+  valueText,
 }: {
   value: number;
   onStep: (delta: 1 | -1) => void;
@@ -281,6 +299,10 @@ export function DeskStepper({
   max?: number;
   labelledBy: string;
   disabled?: boolean;
+  /** Shown in place of the number (e.g. «∞» for «без лимита»). */
+  display?: ReactNode;
+  /** aria-valuetext, for a value that is not a number («без лимита»). */
+  valueText?: string;
 }) {
   const onKeyDown = (event: KeyboardEvent<HTMLSpanElement>) => {
     if (disabled) return;
@@ -298,14 +320,15 @@ export function DeskStepper({
         role="spinbutton"
         tabIndex={0}
         aria-labelledby={labelledBy}
-        aria-valuenow={value}
+        aria-valuenow={Number.isFinite(value) ? value : undefined}
+        aria-valuetext={valueText}
         aria-valuemin={min}
         aria-valuemax={Number.isFinite(max) ? max : undefined}
         aria-disabled={disabled || undefined}
         onKeyDown={onKeyDown}
         className="w-12 rounded-[4px] text-center font-mono text-[15px] leading-5 text-ink tabular-nums"
       >
-        {value}
+        {display ?? value}
       </span>
       <button type="button" tabIndex={-1} aria-label="Больше" disabled={disabled || value >= max} onClick={() => onStep(1)} className={stepBtn}>
         <Icon name="plus" size={16} />

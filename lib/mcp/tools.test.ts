@@ -4,8 +4,10 @@ import type { z } from "zod";
 import { resetRateLimits } from "@/lib/ai/rate-limit";
 import { defaultFolderId } from "@/lib/core/folders";
 import { buildWord, type NewWordInput } from "@/lib/core/words";
-import { newReviewState } from "@/lib/scheduler";
-import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ReviewLog, ReviewState } from "@/lib/types";
+import { folderOrderOf, planDay } from "@/lib/core/plan";
+import { LEGACY_STUDY_PLAN, parseStudyPlan, type StudyPlan } from "@/lib/core/study-plan";
+import { newReviewState, retrievability } from "@/lib/scheduler";
+import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ReviewLog, ReviewState, UserPref, Word } from "@/lib/types";
 import { createFakeRepo, type FakeRepo } from "./fake-repo";
 import { RepoError } from "./repo";
 import {
@@ -33,6 +35,7 @@ import {
   restoreMoves,
   restoreWords,
   searchWords,
+  setWordLevels,
   stampAfter,
   studySummary,
   updateField,
@@ -68,6 +71,9 @@ const FOLDERS = [
   folder("zamok", "Замок", { sort: 2, locked: true }),
   folder("old", "Старое", { sort: 3, deleted_at: OLD.toISOString() }),
 ];
+
+const planRow = (value: StudyPlan): UserPref => ({ id: "study_plan", value, updated_at: OLD.toISOString(), deleted_at: null });
+const legacyPlanRow = (newWords: number) => planRow({ ...LEGACY_STUDY_PLAN, new_words: newWords });
 
 const deps = (fake: FakeRepo) => ({ repo: fake.repo, userId: "user-1", timeZone: "Europe/Paris", now: () => NOW });
 
@@ -789,8 +795,10 @@ describe("study_summary", () => {
         log("l3", "a", "2026-10-22T09:00:00.000Z", 2, true), // undone
         log("l4", "gone", "2026-10-22T09:30:00.000Z", 0), // a word learned today, then deleted
       ],
+      // The rule before «План дня»: one allowance of new cards, RU→FR the day after FR→RU.
+      user_prefs: [legacyPlanRow(3)],
     });
-    const out = await ok(studySummary, fake, { new_per_day: 3 });
+    const out = await ok(studySummary, fake, {});
     expect(out.study_day).toEqual({ start: "2026-10-22T02:00:00.000Z", end: "2026-10-23T02:00:00.000Z", time_zone: "Europe/Paris" });
     expect(out.due_cards).toBe(2);
     expect(out.reviewed_today).toBe(1);
@@ -800,6 +808,67 @@ describe("study_summary", () => {
     expect(out.new_cards_available).toBe(1);
     expect(out.words).toMatchObject({ total: 3, new: 1, learning: 2 });
     expect(out.due_soonest.map((w) => w.id)).toEqual(["b", "a"]);
+    expect(out.plan).toMatchObject({ new_words_today: 3, new_words_left: 1, ceiling: 3, reason: "limit", backlog: false, deferred: 0 });
+    expect(out.plan.settings).toMatchObject({ new_order: "added", ru_fr: "together", saved: true });
+  });
+
+  /** `n` new words in theme Деньги plus `due` review cards due today. */
+  function planned(n: number, due = 0, prefs: UserPref[] = []) {
+    const ws = Array.from({ length: n }, (_, i) => word(`n${i}`, `mot${i}`, `слово${i}`, { folder_id: "f-dengi" }));
+    const rs = Array.from({ length: due }, (_, i) => word(`r${i}`, `rev${i}`, `повтор${i}`, { folder_id: "f-emotsii", both_directions: false }));
+    return createFakeRepo({
+      folders: FOLDERS,
+      words: [...ws, ...rs],
+      review_state: [
+        ...ws.flatMap((w) => cards(w.id)),
+        ...rs.flatMap((w, i) => cards(w.id, false).map((s) => ({ ...s, state: 2 as const, stability: 5 + i, reps: 3, due: "2026-10-21T08:00:00.000Z", last_review: "2026-10-16T08:00:00.000Z" }))),
+      ],
+      user_prefs: prefs,
+    });
+  }
+
+  it("plans the day with the saved «План повторения»: new words, not cards; RU→FR waits", async () => {
+    const out = await ok(studySummary, planned(12, 0, [planRow({ new_words: 5, review_cap: 200, new_order: "themes", mix: "mixed", ru_fr: "after" })]), {});
+    expect(out.new_cards_available).toBe(5);
+    expect(out.new_cards_ready).toBe(12);
+    expect(out.plan).toMatchObject({ new_words_today: 5, ceiling: 5, ru_unlocks: 0, reason: "limit", forecast_7d: 0 });
+  });
+
+  it("without a saved plan: the defaults with 8 new words (the device's 15 cards, halved); new_per_day plans a «what if»", async () => {
+    let out = await ok(studySummary, planned(12), {});
+    expect(out.plan).toMatchObject({ ceiling: 8, new_words_today: 8, settings: { new_order: "level", mix: "mixed", ru_fr: "after", review_cap: 200, saved: false } });
+    out = await ok(studySummary, planned(12), { new_per_day: 3 });
+    expect(out.plan).toMatchObject({ ceiling: 3, new_words_today: 3 });
+    expect(out.new_cards_available).toBe(3);
+  });
+
+  it("over the review cap: a backlog, reviews deferred, no new words", async () => {
+    const out = await ok(studySummary, planned(4, 60, [planRow({ new_words: 10, review_cap: 50, new_order: "added", mix: "after", ru_fr: "after" })]), {});
+    expect(out.plan).toMatchObject({ backlog: true, deferred: 10, reason: "backlog", new_words_today: 0 });
+    expect(out.due_cards).toBe(50);
+    expect(out.new_cards_available).toBe(0);
+  });
+
+  it("matches planDay on the same data (the app's loadSession calls it too)", async () => {
+    const fake = planned(9, 7, [planRow({ new_words: 4, review_cap: null, new_order: "level", mix: "mixed", ru_fr: "after" })]);
+    const out = await ok(studySummary, fake, {});
+    const day = { start: new Date("2026-10-22T02:00:00.000Z"), end: new Date("2026-10-23T02:00:00.000Z") };
+    const ws = [...fake.tables.words.values()];
+    const direct = planDay({
+      now: NOW,
+      dayStart: day.start,
+      dayEnd: day.end,
+      states: [...fake.tables.review_state.values()],
+      words: new Map(ws.map((w) => [w.id, w])),
+      todayLogs: [],
+      logs7d: [],
+      plan: parseStudyPlan(fake.tables.user_prefs.get("study_plan")!.value),
+      r: retrievability,
+      folderOrder: folderOrderOf(FOLDERS.filter((f) => f.deleted_at === null)),
+    });
+    expect(out.due_cards).toBe(direct.counts.due);
+    expect(out.new_cards_available).toBe(direct.counts.new);
+    expect(out.plan.new_words_today).toBe(direct.day.budget);
   });
 });
 
@@ -1493,5 +1562,171 @@ describe("exercises («Упражнения»)", () => {
     expect(await refused(createExerciseSet, fake, set({ client_ref: "s-20" }))).toMatch(/Too many changes/);
     expect((await callTool(exerciseMaterial, deps(fake), {})).isError).toBeFalsy();
     expect((await callTool(listExerciseSets, deps(fake), {})).isError).toBeFalsy();
+  });
+});
+
+describe("«Уровень языка»", () => {
+  const seed = () =>
+    createFakeRepo({
+      folders: FOLDERS,
+      words: [
+        word("a", "le loyer", "квартплата", { pos: "noun", gender: "m" }),
+        word("b", "relou", "надоедливый", { slang_level: 2, verlan: true }),
+        word("c", "faire la queue", "стоять в очереди", { pos: "expression" }),
+        word("d", "la démarche", "процедура", { pos: "noun", gender: "f", cefr: "A2", cefr_source: "user" }),
+        word("e", "constater", "констатировать", { pos: "verb", cefr: "C1", cefr_source: "ai" }),
+      ],
+      review_state: ["a", "b", "c", "d", "e"].flatMap((id) => cards(id)),
+    });
+
+  it("search_words shows the effective level and its source, and filters by level or «none»", async () => {
+    const fake = seed();
+    const out = await ok(searchWords, fake, { limit: 100 });
+    const byId = new Map(out.words.map((w) => [w.id, w]));
+    expect(byId.get("a")).toMatchObject({ level: "B1", level_source: "flelex" });
+    expect(byId.get("b")).toMatchObject({ level: null });
+    expect(byId.get("b")).not.toHaveProperty("level_source");
+    expect(byId.get("c")).toMatchObject({ level: null });
+    expect(byId.get("d")).toMatchObject({ level: "A2", level_source: "user" });
+    expect(byId.get("e")).toMatchObject({ level: "C1", level_source: "ai" });
+    expect((await ok(searchWords, fake, { level: "none" })).words.map((w) => w.id).sort()).toEqual(["b", "c"]);
+    expect((await ok(searchWords, fake, { level: ["A2", "C1"] })).words.map((w) => w.id).sort()).toEqual(["d", "e"]);
+    expect((await ok(searchWords, fake, { level: ["B1", "none"] })).words.map((w) => w.id).sort()).toEqual(["a", "b", "c"]);
+    expect(await refused(searchWords, fake, { level: ["B3"] })).toMatch(/level/);
+  });
+
+  it("add_words saves a given level as Claude's, and shows the estimate otherwise", async () => {
+    const fake = createFakeRepo({ folders: FOLDERS });
+    const out = await ok(addWords, fake, {
+      words: [
+        { fr: "le titre de séjour", ru: "вид на жительство", pos: "expression", cefr: "B1" },
+        { fr: "le loyer", ru: "квартплата", pos: "noun", gender: "m" },
+      ],
+      folder_chosen_by_user: false,
+    });
+    expect(out.added.map((w) => [w.fr, w.level, w.level_source])).toEqual([
+      ["le titre de séjour", "B1", "chat"],
+      ["le loyer", "B1", "flelex"],
+    ]);
+    const saved = [...fake.tables.words.values()];
+    expect(saved.map((w) => [w.cefr, w.cefr_source])).toEqual([
+      ["B1", "chat"],
+      [null, null],
+    ]);
+  });
+
+  it("update_word sets a level as Claude's, keeps a user's equal level, and null clears it", async () => {
+    const fake = seed();
+    const set = await ok(updateWord, fake, { id: "a", patch: { cefr: "A2" } });
+    expect("word" in set && set.word).toMatchObject({ level: "A2", level_source: "chat" });
+    expect(fake.tables.words.get("a")).toMatchObject({ cefr: "A2", cefr_source: "chat" });
+    expect((await ok(updateWord, fake, { id: "d", patch: { cefr: "A2" } })).status).toBe("unchanged");
+    expect(fake.tables.words.get("d")?.cefr_source).toBe("user");
+    const cleared = await ok(updateWord, fake, { id: "a", patch: { cefr: null } });
+    expect("word" in cleared && cleared.word).toMatchObject({ level: "B1", level_source: "flelex" });
+    expect(fake.tables.words.get("a")).toMatchObject({ cefr: null, cefr_source: null });
+    // An older row without the columns: the same «no level» is no change.
+    const old: Partial<Word> = word("x", "pote", "друг");
+    delete old.cefr;
+    delete old.cefr_source;
+    const legacy = createFakeRepo({ words: [old as never] });
+    expect((await ok(updateWord, legacy, { id: "x", patch: { cefr: null } })).status).toBe("unchanged");
+    expect(legacy.writes).toHaveLength(0);
+  });
+
+  it("set_word_levels writes a batch as Claude's, skips the user's levels, and is undone exactly", async () => {
+    const fake = seed();
+    const out = await ok(setWordLevels, fake, {
+      items: [
+        { word_id: "b", cefr: "B2" },
+        { word_id: "c", cefr: "A2" },
+        { word_id: "d", cefr: "B1" },
+        { word_id: "e", cefr: "C1" },
+        { word_id: "nope", cefr: "A1" },
+        { word_id: "c", cefr: "A1" },
+      ],
+    });
+    expect(out.updated).toEqual([
+      { id: "b", fr: "relou", level: "B2", level_source: "chat" },
+      { id: "c", fr: "faire la queue", level: "A1", level_source: "chat" },
+      { id: "e", fr: "constater", level: "C1", level_source: "chat" },
+    ]);
+    expect(out.skipped_user).toEqual([{ id: "d", fr: "la démarche", level: "A2" }]);
+    expect(out.not_found).toEqual(["nope"]);
+    expect(out.unchanged).toEqual([]);
+    expect(fake.tables.words.get("d")).toMatchObject({ cefr: "A2", cefr_source: "user" });
+    // One replace for the whole batch, each row compare-and-set.
+    expect(fake.writes.map((w) => [w.table, w.rows.length])).toEqual([["words", 3]]);
+    expect(out.undo).toEqual({
+      tool: "set_word_levels",
+      overwrite_user: false,
+      items: [
+        { word_id: "b", cefr: null, source: null, expect: { cefr: "B2", source: "chat" } },
+        { word_id: "c", cefr: null, source: null, expect: { cefr: "A1", source: "chat" } },
+        { word_id: "e", cefr: "C1", source: "ai", expect: { cefr: "C1", source: "chat" } },
+      ],
+    });
+
+    const later = new Date(NOW.getTime() + 1000);
+    const res = await callTool(setWordLevels, { ...deps(fake), now: () => later }, { items: out.undo!.items, overwrite_user: out.undo!.overwrite_user });
+    expect(res.isError).toBeFalsy();
+    expect(["b", "c", "e"].map((id) => [fake.tables.words.get(id)?.cefr, fake.tables.words.get(id)?.cefr_source])).toEqual([
+      [null, null],
+      [null, null],
+      ["C1", "ai"],
+    ]);
+  });
+
+  it("set_word_levels overwrites a user's level only with overwrite_user, and reports conflicts", async () => {
+    const fake = seed();
+    const out = await ok(setWordLevels, fake, { items: [{ word_id: "d", cefr: "B1" }], overwrite_user: true });
+    expect(out.updated).toEqual([{ id: "d", fr: "la démarche", level: "B1", level_source: "chat" }]);
+    expect(out.undo).toMatchObject({ overwrite_user: false, items: [{ word_id: "d", cefr: "A2", source: "user", expect: { cefr: "B1", source: "chat" } }] });
+    // Undoing the undo writes over the user's restored level, so that one carries overwrite_user.
+    const back = await ok(setWordLevels, fake, { items: out.undo!.items, overwrite_user: out.undo!.overwrite_user });
+    expect(fake.tables.words.get("d")).toMatchObject({ cefr: "A2", cefr_source: "user" });
+    expect(back.undo).toMatchObject({ overwrite_user: true, items: [{ word_id: "d", cefr: "B1", source: "chat", expect: { cefr: "A2", source: "user" } }] });
+
+    fake.beforeUpsert = (table) => {
+      if (table !== "words") return;
+      const stored = fake.tables.words.get("a")!;
+      fake.tables.words.set("a", { ...stored, ru: "аренда", updated_at: "2030-01-01T00:00:00.000Z" });
+    };
+    const clash = await ok(setWordLevels, fake, { items: [{ word_id: "a", cefr: "A1" }] });
+    expect(clash.conflicts).toEqual(["a"]);
+    expect(clash.updated).toEqual([]);
+    expect(clash.undo).toBeNull();
+    expect(fake.tables.words.get("a")?.cefr).toBeNull();
+  });
+
+  it("set_word_levels takes 1–100 items and writes nothing when nothing changes", async () => {
+    const fake = seed();
+    const items = Array.from({ length: 101 }, (_, i) => ({ word_id: `w${i}`, cefr: "A1" }));
+    expect(await refused(setWordLevels, fake, { items })).toMatch(/items/);
+    expect(await refused(setWordLevels, fake, { items: [] })).toMatch(/items/);
+    const same = await ok(setWordLevels, fake, { items: [{ word_id: "e", cefr: "C1", source: "ai", expect: { cefr: "C1", source: "ai" } }] });
+    expect(same.unchanged).toEqual(["e"]);
+    expect(fake.writes).toHaveLength(0);
+  });
+
+  it("set_word_levels takes source only from an undo, so Claude can't save a level as the user's", async () => {
+    const fake = seed();
+    expect(await refused(setWordLevels, fake, { items: [{ word_id: "a", cefr: "B1", source: "user" }] })).toMatch(/source/);
+    expect(await refused(setWordLevels, fake, { items: [{ word_id: "a", cefr: "B1", source: "ai" }] })).toMatch(/source/);
+    expect(fake.writes).toHaveLength(0);
+    expect(fake.tables.words.get("a")).toMatchObject({ cefr: null, cefr_source: null });
+  });
+
+  it("set_word_levels' undo leaves a level the user picked after the call", async () => {
+    const fake = seed();
+    const out = await ok(setWordLevels, fake, { items: [{ word_id: "a", cefr: "B1" }, { word_id: "b", cefr: "B2" }] });
+    // Meanwhile the user picks A2 for «a» in the app.
+    const stored = fake.tables.words.get("a")!;
+    fake.tables.words.set("a", { ...stored, cefr: "A2", cefr_source: "user", updated_at: "2030-01-01T00:00:00.000Z" });
+    const res = await ok(setWordLevels, fake, { items: out.undo!.items, overwrite_user: out.undo!.overwrite_user });
+    expect(res.changed_since).toEqual([{ id: "a", fr: stored.fr, level: "A2", level_source: "user" }]);
+    expect(res.updated.map((u) => u.id)).toEqual(["b"]);
+    expect(fake.tables.words.get("a")).toMatchObject({ cefr: "A2", cefr_source: "user" });
+    expect(fake.tables.words.get("b")).toMatchObject({ cefr: null, cefr_source: null });
   });
 });

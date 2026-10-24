@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { LevelInfo } from "@/lib/core/level";
 import type { Folder, Word } from "@/lib/types";
 import type { WordSchedule } from "./format";
 import { DEFAULT_PHONE_FILTER, filterPhoneWords, narrows, sheetFilterCount, type PhoneFilter } from "./phone-filter";
@@ -9,12 +10,13 @@ const people = { id: "people", sort: 2, name: "Люди" } as Folder;
 
 function item(
   fr: string,
-  opts: { ru?: string; level?: 0 | 1 | 2 | 3; verlan?: boolean; folder?: Folder; schedule?: Partial<WordSchedule> } = {},
+  opts: { ru?: string; level?: 0 | 1 | 2 | 3; verlan?: boolean; folder?: Folder; schedule?: Partial<WordSchedule>; cefr?: LevelInfo | null } = {},
 ): LibraryWord {
   return {
     word: { id: fr, fr, ru: opts.ru ?? fr, note: null, slang_level: opts.level ?? 0, verlan: opts.verlan ?? false } as Word,
     folder: opts.folder,
     schedule: { status: "new", dueLabel: "новое", tone: "new", due: false, nextDue: null, ...opts.schedule },
+    level: opts.cefr ?? null,
   };
 }
 
@@ -72,5 +74,27 @@ describe("narrows / sheetFilterCount", () => {
     expect(narrows({ ...DEFAULT_PHONE_FILTER, status: "due" })).toBe(true);
     expect(sheetFilterCount({ ...DEFAULT_PHONE_FILTER, status: "due" })).toBe(0);
     expect(sheetFilterCount({ ...DEFAULT_PHONE_FILTER, status: "new", slang: [2, 3], theme: "inbox" })).toBe(3);
+  });
+});
+
+describe("«Уровень языка» in the phone filter", () => {
+  const b1: LevelInfo = { level: "B1", source: "flelex", estimated: true };
+  const a1: LevelInfo = { level: "A1", source: "user", estimated: false };
+  const levelled = [
+    item("la démarche", { cefr: b1 }),
+    item("relou", { level: 2 }),
+    item("la maison", { cefr: a1 }),
+  ];
+  const pick = (patch: Partial<PhoneFilter>) => frs(filterPhoneWords(levelled, { ...DEFAULT_PHONE_FILTER, ...patch }, ""));
+
+  it("filters by level and «без уровня», and counts as a sheet choice", () => {
+    expect(pick({ cefr: ["B1"] })).toEqual(["la démarche"]);
+    expect(pick({ cefr: ["A1", "none"] })).toEqual(["relou", "la maison"]);
+    expect(narrows({ ...DEFAULT_PHONE_FILTER, cefr: ["none"] })).toBe(true);
+    expect(sheetFilterCount({ ...DEFAULT_PHONE_FILTER, cefr: ["A1", "B1"] })).toBe(1);
+  });
+
+  it("«По уровню языка»: A1 → C2, words without a level last", () => {
+    expect(pick({ order: "cefr" })).toEqual(["la maison", "la démarche", "relou"]);
   });
 });

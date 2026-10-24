@@ -9,3 +9,15 @@ futur and past participle. Rebuild with: node scripts/build-conjugation.mjs
 
 fr-morpho.json («Контекст» → «Слово по частям») is derived from Lexique 3.83's morphology column under the
 same licence: [lemma, "prefix-|root|-suffix", frequency]. Rebuild with: node scripts/build-morpho.mjs
+
+fr-cefr.json («Уровень языка», an estimated CEFR level per word) is derived from FLELex, a separate resource
+under its own licence, CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/); it is kept in
+its own file and never merged into the Lexique files above. Source: https://cental.uclouvain.be/cefrlex/flelex/
+- François, T., Gala, N., Watrin, P. & Fairon, C. (2014). FLELex: a graded lexical resource for French
+  foreign learners. Proceedings of LREC 2014, 3766–3773.
+- Pintard, A. & François, T. (2020). Combining Expert Knowledge with Frequency Information to Infer CEFR
+  Levels for Words. Proceedings of READI 2020, 85–92 (the «level» column of FLELex TreeTagger-Beacco).
+Format: { v: 1, beacco: [6 strings], crf: [6 strings] }, string i holding the keys of level A1…C2 joined
+with "|"; beacco is the TreeTagger-Beacco level per lemma (key~pos where it depends on the part of speech),
+crf the multi-word expressions of FLELex CRF at the first level where they occur. Rebuild with:
+node scripts/build-cefr.mjs <directory with Beacco.txt and CRF.txt>

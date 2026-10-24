@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildWord } from "@/lib/core/words";
-import { conjDraftError, draftOf, isDirty, patchFor, undoFor, withConjugationDraft } from "./word-editor";
+import { conjDraftError, draftOf, isDirty, levelPatch, patchFor, undoFor, withConjugationDraft } from "./word-editor";
 
 const word = buildWord({ fr: "relou", ru: "занудный", pos: "adj" }, new Date("2026-10-22T10:00:00Z"));
 
@@ -58,5 +58,41 @@ describe("«+ Поле» kinds", () => {
     expect(conjugationShown(verb, null, "conjugation")).toBe(true);
     expect(conjugationShown(verb, conj, null)).toBe(true);
     expect(conjugationShown(noun, conj, null)).toBe(false);
+  });
+});
+
+describe("word editor: «Уровень языка»", () => {
+  const at = new Date("2026-10-22T10:00:00Z");
+  const plain = buildWord({ fr: "la démarche", ru: "процедура", pos: "noun" }, at);
+  const mine = { ...plain, cefr: "B1" as const, cefr_source: "user" as const };
+  const claude = { ...plain, cefr: "B2" as const, cefr_source: "chat" as const };
+
+  it("«Авто» is checked unless the user set the level; an untouched choice saves nothing", () => {
+    expect(draftOf(plain, []).cefr).toBe("auto");
+    expect(draftOf(claude, []).cefr).toBe("auto");
+    expect(draftOf(mine, []).cefr).toBe("B1");
+    for (const w of [plain, claude, mine]) {
+      expect(levelPatch(draftOf(w, []))).toEqual({});
+      expect(isDirty(w, "level", draftOf(w, []))).toBe(false);
+      expect(isDirty(w, "entry", draftOf(w, []))).toBe(false);
+    }
+  });
+
+  it("a pick is the user's level, also over Claude's same level; «Авто» over the user's clears it", () => {
+    const pick = { ...draftOf(claude, []), cefr: "B2" as const };
+    expect(patchFor("level", pick)).toEqual({ cefr: "B2", cefr_source: "user" });
+    expect(isDirty(claude, "level", pick)).toBe(true);
+    expect(patchFor("entry", pick)).toMatchObject({ fr: "la démarche", cefr: "B2", cefr_source: "user" });
+    const auto = { ...draftOf(mine, []), cefr: "auto" as const };
+    expect(patchFor("level", auto)).toEqual({ cefr: null, cefr_source: null });
+    expect(undoFor(mine, patchFor("level", auto))).toEqual({ cefr: "B1", cefr_source: "user" });
+  });
+
+  it("undo on a row from before the level columns puts no level back", () => {
+    const old = { ...plain } as Partial<typeof plain>;
+    delete old.cefr;
+    delete old.cefr_source;
+    const patch = patchFor("level", { ...draftOf(old as typeof plain, []), cefr: "A2" });
+    expect(undoFor(old as typeof plain, patch)).toEqual({ cefr: null, cefr_source: null });
   });
 });

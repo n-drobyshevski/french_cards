@@ -2,11 +2,14 @@
 // quick save, «Список»), and slang level + example for words already in the library
 // («Дополнить карточки»), via POST /api/ai/enrich. Both also fill the empty «Свои поля» whose
 // definition is marked for the automatic fill (FieldDef.ai_fill: the switch, no setting of its own).
+// Scope "level" («Определить уровень языка»): a CEFR level for the words the app's dictionaries
+// have none for, rated against anchor words of known level, reviewed in a plan before saving.
 // The network part is small; deciding what to change is in pure functions so it is unit-tested.
 import { AiClientError, postAiJson, type AiClientErrorCode, type AiPostOptions } from "./ai-client";
 import { db } from "./db";
-import { ENRICH_CHUNK_MAX } from "./ai/constants";
-import type { CustomFieldInput, EnrichResponse, EnrichResult, FolderInput, ModelTierInput } from "./ai/schemas";
+import { ENRICH_CHUNK_MAX, LEVEL_CHUNK_MAX } from "./ai/constants";
+import type { CustomFieldInput, EnrichResponse, EnrichResult, FolderInput, LevelResponse, LevelResult, ModelTierInput } from "./ai/schemas";
+import { CEFR_LEVELS, hasNoEstimate, isCefr, type Cefr, type LevelResolver } from "./core/level";
 import { cleanFieldLabel, emptyAutoFields, FIELD_HINT_MAX, liveFieldDefs, listFieldDefs, MAX_FIELD_DEFS, withFieldValue } from "./custom-fields";
 import { listFolders } from "./folders";
 import { getSettings } from "./settings";
@@ -494,4 +497,168 @@ export async function applyEnrichChanges(changes: readonly EnrichChange[], now: 
   const { apply, undo } = mergeChanges(changes);
   const written = new Set((await updateWords(apply, now)).map((w) => w.id));
   return undo.filter((u) => written.has(u.id));
+}
+
+// ---------------------------------------------------------------------------------------------
+// «Определить уровень языка» (enrich scope "level")
+
+/** Words per level request: small batches keep each rating close to its anchors. */
+export const LEVEL_REQUEST_SIZE = Math.min(15, LEVEL_CHUNK_MAX);
+/** Anchor words of known level sent with each request (spread over A1…C2). */
+export const LEVEL_ANCHORS = 48;
+
+/**
+ * A word the app has no level for: no stored level and no estimate (FLELex, frequency). Argot,
+ * vulgar words and verlan are left out: they get no level by design.
+ */
+export function isLevelCandidate(w: Word, levels: Pick<LevelResolver, "level">): boolean {
+  return w.deleted_at === null && !isCefr(w.cefr) && !hasNoEstimate(w) && levels.level(w) === null;
+}
+
+/**
+ * Up to `max` words of known level, spread evenly over A1…C2: the user's own levels first, then
+ * FLELex estimates (the dictionary's levels; frequency bands are too rough to rate against).
+ */
+export function levelAnchors(words: readonly Word[], levels: Pick<LevelResolver, "level">, max = LEVEL_ANCHORS): { fr: string; level: Cefr }[] {
+  const byLevel = new Map<Cefr, { fr: string; rank: number }[]>(CEFR_LEVELS.map((l) => [l, []]));
+  for (const w of words) {
+    if (w.deleted_at !== null) continue;
+    const info = levels.level(w);
+    if (!info || (info.source !== "user" && info.source !== "flelex")) continue;
+    byLevel.get(info.level)!.push({ fr: w.fr, rank: info.source === "user" ? 0 : 1 });
+  }
+  const per = Math.max(1, Math.floor(max / CEFR_LEVELS.length));
+  const out: { fr: string; level: Cefr }[] = [];
+  for (const level of CEFR_LEVELS) {
+    const list = byLevel.get(level)!.sort((a, b) => a.rank - b.rank || a.fr.localeCompare(b.fr, "fr"));
+    for (const a of list.slice(0, per)) out.push({ fr: a.fr, level });
+  }
+  return out.slice(0, max);
+}
+
+/** One request (≤ LEVEL_CHUNK_MAX words). */
+export async function postLevels(
+  words: readonly EnrichInput[],
+  anchors: readonly { fr: string; level: Cefr }[],
+  opts: Pick<EnrichOptions, "model" | "signal" | "retries" | "fetchImpl"> = {},
+): Promise<LevelResult[]> {
+  const body = { scope: "level", words, anchors, ...(opts.model && { model: opts.model }) };
+  const res = await postAiJson<LevelResponse>(ENRICH_URL, body, (code) => new EnrichError(code), opts);
+  return res.levels ?? [];
+}
+
+/** A level the plan proposes for one word; saved as the app's (`cefr_source: "ai"`). */
+export interface LevelChange {
+  key: string;
+  word: Word;
+  cefr: Cefr;
+  patch: WordPatch;
+  undo: WordPatch;
+}
+
+export interface LevelPlan {
+  /** Proposed levels, grouped A1 → C2 («A2 · 9 слов»). */
+  groups: { level: Cefr; changes: LevelChange[] }[];
+  /** Words the model gave no level: not saved. */
+  none: Word[];
+}
+
+export function buildLevelPlan(words: readonly Word[], results: ReadonlyMap<string, LevelResult>): LevelPlan {
+  const groups = new Map<Cefr, LevelChange[]>(CEFR_LEVELS.map((l) => [l, []]));
+  const none: Word[] = [];
+  for (const word of words) {
+    const r = results.get(word.id);
+    if (!r) continue;
+    if (!r.cefr) {
+      none.push(word);
+      continue;
+    }
+    groups.get(r.cefr)!.push({
+      key: `level:${word.id}`,
+      word,
+      cefr: r.cefr,
+      patch: { cefr: r.cefr, cefr_source: "ai" },
+      undo: { cefr: word.cefr ?? null, cefr_source: word.cefr_source ?? null },
+    });
+  }
+  return { groups: CEFR_LEVELS.map((level) => ({ level, changes: groups.get(level)! })).filter((g) => g.changes.length > 0), none };
+}
+
+export const levelPlanChanges = (plan: LevelPlan): LevelChange[] => plan.groups.flatMap((g) => g.changes);
+
+export interface LevelPlanRun {
+  plan: LevelPlan;
+  /** Words sent (the sheet's «для 98 слов»). */
+  words: number;
+  /** Candidates left for a later run (over ENRICH_RUN_MAX). */
+  more: number;
+}
+
+/**
+ * «Определить уровень языка»: the candidates (a local read), their levels in batches of
+ * LEVEL_REQUEST_SIZE with anchor words (`onStage` before the first request and after each batch)
+ * and the plan to review. Nothing is written.
+ */
+export async function runLevelPlan(
+  levels: Pick<LevelResolver, "level">,
+  opts: Pick<EnrichOptions, "signal" | "model" | "onStage" | "fetchImpl"> = {},
+): Promise<LevelPlanRun> {
+  const model = opts.model ?? (await getSettings()).ai_model;
+  const all = await db.words.toArray();
+  const candidates = all.filter((w) => isLevelCandidate(w, levels)).sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
+  const batch = toEnrichWords(candidates.slice(0, ENRICH_RUN_MAX));
+  const anchors = levelAnchors(all, levels);
+  const chunks = chunk(batch, LEVEL_REQUEST_SIZE);
+  const results = new Map<string, LevelResult>();
+  let next = 0;
+  let wordsDone = 0;
+  let done = 0;
+  opts.onStage?.({ words: batch.length, wordsDone: 0, done: 0, total: chunks.length, batch: [] });
+  // One failed request stops the others, as in enrichWords.
+  const stop = new AbortController();
+  const onAbort = () => stop.abort();
+  opts.signal?.addEventListener("abort", onAbort, { once: true });
+  if (opts.signal?.aborted) stop.abort();
+  const worker = async () => {
+    while (next < chunks.length) {
+      if (stop.signal.aborted) throw new EnrichError("aborted");
+      const part = chunks[next++];
+      const got = await postLevels(part, anchors, { model, signal: stop.signal, fetchImpl: opts.fetchImpl }).catch((error: unknown) => {
+        stop.abort();
+        throw error;
+      });
+      for (const r of got) results.set(r.id, r);
+      wordsDone += part.length;
+      done++;
+      opts.onStage?.({ words: batch.length, wordsDone, done, total: chunks.length, batch: [] });
+    }
+  };
+  try {
+    await Promise.all(Array.from({ length: Math.min(ENRICH_CONCURRENCY, chunks.length) }, worker));
+  } finally {
+    opts.signal?.removeEventListener("abort", onAbort);
+  }
+  const sent = new Set(batch.map((w) => w.id));
+  return { plan: buildLevelPlan(candidates.filter((w) => sent.has(w.id)), results), words: batch.length, more: candidates.length - batch.length };
+}
+
+/**
+ * Writes the picked levels, skipping words that got a stored level meanwhile (the user's pick,
+ * Claude's); returns the patches that undo them.
+ */
+export async function applyLevelChanges(changes: readonly LevelChange[], now: Date = new Date()): Promise<{ id: string; patch: WordPatch }[]> {
+  const stored = await db.words.bulkGet(changes.map((c) => c.word.id));
+  const apply = changes.filter((c, i) => {
+    const w = stored[i];
+    return w && w.deleted_at === null && !isCefr(w.cefr);
+  });
+  const written = new Set((await updateWords(apply.map((c) => ({ id: c.word.id, patch: c.patch })), now)).map((w) => w.id));
+  return apply.filter((c) => written.has(c.word.id)).map((c) => ({ id: c.word.id, patch: c.undo }));
+}
+
+/** For the library's quiet row «98 без уровня»: candidates in all. */
+export async function countLevelCandidates(levels: Pick<LevelResolver, "level">): Promise<number> {
+  let n = 0;
+  for (const w of await db.words.toArray()) if (isLevelCandidate(w, levels)) n++;
+  return n;
 }

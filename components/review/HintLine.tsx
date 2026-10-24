@@ -15,6 +15,8 @@ export interface HintLineProps {
   /** Single-letter keys are on (Z is listed). */
   letters: boolean;
   gradeButtons: 2 | 3;
+  /** «План на сегодня» is open (the review keys are off): the line ends with «Esc закрыть план». */
+  planOpen?: boolean;
 }
 
 type Hint = { keys: string[]; label: string; before?: string };
@@ -24,7 +26,7 @@ type Hint = { keys: string[]; label: string; before?: string };
  * boxes, left-aligned with the card, 24px from the bottom. Off with Settings › «Подсказки клавиш при
  * повторении» (settings.key_hints) and below 760px tall.
  */
-export function HintLine({ revealed, practice, letters, gradeButtons }: HintLineProps) {
+export function HintLine({ revealed, practice, letters, gradeButtons, planOpen = false }: HintLineProps) {
   const hints: Hint[] = revealed
     ? [
         { keys: ["←", "→"], label: "не знаю / знаю" },
@@ -34,6 +36,7 @@ export function HintLine({ revealed, practice, letters, gradeButtons }: HintLine
   if (revealed && letters) hints.push({ keys: ["E"], label: "изменить" });
   if (practice) hints.push({ keys: ["Esc"], label: "закончить практику" });
   else if (letters) hints.push({ keys: ["Z"], label: "отменить" });
+  if (planOpen) hints.push({ keys: ["Esc"], label: "закрыть план" });
 
   const parts: ReactNode[] = [];
   hints.forEach((hint, i) => {

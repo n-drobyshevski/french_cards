@@ -29,7 +29,7 @@ import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { Kbd } from "@/components/ui/Kbd";
 import { useSnackbar } from "@/components/ui/Snackbar";
-import { countEnrichCandidates, enrichPreferences } from "@/lib/enrich";
+import { countEnrichCandidates, countLevelCandidates, enrichPreferences } from "@/lib/enrich";
 import { getSettings } from "@/lib/settings";
 import { deleteFolder, getFolder, getLibraryStats, restoreFolder } from "@/lib/folders";
 import { useFormatKeys } from "@/lib/key-names";
@@ -43,6 +43,8 @@ import { takeSkeletonHandoff } from "./DeskPlaceholder";
 import { BulkBar, EmptyPane, FilterStrip, SelectionSummary, summaryTargets, TextLink, type StatusFilter } from "./DeskParts";
 import { DisbandSheet, disbandMessage } from "./DisbandSheet";
 import { EnrichPlanSheet } from "./EnrichPlanSheet";
+import { LevelFillSheet } from "./LevelFillSheet";
+import { useLevelData } from "@/lib/use-level-data";
 import { cachedFolder, rememberLibrary, useSearchWait } from "./first-paint";
 import { FolderFormSheet } from "./FolderFormSheet";
 import { enrichCaption, nWords, plural, practiceHref, reviewHref } from "./format";
@@ -52,6 +54,7 @@ import { ThemeMenuItems } from "./ThemeActions";
 import { useThemePause } from "./theme-pause";
 import { INBOX_KEY, MoveMenu, ThemeSquare } from "./MoveMenu";
 import { matchesSlang, type SlangKey } from "./SlangFilter";
+import { levelCounts, matchesLevel, type LevelKey } from "./level";
 import { SortPlanSheet } from "./SortPlanSheet";
 import {
   cursorAfterRemoval,
@@ -144,6 +147,9 @@ function Desk({ scope }: { scope: LibraryScope }) {
     async () => (scope.kind === "all" ? countEnrichCandidates(enrichPreferences(await getSettings())) : null),
     [scope.kind],
   );
+  // «Определить уровень языка»: counted once the dictionaries are in, in the whole library only.
+  const levels = useLevelData();
+  const toLevel = useLiveQuery(async () => (scope.kind === "all" && levels.ready ? countLevelCandidates(levels) : null), [scope.kind, levels]);
   const theme = useLiveQuery(async () => {
     if (folderId === undefined) return null;
     const [folder, counts] = await Promise.all([folderId === null ? Promise.resolve(null) : getFolder(folderId), getSessionCounts({ folderId })]);
@@ -161,6 +167,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
   const deferredQuery = useDeferredValue(query);
   const [status, setStatus] = useState<StatusFilter>("all");
   const [slang, setSlang] = useState<SlangKey[]>([]);
+  const [cefr, setCefr] = useState<LevelKey[]>([]);
   const [sort, setSortState] = useState<SortState>(readSort);
   const setSort = (key: SortKey, fromMenu = false) => {
     // A column head flips its direction; «Порядок ▾» always picks the order as named.
@@ -172,7 +179,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
       // ignore
     }
   };
-  const listMode = query.trim() !== "" || status !== "all" || slang.length > 0;
+  const listMode = query.trim() !== "" || status !== "all" || slang.length > 0 || cefr.length > 0;
 
   const scopeRows = words?.words;
   const folderOrder = useMemo(() => new Map(folders.map((f) => [f.id, f.sort])), [folders]);
@@ -181,7 +188,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
   const filtered = useMemo(() => {
     if (!sortedRows) return undefined;
     const q = deferredQuery.trim();
-    if (!q && status === "all" && slang.length === 0) return sortedRows;
+    if (!q && status === "all" && slang.length === 0 && cefr.length === 0) return sortedRows;
     return sortedRows.filter(
       (item) =>
         (status !== "due" || item.schedule.due) &&
@@ -189,9 +196,12 @@ function Desk({ scope }: { scope: LibraryScope }) {
         (status !== "new" || item.schedule.tone === "new") &&
         (status !== "paused" || item.schedule.tone === "paused") &&
         matchesSlang(item.word, slang) &&
+        matchesLevel(item.level, cefr) &&
         (!q || matchesSearch(item.word, q)),
     );
-  }, [sortedRows, status, slang, deferredQuery]);
+  }, [sortedRows, status, slang, cefr, deferredQuery]);
+  // «Уровень языка ▾» counts every word in scope (D7 C: no other level statistics).
+  const cefrCounts = useMemo(() => (scopeRows ? levelCounts(scopeRows.map((r) => r.level)) : undefined), [scopeRows]);
   const capped = useMemo(() => (filtered && deferredQuery.trim() ? filtered.slice(0, RESULTS_MAX) : filtered), [filtered, deferredQuery]);
   // L5: while the deferred query lags, the old rows stay (dimmed after 150 ms); «Ищем…» after 300 ms.
   const stale = query !== deferredQuery;
@@ -342,6 +352,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
   const [disbandOpen, setDisbandOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const [enrichOpen, setEnrichOpen] = useState(false);
+  const [levelOpen, setLevelOpen] = useState(false);
 
   const openMove = (list: string[], anchorEl: HTMLElement | null) => {
     if (list.length === 0) return;
@@ -539,6 +550,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
       setQuery("");
       setStatus("all");
       setSlang([]);
+      setCefr([]);
       setCursor(word);
       pendingFocus.current = true;
     }
@@ -552,6 +564,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
       setQuery("");
       setStatus("all");
       setSlang([]);
+      setCefr([]);
       setCursor(id);
       focusCursor();
     } else {
@@ -668,7 +681,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
           <span className="font-mono text-[12px] text-muted tabular-nums">{mastery} % выучено</span>
         </span>
       );
-  } else if (lastRun || (toEnrich && toEnrich.total > 0)) {
+  } else if (lastRun || (toEnrich && toEnrich.total > 0) || toLevel) {
     line2 = (
       <span className="flex flex-wrap items-baseline gap-x-6 text-[12px] text-muted">
         {lastRun && (
@@ -677,6 +690,15 @@ function Desk({ scope }: { scope: LibraryScope }) {
               Последняя раскладка: {lastRun.moves.length} {plural(lastRun.moves.length, ["перемещение", "перемещения", "перемещений"])}
             </span>
             <TextLink onClick={() => void undoLastRun()}>Отменить</TextLink>
+          </span>
+        )}
+        {!!toLevel && (
+          <span className="inline-flex items-baseline gap-2">
+            <span className="tabular-nums">{toLevel} без уровня</span>
+            <TextLink aria-haspopup="dialog" onClick={() => setLevelOpen(true)} className="items-center gap-1">
+              <Icon name="spark" size={14} strokeWidth={1.5} className="shrink-0" />
+              Определить уровень языка
+            </TextLink>
           </span>
         )}
         {toEnrich && toEnrich.total > 0 && (
@@ -756,6 +778,9 @@ function Desk({ scope }: { scope: LibraryScope }) {
             {folder?.muted && <span className="shrink-0 rounded-[4px] border border-rule px-1.5 font-mono text-[11px] leading-5 text-muted">на паузе</span>}
             <span className="flex-1" />
             {guideShown && <GuideWords rows={rows} rowH={rowH} scrollRef={scrollRef} loaded={loaded} />}
+            {sort.key === "cefr" && rows.length > 0 && (
+              <span className="shrink-0 text-[13px] text-muted">{sort.dir === 1 ? "A1 → C2" : "C2 → A1"} · без уровня в конце</span>
+            )}
             {/* A theme «на паузе» has nothing to review or practise: the way back instead. */}
             {folder?.muted && hasWords && (
               <button
@@ -885,6 +910,9 @@ function Desk({ scope }: { scope: LibraryScope }) {
                 onStatus={setStatus}
                 slang={slang}
                 onSlang={setSlang}
+                cefr={cefr}
+                onCefr={setCefr}
+                cefrCounts={cefrCounts}
                 dueCount={counts.due}
                 difficultCount={counts.difficult}
                 newCount={counts.fresh}
@@ -1171,6 +1199,7 @@ function Desk({ scope }: { scope: LibraryScope }) {
       )}
       <SortPlanSheet open={sortOpen} onOpenChange={setSortOpen} />
       {scope.kind === "all" && <EnrichPlanSheet open={enrichOpen} onOpenChange={setEnrichOpen} />}
+      {scope.kind === "all" && <LevelFillSheet open={levelOpen} onOpenChange={setLevelOpen} levels={levels} />}
     </main>
   );
 }

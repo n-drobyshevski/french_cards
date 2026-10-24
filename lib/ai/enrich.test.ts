@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FIELD_VALUE_MAX } from "@/lib/core/custom-fields";
-import { fieldRefMap, finalizeCustom, finalizeEnrichment } from "./enrich";
-import type { EnrichmentItemModel } from "./schemas";
+import { fieldRefMap, finalizeCustom, finalizeEnrichment, finalizeLevels } from "./enrich";
+import { EnrichRequestSchema, type EnrichmentItemModel } from "./schemas";
 
 const words = [{ id: "word-a" }, { id: "word-b" }];
 const fields = [{ id: "def-syn" }, { id: "def-ipa" }];
@@ -82,5 +82,38 @@ describe("finalizeEnrichment", () => {
     // No fields sent: refs the model made up are not mapped.
     const none = finalizeEnrichment({ items: [item("w1", { custom: [{ field: "f1", value: "louche" }] })] }, words);
     expect(none[0].custom).toEqual([]);
+  });
+});
+
+describe("finalizeLevels («Определить уровень языка»)", () => {
+  it("maps refs to ids, NONE and junk to null, drops unknown refs and repeats, skips missing words", () => {
+    const three = [{ id: "a" }, { id: "b" }, { id: "c" }];
+    const out = finalizeLevels(
+      {
+        items: [
+          { ref: "w2", level: "NONE" },
+          { ref: " w1 ", level: "B1" },
+          { ref: "w1", level: "C2" },
+          { ref: "w9", level: "A1" },
+          { ref: "w3", level: "B9" as never },
+        ],
+      },
+      three,
+    );
+    expect(out).toEqual([
+      { id: "a", cefr: "B1" },
+      { id: "b", cefr: null },
+      { id: "c", cefr: null },
+    ]);
+    expect(finalizeLevels({ items: [] }, three)).toEqual([]);
+  });
+
+  it("the request takes scope level with anchors, defaulting to the card scope", () => {
+    const words = [{ id: "a", fr: "faire la queue", ru: "стоять в очереди" }];
+    expect(EnrichRequestSchema.parse({ words }).scope).toBe("card");
+    const level = EnrichRequestSchema.parse({ words, scope: "level", anchors: [{ fr: "la maison", level: "A1" }] });
+    expect(level).toMatchObject({ scope: "level", anchors: [{ fr: "la maison", level: "A1" }] });
+    expect(EnrichRequestSchema.safeParse({ words, scope: "level", anchors: [{ fr: "x", level: "D1" }] }).success).toBe(false);
+    expect(EnrichRequestSchema.safeParse({ words, anchors: Array.from({ length: 61 }, () => ({ fr: "x", level: "A1" })) }).success).toBe(false);
   });
 });

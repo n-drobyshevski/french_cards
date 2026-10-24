@@ -1,7 +1,16 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createLexique, foldKey, loadLexique, prefixSearch, setLexiqueForTesting, type LexiqueEntry } from "./lexique";
+import {
+  createLexique,
+  foldKey,
+  loadLevelData,
+  loadLexique,
+  prefixSearch,
+  setCefrDataForTesting,
+  setLexiqueForTesting,
+  type LexiqueEntry,
+} from "./lexique";
 
 const FIXTURE: LexiqueEntry[] = [
   ["casser", "verb", "none", 133],
@@ -82,6 +91,19 @@ describe("createLexique / search", () => {
   });
 });
 
+describe("createLexique / lookup", () => {
+  const lex = createLexique([...FIXTURE, ["sur", "other", "none", 600], ["sûr", "adj", "none", 150]]);
+
+  it("finds the exact folded key with its frequency rank, preferring the part of speech", () => {
+    expect(lex.lookup("semaine")).toEqual({ lemma: "semaine", pos: "noun", gender: "f", freq: 100, rank: 4 });
+    expect(lex.lookup("Œuvre")).toMatchObject({ lemma: "œuvre", rank: 5 });
+    expect(lex.lookup("sur")?.lemma).toBe("sur");
+    expect(lex.lookup("sûr", "adj")?.lemma).toBe("sûr");
+    expect(lex.lookup("cass")).toBeNull();
+    expect(lex.lookup("")).toBeNull();
+  });
+});
+
 describe("public/lexique/fr-lemmas.json", () => {
   const path = fileURLToPath(new URL("../public/lexique/fr-lemmas.json", import.meta.url));
   const data = JSON.parse(readFileSync(path, "utf8")) as LexiqueEntry[];
@@ -110,6 +132,45 @@ describe("public/lexique/fr-lemmas.json", () => {
     expect(lex.search("keuf")[0]).toMatchObject({ lemma: "keuf", pos: "noun", gender: "m" });
     expect(lex.search("chelou")[0].lemma).toBe("chelou");
     expect(lex.search("maison")[0]).toMatchObject({ lemma: "maison", gender: "f" });
+  });
+
+  it("ranks lemmas by frequency for the level bands", () => {
+    expect(lex.lookup("être", "verb")?.rank).toBeLessThan(10);
+    expect(lex.lookup("logement", "noun")?.rank).toBeLessThan(4000);
+    expect(lex.lookup("kiffer", "verb")?.freq).toBe(3); // curated slang: excluded from the bands
+  });
+});
+
+describe("loadLevelData", () => {
+  afterEach(() => {
+    setLexiqueForTesting(null);
+    setCefrDataForTesting(null);
+  });
+
+  const cefr = { v: 1, beacco: ["", "", "", "démarche", "", ""], crf: ["", "", "", "", "", ""] };
+
+  it("loads both files once and resolves levels", async () => {
+    const fetchImpl = vi.fn(async (url: string) => Response.json(url.includes("cefr") ? cefr : FILE_FIXTURE));
+    const r = await loadLevelData(fetchImpl as unknown as typeof fetch);
+    expect(r.ready).toBe(true);
+    expect(await loadLevelData(fetchImpl as unknown as typeof fetch)).toBe(r);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const w = { pos: "noun" as const, slang_level: 0 as const, verlan: false };
+    expect(r.level({ ...w, fr: "la démarche" })).toMatchObject({ level: "B2", source: "flelex" });
+    expect(r.level({ ...w, fr: "la semaine" })).toMatchObject({ level: "A1", source: "freq" });
+    expect(r.freq({ ...w, fr: "la semaine" })).toBe(100);
+  });
+
+  it("resolves over what loaded, not ready, and retries next time", async () => {
+    let fail = true;
+    const fetchImpl = vi.fn(async (url: string) =>
+      url.includes("cefr") && fail ? new Response("", { status: 503 }) : Response.json(url.includes("cefr") ? cefr : FILE_FIXTURE),
+    );
+    const first = await loadLevelData(fetchImpl as unknown as typeof fetch);
+    expect(first.ready).toBe(false);
+    expect(first.level({ fr: "la semaine", pos: "noun", slang_level: 0, verlan: false })?.source).toBe("freq");
+    fail = false;
+    expect((await loadLevelData(fetchImpl as unknown as typeof fetch)).ready).toBe(true);
   });
 });
 

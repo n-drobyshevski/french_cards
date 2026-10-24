@@ -4,6 +4,7 @@ import { cleanExamples } from "../examples";
 import { cleanConjugation, cleanOrigin } from "./conjugate";
 import { cleanCustomFields } from "./custom-fields";
 import { newId } from "../id";
+import { isCefr, isStoredLevelSource, type Cefr, type StoredLevelSource } from "./level";
 import type { Direction, Folder, Word } from "../types";
 
 export type WordFields = Omit<Word, "id" | "created_at" | "updated_at" | "deleted_at">;
@@ -17,6 +18,19 @@ export type WordPatch = Partial<WordFields>;
 export function cleanText(s: string | null | undefined): string | null {
   const t = s?.replace(/\s+/g, " ").trim();
   return t ? t : null;
+}
+
+/**
+ * A stored «Уровень языка» and its source, kept consistent: no level → no source; a level without
+ * a (valid) source counts as the user's. Throws on a value that is not A1…C2 (null clears).
+ */
+export function cleanLevel(
+  cefr: Cefr | null | undefined,
+  source: StoredLevelSource | null | undefined,
+): Pick<Word, "cefr" | "cefr_source"> {
+  if (cefr === null || cefr === undefined) return { cefr: null, cefr_source: null };
+  if (!isCefr(cefr)) throw new Error("Неизвестный уровень языка");
+  return { cefr, cefr_source: isStoredLevelSource(source) ? source : "user" };
 }
 
 /** A complete new word row with every default set explicitly (the DB defaults differ, e.g. both_directions). */
@@ -39,6 +53,7 @@ export function buildWord(input: NewWordInput, now: Date): Word {
     origin: cleanOrigin(input.origin),
     conjugation: cleanConjugation(input.conjugation),
     muted: input.muted ?? false,
+    ...cleanLevel(input.cefr, input.cefr_source),
     pos: input.pos ?? "other",
     gender: input.gender ?? "none",
     slang_level: input.slang_level ?? 0,

@@ -41,7 +41,8 @@ test("the segmented slab glides to a tapped segment with a transform", async ({ 
 });
 
 test("the stepper's buttons press in .96 with a tint", async ({ page }) => {
-  await page.goto("/settings");
+  // «План повторения» (the e2e plan counts cards, «Назавтра»).
+  await page.goto("/settings/plan");
   const more = page.getByRole("group", { name: "Новых карточек в день" }).getByRole("button", { name: "Больше" });
   await expect(more).toBeVisible();
   expect(await more.evaluate((el) => getComputedStyle(el).transitionProperty)).toContain("scale");

@@ -69,7 +69,7 @@ export function SlangFilterPanel({ value, onChange, open, onOpenChange, id }: Sl
     >
       <div className="flex h-8 items-center justify-between">
         <span id={headingId} className="meta">
-          Уровень сленга
+          Сленг
         </span>
         {value.length > 0 && (
           <button

@@ -69,3 +69,13 @@ export function studyDay(now: Date, timeZone: string): StudyDay {
     end: new Date(zonedInstant(w.year, w.month, w.day + dayOffset + 1, DAY_START_HOUR, timeZone)),
   };
 }
+
+/**
+ * The start of the study day `days` calendar days before the one starting at `start` (04:00 on the
+ * zone's clock), as the device counts it with `setDate` (lib/session.ts): across a DST change it is
+ * not `days × 24 h` back.
+ */
+export function studyDayStartBefore(start: Date, days: number, timeZone: string): Date {
+  const w = wallClock(start.getTime(), timeZone);
+  return new Date(zonedInstant(w.year, w.month, w.day - days, DAY_START_HOUR, timeZone));
+}

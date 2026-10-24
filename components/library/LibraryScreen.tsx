@@ -13,7 +13,7 @@ import { Icon } from "@/components/ui/Icons";
 import { KEYBOARD_MIN, useVisualViewport } from "@/components/ui/Sheet";
 import { SkeletonRow } from "@/components/ui/Skeleton";
 import { useSnackbar } from "@/components/ui/Snackbar";
-import { countEnrichCandidates, enrichPreferences } from "@/lib/enrich";
+import { countEnrichCandidates, countLevelCandidates, enrichPreferences } from "@/lib/enrich";
 import { useFolderSpotlight } from "@/lib/folder-spotlight";
 import { deleteFolder, getLibraryStats, restoreFolder, type FolderWithStats } from "@/lib/folders";
 import { getSettings, updateSettings } from "@/lib/settings";
@@ -26,6 +26,8 @@ import { BootNotice } from "./BootNotice";
 import { DeskPlaceholder } from "./DeskPlaceholder";
 import { DisbandSheet, disbandMessage } from "./DisbandSheet";
 import { EnrichPlanSheet } from "./EnrichPlanSheet";
+import { LevelFillSheet } from "./LevelFillSheet";
+import { useLevelData } from "@/lib/use-level-data";
 import { rememberLibrary, rememberLibraryShape, STALE_DIM, useLibraryShape, useRevealClass, useSearchWait, type LibraryShape } from "./first-paint";
 import { FolderFormSheet } from "./FolderFormSheet";
 import { FolderMenuSheet } from "./FolderMenuSheet";
@@ -34,6 +36,7 @@ import { FolderTile, NAV_FORWARD, NewFolderTile, TileSkeleton } from "./FolderTi
 import { enrichCaption, folderHref, nWords, plural } from "./format";
 import { useLibraryDesk } from "./lazy-desk";
 import { LibraryFilterSheet } from "./LibraryFilterSheet";
+import { levelCounts } from "./level";
 import {
   ALL_THEMES,
   DEFAULT_PHONE_FILTER,
@@ -112,6 +115,10 @@ function PhoneLibrary() {
   const [createOpen, setCreateOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const [enrichOpen, setEnrichOpen] = useState(false);
+  const [levelOpen, setLevelOpen] = useState(false);
+  // «Определить уровень языка»: counted once the dictionaries are in (before, every word looks unlevelled).
+  const levels = useLevelData();
+  const toLevel = useLiveQuery(async () => (levels.ready ? countLevelCandidates(levels) : null), [levels]);
   // Long press on a theme tile: its actions, then maybe the edit form.
   const [menuFolderId, setMenuFolderId] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -133,6 +140,8 @@ function PhoneLibrary() {
   const shown = page.key === listKey ? page.size : PAGE_SIZE;
 
   const results = useMemo(() => (words ? filterPhoneWords(words.words, filter, deferredQuery) : null), [words, filter, deferredQuery]);
+  // «Уровень языка» chips count every live word (D7 C: no other level statistics).
+  const cefrCounts = useMemo(() => (words ? levelCounts(words.words.map((w) => w.level)) : undefined), [words]);
   const pageItems = useMemo(() => results?.slice(0, shown), [results, shown]);
   const showMore = useCallback(() => setPage({ key: listKey, size: shown + PAGE_SIZE }), [listKey, shown]);
   // «Все слова»: the rows fade in over the reserved blank, or replace the skeleton at once (L4).
@@ -167,6 +176,18 @@ function PhoneLibrary() {
           action="Разложить по темам"
           disabled={!online}
           onClick={() => setSortOpen(true)}
+        />,
+      );
+    }
+    if (toLevel) {
+      upkeep.push(
+        <UpkeepRow
+          key="level"
+          ai
+          caption={`${toLevel} без уровня`}
+          action="Определить уровень языка"
+          disabled={!online}
+          onClick={() => setLevelOpen(true)}
         />,
       );
     }
@@ -480,6 +501,7 @@ function PhoneLibrary() {
         onChange={setFilter}
         folders={stats?.folders ?? []}
         counts={{ due: totals?.due, difficult: totals?.difficult, fresh: totals?.fresh, paused: totals?.paused }}
+        levelCounts={cefrCounts}
         resultCount={results ? results.length : null}
         onShow={() => {
           if (!filtered) setView("words");
@@ -550,6 +572,7 @@ function PhoneLibrary() {
       />
       <SortPlanSheet open={sortOpen} onOpenChange={setSortOpen} />
       <EnrichPlanSheet open={enrichOpen} onOpenChange={setEnrichOpen} />
+      <LevelFillSheet open={levelOpen} onOpenChange={setLevelOpen} levels={levels} />
     </main>
   );
 }
@@ -606,15 +629,20 @@ const upkeepHeight = (rows: number) => (rows > 0 ? UPKEEP_HEAD_H + rows * UPKEEP
 /**
  * The upkeep rows under the tiles (L1). Until the overview resolves the block reserves the last
  * known height; the rows then fade in together, and if their number changed the block resizes
- * once (`--dur-move`) instead of jumping.
+ * once (`--dur-move`) instead of jumping. A row that comes later (the level count waits for the
+ * dictionaries) resizes it the same way.
  */
 function UpkeepBlock({ rows, reserve, reveal }: { rows: ReactNode[] | null; reserve: number; reveal?: string }) {
   const ref = useRef<HTMLDivElement>(null);
   const loaded = rows !== null;
+  const count = rows ? rows.length : null;
+  // The rows last drawn; before the first load, the reserved number.
+  const drawn = useRef<number | null>(null);
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el || !loaded) return;
-    const from = upkeepHeight(reserve);
+    if (!el || count === null) return;
+    const from = upkeepHeight(drawn.current ?? reserve);
+    drawn.current = count;
     const to = el.scrollHeight;
     if (from === to || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     el.style.overflow = "hidden";
@@ -630,8 +658,10 @@ function UpkeepBlock({ rows, reserve, reveal }: { rows: ReactNode[] | null; rese
     return () => {
       window.clearTimeout(fallback);
       el.removeEventListener("transitionend", done);
+      // Never leave the block at a fixed height: its rows would be clipped under what follows.
+      done();
     };
-  }, [loaded, reserve]);
+  }, [count, reserve]);
 
   return (
     <div

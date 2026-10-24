@@ -25,7 +25,16 @@ import {
   postEnrich,
   runEnrichPlan,
   toEnrichWords,
+  applyLevelChanges,
+  buildLevelPlan,
+  countLevelCandidates,
+  isLevelCandidate,
+  LEVEL_REQUEST_SIZE,
+  levelAnchors,
+  levelPlanChanges,
+  runLevelPlan,
 } from "./enrich";
+import { createLevelResolver, type LevelResolver } from "./core/level";
 import { updateSettings } from "./settings";
 import type { FieldDef } from "./types";
 import { addWord, getWord, softDeleteWord, updateWord, updateWords } from "./words";
@@ -437,5 +446,94 @@ describe("«Дополнить карточки»", () => {
 
     await updateWords(undo);
     expect(await getWord(manual.id)).toMatchObject({ slang_level: 0, pos: "other", gender: "none", example_fr: null, example_ru: null });
+  });
+});
+
+describe("«Определить уровень языка» (scope level)", () => {
+  // A stand-in for the dictionaries: «la maison» A1 and «la démarche» B2 from FLELex, «le loyer» by frequency.
+  const KNOWN: Record<string, { level: "A1" | "B1" | "B2"; source: "flelex" | "freq" }> = {
+    "la maison": { level: "A1", source: "flelex" },
+    "la démarche": { level: "B2", source: "flelex" },
+    "le loyer": { level: "B1", source: "freq" },
+  };
+  const stored = createLevelResolver(null, null);
+  const levels: LevelResolver = {
+    ready: true,
+    level: (w) => stored.level(w) ?? (KNOWN[w.fr] ? { ...KNOWN[w.fr], estimated: true } : null),
+    freq: () => null,
+  };
+
+  it("candidates: no stored level and no estimate; argot, vulgar and verlan words are left out", async () => {
+    const queue = await addWord({ fr: "faire la queue", ru: "стоять в очереди" }, NOW);
+    const maison = await addWord({ fr: "la maison", ru: "дом" }, NOW);
+    const mine = await addWord({ fr: "au fur et à mesure", ru: "по мере", cefr: "B2" }, NOW);
+    const relou = await addWord({ fr: "relou", ru: "занудный", slang_level: 1, verlan: true }, NOW);
+    const seum = await addWord({ fr: "avoir le seum", ru: "беситься", slang_level: 2 }, NOW);
+    expect([queue, maison, mine, relou, seum].map((w) => isLevelCandidate(w, levels))).toEqual([true, false, false, false, false]);
+    expect(await countLevelCandidates(levels)).toBe(1);
+  });
+
+  it("anchors: the user's levels first, then FLELex, spread over the levels; no frequency bands", async () => {
+    const words = [
+      await addWord({ fr: "la maison", ru: "дом" }, NOW),
+      await addWord({ fr: "la démarche", ru: "процедура" }, NOW),
+      await addWord({ fr: "le loyer", ru: "квартплата" }, NOW),
+      await addWord({ fr: "pote", ru: "друг", cefr: "A1" }, NOW),
+    ];
+    expect(levelAnchors(words, levels)).toEqual([
+      { fr: "pote", level: "A1" },
+      { fr: "la maison", level: "A1" },
+      { fr: "la démarche", level: "B2" },
+    ]);
+    expect(levelAnchors(words, levels, 6)).toEqual([
+      { fr: "pote", level: "A1" },
+      { fr: "la démarche", level: "B2" },
+    ]);
+  });
+
+  it("asks in batches of 15 with the anchors, plans by level, and saves the picked ones as the app's, with an undo", async () => {
+    await addWord({ fr: "la maison", ru: "дом" }, NOW);
+    const candidates = [];
+    for (let i = 0; i < 17; i++) candidates.push(await addWord({ fr: `expr ${i}`, ru: `выраж ${i}`, created_at: new Date(NOW.getTime() + i).toISOString() }, NOW));
+    const bodies: { scope: string; words: { id: string }[]; anchors: unknown[] }[] = [];
+    const fetchImpl = vi.fn(async (_url: RequestInfo | URL, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as (typeof bodies)[number];
+      bodies.push(body);
+      const levelsOut = body.words.map((w, i) => ({ id: w.id, cefr: i === 0 ? null : i % 2 ? "B1" : "A2" }));
+      return Response.json({ levels: levelsOut });
+    });
+    const stages: number[] = [];
+    const run = await runLevelPlan(levels, { fetchImpl, model: "fast", onStage: (p) => stages.push(p.wordsDone) });
+    expect(bodies.map((b) => [b.scope, b.words.length])).toEqual([
+      ["level", LEVEL_REQUEST_SIZE],
+      ["level", 2],
+    ]);
+    expect(bodies[0].anchors).toEqual([{ fr: "la maison", level: "A1" }]);
+    expect(stages[0]).toBe(0);
+    expect(stages.at(-1)).toBe(17);
+    expect(run.words).toBe(17);
+    expect(run.plan.none).toHaveLength(2);
+    expect(run.plan.groups.map((g) => [g.level, g.changes.length])).toEqual([
+      ["A2", 7],
+      ["B1", 8],
+    ]);
+
+    // The user set one level meanwhile: that word is skipped.
+    const [first, ...rest] = levelPlanChanges(run.plan);
+    await updateWord(first.word.id, { cefr: "C1" });
+    const undo = await applyLevelChanges([first, ...rest]);
+    expect(undo).toHaveLength(14);
+    expect(await getWord(first.word.id)).toMatchObject({ cefr: "C1", cefr_source: "user" });
+    expect(await getWord(rest[0].word.id)).toMatchObject({ cefr: rest[0].cefr, cefr_source: "ai" });
+    await updateWords(undo);
+    expect(await getWord(rest[0].word.id)).toMatchObject({ cefr: null, cefr_source: null });
+  });
+
+  it("buildLevelPlan leaves out words the model skipped", async () => {
+    const a = await addWord({ fr: "x", ru: "y" }, NOW);
+    const b = await addWord({ fr: "z", ru: "w" }, NOW);
+    const plan = buildLevelPlan([a, b], new Map([[a.id, { id: a.id, cefr: "C1" as const }]]));
+    expect(plan.groups).toEqual([{ level: "C1", changes: [expect.objectContaining({ word: a, cefr: "C1", patch: { cefr: "C1", cefr_source: "ai" } })] }]);
+    expect(plan.none).toEqual([]);
   });
 });

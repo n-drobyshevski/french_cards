@@ -78,12 +78,10 @@ test("checkboxes, text options and the direction select", async ({ page }) => {
   await expect(select).toContainText("RU → FR");
   await expect(select).toBeFocused();
 
-  const stepper = page.getByRole("spinbutton", { name: "Новых карточек в день" });
-  await expect(stepper).toHaveAttribute("aria-valuenow", "15");
-  await page.getByRole("button", { name: "Больше" }).click();
-  await expect(stepper).toHaveAttribute("aria-valuenow", "20");
-  await stepper.press("ArrowDown");
-  await expect(stepper).toHaveAttribute("aria-valuenow", "15");
+  // «Новых карточек в день» moved to its own page: the row «План повторения ›» (e2e/study-plan.spec.ts).
+  const planRow = page.locator("#set-review").getByRole("link", { name: /^План повторения/ });
+  await expect(planRow).toHaveAttribute("href", "/settings/plan");
+  await expect(planRow).toContainText("20 карточек в день · без лимита повторений");
 
   await page.reload();
   await expect(page.getByRole("button", { name: /Направление по умолчанию/ })).toContainText("RU → FR");

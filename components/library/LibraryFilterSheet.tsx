@@ -8,6 +8,7 @@ import { Sheet, SheetCloseButton, SheetTitle } from "@/components/ui/Sheet";
 import { cx } from "@/components/ui/cx";
 import type { Folder, SlangLevel } from "@/lib/types";
 import { nWords } from "./format";
+import { LEVEL_FILTER_NOTE, LEVEL_KEYS, toggleLevelKey, type LevelKey } from "./level";
 import {
   ALL_THEMES,
   DEFAULT_PHONE_FILTER,
@@ -32,6 +33,8 @@ export interface LibraryFilterSheetProps {
   onChange: (value: PhoneFilter) => void;
   folders: readonly Folder[];
   counts: LibraryFilterCounts;
+  /** «Уровень языка» chip counts; undefined while counting. */
+  levelCounts?: Record<LevelKey, number>;
   /** Words the current filter and search leave; null while counting. */
   resultCount: number | null;
   /** «Показать N слов»: closes the sheet and shows the list. */
@@ -62,10 +65,10 @@ function Segments({ level, selected }: { level: SlangLevel; selected: boolean })
 }
 
 /**
- * «Фильтр и порядок» (phone library): status, slang levels, theme and order in one sheet. Every
+ * «Фильтр и порядок» (phone library): status, «Уровень языка», slang, theme and order in one sheet. Every
  * choice applies at once; the footer shows how many words are left.
  */
-export function LibraryFilterSheet({ open, onOpenChange, value, onChange, folders, counts, resultCount, onShow }: LibraryFilterSheetProps) {
+export function LibraryFilterSheet({ open, onOpenChange, value, onChange, folders, counts, levelCounts, resultCount, onShow }: LibraryFilterSheetProps) {
   const set = (patch: Partial<PhoneFilter>) => onChange({ ...value, ...patch });
   const toggleSlang = (k: SlangKey) =>
     set({ slang: value.slang.includes(k) ? value.slang.filter((x) => x !== k) : SLANG_KEYS.filter((x) => x === k || value.slang.includes(x)) });
@@ -112,7 +115,27 @@ export function LibraryFilterSheet({ open, onOpenChange, value, onChange, folder
           </div>
         </Group>
 
-        <Group id="filter-slang" label="Уровень сленга">
+        <Group id="filter-cefr" label="Уровень языка">
+          <div role="group" aria-labelledby="filter-cefr" className="flex flex-wrap gap-x-1.5 gap-y-3 py-2">
+            {LEVEL_KEYS.map((k) => (
+              <Chip
+                key={k}
+                role="checkbox"
+                selected={value.cefr.includes(k)}
+                dashed={k === "none"}
+                count={levelCounts?.[k]}
+                aria-label={levelCounts ? `${k === "none" ? "без уровня" : k}, ${levelCounts[k]}` : undefined}
+                onClick={() => set({ cefr: toggleLevelKey(value.cefr, k) })}
+                className={k === "none" ? undefined : "font-mono text-[12px] font-medium tracking-[.04em]"}
+              >
+                {k === "none" ? "без уровня" : k}
+              </Chip>
+            ))}
+          </div>
+          <p className="m-0 text-[12px] leading-4 text-muted">{LEVEL_FILTER_NOTE}</p>
+        </Group>
+
+        <Group id="filter-slang" label="Сленг">
           <div role="group" aria-labelledby="filter-slang" className="flex flex-wrap gap-x-1.5 gap-y-3 py-2">
             {SLANG_KEYS.map((k) => (
               <Chip

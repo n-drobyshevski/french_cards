@@ -59,7 +59,10 @@ import { buildWord, cleanText, directionsOf, isMovable, isPaused, pausedFolderId
 import { cleanConjugation, cleanOrigin, conjugate, ORIGIN_MAX, type ConjData } from "@/lib/core/conjugate";
 import conjTable from "@/public/lexique/fr-conj.json";
 import { newId } from "@/lib/id";
-import { cardStatus, newReviewState, reviewStateId, wordStatus, type CardStatus } from "@/lib/scheduler";
+import { folderOrderOf, planDay } from "@/lib/core/plan";
+import { CEFR_LEVELS, STORED_LEVEL_SOURCES, type Cefr, type LevelResolver, type StoredLevelSource } from "@/lib/core/level";
+import { migrateStudyPlan, parseStudyPlan, STUDY_PLAN_PREF } from "@/lib/core/study-plan";
+import { cardStatus, newReviewState, retrievability, reviewStateId, wordStatus, type CardStatus } from "@/lib/scheduler";
 import type {
   Confidence,
   Conjugation,
@@ -80,7 +83,8 @@ import type {
   Word,
 } from "@/lib/types";
 import { PartialWriteError, RepoError, type McpRepo, type Replacement } from "./repo";
-import { studyDay } from "./study-day";
+import { serverLevels } from "./levels";
+import { studyDay, studyDayStartBefore } from "./study-day";
 
 export interface ToolDeps {
   repo: McpRepo;
@@ -154,6 +158,8 @@ interface ViewContext {
   dayEnd: number;
   /** Custom-field definitions (tombstones included), for the fields' current names. */
   defs: readonly FieldDef[];
+  /** «Уровень языка»: stored levels, else the FLELex / Lexique estimate. */
+  levels: LevelResolver;
 }
 
 function viewContext(folders: readonly Folder[], states: readonly ReviewState[], defs: readonly FieldDef[], deps: ToolDeps): ViewContext {
@@ -170,6 +176,7 @@ function viewContext(folders: readonly Folder[], states: readonly ReviewState[],
     statesByWord,
     dayEnd: studyDay(deps.now(), deps.timeZone).end.getTime(),
     defs,
+    levels: serverLevels(),
   };
 }
 
@@ -199,6 +206,21 @@ function conjugationView(w: Word): Record<string, unknown> {
   return w.pos === "verb" || builtin ? { conjugation_builtin: builtin } : {};
 }
 
+/**
+ * «Уровень языка» as the app shows it: `level` null = «без уровня»; `level_source` user / chat / ai
+ * for a stored level, flelex / freq for an estimate (computed, never stored).
+ */
+function levelView(w: Word, levels: LevelResolver): { level: Cefr | null; level_source?: string } {
+  const info = levels.level(w);
+  return info ? { level: info.level, level_source: info.source } : { level: null };
+}
+
+/** The planner's `level` / `freq` inputs (new_order "level" and "themes"). */
+const levelSignals = (levels: LevelResolver) => ({
+  level: (w: Word) => levels.level(w)?.level ?? null,
+  freq: (w: Word) => levels.freq(w),
+});
+
 function wordView(w: Word, ctx: ViewContext) {
   const states = ctx.statesByWord.get(w.id) ?? [];
   const fields = customFieldsView(w, ctx.defs);
@@ -219,6 +241,7 @@ function wordView(w: Word, ctx: ViewContext) {
     gender: w.gender,
     slang_level: w.slang_level,
     verlan: w.verlan,
+    ...levelView(w, ctx.levels),
     tags: w.tags,
     folder: folderRef(placeOf(w, ctx.live)),
     folder_source: w.folder_source,
@@ -363,6 +386,10 @@ const slangLevel = z
   .max(3)
   .describe("0 neutral (нейтр.), 1 familier (fam.), 2 argot (arg.), 3 vulgaire (vulg.).");
 
+const cefrLevel = z.enum(CEFR_LEVELS as readonly [Cefr, ...Cefr[]]);
+const LEVEL_RUBRIC =
+  "CEFR level of the word for a learner of French (the level of a textbook or DELF / TCF list where it first appears): A1 basic everyday words (maison, manger), A2 common (le loyer, se dépêcher), B1 (la démarche, constater), B2 (s'en sortir, néanmoins), C1–C2 rare, literary or very specific. Not for argot, vulgar words or verlan unless the user asks.";
+
 const conjForms = (tense: string) =>
   z
     .array(z.string().trim().min(1).max(80))
@@ -415,6 +442,9 @@ const newWordSchema = z.object({
   gender: z.enum(GENDER_VALUES).optional().describe("Gender for nouns (mf = both); ignored for other parts of speech."),
   slang_level: slangLevel.optional().describe("Slang level: 0 neutral, 1 familier, 2 argot, 3 vulgaire. Default 0."),
   verlan: z.boolean().optional().describe("True for verlan forms (meuf, relou, chelou, vénère)."),
+  cefr: cefrLevel
+    .optional()
+    .describe(`«Уровень языка», only when you are fairly sure; leave it out and the app estimates one from its dictionary. ${LEVEL_RUBRIC}`),
   tags: z.array(z.string().trim().min(1).max(40)).max(10).optional(),
   custom_fields: customFieldsInput("Fill a shared field as its hint says; null or an empty value leaves it out."),
   origin: originInput,
@@ -469,11 +499,15 @@ export const searchWords = tool({
   name: "search_words",
   title: "Search words",
   description:
-    "Search the user's saved French words. Every term of `query` must match the French, the Russian, the note, a tag or a custom field's value, ignoring accents and case; an empty query lists words. Filter by theme and learning status. Newest first; `total` counts all matches, and `next_offset` (when not null) fetches the next page. A word's custom fields («Свои поля») come as `custom_fields` (name → value), only when it has any; `origin` when it has one; `muted: true` for a word «на паузе» (kept, but never in review), `theme_muted: true` when its theme is; for verbs, the saved `conjugation`, or `conjugation_builtin` (true when the app builds it on the device, false when it has none). Use it before add_words to avoid duplicates, and to find ids for update_word, move_words and delete_words.",
+    "Search the user's saved French words. Every term of `query` must match the French, the Russian, the note, a tag or a custom field's value, ignoring accents and case; an empty query lists words. Filter by theme and learning status. Newest first; `total` counts all matches, and `next_offset` (when not null) fetches the next page. A word's custom fields («Свои поля») come as `custom_fields` (name → value), only when it has any; `origin` when it has one; `muted: true` for a word «на паузе» (kept, but never in review), `theme_muted: true` when its theme is; for verbs, the saved `conjugation`, or `conjugation_builtin` (true when the app builds it on the device, false when it has none); `level` («Уровень языка», A1…C2, null = none) with `level_source`: user (the user picked it: never change it unless asked), chat (set by you), ai (by the app), or an estimate the app computes, flelex (its dictionary) or freq (word frequency). Filter with `level` (some levels, or \"none\" for words with no level at all). Use it before add_words to avoid duplicates, and to find ids for update_word, move_words and delete_words.",
   input: z.object({
     query: z.string().max(200).optional().describe("Words to look for (French or Russian). Empty = all."),
     folder: folderSelector.optional(),
     status: z.enum(statusValues).optional().describe("new = never reviewed, learning, mastered, due = due for review today."),
+    level: z
+      .union([z.literal("none"), z.array(z.enum(["none", ...CEFR_LEVELS] as [Cefr | "none", ...(Cefr | "none")[]])).min(1).max(7)])
+      .optional()
+      .describe('«Уровень языка»: words whose level (stored or estimated) is one of these; "none" = words with no level, the ones to fill with set_word_levels.'),
     limit: z.number().int().min(1).max(100).default(20),
     offset: z.number().int().min(0).default(0).describe("Matches to skip, for paging: pass the previous result's next_offset."),
   }),
@@ -483,11 +517,13 @@ export const searchWords = tool({
     const [folders, words, states, defs] = await Promise.all([deps.repo.folders(), deps.repo.words(), deps.repo.states(), deps.repo.fieldDefs()]);
     const target = args.folder === undefined ? undefined : resolveFolder(args.folder, folders);
     const ctx = viewContext(folders, states, defs, deps);
+    const levels = args.level === undefined ? null : new Set<string>(args.level === "none" ? ["none"] : args.level);
     const matches = words
       .filter((w) => w.deleted_at === null)
       .filter((w) => target === undefined || (placeOf(w, ctx.live)?.id ?? null) === (target?.id ?? null))
       .filter((w) => !args.query || matchesSearch(w, args.query))
       .map((w) => wordView(w, ctx))
+      .filter((v) => !levels || levels.has(v.level ?? "none"))
       .filter((v) => {
         if (args.status === "new") return v.status === "new";
         if (args.status === "learning") return v.status === "learning" || v.status === "difficult";
@@ -713,70 +749,103 @@ export const studySummary = tool({
   name: "study_summary",
   title: "Today's study summary",
   description:
-    "Today's review numbers: cards due, new cards still available, reviews done today, words by learning status, the themes «на паузе» (`muted_themes`, left out of review), and the words due soonest. The daily limit of new cards is a device setting this tool can't see (default 15); pass new_per_day if the user changed it. The exact queue is built by the app on the device, and reviewing happens there.",
+    "Today's review numbers, planned exactly as the app plans the day (the user's «План повторения», user_prefs `study_plan`): cards due, new cards in today's queue, reviews done today, words by learning status, the themes «на паузе» (`muted_themes`, left out of review), the words due soonest, and `plan`: today's new-word budget (`new_words_today`, at most the `ceiling`; lower when the coming reviews are heavy (`reason` \"load\"), when recent answers are weak (\"accuracy\") or over the review cap (\"backlog\", with `deferred` reviews held for tomorrow)), reverse sides unlocked (`ru_unlocks`), and the mean reviews a day over the next week (`forecast_7d`). The one-day «Всё равно добавить новые» is a device setting this tool can't see. Reviewing happens in the app.",
   input: z.object({
-    new_per_day: z.number().int().min(0).max(500).default(DEFAULT_NEW_PER_DAY).describe("The app's «Новых в день» setting."),
+    new_per_day: z
+      .number()
+      .int()
+      .min(0)
+      .max(500)
+      .optional()
+      .describe("Only to answer «what if»: a daily ceiling of new words to plan with instead of the saved plan's."),
   }),
   write: false,
   annotations: READ,
   async run(deps, args) {
     const now = deps.now();
     const day = studyDay(now, deps.timeZone);
+    const dayStart = day.start.getTime();
     const dayEnd = day.end.getTime();
-    const [folders, words, states, logs] = await Promise.all([
+    // Seven calendar days back, as the device counts them (lib/session.ts `loadSession`).
+    const weekAgo = studyDayStartBefore(day.start, 7, deps.timeZone);
+    const [folders, words, states, logs, prefs] = await Promise.all([
       deps.repo.folders(),
       deps.repo.words(),
       deps.repo.states(),
-      deps.repo.logsSince(day.start.toISOString()),
+      deps.repo.logsSince(weekAgo.toISOString()),
+      deps.repo.userPrefs(),
     ]);
     const live = new Map(liveFolders(folders).map((f) => [f.id, f]));
     const wordsById = new Map(words.filter((w) => w.deleted_at === null).map((w) => [w.id, w]));
     const cards = states.filter((s) => s.deleted_at === null && wordsById.has(s.word_id));
-    const byKey = new Map(cards.map((s) => [s.id, s]));
     // Words «на паузе» (themselves or their theme) are never shown in review: not due, not new.
     const paused = pausedFolderIds(folders);
-    const inReview = cards.filter((s) => !isPaused(wordsById.get(s.word_id)!, paused));
-    // As in loadSession: the daily new-card allowance counts every review of the day, also of words
-    // deleted since; «reviewed today» counts only live words' reviews.
-    const dayLogs = logs.filter((l) => l.deleted_at === null && Date.parse(l.review) < dayEnd);
+    const inReview = new Map([...wordsById].filter(([, w]) => !isPaused(w, paused)));
+    // As in the app: the day's budgets count every review of the day, also of words deleted since;
+    // «reviewed today» counts only live words' reviews.
+    const liveLogs = logs.filter((l) => l.deleted_at === null);
+    const dayLogs = liveLogs.filter((l) => Date.parse(l.review) >= dayStart && Date.parse(l.review) < dayEnd);
     const today = dayLogs.filter((l) => wordsById.has(l.word_id));
-    const introduced = new Set(dayLogs.filter((l) => l.state === 0).map((l) => reviewStateId(l.word_id, l.direction)));
-    const reviewed = new Set(dayLogs.map((l) => reviewStateId(l.word_id, l.direction)));
 
-    const due = inReview.filter((s) => isDueToday(s, dayEnd)).sort((a, b) => Date.parse(a.due) - Date.parse(b.due));
-    // Same rule as loadSession: a new RU→FR card waits until its FR→RU card was learned on an earlier day.
-    const fresh = inReview.filter((s) => {
-      if (s.state !== 0) return false;
-      if (s.direction !== "ru_fr") return true;
-      const siblingKey = reviewStateId(s.word_id, "fr_ru");
-      const sibling = byKey.get(siblingKey);
-      return !(sibling && (sibling.state === 0 || reviewed.has(siblingKey)));
+    const row = prefs.find((p) => p.id === STUDY_PLAN_PREF && p.deleted_at === null);
+    // Without a saved plan the app migrates the device's «Новых карточек в день» (default 15); a device
+    // with another number saves its migrated plan after a sync (lib/user-prefs.ts saveMigratedStudyPlan).
+    const fallback = migrateStudyPlan(DEFAULT_NEW_PER_DAY);
+    const saved = row ? parseStudyPlan(row.value, fallback) : fallback;
+    const plan = args.new_per_day === undefined ? saved : { ...saved, new_words: args.new_per_day };
+    const result = planDay({
+      now,
+      dayStart: day.start,
+      dayEnd: day.end,
+      states: cards,
+      words: inReview,
+      todayLogs: dayLogs,
+      logs7d: liveLogs.filter((l) => Date.parse(l.review) < dayStart),
+      plan,
+      overrideNewToday: false,
+      r: retrievability,
+      // The same level and frequency signals as the app's (lib/session.ts), so the orders agree.
+      ...(plan.new_order === "added" ? {} : levelSignals(serverLevels())),
+      folderOrder: folderOrderOf([...live.values()]),
     });
-    const allowance = Math.max(0, args.new_per_day - introduced.size);
 
     const statesByWord = new Map<string, ReviewState[]>();
     for (const s of cards) statesByWord.set(s.word_id, [...(statesByWord.get(s.word_id) ?? []), s]);
     const byStatus: Record<CardStatus, number> = { new: 0, learning: 0, known: 0, difficult: 0 };
     for (const w of wordsById.values()) byStatus[wordStatus(statesByWord.get(w.id) ?? [])]++;
 
+    const due = [...result.queue.filter((i) => !i.isNew), ...result.waiting].sort((a, b) => Date.parse(a.state.due) - Date.parse(b.state.due));
     const dueWords: ReturnType<typeof brief>[] = [];
     const seen = new Set<string>();
-    for (const s of due) {
-      if (seen.has(s.word_id) || dueWords.length >= 20) continue;
-      seen.add(s.word_id);
-      dueWords.push(brief(wordsById.get(s.word_id)!, live));
+    for (const { word } of due) {
+      if (seen.has(word.id) || dueWords.length >= 20) continue;
+      seen.add(word.id);
+      dueWords.push(brief(word, live));
     }
+    const d = result.day;
     return {
       study_day: { start: day.start.toISOString(), end: day.end.toISOString(), time_zone: deps.timeZone },
-      due_cards: due.length,
-      new_cards_available: Math.min(fresh.length, allowance),
-      /** New cards that could be introduced, ignoring the daily limit. */
-      new_cards_ready: fresh.length,
+      due_cards: result.counts.due,
+      new_cards_available: result.counts.new,
+      /** New cards that could be introduced, ignoring today's budget. */
+      new_cards_ready: d.available.fr + d.available.ru,
       reviewed_today: today.length,
       words: { total: wordsById.size, ...byStatus },
       ...(paused.size > 0 ? { muted_themes: [...live.values()].filter((f) => paused.has(f.id)).map((f) => f.name) } : {}),
       due_soonest: dueWords,
-      note: "Counts come from the synced copy: reviews not yet synced from the device are missing. The app builds the exact queue.",
+      plan: {
+        new_words_today: d.budget,
+        new_words_left: d.newLeft,
+        ceiling: d.ceiling,
+        ru_unlocks: result.queue.filter((i) => i.isNew && i.direction === "ru_fr").length,
+        reason: d.reason,
+        deferred: d.deferred,
+        backlog: d.backlog,
+        forecast_7d: Math.round(d.forecast7 * 10) / 10,
+        ...(d.accuracy7 !== null ? { accuracy_7d: Math.round(d.accuracy7 * 100) / 100 } : {}),
+        settings: { ...plan, saved: !!row },
+      },
+      note: "Counts come from the synced copy: reviews not yet synced from the device are missing.",
     };
   },
 });
@@ -785,7 +854,7 @@ export const addWords = tool({
   name: "add_words",
   title: "Add words",
   description:
-    `Add 1–50 new words. Each gets review cards (FR→RU, and RU→FR unless both_directions is false). Words whose French form is already saved are skipped (on_duplicate "skip", the default) and listed in \`duplicates\`. Fill in everything you can: ru, slang_level (0 neutral, 1 familier, 2 argot, 3 vulgaire), verlan, pos, gender for nouns, and a short example_fr with example_ru. \`folder\` is a theme id, slug or name (default «${INBOX_NAME}»); set folder_chosen_by_user to true only when the user named the theme (per word, \`folder\` and folder_chosen_by_user override the call's). Optional \`custom_fields\` sets the user's custom fields by name (list_fields). List the words and get the user's OK before adding more than 5. Undo with delete_words and the returned ids.`,
+    `Add 1–50 new words. Each gets review cards (FR→RU, and RU→FR unless both_directions is false). Words whose French form is already saved are skipped (on_duplicate "skip", the default) and listed in \`duplicates\`. Fill in everything you can: ru, slang_level (0 neutral, 1 familier, 2 argot, 3 vulgaire), verlan, pos, gender for nouns, and a short example_fr with example_ru. \`cefr\` («Уровень языка») is optional: the app estimates a level itself, and \`added\` shows the \`level\` each word got. \`folder\` is a theme id, slug or name (default «${INBOX_NAME}»); set folder_chosen_by_user to true only when the user named the theme (per word, \`folder\` and folder_chosen_by_user override the call's). Optional \`custom_fields\` sets the user's custom fields by name (list_fields). List the words and get the user's OK before adding more than 5. Undo with delete_words and the returned ids.`,
   input: z.object({
     words: z.array(newWordSchema).min(1).max(50),
     folder: folderSelector.optional().describe(`Theme for all words: id, slug or name (default «${INBOX_NAME}»).`),
@@ -838,6 +907,8 @@ export const addWords = tool({
           gender: pos === "noun" ? (input.gender ?? "none") : "none",
           slang_level: (input.slang_level ?? 0) as Word["slang_level"],
           verlan: input.verlan ?? false,
+          cefr: input.cefr ?? null,
+          cefr_source: input.cefr ? "chat" : null,
           tags: input.tags,
           custom_fields: fields.values,
           origin: cleanOrigin(input.origin),
@@ -871,6 +942,7 @@ export const addWords = tool({
         throw error;
       }
     }
+    const levels = serverLevels();
     return {
       added: built.map((w) => {
         const fields = customFieldsView(w, defs);
@@ -879,6 +951,7 @@ export const addWords = tool({
           ...brief(w, live),
           slang_level: w.slang_level,
           verlan: w.verlan,
+          ...levelView(w, levels),
           ...(Object.keys(fields).length > 0 ? { custom_fields: fields } : {}),
           ...(fresh ? { new_one_off_fields: fresh } : {}),
         };
@@ -895,7 +968,7 @@ export const updateWord = tool({
   name: "update_word",
   title: "Edit a word",
   description:
-    "Edit one word: French, Russian, note, example, tags, part of speech, gender, slang level, verlan, both_directions, custom fields, origin («Происхождение»), a verb's conjugation, or muted («на паузе»: kept but out of review). Only the fields in `patch` change; null clears note or example. `custom_fields` changes only the fields it names (null clears one) and keeps the others. both_directions false removes the RU→FR card, true brings it back with its progress. Use move_words to change the theme.",
+    "Edit one word: French, Russian, note, example, tags, part of speech, gender, slang level, verlan, «Уровень языка» (cefr; null clears a stored level, back to the app's estimate), both_directions, custom fields, origin («Происхождение»), a verb's conjugation, or muted («на паузе»: kept but out of review). Only the fields in `patch` change; null clears note or example. For the levels of several words use set_word_levels. `custom_fields` changes only the fields it names (null clears one) and keeps the others. both_directions false removes the RU→FR card, true brings it back with its progress. Use move_words to change the theme.",
   input: z.object({
     id: z.string().trim().min(1).max(64).describe("Word id from search_words."),
     patch: z
@@ -909,6 +982,10 @@ export const updateWord = tool({
         gender: z.enum(GENDER_VALUES).optional().describe("Nouns only; other parts of speech always get none."),
         slang_level: slangLevel.optional(),
         verlan: z.boolean().optional(),
+        cefr: cefrLevel
+          .nullable()
+          .optional()
+          .describe(`«Уровень языка», saved as set by you (level_source chat); null clears the stored level. Never change a level with level_source user unless the user asks. ${LEVEL_RUBRIC}`),
         tags: z.array(z.string().trim().min(1).max(40)).max(10).optional().describe("Replaces all tags."),
         custom_fields: customFieldsInput("Only the named fields change; null or an empty value clears one."),
         origin: originInput,
@@ -936,6 +1013,11 @@ export const updateWord = tool({
     if (p.gender !== undefined) next.gender = p.gender;
     if (p.slang_level !== undefined) next.slang_level = p.slang_level as Word["slang_level"];
     if (p.verlan !== undefined) next.verlan = p.verlan;
+    // The same level again keeps who set it (a user's B1 stays the user's).
+    if (p.cefr !== undefined && p.cefr !== (current.cefr ?? null)) {
+      next.cefr = p.cefr;
+      next.cefr_source = p.cefr === null ? null : "chat";
+    }
     if (p.tags !== undefined) next.tags = [...new Set(p.tags.map((t) => t.trim()).filter(Boolean))];
     if (p.both_directions !== undefined) next.both_directions = p.both_directions;
     if (p.muted !== undefined) next.muted = p.muted;
@@ -957,6 +1039,10 @@ export const updateWord = tool({
     // Columns missing on older rows read as no value, so «not set» never counts as a change.
     if ((next.origin ?? null) === (current.origin ?? null)) next.origin = current.origin;
     if (!!next.muted === !!current.muted) next.muted = current.muted;
+    if ((next.cefr ?? null) === (current.cefr ?? null)) {
+      next.cefr = current.cefr;
+      next.cefr_source = current.cefr_source;
+    }
     if (JSON.stringify(next.conjugation ?? null) === JSON.stringify(current.conjugation ?? null)) next.conjugation = current.conjugation;
 
     const changed = JSON.stringify(next) !== JSON.stringify(current);
@@ -985,6 +1071,100 @@ export const updateWord = tool({
       status: changed || cards > 0 ? "updated" : "unchanged",
       word: wordView(changed ? next : current, viewContext(folders, states, defs, deps)),
       ...(newOneOff.length > 0 ? { new_one_off_fields: newOneOff, fields_note: ONE_OFF_NOTE } : {}),
+      note: SYNC_NOTE,
+    };
+  },
+});
+
+const storedLevelSource = z.enum(STORED_LEVEL_SOURCES as readonly ["user", "chat", "ai"]);
+
+/** One word's level for set_word_levels; `source` and `expect` only come from an `undo`. */
+const levelItemSchema = z.object({
+  word_id: z.string().trim().min(1).max(64).describe("Word id from search_words."),
+  cefr: cefrLevel.nullable().describe("The level; null clears a stored level (back to the app's estimate)."),
+  source: storedLevelSource
+    .nullable()
+    .optional()
+    .describe("Only inside a returned `undo.items` list, passed back unchanged: who had set the level before. Leave it out otherwise."),
+  expect: z
+    .object({ cefr: cefrLevel.nullable(), source: storedLevelSource.nullable() })
+    .optional()
+    .describe("Only inside a returned `undo.items` list, passed back unchanged: the level that call wrote. A word whose level changed since is left alone."),
+});
+
+export const SET_LEVELS_MAX = 100;
+
+export const setWordLevels = tool({
+  name: "set_word_levels",
+  title: "Set word levels",
+  description: `Set «Уровень языка» (CEFR A1…C2) on up to ${SET_LEVELS_MAX} words in one call; each level is saved as set by you (level_source chat), null clears a stored level. Words whose level the user picked (level_source user) are skipped and listed in \`skipped_user\`, unless overwrite_user is true because the user asked to change those. For filling missing levels: search_words level "none", list the words with the levels you propose and wait for the user's OK, then send them in batches of 10–15 together with a few words of known level as anchors in your reasoning. Undo with set_word_levels and the returned \`undo\` (items and overwrite_user as given); words whose level changed since that call are left alone and listed in \`changed_since\`.`,
+  input: z.object({
+    items: z.array(levelItemSchema).min(1).max(SET_LEVELS_MAX),
+    overwrite_user: z.boolean().default(false).describe("True only when the user asked to change levels they set themselves."),
+  }),
+  write: true,
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  async run(deps, args) {
+    // `source` other than chat is how an undo puts a level back, so it comes only with the undo's `expect`.
+    if (args.items.some((i) => i.source !== undefined && i.expect === undefined)) {
+      throw new ToolError("items[].source is only for an `undo` passed back unchanged (with its `expect`). Leave source out: your levels are saved as chat.");
+    }
+    // The last item for a word wins.
+    const items = [...new Map(args.items.map((i) => [i.word_id.trim(), i])).values()];
+    const found = await deps.repo.wordsByIds(items.map((i) => i.word_id.trim()));
+    const byId = new Map(found.map((w) => [w.id, w]));
+    const now = deps.now();
+    const changes: Replacement<"words">[] = [];
+    const undo: z.infer<typeof levelItemSchema>[] = [];
+    const unchanged: string[] = [];
+    const notFound: string[] = [];
+    const skippedUser: { id: string; fr: string; level: Cefr }[] = [];
+    const changedSince: { id: string; fr: string; level: Cefr | null; level_source: StoredLevelSource | null }[] = [];
+    for (const item of items) {
+      const id = item.word_id.trim();
+      const w = byId.get(id);
+      if (!w || w.deleted_at !== null) {
+        notFound.push(id);
+        continue;
+      }
+      const before = { cefr: w.cefr ?? null, source: w.cefr ? (w.cefr_source ?? "user") : null };
+      // An undo restores only a level that is still the one its call wrote: a level picked since (in the app or another call) stays.
+      if (item.expect && (item.expect.cefr !== before.cefr || item.expect.source !== before.source)) {
+        changedSince.push({ id, fr: w.fr, level: before.cefr, level_source: before.source });
+        continue;
+      }
+      const source = item.cefr === null ? null : (item.source ?? "chat");
+      if (before.source === "user" && !args.overwrite_user && !(item.cefr === before.cefr && source === "user")) {
+        skippedUser.push({ id, fr: w.fr, level: before.cefr as Cefr });
+        continue;
+      }
+      if (item.cefr === before.cefr && source === before.source) {
+        unchanged.push(id);
+        continue;
+      }
+      changes.push(change(w, { ...w, cefr: item.cefr, cefr_source: source, updated_at: stampAfter(now, w.updated_at) }));
+      undo.push({ word_id: id, cefr: before.cefr, source: before.source, expect: { cefr: item.cefr, source } });
+    }
+    const outcome = await writeWords(deps.repo, changes);
+    const { conflicts, failed } = outcome;
+    // As with move_words, the way back of a word in `failed` stays in: an unchanged word stays unchanged.
+    const undoItems = undo.filter((u) => !conflicts.has(u.word_id));
+    const levels = serverLevels();
+    return {
+      updated: changes
+        .filter((c) => !conflicts.has(c.row.id) && !failed.has(c.row.id))
+        .map((c) => ({ id: c.row.id, fr: c.row.fr, ...levelView(c.row, levels) })),
+      unchanged,
+      skipped_user: skippedUser,
+      ...(changedSince.length > 0 ? { changed_since: changedSince } : {}),
+      not_found: notFound,
+      conflicts: [...conflicts],
+      ...failedPart(outcome),
+      // overwrite_user only when this call itself wrote a user's level (an undo putting one back).
+      undo:
+        undoItems.length > 0
+          ? { tool: "set_word_levels", items: undoItems, overwrite_user: undoItems.some((u) => u.expect?.source === "user") }
+          : null,
       note: SYNC_NOTE,
     };
   },
@@ -2075,6 +2255,7 @@ export const TOOL_NAMES = [
   studySummary.name,
   addWords.name,
   updateWord.name,
+  setWordLevels.name,
   moveWords.name,
   restoreMoves.name,
   deleteWords.name,
@@ -2101,6 +2282,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   register(server, deps, studySummary);
   register(server, deps, addWords);
   register(server, deps, updateWord);
+  register(server, deps, setWordLevels);
   register(server, deps, moveWords);
   register(server, deps, restoreMoves);
   register(server, deps, deleteWords);
@@ -2122,9 +2304,10 @@ export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard
 - Set folder_chosen_by_user to true only when the user named the theme; otherwise pick a fitting theme yourself, or leave the word in the inbox.
 - A word can carry origin («Происхождение»: one Russian line, e.g. «верлан от lourd», «от volonté „воля“ + -aire») and, for verbs, a conjugation (présent, passé composé, imparfait, futur; six forms each with pronouns). The app builds most conjugations itself from Lexique: search_words shows conjugation_builtin false where it cannot. Fill them with update_word when the user asks (e.g. «заполни происхождение для слов из темы X»), checking forms you are not sure of; never overwrite an existing origin or conjugation unless asked.
 - Cards can carry the user's custom fields («Свои поля»): list_fields shows the shared ones and what to write in each. Set them by name with custom_fields in add_words or update_word (null clears one); search_words shows them. Use a name not in list_fields only when the user asks for a field on that one word. create_field, update_field and delete_field manage the shared fields; ask the user before creating or deleting one.
+- «Уровень языка» (CEFR A1…C2): search_words shows each word's \`level\` and \`level_source\`; most are estimates the app computes from its dictionary (flelex, freq), which you leave alone. To fill the missing ones (search_words level "none"), list the words with the levels you propose and wait for the OK, then save them with set_word_levels in batches of 10–15. Rate a word as a textbook or DELF / TCF list would, against words of known level; skip argot, vulgar words and verlan unless asked. Never change a level the user set (level_source user) unless they ask.
 - Before adding more than 5 words, and before any move, delete, or renaming, pausing or deleting a theme (update_folder, delete_folder), list what will change and wait for the user's OK.
 - «На паузе»: a theme (update_folder \`muted\`) or a word (update_word \`muted\`) stays in the library with its progress but never comes up in review or practice; \`false\` brings it back. When list_folders shows many themes with words still \`new\` and some of them look like later steps of a sequence (levels, lessons, chapters, a course or book order) or like topics the user said can wait, suggest pausing those so only the current ones reach review: name the themes to pause and the ones that stay, and wait for the OK. When the user moves on, suggest bringing the next ones back. Never pause or unpause on your own.
-- After a change, say what changed and how to undo it with the result's \`undo\` (delete_words, restore_words, restore_moves, restore_folder, delete_field, restore_field, delete_exercise_set or restore_exercise_set).
+- After a change, say what changed and how to undo it with the result's \`undo\` (delete_words, restore_words, restore_moves, set_word_levels, restore_folder, delete_field, restore_field, delete_exercise_set or restore_exercise_set).
 - Exercises («Упражнения»: «сделай упражнение / тест / квиз по теме …»): call exercise_material first, then save the whole set with exactly one create_exercise_set call. Never write the questions into the chat instead; the app plays the set offline and it never changes the review schedule.
 - For a free-text topic, use the saved words in topic_matches by word_id. Words found with web search go in new_words (at most 8, each checked in at least 2 sources, slang_level by the rubric, source_url); never add_words them without the user's OK, since the user adds them from the app.
 - choice and cloze have 4 options: the answer plus 3 distractors of the same part of speech, gender, register and length, with exactly one best answer. A cloze's sentence_ru hints at the situation and never translates the gap.

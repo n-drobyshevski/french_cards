@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { motionSettled, openReview, questionCard } from "./fixtures";
+import { motionSettled, openReview, questionCard, seedCardStates, seedLearningCard, SEED_WORDS } from "./fixtures";
 import { slowDatabase } from "./review-loading";
 
 // Desktop review (mockups/DESKTOP-SPEC.md §5 #1–#4): running head, the landscape index card centred
@@ -199,4 +199,21 @@ test("medium width: rail, 640×384 card", async ({ page }) => {
   // Under 760 tall the hint line goes away.
   await page.setViewportSize({ width: 1024, height: 700 });
   await expect(page.getByText("после переворота:")).toBeHidden();
+});
+
+test("the wait screen takes focus on its heading when it replaces the card", async ({ page }) => {
+  // Near 04:00 the card would fall into the next study day.
+  const minutesToFour = await page.evaluate(() => {
+    const d = new Date();
+    const four = new Date(d);
+    four.setHours(4, 0, 0, 0);
+    if (four <= d) four.setDate(four.getDate() + 1);
+    return (four.getTime() - d.getTime()) / 60_000;
+  });
+  test.skip(minutesToFour < 45, "the study day ends at 04:00");
+  await openReview(page);
+  await seedCardStates(page, Object.fromEntries(SEED_WORDS.map((fr) => [fr, "known" as const])));
+  await seedLearningCard(page, "une blague", 30);
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 1, name: /^Ещё 1 карточка — через/ })).toBeFocused();
 });

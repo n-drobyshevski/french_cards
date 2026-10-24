@@ -21,9 +21,8 @@ import { DataSection } from "./DataSection";
 import { DesktopSettings } from "./DesktopSettings";
 import { DirectionSheet } from "./DirectionSheet";
 import { PhoneExerciseSection } from "./ExerciseFocusSection";
-import { NEW_PER_DAY_MAX, stepNewPerDay } from "./format";
 import { SettingsButtonRow, SettingsRow, SettingsSection } from "./SettingsList";
-import { Stepper } from "./Stepper";
+import { PhonePlanRow } from "./StudyPlanSettings";
 import { Valued } from "./Valued";
 
 const THEME_OPTIONS = [
@@ -55,7 +54,7 @@ const GRADE_OPTIONS = [
 ] as const;
 
 /**
- * «Настройки»: review preferences, «Упражнения» («Чаще в упражнениях»), theme, «ИИ» (what is filled in automatically, and how), «Свои поля» and data
+ * «Настройки»: review preferences (the «План повторения» row opens /settings/plan), «Упражнения» («Чаще в упражнениях»), theme, «ИИ» (what is filled in automatically, and how), «Свои поля» and data
  * (sync, backup, sign-out). Phones get today's list; from 768 up the desktop layout
  * (DesktopSettings). The server and hydration render the phone list, hidden from 768 up by CSS,
  * so a wide window never flashes the phone layout.
@@ -121,15 +120,8 @@ function PhoneSettings({ settings, known, save, onTheme, onDirection }: ScreenPr
                 </>
               }
             />
-            <SettingsRow label="Новых карточек в день">
-              <Stepper
-                label="Новых карточек в день"
-                value={settings.new_per_day}
-                max={NEW_PER_DAY_MAX}
-             
-                onStep={(delta) => save({ new_per_day: stepNewPerDay(settings.new_per_day, delta) })}
-              />
-            </SettingsRow>
+            {/* «План повторения ›»: synced (user_prefs), its own screen (D1 C). */}
+            <PhonePlanRow />
             <SettingsRow label="Кнопки оценки" labelId="grade-buttons-label">
               <Segmented
                 mono

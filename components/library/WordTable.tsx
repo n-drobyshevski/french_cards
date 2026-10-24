@@ -26,6 +26,7 @@ import { CURRENT_ROW_BG } from "./dark";
 import { STALE_DIM } from "./first-paint";
 import { posAbbr } from "./format";
 import { useLeavingList, type ListEntry } from "./leaving";
+import { LevelMark } from "./LevelMark";
 import type { MenuAnchor } from "./Menu";
 import type { Columns, SortKey, SortState } from "./table";
 import type { LibraryWord } from "./useLibraryWords";
@@ -84,10 +85,11 @@ const onIdle = (fn: () => void): number =>
   typeof window.requestIdleCallback === "function" ? window.requestIdleCallback(fn, { timeout: 500 }) : window.setTimeout(fn, 16);
 const cancelIdle = (id: number) => (typeof window.cancelIdleCallback === "function" ? window.cancelIdleCallback(id) : window.clearTimeout(id));
 
-const HEADS: { key: SortKey; label: string; col: "fr" | "ru" | "level" | "theme" | "due" }[] = [
+const HEADS: { key: SortKey; label: string; col: "fr" | "ru" | "cefr" | "level" | "theme" | "due"; title?: string }[] = [
   { key: "fr", label: "Слово", col: "fr" },
   { key: "ru", label: "Перевод", col: "ru" },
-  { key: "level", label: "Уровень", col: "level" },
+  { key: "cefr", label: "Ур.", col: "cefr", title: "По уровню языка" },
+  { key: "level", label: "Сленг", col: "level" },
   { key: "theme", label: "Тема", col: "theme" },
   { key: "due", label: "Показ", col: "due" },
 ];
@@ -196,6 +198,7 @@ export function WordTable({
                   <button
                     type="button"
                     tabIndex={-1}
+                    title={h.title}
                     onClick={() => onSort(h.key)}
                     className={cx(
                       "hover-fade inline-flex h-8 items-center gap-1 bg-transparent p-0 font-mono text-[11px] tracking-[.06em] uppercase hoverable:text-ink",
@@ -433,6 +436,9 @@ const Row = memo(function Row({ item, index, leaving, returning, columns, curren
       <div role="gridcell" className="min-w-0 truncate px-2 text-[14px] leading-5 text-muted">
         {word.ru}
         {origin && <span className="text-muted/80"> · {origin}</span>}
+      </div>
+      <div role="gridcell" className="flex min-w-0 px-2">
+        <LevelMark info={item.level} size="cell" />
       </div>
       <div role="gridcell" className="flex min-w-0 px-2">
         {columns.level === "meter" ? (

@@ -1,10 +1,13 @@
-// Daily review sessions: today's queue (due first, then new up to the daily limit), header counts,
-// the end-of-session summary and practice rounds that never touch scheduling.
+// Daily review sessions: today's queue and header counts («План дня», planned by the pure
+// lib/core/plan.ts `planDay` from the synced «План повторения»), the end-of-session summary and
+// practice rounds that never touch scheduling.
+import { folderOrderOf, planDay, type DayPlan, type PlanCounts, type PlanItem } from "./core/plan";
 import { isPaused, pausedFolderIds } from "./core/words";
 import { db, liveRows } from "./db";
-import { reviewStateId, wordStatus } from "./scheduler";
-import { getSettings } from "./settings";
+import { loadLevelData } from "./lexique";
+import { retrievability, reviewStateId, wordStatus } from "./scheduler";
 import type { Direction, ReviewLog, ReviewSetStatus, ReviewState, SlangLevel, Word } from "./types";
+import { getStudyPlan, isNewOverrideOn, type StudyPlan } from "./user-prefs";
 
 /** A study day starts at 04:00 local time, so late-night reviews count for the previous day. */
 export const DAY_START_HOUR = 4;
@@ -34,33 +37,35 @@ export function matchesSlangKeys(word: Pick<Word, "slang_level" | "verlan">, key
   return !keys.includes("verl") || word.verlan;
 }
 
-export interface QueueItem {
-  /** review_state id: `${word_id}:${direction}` */
-  key: string;
-  word: Word;
-  state: ReviewState;
-  direction: Direction;
-  isNew: boolean;
-}
+/** One card of a session: `key` is the review_state id `${word_id}:${direction}`. */
+export type QueueItem = PlanItem;
 
-export interface SessionCounts {
-  /** Cards still due today (review + learning), including ones due later today. */
-  due: number;
-  /** New cards still allowed today. */
-  new: number;
-  /** Reviews logged today (undone reviews excluded). */
-  done: number;
-  /**
-   * done + queued cards not yet reviewed today — the denominator of `07 / 30`. A card that comes
-   * back later today (learning step) is not counted again until it is actually reviewed, so the
-   * header stays steady while studying.
-   */
-  total: number;
-}
+/**
+ * `due` (cards still due today: learning, reviews shown, learning due within 20 min and the
+ * waiting ones), `new` (new cards in today's queue), `done` (reviews logged today, undone ones
+ * excluded), `total` (done + cards not yet reviewed today — the steady denominator of `07 / 30`: a
+ * learning step coming back is not counted again), `deferred` (reviews held for tomorrow by the
+ * cap) and `waiting` (learning cards due later today, not in the queue).
+ */
+export type SessionCounts = PlanCounts;
 
 export interface Session {
   queue: QueueItem[];
   counts: SessionCounts;
+  /** The day's plan: budget, ceiling, reason, backlog, forecast… (global, every theme). */
+  day: DayPlan;
+  /** Learning cards due later today (not in the queue), soonest first: the «через N мин» screen. */
+  waiting: QueueItem[];
+  /** When the first waiting card is due (ISO); null when none. */
+  nextDue: string | null;
+  /** The plan the session was built with. */
+  plan: StudyPlan;
+}
+
+/** Optional per-word signals for the `level` order of new words (P2: lib/core/level.ts, Lexique). */
+export interface PlanSignals {
+  level?: (w: Word) => string | null;
+  freq?: (w: Word) => number | null;
 }
 
 export function startOfStudyDay(now: Date = new Date()): Date {
@@ -88,18 +93,20 @@ export interface SessionData {
   liveFolderIds: ReadonlySet<string>;
   /** Live themes «на паузе»: their words never reach a session. */
   pausedFolderIds: ReadonlySet<string>;
+  /** Theme order for new words (folder id → index, «Входящие» last); read again when missing. */
+  folderOrder?: ReadonlyMap<string | null, number>;
 }
 
-/** Live folder ids, and the ones «на паузе». */
-async function folderSets(): Promise<{ live: Set<string>; paused: Set<string> }> {
+/** Live folder ids, the ones «на паузе», and their order. */
+async function folderSets(): Promise<{ live: Set<string>; paused: Set<string>; order: Map<string | null, number> }> {
   const folders = await liveRows(db.folders);
-  return { live: new Set(folders.map((f) => f.id)), paused: pausedFolderIds(folders) };
+  return { live: new Set(folders.map((f) => f.id)), paused: pausedFolderIds(folders), order: folderOrderOf(folders) };
 }
 
 /** Reads every live word, card and folder once (pass it to loadSession and friends). */
 export async function loadSessionData(): Promise<SessionData> {
   const [words, states, folders] = await Promise.all([liveRows(db.words), liveRows(db.review_state), folderSets()]);
-  return { words, states, liveFolderIds: folders.live, pausedFolderIds: folders.paused };
+  return { words, states, liveFolderIds: folders.live, pausedFolderIds: folders.paused, folderOrder: folders.order };
 }
 
 const NO_IDS: ReadonlySet<string> = new Set();
@@ -185,79 +192,67 @@ function newIntroduced(logs: readonly ReviewLog[]): Set<string> {
   return new Set(logs.filter((l) => l.state === 0).map((l) => reviewStateId(l.word_id, l.direction)));
 }
 
+/** The whole library (every live word, card and theme), from `pre` when given. */
+async function wholeLibrary(pending?: SessionData | Promise<SessionData>): Promise<Required<SessionData>> {
+  const pre = await pending;
+  if (pre) return { ...pre, folderOrder: pre.folderOrder ?? (await folderSets()).order };
+  const [words, states, folders] = await Promise.all([liveRows(db.words), liveRows(db.review_state), folderSets()]);
+  return { words, states, liveFolderIds: folders.live, pausedFolderIds: folders.paused, folderOrder: folders.order };
+}
+
+/** A filter narrowed to one theme: new words then come from it alone, without the per-theme limit. */
+const isOneTheme = (filter: SessionFilter) =>
+  filter.folderIds && filter.folderIds.length > 0 ? filter.folderIds.length === 1 : filter.folderId !== undefined;
+
 /**
- * Today's queue and header counts in one read (use it inside useLiveQuery).
- *
- * Order: cards due by now (oldest due first, review cards due later today included), then new
- * cards (oldest words first) up to `settings.new_per_day` minus those already introduced today
- * (counted across all folders/directions), then learning cards waiting for their next step.
- * A new ru_fr card is held back until the word's fr_ru card has been learned on an earlier day,
- * unless the session is filtered to ru_fr only.
+ * Today's queue and header counts in one read (use it inside useLiveQuery), planned by
+ * lib/core/plan.ts `planDay` from the «План повторения» (`getStudyPlan`):
+ * `[...learning due now, ...reviews and new cards (mixed or reviews first), ...learning due within
+ * 20 min]`. The new-word budget, the review cap and the backlog are global (every theme, from the
+ * start-of-day snapshot); the filter only narrows which cards are picked. `pre` may still be
+ * loading: the plan and today's log are read meanwhile.
  */
-/** `pre` may still be loading: the settings and today's log are read meanwhile. */
 export async function loadSession(
   filter: SessionFilter = {},
   now: Date = new Date(),
   pre?: SessionData | Promise<SessionData>,
+  signals: PlanSignals = {},
 ): Promise<Session> {
   const dayStart = startOfStudyDay(now);
   const dayEnd = endOfStudyDay(now);
-  const t = now.getTime();
+  const weekAgo = new Date(dayStart);
+  weekAgo.setDate(weekAgo.getDate() - 7);
 
-  const [settings, { words, states }, todayLogs] = await Promise.all([
-    getSettings(),
-    wordsWithStates(filter, pre),
+  const [plan, override, lib, todayLogs, logs7d] = await Promise.all([
+    getStudyPlan(),
+    isNewOverrideOn(dayStart),
+    wholeLibrary(pre),
     logsBetween(dayStart, dayEnd),
+    logsBetween(weekAgo, dayStart),
   ]);
-
-  const byKey = new Map(states.map((s) => [s.id, s]));
-  const introducedToday = newIntroduced(todayLogs);
-  const reviewedToday = new Set(todayLogs.map((l) => reviewStateId(l.word_id, l.direction)));
-
-  const dueNow: QueueItem[] = [];
-  const learningLater: QueueItem[] = [];
-  const fresh: QueueItem[] = [];
-
-  for (const state of states) {
-    const word = words.get(state.word_id);
-    if (!word) continue;
-    if (filter.direction && state.direction !== filter.direction) continue;
-    const item: QueueItem = { key: state.id, word, state, direction: state.direction, isNew: state.state === 0 };
-    if (state.state === 0) {
-      if (state.direction === "ru_fr" && filter.direction !== "ru_fr") {
-        const siblingKey = reviewStateId(state.word_id, "fr_ru");
-        const sibling = byKey.get(siblingKey);
-        if (sibling && (sibling.state === 0 || reviewedToday.has(siblingKey))) continue;
-      }
-      fresh.push(item);
-      continue;
-    }
-    const due = ms(state.due);
-    if (due <= t || (state.state === 2 && due < dayEnd.getTime())) dueNow.push(item);
-    else if (due < dayEnd.getTime()) learningLater.push(item);
-  }
-
-  const byDue = (a: QueueItem, b: QueueItem) => ms(a.state.due) - ms(b.state.due);
-  dueNow.sort(byDue);
-  learningLater.sort(byDue);
-  fresh.sort(
-    (a, b) =>
-      a.word.created_at.localeCompare(b.word.created_at) ||
-      a.word.id.localeCompare(b.word.id) ||
-      (a.direction === b.direction ? 0 : a.direction === "fr_ru" ? -1 : 1),
-  );
-
-  const allowance = Math.max(0, settings.new_per_day - introducedToday.size);
-  const newCards = fresh.slice(0, allowance);
-  const queue = [...dueNow, ...newCards, ...learningLater];
-
-  const done = todayLogs.filter((l) => {
-    const w = words.get(l.word_id);
-    return !!w && (!filter.direction || l.direction === filter.direction);
-  }).length;
-  const due = dueNow.length + learningLater.length;
-  const pending = queue.filter((item) => !reviewedToday.has(item.key)).length;
-  return { queue, counts: { due, new: newCards.length, done, total: done + pending } };
+  const words = matchWords(lib.words, lib.states, lib.liveFolderIds, {}, lib.pausedFolderIds);
+  const matched = matchWords(lib.words, lib.states, lib.liveFolderIds, filter, lib.pausedFolderIds);
+  // «По уровню языка» / «По темам» order by level and Lexique frequency (loaded once, never rejects).
+  const levels = signals.level || signals.freq || plan.new_order === "added" ? null : await loadLevelData();
+  const result = planDay({
+    now,
+    dayStart,
+    dayEnd,
+    states: lib.states,
+    words,
+    match: (w) => matched.has(w.id),
+    direction: filter.direction,
+    todayLogs,
+    logs7d,
+    plan,
+    overrideNewToday: override,
+    r: retrievability,
+    level: signals.level ?? (levels ? (w) => levels.level(w)?.level ?? null : undefined),
+    freq: signals.freq ?? (levels ? (w) => levels.freq(w) : undefined),
+    folderOrder: lib.folderOrder,
+    spreadThemes: !isOneTheme(filter),
+  });
+  return { queue: result.queue, counts: result.counts, day: result.day, waiting: result.waiting, nextDue: result.nextDue, plan };
 }
 
 export async function buildQueue(filter: SessionFilter = {}, now: Date = new Date()): Promise<QueueItem[]> {
@@ -279,7 +274,7 @@ export interface DaySummary {
   hardWords: Word[];
   /** Cards graded «Не знаю» today — the size of «Повторить ошибки (N)». */
   mistakes: number;
-  /** Non-new cards due during the next study day («Следующие 18 слов — завтра»). */
+  /** Words with a non-new card due during the next study day, or held for it («Следующие 18 слов — завтра»). */
   dueTomorrow: number;
 }
 
@@ -300,11 +295,17 @@ export async function getDaySummary(
   const hardIds: string[] = [];
   for (const l of mine) if (l.rating <= 2 && !hardIds.includes(l.word_id)) hardIds.push(l.word_id);
   const failedCards = new Set(mine.filter((l) => l.rating === 1).map((l) => reviewStateId(l.word_id, l.direction)));
-  const dueTomorrow = states.filter((s) => {
-    if (!words.has(s.word_id) || (filter.direction && s.direction !== filter.direction)) return false;
-    const due = ms(s.due);
-    return due >= dayEnd.getTime() && due < nextEnd.getTime();
-  }).length;
+  const dueTomorrow = new Set(
+    states
+      .filter((s) => {
+        if (!words.has(s.word_id) || (filter.direction && s.direction !== filter.direction)) return false;
+        const due = ms(s.due);
+        // A review card still due today at the end of the session was held for tomorrow: deferred
+        // by the cap or buried behind its FR→RU side (lib/core/plan.ts).
+        return due < nextEnd.getTime() && (due >= dayEnd.getTime() || s.state === 2);
+      })
+      .map((s) => s.word_id),
+  ).size;
   return {
     reviewed: mine.length,
     newCount: newIntroduced(mine).size,
