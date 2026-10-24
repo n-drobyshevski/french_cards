@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>D2 · B — сводка открывает план</title>
+<meta name="description" content="D2 · B. Строка-сводка «27 к повторению · 4 новых · 6 обратных» подчёркнута и нажимается (стрелка); открывает лист «План на сегодня» (здесь наполовину открыт поверх карточки). При завале сводка «200 к повторению · новые на паузе», в листе — «Отложено 140» и «Всё равно добавить новые».">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#111111}a:hover{color:#c8331f}
+button{font:inherit}
+input,textarea{font:inherit}
+::placeholder{color:#5a5a57;opacity:1}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #f1f1ee; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif; display: flex; flex-direction: column">
+
+  <main style="flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 16px 104px; box-sizing: border-box">
+
+    <header style="height: 44px; flex-shrink: 0; display: flex; align-items: center; gap: 8px">
+      <button type="button" aria-label="Направление FR → RU, сменить" style="height: 30px; padding: 0 10px; display: inline-flex; align-items: center; gap: 8px; box-sizing: border-box; border-radius: 4px; background: #ffffff; border: 1px solid #d6d6d1; color: #111111; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 500; letter-spacing: .06em; cursor: pointer; white-space: nowrap">
+        <span>FR → RU</span>
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5a5a57" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4 3 8l4 4"></path><path d="M3 8h14"></path><path d="m17 12 4 4-4 4"></path><path d="M21 16H7"></path></svg>
+      </button>
+      <button type="button" aria-haspopup="listbox" style="height: 30px; padding: 0 8px 0 10px; display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; border-radius: 4px; background: #ffffff; border: 1px solid #d6d6d1; color: #111111; font-size: 13px; font-weight: 400; cursor: pointer; white-space: nowrap">
+        <span>Все темы</span>
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5a5a57" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+      </button>
+      <div style="flex: 1"></div>
+      <div style="display: flex; align-items: center; margin-right: -12px">
+        <button type="button" aria-label="Отменить последний ответ" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 4px; background: transparent; color: #111111; cursor: pointer; padding: 0">
+          <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"></path></svg>
+        </button>
+        <a href="Settings.dc.html" aria-label="Настройки" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #111111; text-decoration: none">
+          <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+        </a>
+      </div>
+    </header>
+
+    <div style="margin-top: 2px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 8px">
+      <button type="button" aria-haspopup="dialog" aria-expanded="true" aria-label="План на сегодня: 27 к повторению, 4 новых, 6 обратных" style="height: 44px; margin-left: -4px; padding: 0 0 0 4px; min-width: 0; display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; border: 0; border-radius: 4px; background: transparent; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #111111; cursor: pointer; white-space: nowrap">
+        <span style="text-decoration: underline; text-underline-offset: 3px; text-decoration-color: #8a8a85">27 к повторению · 4 новых · 6 обратных</span>
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="transform: rotate(180deg)"><path d="m6 9 6 6 6-6"></path></svg>
+      </button>
+      <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #111111; font-weight: 500; white-space: nowrap">05 / 37</span>
+    </div>
+
+    <div aria-hidden="true" style="margin-top: -6px; flex-shrink: 0; position: relative; height: 5px">
+      <div style="position: absolute; left: 0; right: 0; top: 2px; height: 1px; background: #d6d6d1"></div>
+      <div style="position: absolute; left: 0; top: 2px; width: 13.5%; height: 1px; background: #111111"></div>
+      <div style="position: absolute; left: 13.5%; top: 0; width: 1px; height: 5px; background: #111111"></div>
+    </div>
+
+    <a href="Review-Back.dc.html" aria-label="Карточка la démarche, перевернуть" style="flex: 1; min-height: 0; margin-top: 16px; display: flex; flex-direction: column; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; color: #111111; text-decoration: none; overflow: hidden">
+      <div style="height: 46px; flex-shrink: 0; box-sizing: border-box; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #c8331f">
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; color: #5a5a57">FR</span>
+        
+      </div>
+      <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 24px 24px">
+        <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 40px; line-height: 1.1; letter-spacing: -0.015em; color: #111111">la démarche</span>
+        <span lang="fr" style="margin-top: 8px; font-family: Newsreader, Georgia, serif; font-style: italic; font-weight: 400; font-size: 15px; line-height: 20px; color: #5a5a57">n. f.</span>
+      </div>
+      <div style="height: 48px; flex-shrink: 0; box-sizing: border-box; margin: 0 20px; border-top: 1px solid #d6d6d1; display: flex; align-items: center; gap: 8px; font-size: 12px; color: #5a5a57">
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"></path><path d="M3 3v5h5"></path></svg>
+        <span>тапни, чтобы перевернуть</span>
+      </div>
+    </a>
+    <a href="Review-Back.dc.html" style="margin-top: 16px; height: 52px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: #111111; color: #ffffff; font-size: 15px; font-weight: 500; letter-spacing: .01em; text-decoration: none">Показать ответ</a>
+  </main>
+
+  <nav aria-label="Основная навигация" style="position: absolute; left: 0; right: 0; bottom: 0; height: 88px; box-sizing: border-box; padding-bottom: 28px; background: #ffffff; border-top: 1px solid #d6d6d1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr))">
+    <a href="Main.dc.html" aria-current="page" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #111111; font-size: 12px; font-weight: 600; text-decoration: none">
+      <span aria-hidden="true" style="position: absolute; top: -1px; left: 0; right: 0; height: 2px; background: #c8331f"></span>
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="14" height="13" rx="1"></rect><path d="M3.5 11h14"></path><path d="M7 4.5h12.5a1 1 0 0 1 1 1V17"></path></svg>
+      <span>Повторение</span>
+    </a>
+    <a href="Exercise-List-B.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; font-size: 12px; font-weight: 500; text-decoration: none">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="1.5"></rect><path d="m7.5 9 1.5 1.5 3-3"></path><path d="M14 9h3"></path><path d="M7.5 15h2"></path><path d="M14 15h3"></path></svg>
+      <span>Упражнения</span>
+    </a>
+    <a href="Add-Empty.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; font-size: 12px; font-weight: 500; text-decoration: none">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+      <span>Добавить</span>
+    </a>
+    <a href="Library.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; font-size: 12px; font-weight: 500; text-decoration: none">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="1"></rect><path d="M3.5 12h17"></path><path d="M10 8h4"></path><path d="M10 16h4"></path></svg>
+      <span>Библиотека</span>
+    </a>
+  </nav>
+
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(17,17,17,.4)"></div>
+
+  <section role="dialog" aria-label="План на сегодня" style="position: absolute; left: 0; right: 0; top: 452px; bottom: 0; background: #f1f1ee; border-top: 1px solid #111111; border-radius: 12px 12px 0 0; display: flex; flex-direction: column; overflow: hidden">
+    <div aria-hidden="true" style="height: 20px; flex-shrink: 0; display: flex; align-items: center; justify-content: center"><span style="width: 36px; height: 4px; border-radius: 2px; background: #d6d6d1"></span></div>
+    <div style="padding: 0 4px 0 16px; height: 44px; flex-shrink: 0; display: flex; align-items: center; gap: 8px">
+      <h2 style="margin: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 22px; line-height: 28px; letter-spacing: -0.01em; color: #111111">План на сегодня</h2>
+      <div style="flex: 1"></div>
+      <a href="Review-Header-A.dc.html" aria-label="Закрыть" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; color: #111111; text-decoration: none">
+        <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6 6 18"></path></svg>
+      </a>
+    </div>
+    <div style="padding: 4px 16px 0; display: flex; flex-direction: column">
+      <section aria-label="Сегодня" style="border-top: 1px solid #111111; border-bottom: 1px solid #d6d6d1">
+          <div style="height: 44px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #d6d6d1;">
+            <span style="flex: 1; font-size: 15px; color: #111111; white-space: nowrap">К повторению</span>
+            <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; font-weight: 500; color: #111111; white-space: nowrap">27</span>
+          </div>
+          <div style="height: 44px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #d6d6d1;">
+            <span style="flex: 1; font-size: 15px; color: #111111; white-space: nowrap">Новых слов</span>
+            <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; font-weight: 500; color: #111111; white-space: nowrap">4 <span style="color: #5a5a57; font-weight: 400">из 10</span></span>
+          </div>
+          <div style="height: 44px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #d6d6d1;">
+            <span style="flex: 1; font-size: 15px; color: #111111; white-space: nowrap">Обратных сторон</span>
+            <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; font-weight: 500; color: #111111; white-space: nowrap">6</span>
+          </div>
+          <div style="height: 44px; display: flex; align-items: center; gap: 8px;">
+            <span style="flex: 1; font-size: 15px; color: #111111; white-space: nowrap">Отложено</span>
+            <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 14px; line-height: 20px; font-weight: 500; color: #111111; white-space: nowrap">0</span>
+          </div>
+      </section>
+      <p style="margin: 12px 0 0; font-size: 13px; line-height: 20px; color: #5a5a57">Точность за неделю 74&#160;% — новых сегодня меньше.</p>
+      <a href="Review-Settings-C.dc.html" style="margin-top: 8px; height: 44px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #d6d6d1; color: #111111; font-size: 15px; font-weight: 500; text-decoration: none">
+        <span style="flex: 1">Изменить план</span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; letter-spacing: .06em; color: #5a5a57; white-space: nowrap; margin-right: 4px">10 слов · до 200</span>
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5a5a57" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg>
+      </a>
+    </div>
+  </section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

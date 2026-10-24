@@ -950,6 +950,236 @@
    "title": "Упражнения · вход — из Библиотеки и после повторения",
    "is_interactive": true,
    "radius": 28
+  },
+  "Review-Settings-A.dc.html": {
+   "x": 0,
+   "y": 28536,
+   "w": 390,
+   "h": 844,
+   "title": "D1 · A — в разделе Повторение",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Review-Settings-B.dc.html": {
+   "x": 470,
+   "y": 28536,
+   "w": 390,
+   "h": 844,
+   "title": "D1 · B — «Цель» и Повторение",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Review-Settings-C.dc.html": {
+   "x": 940,
+   "y": 28536,
+   "w": 390,
+   "h": 844,
+   "title": "D1 · C — экран «План повторения»",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Review-Plan-Sheet.dc.html": {
+   "x": 1410,
+   "y": 28536,
+   "w": 390,
+   "h": 844,
+   "title": "План на сегодня — шторка",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Review-Header-A.dc.html": {
+   "x": 1880,
+   "y": 28536,
+   "w": 390,
+   "h": 844,
+   "title": "D2 · A — строка под счётчиком",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Review-Header-B.dc.html": {
+   "x": 2350,
+   "y": 28536,
+   "w": 390,
+   "h": 844,
+   "title": "D2 · B — сводка открывает план",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Review-Mix-A.dc.html": {
+   "x": 2820,
+   "y": 28536,
+   "w": 390,
+   "h": 844,
+   "title": "D3 · A — новые после повторения",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Review-Mix-B.dc.html": {
+   "x": 3290,
+   "y": 28536,
+   "w": 390,
+   "h": 844,
+   "title": "D3 · B — новые вперемешку",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Review-Wait.dc.html": {
+   "x": 3760,
+   "y": 28536,
+   "w": 390,
+   "h": 844,
+   "title": "Повторение — ждём карточки",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Review-Done-Plan-A.dc.html": {
+   "x": 4230,
+   "y": 28536,
+   "w": 390,
+   "h": 844,
+   "title": "D4 · A — текст о завтра",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Review-Done-Plan-B.dc.html": {
+   "x": 4700,
+   "y": 28536,
+   "w": 390,
+   "h": 844,
+   "title": "D4 · B — неделя нагрузки",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Level-Badge-A.dc.html": {
+   "x": 0,
+   "y": 29880,
+   "w": 820,
+   "h": 844,
+   "title": "D5 · A — моно «≈B1» в строке",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Level-Badge-B.dc.html": {
+   "x": 900,
+   "y": 29880,
+   "w": 820,
+   "h": 844,
+   "title": "D5 · B — курсив «≈b1» с подсказкой",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Level-Badge-C.dc.html": {
+   "x": 1800,
+   "y": 29880,
+   "w": 820,
+   "h": 844,
+   "title": "D5 · C — только в карточке слова",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Level-Word.dc.html": {
+   "x": 2700,
+   "y": 29880,
+   "w": 390,
+   "h": 844,
+   "title": "Уровень языка в карточке слова",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Level-Edit.dc.html": {
+   "x": 3170,
+   "y": 29880,
+   "w": 390,
+   "h": 844,
+   "title": "Уровень языка — правка слова",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Level-Filter-A.dc.html": {
+   "x": 3640,
+   "y": 29880,
+   "w": 390,
+   "h": 844,
+   "title": "D6 · A — «Уровень языка» и «Сленг»",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Level-Filter-B.dc.html": {
+   "x": 4110,
+   "y": 29880,
+   "w": 390,
+   "h": 844,
+   "title": "D6 · B — группа «CEFR»",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Level-Fill.dc.html": {
+   "x": 4580,
+   "y": 29880,
+   "w": 390,
+   "h": 844,
+   "title": "Определить уровень языка",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Level-Coverage-A.dc.html": {
+   "x": 5050,
+   "y": 29880,
+   "w": 390,
+   "h": 844,
+   "title": "D7 · A — уровни в сводке библиотеки",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Level-Coverage-B.dc.html": {
+   "x": 5520,
+   "y": 29880,
+   "w": 390,
+   "h": 844,
+   "title": "D7 · B — «к B2» против Beacco",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Level-Coverage-C.dc.html": {
+   "x": 5990,
+   "y": 29880,
+   "w": 390,
+   "h": 844,
+   "title": "D7 · C — без уровней (как сейчас)",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "D-Review-Settings.dc.html": {
+   "x": 0,
+   "y": 31224,
+   "w": 1440,
+   "h": 800,
+   "title": "D1 · C — десктоп, страница плана",
+   "is_interactive": true
+  },
+  "D-Review-Plan.dc.html": {
+   "x": 1520,
+   "y": 31224,
+   "w": 1440,
+   "h": 800,
+   "title": "D2 · B — десктоп, сводка открывает план",
+   "is_interactive": true
+  },
+  "D-Level-Library.dc.html": {
+   "x": 3040,
+   "y": 31224,
+   "w": 1440,
+   "h": 800,
+   "title": "D6 · A — десктоп, столбец «Ур.»",
+   "is_interactive": true
+  },
+  "D-Level-Word.dc.html": {
+   "x": 4560,
+   "y": 31224,
+   "w": 1440,
+   "h": 800,
+   "title": "Десктоп · уровень языка слова",
+   "is_interactive": true
   }
  },
  "order": [
@@ -1062,7 +1292,33 @@
   "Exercise-S-Settings-Focus.dc.html",
   "Exercise-S-Request-Scope.dc.html",
   "Exercise-S-Quick-Tiles.dc.html",
-  "Exercise-S-Entry-Library-Done.dc.html"
+  "Exercise-S-Entry-Library-Done.dc.html",
+  "Review-Settings-A.dc.html",
+  "Review-Settings-B.dc.html",
+  "Review-Settings-C.dc.html",
+  "Review-Plan-Sheet.dc.html",
+  "Review-Header-A.dc.html",
+  "Review-Header-B.dc.html",
+  "Review-Mix-A.dc.html",
+  "Review-Mix-B.dc.html",
+  "Review-Wait.dc.html",
+  "Review-Done-Plan-A.dc.html",
+  "Review-Done-Plan-B.dc.html",
+  "Level-Badge-A.dc.html",
+  "Level-Badge-B.dc.html",
+  "Level-Badge-C.dc.html",
+  "Level-Word.dc.html",
+  "Level-Edit.dc.html",
+  "Level-Filter-A.dc.html",
+  "Level-Filter-B.dc.html",
+  "Level-Fill.dc.html",
+  "Level-Coverage-A.dc.html",
+  "Level-Coverage-B.dc.html",
+  "Level-Coverage-C.dc.html",
+  "D-Review-Settings.dc.html",
+  "D-Review-Plan.dc.html",
+  "D-Level-Library.dc.html",
+  "D-Level-Word.dc.html"
  ],
  "notes": {
   "row1": {
@@ -1211,6 +1467,27 @@
    "text": "21 · Упражнения — десктоп и движение",
    "kind": "title1",
    "maxW": 6750
+  },
+  "row22": {
+   "x": 0,
+   "y": 28286,
+   "text": "22 · Повторение — план дня",
+   "kind": "title1",
+   "maxW": 5090
+  },
+  "row23": {
+   "x": 0,
+   "y": 29630,
+   "text": "23 · Уровень языка",
+   "kind": "title1",
+   "maxW": 6380
+  },
+  "row24": {
+   "x": 0,
+   "y": 30974,
+   "text": "24 · План и уровень — десктоп",
+   "kind": "title1",
+   "maxW": 6000
   }
  },
  "designSystems": []
