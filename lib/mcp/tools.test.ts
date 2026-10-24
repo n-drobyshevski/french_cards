@@ -38,6 +38,7 @@ import {
   setWordLevels,
   stampAfter,
   studySummary,
+  updateStudyPlan,
   updateField,
   updateFolder,
   updateWord,
@@ -869,6 +870,60 @@ describe("study_summary", () => {
     expect(out.due_cards).toBe(direct.counts.due);
     expect(out.new_cards_available).toBe(direct.counts.new);
     expect(out.plan.new_words_today).toBe(direct.day.budget);
+  });
+});
+
+describe("update_study_plan", () => {
+  const stored = (fake: FakeRepo) => fake.tables.user_prefs.get("study_plan");
+
+  it("without a saved plan: starts from the migrated default and changes only the fields given", async () => {
+    const fake = createFakeRepo({});
+    const out = await ok(updateStudyPlan, fake, { new_words: 15, new_order: "themes" });
+    expect(out.previous).toEqual({ new_words: 8, review_cap: 200, new_order: "level", mix: "mixed", ru_fr: "after" });
+    expect(out.plan).toEqual({ new_words: 15, review_cap: 200, new_order: "themes", mix: "mixed", ru_fr: "after" });
+    expect(out.changed).toEqual(["new_words", "new_order"]);
+    expect(out.undo).toEqual({ tool: "update_study_plan", ...out.previous });
+    expect(fake.writes.map((w) => w.table)).toEqual(["user_prefs"]);
+    expect(stored(fake)).toMatchObject({ id: "study_plan", value: out.plan, deleted_at: null, updated_at: NOW.toISOString() });
+  });
+
+  it("over a saved plan: stamps past it; study_summary plans with the new one; undo puts the old one back", async () => {
+    const before: StudyPlan = { new_words: 5, review_cap: null, new_order: "added", mix: "after", ru_fr: "together" };
+    const fake = createFakeRepo({ user_prefs: [{ ...planRow(before), updated_at: "2026-10-22T10:00:00.500Z" }] });
+    const out = await ok(updateStudyPlan, fake, { review_cap: 150, ru_fr: "after" });
+    expect(out.plan).toEqual({ ...before, review_cap: 150, ru_fr: "after" });
+    expect(Date.parse(stored(fake)!.updated_at)).toBeGreaterThan(Date.parse("2026-10-22T10:00:00.500Z"));
+    expect((await ok(studySummary, fake, {})).plan.settings).toMatchObject({ review_cap: 150, ru_fr: "after", saved: true });
+    expect(out.undo).toEqual({ tool: "update_study_plan", ...before });
+    const back = await ok(updateStudyPlan, fake, out.previous);
+    expect(back.plan).toEqual(before);
+    expect(parseStudyPlan(stored(fake)!.value)).toEqual(before);
+  });
+
+  it("the same values: unchanged, nothing written", async () => {
+    const fake = createFakeRepo({ user_prefs: [planRow({ new_words: 10, review_cap: 200, new_order: "level", mix: "mixed", ru_fr: "after" })] });
+    const out = await ok(updateStudyPlan, fake, { new_words: 10, mix: "mixed" });
+    expect(out).toMatchObject({ result: "unchanged" });
+    expect(fake.writes).toHaveLength(0);
+  });
+
+  it("refuses an empty call, values out of range and a write the app made at the same time", async () => {
+    const fake = createFakeRepo({ user_prefs: [planRow({ new_words: 10, review_cap: 200, new_order: "level", mix: "mixed", ru_fr: "after" })] });
+    expect(await refused(updateStudyPlan, fake, {})).toMatch(/Nothing to change/);
+    await refused(updateStudyPlan, fake, { new_words: 31 });
+    await refused(updateStudyPlan, fake, { review_cap: 20 });
+    await refused(updateStudyPlan, fake, { new_order: "random" });
+    expect(fake.writes).toHaveLength(0);
+    fake.beforeUpsert = () => {
+      fake.tables.user_prefs.set("study_plan", { ...planRow({ new_words: 3, review_cap: 200, new_order: "level", mix: "mixed", ru_fr: "after" }), updated_at: "2026-10-23T00:00:00.000Z" });
+    };
+    expect(await refused(updateStudyPlan, fake, { new_words: 12 })).toMatch(/changed in the app/);
+    expect(parseStudyPlan(stored(fake)!.value).new_words).toBe(3);
+  });
+
+  it("review_cap null lifts the cap", async () => {
+    const fake = createFakeRepo({});
+    expect((await ok(updateStudyPlan, fake, { review_cap: null })).plan.review_cap).toBeNull();
   });
 });
 

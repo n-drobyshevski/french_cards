@@ -1,6 +1,6 @@
 ---
 name: kartochki
-description: Conventions for the user's «Карточки» flashcard app for colloquial French (the user is a Russian speaker). Use whenever the user wants to add, find, fix, sort, pause or delete French words, slang or themes, asks what to review today («что повторить сегодня»), sends a French text, chat, song or screenshot to turn into cards, asks for an exercise («упражнение», тест, квиз, QCM, по трудным словам), or mentions карточки, темы or «Входящие». Covers card format, the slang level rubric 0–3 with verlan, theme choice, when to ask first, exercise rules, and recipes for the Kartochki connector tools (search_words, add_words, update_word, set_word_levels, move_words, restore_moves, delete_words, restore_words, create/update/delete/restore_folder, list_folders, list_fields, create/update/delete/restore_field, study_summary, exercise_material, create_exercise_set, list_exercise_sets, delete/restore_exercise_set). Needs the Kartochki connector (else: say to add it).
+description: Conventions for the user's «Карточки» flashcard app for colloquial French (the user is a Russian speaker). Use whenever the user wants to add, find, fix, sort, pause or delete French words, slang or themes, asks what to review today («что повторить сегодня») or to change the review plan, sends a French text, chat, song or screenshot to turn into cards, asks for an exercise («упражнение», тест, квиз, QCM, по трудным словам), or mentions карточки, темы or «Входящие». Covers card format, the slang level rubric 0–3 with verlan, theme choice, when to ask first, exercise rules, and recipes for the Kartochki connector tools (search_words, add_words, update_word, set_word_levels, move_words, restore_moves, delete_words, restore_words, create/update/delete/restore_folder, list_folders, list_fields, create/update/delete/restore_field, study_summary, update_study_plan, exercise_material, create_exercise_set, list_exercise_sets, delete/restore_exercise_set). Needs the Kartochki connector (else: say to add it).
 ---
 
 # Карточки: working with the user's French cards
@@ -80,7 +80,7 @@ The connector's write tools normally ask the user for approval in the chat. Stil
 - **Up to 5 words the user asked to add:** add them directly.
 - **An exercise set the user asked for:** save it directly; it adds no words and never changes the review schedule.
 
-After every change, report what was done in one or two lines and how to undo it: `delete_words` with the returned ids after adding, `restore_words` after deleting, `restore_moves` with the returned `undo.moves` after moving (never a move back with `move_words`: it would change how automatic sorting treats the words), `set_word_levels` with the returned `undo` after setting levels, `delete_exercise_set` after saving an exercise set and `restore_exercise_set` after deleting one. Mention that the app shows the change after its next sync (open the app or switch back to it).
+After every change, report what was done in one or two lines and how to undo it: `delete_words` with the returned ids after adding, `restore_words` after deleting, `restore_moves` with the returned `undo.moves` after moving (never a move back with `move_words`: it would change how automatic sorting treats the words), `set_word_levels` with the returned `undo` after setting levels, `update_study_plan` with the returned `undo` after changing the plan, `delete_exercise_set` after saving an exercise set and `restore_exercise_set` after deleting one. Mention that the app shows the change after its next sync (open the app or switch back to it).
 
 Make write calls one at a time, never in parallel, even for different fields of the same word.
 
@@ -102,8 +102,14 @@ Make write calls one at a time, never in parallel, even for different fields of 
 
 ### «Что повторить сегодня?»
 
-1. `study_summary` (pass `new_per_day` if the user mentioned a different daily limit; the default is 15).
-2. Answer in two or three lines: how many cards are due, how many new cards are left for today, how many reviews are done, and a few of the words due soonest. Mention `muted_themes` if there are any. If new cards pile up across many themes that look sequential, offer to pause the later ones (see Themes). Reviewing itself happens in the app, so suggest opening it. The numbers come from the synced copy, so reviews the phone has not synced yet are missing.
+1. `study_summary`: it plans the day exactly as the app does, with the user's «План повторения».
+2. Answer in two or three lines: how many cards are due, how many new words today (`plan.new_words_today` of `plan.ceiling`, and why fewer: `plan.reason` load / accuracy / backlog), how many reviews are done, and a few of the words due soonest. Mention `muted_themes` if there are any. If new cards pile up across many themes that look sequential, offer to pause the later ones (see Themes). Reviewing itself happens in the app, so suggest opening it. The numbers come from the synced copy, so reviews the phone has not synced yet are missing.
+
+### «План повторения»: «давай 15 новых слов в день», «новые по темам», «без обратной стороны»
+
+1. `study_summary` for the current plan (`plan.settings`) and today's numbers.
+2. `update_study_plan` with only the fields the user asked about: `new_words` (0–30 a day; a ceiling the app lowers on heavy or weak days), `review_cap` (50–999 reviews a day, `null` = no limit), `new_order` (`level`: by «Уровень языка» and frequency, themes in turn; `themes`; `added`), `mix` (`mixed` / `after`), `ru_fr` (`after`: RU→FR once FR→RU holds 3 days; `together`: the next day; `recognition`: never). Change it only when asked; for advice («сколько новых слов брать?»), suggest numbers from `plan.forecast_7d` and `plan.accuracy_7d` and wait for the OK.
+3. Say what changed and the undo (`update_study_plan` with the returned `undo`), then what today looks like (`study_summary` again). The app picks it up on its next sync.
 
 ### Sort «Входящие»
 

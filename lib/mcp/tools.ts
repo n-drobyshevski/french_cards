@@ -61,7 +61,7 @@ import conjTable from "@/public/lexique/fr-conj.json";
 import { newId } from "@/lib/id";
 import { folderOrderOf, planDay } from "@/lib/core/plan";
 import { CEFR_LEVELS, STORED_LEVEL_SOURCES, type Cefr, type LevelResolver, type StoredLevelSource } from "@/lib/core/level";
-import { migrateStudyPlan, parseStudyPlan, STUDY_PLAN_PREF } from "@/lib/core/study-plan";
+import { migrateStudyPlan, NEW_WORDS_MAX as PLAN_NEW_WORDS_MAX, NEW_WORDS_MIN as PLAN_NEW_WORDS_MIN, parseStudyPlan, REVIEW_CAP_MAX, REVIEW_CAP_MIN, sameStudyPlan, STUDY_PLAN_PREF, type StudyPlan } from "@/lib/core/study-plan";
 import { cardStatus, newReviewState, retrievability, reviewStateId, wordStatus, type CardStatus } from "@/lib/scheduler";
 import type {
   Confidence,
@@ -80,6 +80,7 @@ import type {
   Folder,
   ReviewState,
   SlangLevel,
+  UserPref,
   Word,
 } from "@/lib/types";
 import { PartialWriteError, RepoError, type McpRepo, type Replacement } from "./repo";
@@ -749,7 +750,7 @@ export const studySummary = tool({
   name: "study_summary",
   title: "Today's study summary",
   description:
-    "Today's review numbers, planned exactly as the app plans the day (the user's «План повторения», user_prefs `study_plan`): cards due, new cards in today's queue, reviews done today, words by learning status, the themes «на паузе» (`muted_themes`, left out of review), the words due soonest, and `plan`: today's new-word budget (`new_words_today`, at most the `ceiling`; lower when the coming reviews are heavy (`reason` \"load\"), when recent answers are weak (\"accuracy\") or over the review cap (\"backlog\", with `deferred` reviews held for tomorrow)), reverse sides unlocked (`ru_unlocks`), and the mean reviews a day over the next week (`forecast_7d`). The one-day «Всё равно добавить новые» is a device setting this tool can't see. Reviewing happens in the app.",
+    "Today's review numbers, planned exactly as the app plans the day (the user's «План повторения», user_prefs `study_plan`): cards due, new cards in today's queue, reviews done today, words by learning status, the themes «на паузе» (`muted_themes`, left out of review), the words due soonest, and `plan`: today's new-word budget (`new_words_today`, at most the `ceiling`; lower when the coming reviews are heavy (`reason` \"load\"), when recent answers are weak (\"accuracy\") or over the review cap (\"backlog\", with `deferred` reviews held for tomorrow)), reverse sides unlocked (`ru_unlocks`), and the mean reviews a day over the next week (`forecast_7d`). The one-day «Всё равно добавить новые» is a device setting this tool can't see. Reviewing happens in the app. update_study_plan changes the plan.",
   input: z.object({
     new_per_day: z
       .number()
@@ -787,11 +788,7 @@ export const studySummary = tool({
     const dayLogs = liveLogs.filter((l) => Date.parse(l.review) >= dayStart && Date.parse(l.review) < dayEnd);
     const today = dayLogs.filter((l) => wordsById.has(l.word_id));
 
-    const row = prefs.find((p) => p.id === STUDY_PLAN_PREF && p.deleted_at === null);
-    // Without a saved plan the app migrates the device's «Новых карточек в день» (default 15); a device
-    // with another number saves its migrated plan after a sync (lib/user-prefs.ts saveMigratedStudyPlan).
-    const fallback = migrateStudyPlan(DEFAULT_NEW_PER_DAY);
-    const saved = row ? parseStudyPlan(row.value, fallback) : fallback;
+    const { row, plan: saved } = savedStudyPlan(prefs);
     const plan = args.new_per_day === undefined ? saved : { ...saved, new_words: args.new_per_day };
     const result = planDay({
       now,
@@ -846,6 +843,58 @@ export const studySummary = tool({
         settings: { ...plan, saved: !!row },
       },
       note: "Counts come from the synced copy: reviews not yet synced from the device are missing.",
+    };
+  },
+});
+
+/** The saved «План повторения» row, and the plan it holds (the migrated default without one). */
+function savedStudyPlan(prefs: readonly UserPref[]): { row: UserPref | undefined; plan: StudyPlan } {
+  const row = prefs.find((p) => p.id === STUDY_PLAN_PREF && p.deleted_at === null);
+  // Without a saved plan the app migrates the device's «Новых карточек в день» (default 15); a device
+  // with another number saves its migrated plan after a sync (lib/user-prefs.ts saveMigratedStudyPlan).
+  const fallback = migrateStudyPlan(DEFAULT_NEW_PER_DAY);
+  return { row, plan: row ? parseStudyPlan(row.value, fallback) : fallback };
+}
+
+const STUDY_PLAN_KEYS = ["new_words", "review_cap", "new_order", "mix", "ru_fr"] as const;
+
+export const updateStudyPlan = tool({
+  name: "update_study_plan",
+  title: "Change the review plan",
+  description:
+    "Change the user's «План повторения» (Settings → «План повторения»), the same synced setting the app edits; only the fields given change. `new_words`: the ceiling of new words a day (the app lowers it on heavy or weak days, never raises it; with ru_fr \"together\" it counts cards). `review_cap`: most reviews a day, the rest wait for the next days (null = no limit). `new_order`: \"level\" (by «Уровень языка» and frequency, themes in turn), \"themes\" (theme by theme, in the themes' order) or \"added\" (oldest first). `mix`: new cards \"mixed\" in with the reviews or \"after\" them. `ru_fr`, when the RU→FR side starts: \"after\" (once FR→RU holds for 3 days), \"together\" («Назавтра»: the next day) or \"recognition\" (never). Change it only when the user asks; say what changed, and undo with `undo` (the previous plan). study_summary shows what today looks like with it.",
+  input: z.object({
+    new_words: z.number().int().min(PLAN_NEW_WORDS_MIN).max(PLAN_NEW_WORDS_MAX).optional().describe(`Ceiling of new words a day (${PLAN_NEW_WORDS_MIN}–${PLAN_NEW_WORDS_MAX}).`),
+    review_cap: z
+      .number()
+      .int()
+      .min(REVIEW_CAP_MIN)
+      .max(REVIEW_CAP_MAX)
+      .nullable()
+      .optional()
+      .describe(`Most reviews a day (${REVIEW_CAP_MIN}–${REVIEW_CAP_MAX}); null = no limit.`),
+    new_order: z.enum(["level", "themes", "added"]).optional(),
+    mix: z.enum(["mixed", "after"]).optional(),
+    ru_fr: z.enum(["after", "together", "recognition"]).optional(),
+  }),
+  write: true,
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  async run(deps, args) {
+    const given = STUDY_PLAN_KEYS.filter((k) => args[k] !== undefined);
+    if (given.length === 0) throw new ToolError(`Nothing to change: pass at least one of ${STUDY_PLAN_KEYS.join(", ")}.`);
+    const { row, plan: previous } = savedStudyPlan(await deps.repo.userPrefs());
+    const next: StudyPlan = { ...previous };
+    for (const k of given) Object.assign(next, { [k]: args[k] });
+    if (row && sameStudyPlan(next, previous)) return { plan: next, result: "unchanged" };
+    const write: UserPref = { id: STUDY_PLAN_PREF, value: next, updated_at: stampAfter(deps.now(), row?.updated_at), deleted_at: null };
+    const [stored] = await deps.repo.upsert("user_prefs", [write]);
+    if (!stored || stored.updated_at !== write.updated_at) throw new ToolError("The plan was changed in the app at the same time. Call study_summary and try again.");
+    return {
+      plan: next,
+      changed: STUDY_PLAN_KEYS.filter((k) => next[k] !== previous[k]),
+      previous,
+      undo: { tool: "update_study_plan", ...previous },
+      note: SYNC_NOTE,
     };
   },
 });
@@ -2253,6 +2302,7 @@ export const TOOL_NAMES = [
   deleteField.name,
   restoreField.name,
   studySummary.name,
+  updateStudyPlan.name,
   addWords.name,
   updateWord.name,
   setWordLevels.name,
@@ -2280,6 +2330,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   register(server, deps, deleteField);
   register(server, deps, restoreField);
   register(server, deps, studySummary);
+  register(server, deps, updateStudyPlan);
   register(server, deps, addWords);
   register(server, deps, updateWord);
   register(server, deps, setWordLevels);
@@ -2305,9 +2356,10 @@ export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard
 - A word can carry origin («Происхождение»: one Russian line, e.g. «верлан от lourd», «от volonté „воля“ + -aire») and, for verbs, a conjugation (présent, passé composé, imparfait, futur; six forms each with pronouns). The app builds most conjugations itself from Lexique: search_words shows conjugation_builtin false where it cannot. Fill them with update_word when the user asks (e.g. «заполни происхождение для слов из темы X»), checking forms you are not sure of; never overwrite an existing origin or conjugation unless asked.
 - Cards can carry the user's custom fields («Свои поля»): list_fields shows the shared ones and what to write in each. Set them by name with custom_fields in add_words or update_word (null clears one); search_words shows them. Use a name not in list_fields only when the user asks for a field on that one word. create_field, update_field and delete_field manage the shared fields; ask the user before creating or deleting one.
 - «Уровень языка» (CEFR A1…C2): search_words shows each word's \`level\` and \`level_source\`; most are estimates the app computes from its dictionary (flelex, freq), which you leave alone. To fill the missing ones (search_words level "none"), list the words with the levels you propose and wait for the OK, then save them with set_word_levels in batches of 10–15. Rate a word as a textbook or DELF / TCF list would, against words of known level; skip argot, vulgar words and verlan unless asked. Never change a level the user set (level_source user) unless they ask.
+- «План повторения» (how many new words a day, the review cap, the order of new words, when RU→FR starts): study_summary's \`plan.settings\` shows it; change it with update_study_plan only when the user asks (e.g. «давай 15 новых слов в день», «новые по темам»), then say what changed and what today looks like (study_summary).
 - Before adding more than 5 words, and before any move, delete, or renaming, pausing or deleting a theme (update_folder, delete_folder), list what will change and wait for the user's OK.
 - «На паузе»: a theme (update_folder \`muted\`) or a word (update_word \`muted\`) stays in the library with its progress but never comes up in review or practice; \`false\` brings it back. When list_folders shows many themes with words still \`new\` and some of them look like later steps of a sequence (levels, lessons, chapters, a course or book order) or like topics the user said can wait, suggest pausing those so only the current ones reach review: name the themes to pause and the ones that stay, and wait for the OK. When the user moves on, suggest bringing the next ones back. Never pause or unpause on your own.
-- After a change, say what changed and how to undo it with the result's \`undo\` (delete_words, restore_words, restore_moves, set_word_levels, restore_folder, delete_field, restore_field, delete_exercise_set or restore_exercise_set).
+- After a change, say what changed and how to undo it with the result's \`undo\` (delete_words, restore_words, restore_moves, set_word_levels, update_study_plan, restore_folder, delete_field, restore_field, delete_exercise_set or restore_exercise_set).
 - Exercises («Упражнения»: «сделай упражнение / тест / квиз по теме …»): call exercise_material first, then save the whole set with exactly one create_exercise_set call. Never write the questions into the chat instead; the app plays the set offline and it never changes the review schedule.
 - For a free-text topic, use the saved words in topic_matches by word_id. Words found with web search go in new_words (at most 8, each checked in at least 2 sources, slang_level by the rubric, source_url); never add_words them without the user's OK, since the user adds them from the app.
 - choice and cloze have 4 options: the answer plus 3 distractors of the same part of speech, gender, register and length, with exactly one best answer. A cloze's sentence_ru hints at the situation and never translates the gap.

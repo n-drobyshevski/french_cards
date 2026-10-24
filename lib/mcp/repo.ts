@@ -26,11 +26,11 @@ export interface TableRows {
   exercise_sets: ExerciseSet;
   /** Read-only here: runs are written by the device that plays them. */
   exercise_runs: ExerciseRun;
-  /** Read-only here: preferences («Чаще в упражнениях») are set in the app. */
+  /** Preferences: «Чаще в упражнениях» is set in the app; «План повторения» also by the connector (update_study_plan). */
   user_prefs: UserPref;
 }
 
-export type WritableTable = "folders" | "words" | "review_state" | "field_defs" | "exercise_sets";
+export type WritableTable = "folders" | "words" | "review_state" | "field_defs" | "exercise_sets" | "user_prefs";
 
 export interface McpRepo {
   /** Every folder, tombstones included. */
@@ -49,7 +49,7 @@ export interface McpRepo {
   exerciseSets(): Promise<ExerciseSet[]>;
   /** Exercise runs with `started_at >= from`, tombstones included. Read-only. */
   exerciseRunsSince(from: string): Promise<ExerciseRun[]>;
-  /** Every preference row (`user_prefs`, e.g. `exercise_focus`), tombstones included. Read-only. */
+  /** Every preference row (`user_prefs`, e.g. `exercise_focus`, `study_plan`), tombstones included. */
   userPrefs(): Promise<UserPref[]>;
   /** Inserts or replaces rows; returns them as stored (an older-than-stored write comes back unchanged). */
   upsert<T extends WritableTable>(table: T, rows: readonly TableRows[T][]): Promise<TableRows[T][]>;
