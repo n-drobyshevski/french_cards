@@ -668,6 +668,7 @@ function AddSession({ open, onOpenChange, initialFr, initialDraft, onOpenWord }:
         setUndoBar(null);
         setFocusRequest({ target: "search" });
       }}
+      onDismiss={() => setUndoBar(null)}
       className="mb-3"
     />
   );

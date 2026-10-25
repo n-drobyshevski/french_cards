@@ -538,6 +538,8 @@ requeue appends a hollow tick at the end. No sequence, no travel. Review keeps t
 scale to 200 cards), with the deck edges of §5.19 as its at-a-glance quantity.
 
 ### 5.6 Snackbar — see N2
+
+Swipe to dismiss (added 2026-10-25): past 8px the bar follows the finger — sideways 1:1, fading to .2 at its full width; down 1:1, up with ¼ resistance. Released past 35 % of its width sideways, 24px down or on a flick (> .5 px/ms), it leaves the same way in `--dur-exit` (`--ease-exit`) with one haptic tick at the threshold, and leaves no outgoing copy behind; otherwise it settles back in `--dur-move`. Reduced motion: no travel, the bar goes at once.
 Ink bg, white 14 px text, «Отменить» underlined. In `--dur-enter` (8 px rise), out `--dur-exit` (8 px down),
 5 s (7 s with an action), paused while the app is hidden or the bar is touched. Review snackbar overlays (R9).
 One snackbar at a time; a new one replaces the old (old exits, new enters).
