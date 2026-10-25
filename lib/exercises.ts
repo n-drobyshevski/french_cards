@@ -6,7 +6,7 @@
 // another device show their result but are never written here.
 // Exercises never touch review_state or review_log. Pure rules live in lib/core/exercises.ts.
 import { useLiveQuery } from "dexie-react-hooks";
-import { cleanLevels, countFirstTry, itemWordKeys, parseScope, runItems, runSettled } from "./core/exercises";
+import { cleanLevels, countFirstTry, itemWordKeys, parseScope, playedItems, runItems, runSettled } from "./core/exercises";
 import { isPaused, pausedFolderIds } from "./core/words";
 import { db, liveRows, newId } from "./db";
 import { isDueToday } from "./folders";
@@ -229,7 +229,8 @@ export interface StartRunOptions {
 export async function startRun(set: ExerciseSet, opts: StartRunOptions = {}, now: Date = new Date()): Promise<ExerciseRun> {
   const iso = now.toISOString();
   const wanted = opts.itemIds ? new Set(opts.itemIds) : null;
-  const itemIds = wanted ? set.items.filter((i) => wanted.has(i.id)).map((i) => i.id) : [];
+  // Played items only: a selection of old register items alone plays nothing.
+  const itemIds = wanted ? playedItems(set.items).filter((i) => wanted.has(i.id)).map((i) => i.id) : [];
   // item_ids [] means "every item": an explicit selection that matches nothing must not become the whole set.
   if (opts.itemIds && itemIds.length === 0) throw new Error("В наборе нет этих вопросов");
   const run: ExerciseRun = {

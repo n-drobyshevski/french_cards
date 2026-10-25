@@ -786,12 +786,13 @@ describe("review fixes", () => {
     expect(runSettled(pairsSet, run([...third, answer("p", 3, "dont_know"), answer("q1", 1, "correct"), answer("q3", 1, "correct")]))).toBe(true);
   });
 
-  it("missed words: a pairs row without a word stands for the board, a miss on an old register item keeps no option", () => {
+  it("missed words: a pairs row without a word stands for the board, a miss on an old register item is left out", () => {
     const set = good();
     set.items[2] = { ...set.items[2], type: "register", skill: null, prompt: null, answer: "fam.", distractors: [] };
-    const missed = missedWords(run([answer("q4", 1, "dont_know"), answer("q3", 1, "wrong", { chosen: "arg." })]), set);
-    expect(missed.map((m) => m.key)).toEqual(["w-thune", "w-keuf", "w-daron", "w-bouffer", "w-bagnole"]);
-    expect(missed.at(-1)?.chosen).toEqual([]);
+    const answers = [answer("q4", 1, "dont_know"), answer("q3", 1, "wrong", { chosen: "arg." })];
+    expect(missedWords(run(answers), set).map((m) => m.key)).toEqual(["w-thune", "w-keuf", "w-daron", "w-bouffer"]);
+    expect(missedItemIds(run(answers), set)).toEqual(["q4"]);
+    expect(missedItemIds(run(answers))).toEqual(["q4", "q3"]);
   });
 
   it("leaves out items about blocked words, and intro cards of saved new words", () => {

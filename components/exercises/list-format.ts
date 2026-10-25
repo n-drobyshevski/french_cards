@@ -131,7 +131,8 @@ export function tileLines(
  * the phone tile's and the resume card's ticks.
  */
 export function firstTryMarks(run: Pick<ExerciseRun, "answers">, set: Pick<ExerciseSet, "items">, total: number): StripMark[] {
-  const ids = new Set(set.items.map((i) => i.id));
+  // An old run's answers on register items tick nothing: those questions are no longer played.
+  const ids = new Set(playedItems(set.items).map((i) => i.id));
   const marks = attemptMarks(run.answers.filter((a) => a.attempt === 1 && ids.has(a.item_id)));
   while (marks.length < total) marks.push("future");
   return marks;

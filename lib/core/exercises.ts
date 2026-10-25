@@ -1051,9 +1051,13 @@ export function scoreRun(run: Pick<ExerciseRun, "item_ids" | "answers">, set: Pi
   };
 }
 
-/** Items missed at least once («Не знаю» included), in the order of their first miss. */
-export function missedItemIds(run: Pick<ExerciseRun, "answers">): string[] {
-  return [...new Set(run.answers.filter((a) => a.outcome !== "correct").map((a) => a.item_id))];
+/**
+ * Items missed at least once («Не знаю» included), in the order of their first miss. With the set,
+ * only its played items: an old run's miss on a register item is not replayed («Повторить ошибки»).
+ */
+export function missedItemIds(run: Pick<ExerciseRun, "answers">, set?: Pick<ExerciseSet, "items">): string[] {
+  const played = set ? new Set(playedItems(set.items).map((i) => i.id)) : null;
+  return [...new Set(run.answers.filter((a) => a.outcome !== "correct" && (!played || played.has(a.item_id))).map((a) => a.item_id))];
 }
 
 export interface MissedWord {
@@ -1087,7 +1091,10 @@ export function answerWords(
   return item.new_ref ? [{ word_id: null, new_ref: item.new_ref }] : [];
 }
 
-/** The words behind the misses, in the order of their first miss, one entry per word. */
+/**
+ * The words behind the misses, in the order of their first miss, one entry per word. A miss on an
+ * item no longer played (an old register item) is left out, as its question is.
+ */
 export function missedWords(run: Pick<ExerciseRun, "answers">, set: Pick<ExerciseSet, "items" | "new_words">): MissedWord[] {
   const items = new Map(set.items.map((i) => [i.id, i]));
   const fresh = new Map(set.new_words.map((w) => [w.ref, w]));
@@ -1096,6 +1103,7 @@ export function missedWords(run: Pick<ExerciseRun, "answers">, set: Pick<Exercis
   for (const a of run.answers) {
     if (a.outcome === "correct") continue;
     const item = items.get(a.item_id);
+    if (item && !isPlayedItem(item)) continue;
     for (const { word_id, new_ref } of answerWords(a, item, refs)) {
       const key = (word_id ?? new_ref)!;
       let entry = out.get(key);
@@ -1113,8 +1121,7 @@ export function missedWords(run: Pick<ExerciseRun, "answers">, set: Pick<Exercis
         out.set(key, entry);
       }
       if (!entry.item_ids.includes(a.item_id)) entry.item_ids.push(a.item_id);
-      // A miss on an old register item picked a level label («arg.»), never a usable distractor.
-      if (a.chosen && item?.type !== "register" && !entry.chosen.includes(a.chosen)) entry.chosen.push(a.chosen);
+      if (a.chosen && !entry.chosen.includes(a.chosen)) entry.chosen.push(a.chosen);
     }
   }
   return [...out.values()];

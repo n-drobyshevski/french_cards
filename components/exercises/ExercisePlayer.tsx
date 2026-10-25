@@ -30,6 +30,7 @@ import {
   pairsBoard,
   playableItemIds,
   playContext,
+  playedItems,
   recordAnswer,
   resumableRunFor,
   resumeQueue,
@@ -129,7 +130,7 @@ async function startOf(set: ExerciseSet, kind: "set" | "mistakes", itemIds?: rea
   const wanted = itemIds ? playable.filter((id) => itemIds.includes(id)) : playable;
   if (wanted.length === 0) return NOTHING_TO_PLAY;
   // A whole-set run lists its items only when some are left out (item_ids [] = every item).
-  const ids = kind === "mistakes" || wanted.length < set.items.length ? wanted : undefined;
+  const ids = kind === "mistakes" || wanted.length < playedItems(set.items).length ? wanted : undefined;
   const run = await startRun(set, { kind, itemIds: ids });
   return { set, run, queue: buildQueue(set, { itemIds: run.item_ids, intros: kind !== "mistakes", ...ctx }), ctx };
 }

@@ -14,6 +14,7 @@ import {
   buildFollowUpText,
   missedItemIds,
   missedWords,
+  playedItems,
   savedNewWords,
   scoreRun,
   undoAddNewWords,
@@ -95,8 +96,9 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
   const letters = useShortcutsEnabled();
   const score = scoreRun(run, set);
   const missed = missedWords(run, set);
-  const missedItems = missedItemIds(run);
-  const itemIds = new Set(set.items.map((i) => i.id));
+  const missedItems = missedItemIds(run, set);
+  // Played items only: an old run's answers on register items are not shown.
+  const itemIds = new Set(playedItems(set.items).map((i) => i.id));
   const marks = attemptMarks(run.answers.filter((a) => itemIds.has(a.item_id)));
   // The library rows of the missed words: a link only to a word still there, and the meter for a
   // word met only in pairs (its tile carries no snapshot).
@@ -173,7 +175,7 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
 
   const followUp = async () => {
     const text = buildFollowUpText(set, missed);
-    const ok = await copyRequest({ text, summary: `после «${set.title}», ${nQuestions(set.items.length)}` }, sets ?? [set]);
+    const ok = await copyRequest({ text, summary: `после «${set.title}», ${nQuestions(playedItems(set.items).length)}` }, sets ?? [set]);
     snackbar.show({ message: ok ? "Запрос скопирован — вставьте его в чат с Claude" : "Не удалось скопировать запрос" });
   };
 
