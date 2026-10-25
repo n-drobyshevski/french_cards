@@ -39,13 +39,24 @@ export interface ChatPlayerSet {
   new_words: ExerciseNewWord[];
   /** Already in the app's «Упражнения» (played from there, or saved before): saving adds only the run. */
   saved: boolean;
+  /**
+   * «practice» (the usual round) or «exam» («Мини-TCF»: one overall timer, no feedback until the end,
+   * no going back, no requeue, a result by level). Missing = practice.
+   */
+  mode?: ChatPlayMode;
+  /** exam: the overall time in seconds (≈90 per question, like the TCF); null / missing in practice. */
+  time_limit_s?: number | null;
 }
+
+export type ChatPlayMode = "practice" | "exam";
+/** «Мини-TCF»: seconds per question when play_exercises gets no time limit (TCF CE: 39 in 60 min). */
+export const EXAM_SECONDS_PER_ITEM = 90;
 
 /**
  * The item types the chat player plays. Register items («нейтр. / fam. / arg. / vulg.») are gone,
  * and a type a newer connector invents is unknown here: both are skipped, as the app skips them.
  */
-export const CHAT_ITEM_TYPES: readonly ExerciseItemType[] = ["choice", "cloze", "pairs", "conjugate"];
+export const CHAT_ITEM_TYPES: readonly ExerciseItemType[] = ["choice", "cloze", "pairs", "conjugate", "reading"];
 
 /** The items of a set the player can show: a known type with what it needs (an answer, or a pairs board). */
 export function playableItems(items: readonly ExerciseItem[]): ExerciseItem[] {

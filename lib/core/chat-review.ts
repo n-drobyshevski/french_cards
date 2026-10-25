@@ -1,0 +1,90 @@
+// «Проверка» in the chat: the second MCP App of the connector (ui://kartochki/review.html), where the
+// user checks what Claude proposes before it is written — levels for a batch of words
+// (propose_levels → set_word_levels, mockup Chat-Levels-A) and new words before add_words
+// (propose_words → add_words, mockup Chat-Words-A). The page calls those write tools itself
+// (MCP App tools/call) only on the user's tap, then offers «Отменить» with the tool's own undo.
+// Pure types and helpers, shared by the server (lib/mcp/tools.ts) and the page (chat-player/).
+import type { Cefr } from "./level";
+import type { Gender, PartOfSpeech, SlangLevel } from "../types";
+
+/** The review page's UI resource; propose_levels and propose_words point at it. */
+export const CHAT_REVIEW_URI = "ui://kartochki/review.html";
+
+/** One word in «Уровни слов». */
+export interface LevelReviewRow {
+  id: string;
+  fr: string;
+  ru: string;
+  pos: PartOfSpeech;
+  /** Claude's proposal (preselected). */
+  proposed: Cefr;
+  /** The level the word shows now (stored or estimated) and where it comes from (user / chat / ai / flelex / freq). */
+  current: Cefr | null;
+  current_source: string | null;
+  /** The app's dictionary estimate, shown as «≈C1 по словарю» when it differs from the proposal. */
+  dictionary: Cefr | null;
+  /** A level the user set: shown greyed «ВЫ УКАЗАЛИ», never saved over. */
+  locked: boolean;
+}
+
+export interface LevelsReview {
+  kind: "kartochki-levels";
+  version: 1;
+  rows: LevelReviewRow[];
+  /** Words still without a level in the library after this batch (for «Следующие 15 ›»); null when unknown. */
+  remaining: number | null;
+}
+
+/** A theme the user can pick for a new word; id null = «Входящие». */
+export interface ReviewFolder {
+  id: string | null;
+  name: string;
+  count: number;
+}
+
+/** One proposed new word in «Новые слова» (the add_words word fields plus what the server found). */
+export interface WordReviewRow {
+  /** Stable key for the row inside this review (its index as a string). */
+  key: string;
+  fr: string;
+  ru: string;
+  pos: PartOfSpeech;
+  gender: Gender;
+  slang_level: SlangLevel;
+  verlan: boolean;
+  note: string | null;
+  example_fr: string | null;
+  example_ru: string | null;
+  origin: string | null;
+  /** The level the app would show (≈, estimated) or the one Claude gave. */
+  level: Cefr | null;
+  /** The theme it would go to. */
+  folder: ReviewFolder;
+  /** The theme was named by the user (folder_chosen_by_user); a theme the user picks in the page counts too. */
+  folder_chosen_by_user: boolean;
+  /** Already saved: unchecked and struck («уже есть в «Жильё»»). */
+  duplicate: { id: string; fr: string; folder_name: string } | null;
+  /** Preselected: true unless a duplicate. */
+  checked: boolean;
+}
+
+export interface WordsReview {
+  kind: "kartochki-words";
+  version: 1;
+  rows: WordReviewRow[];
+  /** The user's themes for the picker, «Входящие» first. */
+  folders: ReviewFolder[];
+  /** Where the words came from, as a mono label («ИЗ СКРИНШОТА», «ИЗ ПЕСНИ»); null when not said. */
+  source_label: string | null;
+}
+
+export type ChatReview = LevelsReview | WordsReview;
+
+/** A review from a tool result's structuredContent; null when it isn't one. */
+export function asChatReview(value: unknown): ChatReview | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Partial<ChatReview>;
+  if (v.kind !== "kartochki-levels" && v.kind !== "kartochki-words") return null;
+  if (!Array.isArray(v.rows)) return null;
+  return v as ChatReview;
+}

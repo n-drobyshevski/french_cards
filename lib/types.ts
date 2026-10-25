@@ -299,7 +299,7 @@ export const DEFAULT_SETTINGS: Settings = {
  *
  * Options are shuffled at play time (`optionsFor(item, random)`); nothing stores the answer's index.
  */
-export type ExerciseItemType = "choice" | "cloze" | "register" | "pairs" | "conjugate";
+export type ExerciseItemType = "choice" | "cloze" | "register" | "pairs" | "conjugate" | "reading";
 /** What a choice item tests; shown in the card header. */
 export type ExerciseSkill = "meaning" | "form" | "neutral" | "verlan" | "situation";
 /** The tense a conjugate item asks (the four of a Conjugation). */
@@ -344,6 +344,16 @@ export interface ExerciseItem {
   tiles: ExercisePairTile[];
   explain_ru: string | null;
   word: ExerciseWordSnapshot | null;
+  /**
+   * reading («текст», TCF «compréhension écrite»): a short French text the question is about (an
+   * ad, a message, a notice, a short article), with `prompt` the question in French and 4 options.
+   * Older items have none.
+   */
+  passage?: string | null;
+  /** reading: the text's kind as a mono label («ANNONCE», «MESSAGE», «ARTICLE»). */
+  passage_label?: string | null;
+  /** The item's CEFR level (A2…C1), set for «Мини-TCF» questions; null / missing elsewhere. */
+  level?: Cefr | null;
 }
 
 /**
