@@ -24,7 +24,7 @@ export interface TableRows {
   field_defs: FieldDef;
   /** «Упражнения»: the connector writes the content (create, soft delete, restore). */
   exercise_sets: ExerciseSet;
-  /** Read-only here: runs are written by the device that plays them. */
+  /** Runs are written by the device that plays them; the connector inserts only a round played in the chat (save_exercise_result). */
   exercise_runs: ExerciseRun;
   /** Preferences: «Чаще в упражнениях» is set in the app; «План повторения» also by the connector (update_study_plan). */
   user_prefs: UserPref;
@@ -32,7 +32,7 @@ export interface TableRows {
   progress_days: ProgressDay;
 }
 
-export type WritableTable = "folders" | "words" | "review_state" | "field_defs" | "exercise_sets" | "user_prefs";
+export type WritableTable = "folders" | "words" | "review_state" | "field_defs" | "exercise_sets" | "exercise_runs" | "user_prefs";
 
 export interface McpRepo {
   /** Every folder, tombstones included. */
@@ -49,7 +49,7 @@ export interface McpRepo {
   logsSince(from: string): Promise<ReviewLog[]>;
   /** Every exercise set, tombstones included. */
   exerciseSets(): Promise<ExerciseSet[]>;
-  /** Exercise runs with `started_at >= from`, tombstones included. Read-only. */
+  /** Exercise runs with `started_at >= from`, tombstones included. */
   exerciseRunsSince(from: string): Promise<ExerciseRun[]>;
   /** Every preference row (`user_prefs`, e.g. `exercise_focus`, `study_plan`), tombstones included. */
   userPrefs(): Promise<UserPref[]>;

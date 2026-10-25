@@ -1316,7 +1316,7 @@ describe("exercises («Упражнения»)", () => {
     { id: "a", type: "choice", word_id: "w-meuf", distractors: ["тачка", "мент", "зануда"] },
     { id: "a", type: "choice", skill: "verlan", word_id: "w-keuf", prompt: "Верлан от «flic»", answer: "le keuf", distractors: ["le reuf", "la meuf", "le teuf"] },
     { type: "cloze", word_id: "w-kiffer", sentence: "J'ai trop [[kiffé]] ce concert.", sentence_ru: "Концерт был что надо.", distractors: ["bouffé", "galéré", "flippé"] },
-    { type: "register", word_id: "w-relou" },
+    { type: "cloze", word_id: "w-relou", sentence: "Ton pote est trop [[relou]] ce soir.", sentence_ru: "Друг весь вечер достаёт.", distractors: ["chelou", "ouf", "vénère"] },
     { type: "pairs", pairs: ["w-meuf", "w-bagnole", "w-keuf", "w-ouf"] },
     {
       type: "choice",
@@ -1339,7 +1339,7 @@ describe("exercises («Упражнения»)", () => {
     expect(exerciseSetId(" fete-1 ")).toBe(id);
     expect(out).toEqual({
       already_saved: false,
-      set: { id, title: "Вечеринка · сленг", count: 7, by_type: { choice: 4, cloze: 1, register: 1, pairs: 1 }, new_words: 0, levels: [] },
+      set: { id, title: "Вечеринка · сленг", count: 7, by_type: { choice: 4, cloze: 2, pairs: 1 }, new_words: 0, levels: [] },
       warnings: expect.any(Array),
       undo: { tool: "delete_exercise_set", id },
       note: expect.stringMatching(/next sync/),
@@ -1352,7 +1352,7 @@ describe("exercises («Упражнения»)", () => {
     expect(row.items.map((i) => i.id)).toEqual(["q1", "q2", "q3", "q4", "q5", "q6", "q7"]);
     expect(row.items[0]).toMatchObject({ skill: "meaning", ask: "fr", prompt: "la meuf", answer: "девушка", word: { fr: "la meuf", ru: "девушка", gender: "f", verlan: true } });
     expect(row.items[2]).toMatchObject({ answer: "kiffé", word: { example_fr: "J'ai trop kiffé ce concert." } });
-    expect(row.items[3]).toMatchObject({ answer: "fam.", distractors: [] });
+    expect(row.items[3]).toMatchObject({ type: "cloze", skill: null, answer: "relou", distractors: ["chelou", "ouf", "vénère"] });
     expect(row.items[4].tiles).toEqual([
       { key: "w-meuf", fr: "la meuf", ru: "девушка" },
       { key: "w-bagnole", fr: "la bagnole", ru: "тачка" },
@@ -1377,13 +1377,12 @@ describe("exercises («Упражнения»)", () => {
   it("accepts null for absent fields and any item ids (they are renumbered anyway)", async () => {
     const fake = fakeLib();
     const items = ITEMS.map((item, i) => ({ skill: null, ask: null, distractors: null, pairs: null, prompt: null, answer: null, ...item, id: i }));
-    items[3] = { ...items[3], skill: null, ask: null, distractors: null, pairs: null };
     const out = await ok(createExerciseSet, fake, set({ items, new_words: null, folders: null, topic: null }));
     expect(out.set).toMatchObject({ count: 7, new_words: 0 });
     const [row] = stored(fake);
     expect(row.folders).toEqual([]);
     expect(row.items.map((i) => i.id)).toEqual(["q1", "q2", "q3", "q4", "q5", "q6", "q7"]);
-    expect(row.items[3]).toMatchObject({ type: "register", skill: null, answer: "fam.", distractors: [] });
+    expect(row.items[3]).toMatchObject({ type: "cloze", skill: null, ask: null, answer: "relou", pairs: [] });
     expect((await ok(exerciseMaterial, fake, { folders: null })).scope).toMatchObject({ folders: "all" });
   });
 
@@ -1391,7 +1390,7 @@ describe("exercises («Упражнения»)", () => {
     const fake = fakeLib();
     const items = [...ITEMS];
     items[1] = { ...items[1], word_id: "w-nope" };
-    items[3] = { type: "register", word_id: "w-thune" };
+    items[3] = { ...items[3], word_id: "w-thune" };
     items[6] = { ...items[6], word_id: "w-fric" };
     const message = await refused(createExerciseSet, fake, set({ items }));
     expect(message).toMatch(/not saved/);

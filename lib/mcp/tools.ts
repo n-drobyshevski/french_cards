@@ -41,17 +41,21 @@ import {
   ITEMS_MIN,
   levelsText,
   levelWarnings,
+  MAX_ATTEMPTS,
   missedWords,
   NEW_WORDS_MAX,
   parseScope,
+  playableItemIds,
   REF_MAX,
   runSettled,
+  scoreRun,
   TEXT_MAX,
   TITLE_MAX,
   TOPIC_MAX,
   validateSet,
   warningsFor,
   type ExerciseLevel,
+  type ExerciseSetContent,
 } from "@/lib/core/exercises";
 import {
   DEFAULT_EXERCISE_FOCUS,
@@ -61,6 +65,7 @@ import {
   matchesFocus,
   parseExerciseFocus,
 } from "@/lib/core/exercise-focus";
+import { CHAT_PLAYER_URI, fillArtifact, MCP_APP_MIME, parseRunLine, RUN_LINE_PREFIX, SAVE_RESULT_TOOL, type ChatPlayerSet, type ChatRunResult } from "@/lib/core/chat-player";
 import { matchesSearch, normalizeLemma, searchHaystack, searchKey } from "@/lib/core/text";
 import { buildWord, cleanText, directionsOf, isMovable, isPaused, pausedFolderIds } from "@/lib/core/words";
 import { cleanConjugation, cleanOrigin, conjugate, ORIGIN_MAX, type ConjData } from "@/lib/core/conjugate";
@@ -75,6 +80,7 @@ import type {
   Conjugation,
   CustomFieldValue,
   Direction,
+  ExerciseAnswer,
   ExerciseFocus,
   ExerciseFocusShare,
   ExerciseFocusTarget,
@@ -97,6 +103,7 @@ import { lemmaLevel, serverLevels } from "./levels";
 import { HISTORY_DAYS_MAX, historyRange, progressHistory } from "./history";
 import { studyDay, studyDayStartBefore } from "./study-day";
 import { planFitLogsFrom, planFitView, serverPlanFit } from "./plan-fit";
+import { CHAT_PLAYER_ARTIFACT, CHAT_PLAYER_HTML } from "./chat-player-html";
 
 export interface ToolDeps {
   repo: McpRepo;
@@ -499,9 +506,19 @@ export interface ToolSpec<S extends z.ZodObject, O extends Record<string, unknow
   /** For a write tool: what to tell Claude after a database error (default: check with search_words). */
   retryHint?: string;
   annotations: ToolAnnotations;
+  /** The tool definition's `_meta` (MCP Apps: `ui.resourceUri`, `ui.visibility`). */
+  meta?: Record<string, unknown>;
   /** Returns the structured result (also sent as JSON text). Throws ToolError for a refusal. */
   run: (deps: ToolDeps, args: z.output<S>) => Promise<O>;
+  /**
+   * How the result is sent, when not as JSON text + structuredContent: an MCP App's tool gives the
+   * model a short text and the player its data (`structuredContent` never reaches the model).
+   * Method syntax on purpose: a spec with its own O still passes as a ToolSpec<S>.
+   */
+  reply?(out: O): ToolReply;
 }
+
+export type ToolReply = Pick<CallToolResult, "content" | "structuredContent" | "_meta">;
 
 const tool = <S extends z.ZodObject, O extends Record<string, unknown>>(spec: ToolSpec<S, O>): ToolSpec<S, O> => spec;
 
@@ -1646,11 +1663,18 @@ export const restoreFolder = tool({
 // ---------------------------------------------------------------------------------------------
 // «Упражнения»: exercise sets Claude writes and the app plays offline. The rules of a set live in
 // lib/core/exercises.ts (shared with the app); the item contract is on ExerciseItem in lib/types.ts.
-// The connector writes a set's content once (create) and its deleted_at (delete / restore); runs
-// are written only by the playing device, so they are read here and never written.
+// The connector writes a set's content once (create, or a chat set saved with its result) and its
+// deleted_at (delete / restore). Runs are written by the playing device, except a round played in
+// the chat («Упражнения в чате», lib/core/chat-player.ts): save_exercise_result writes it once,
+// when the user agrees, under an id of its own so no device ever writes the same row.
 
 const DAY_MS = 86_400_000;
-const ITEM_TYPES = ["choice", "cloze", "register", "pairs", "conjugate"] as const satisfies readonly ExerciseItemType[];
+// No «register» (pick нейтр. / fam. / arg. / vulg.): it is no longer made, and old sets' register
+// items are skipped wherever a set is played (isRegisterItem).
+const ITEM_TYPES = ["choice", "cloze", "pairs", "conjugate"] as const satisfies readonly ExerciseItemType[];
+const REGISTER_GONE = "register items are no longer used; use choice/cloze/pairs/conjugate";
+/** An item of the dropped «register» type, in an older stored set (typed loosely: the type may leave ExerciseItemType). */
+const isRegisterItem = (item: { type: string } | undefined): boolean => item?.type === "register";
 const SKILLS = ["meaning", "form", "neutral", "verlan", "situation"] as const satisfies readonly ExerciseSkill[];
 const TENSES = ["present", "passe_compose", "imparfait", "futur"] as const satisfies readonly ExerciseTense[];
 const PERSONS = ["je", "tu", "il", "nous", "vous", "ils"] as const satisfies readonly ExercisePerson[];
@@ -1798,7 +1822,7 @@ function onlyBlock(only: ExerciseScope, available: number, themes: boolean, verb
   const note =
     available === 0
       ? `There are no ${what} ${noun}${themes ? " in these themes" : ""} right now, so there is nothing to drill: don't create a set; tell the user (in Russian) that they have no ${SCOPE_WORDS_RU[only]} now.`
-      : `Use only these ${available} ${what} ${noun} (words[]): no other library words and no new_words. ${recipe} Save it with create_exercise_set scope: "${only}".`;
+      : `Use only these ${available} ${what} ${noun} (words[]): no other library words and no new_words. ${recipe} Pass scope: "${only}" with the set (create_exercise_set, or play_exercises in the chat).`;
   return { only, available, suggested_items: suggested, note };
 }
 
@@ -1871,8 +1895,8 @@ function weaknessSignals(
     if (run.deleted_at !== null) continue;
     const set = run.set_id ? sets.get(run.set_id) : undefined;
     for (const a of run.answers) {
-      // A register miss picked a level label («arg.»): not a confusion to reuse as a distractor.
-      const register = set?.items.find((i) => i.id === a.item_id)?.type === "register";
+      // A miss on an old register item picked a level label («arg.»): not a confusion to reuse as a distractor.
+      const register = isRegisterItem(set?.items.find((i) => i.id === a.item_id));
       for (const id of answerWordIds(a, set, savedRefs)) {
         const s = out.get(id);
         if (!s) continue;
@@ -1966,7 +1990,7 @@ function focusBlock(focus: ExerciseFocus, from: "settings" | "request", availabl
  * distractors, the item mix and the new words; it never changes which library words are asked.
  */
 const LEVEL_GUIDE: Record<ExerciseLevel, string> = {
-  A2: "A2: short sentences (5–8 words), présent and passé composé, concrete everyday situations; distractors of the same part of speech but clearly different in meaning; mostly recognition (meaning fr→ru, pairs, register), at most a quarter production (meaning ru→fr, cloze); new words A1–A2.",
+  A2: "A2: short sentences (5–8 words), présent and passé composé, concrete everyday situations; distractors of the same part of speech but clearly different in meaning; mostly recognition (meaning fr→ru, pairs), at most a quarter production (meaning ru→fr, cloze); new words A1–A2.",
   B1: "B1: sentences of 8–12 words, the common tenses (imparfait, futur, conditionnel of politeness), everyday life in France (housing, work, administration, health); distractors from the same theme; about half recognition, half production (cloze, meaning ru→fr, situation); new words up to B1.",
   B2: "B2: sentences of 12–18 words with a subordinate clause or a connector (bien que, alors que, pourtant), opinions and society (news, work, environment); distractors close in meaning: near-synonyms, false friends, a wrong collocation or register; mostly production (cloze, meaning ru→fr, situation); new words B1–B2.",
   C1: "C1: longer sentences with nuance (subjonctif, concession, nominalisation), abstract or idiomatic contexts; distractors that differ by nuance, collocation or register only; mostly production and situation items; new words B2–C1.",
@@ -2006,7 +2030,7 @@ export const exerciseMaterial = tool({
   name: "exercise_material",
   title: "Material for an exercise",
   description:
-    `Read what an exercise set («Упражнения») should practise, before create_exercise_set. \`words\`: the live words of the given themes (all themes without \`folders\`), weakest first, each with \`signals\` merged from the last \`days\`: exercise answers (ex_attempts, ex_misses, confusions = wrong options the user picked), reviews graded «Снова»/«Трудно» (review_misses), lapses, due today and difficult cards. Words «на паузе» and deleted words are left out, and so are themes «на паузе» unless named in \`folders\`. With \`topic\` (a free-text subject like «вечеринка»), \`topic_matches\` lists saved words that fit it: use them by word_id and never put them in new_words (a muted one can't be used at all). \`recent_sets\` are the latest sets with their words, so the next one doesn't repeat them. \`focus\` is the user's «Чаще в упражнениях» (from Settings, or \`focus\` in the input when the user asks otherwise in this chat): when it is on, the matching words (difficult and/or due today) come first and carry \`focus: true\`, and its \`note\` says how many of the questions must be about them; honour it. With \`only\` («по трудным словам», «по словам к повторению», «без тем»), \`words\` are only the user's difficult and/or due words from every theme (\`folders\` still narrows), \`topic\` and \`focus\` are left out, and \`scope\` says how many there are (\`available\`), how many questions to make (\`suggested_items\`: fewer words → a shorter set, at least ${ITEMS_MIN}) and what to do when there are none. With \`verbs\` («упражнение на спряжение глаголов»), \`words\` are only the verbs conjugate items can ask about (\`conjugable: true\`: a saved conjugation or one the app builds). Each word carries its «Уровень языка» (\`level\`). \`level\` says the levels to write the questions at: the ones asked (\`levels\` in the input, «уровня B1» or «уровня B1–B2» in the request) or, without them, the median level of the words (\`from: "auto"\`); follow \`guide\` for the sentences, distractors, item mix and new words.`,
+    `Read what an exercise set («Упражнения») should practise, before create_exercise_set (a set for the app) or play_exercises / exercise_artifact (a round in the chat). \`words\`: the live words of the given themes (all themes without \`folders\`), weakest first, each with \`signals\` merged from the last \`days\`: exercise answers (ex_attempts, ex_misses, confusions = wrong options the user picked), reviews graded «Снова»/«Трудно» (review_misses), lapses, due today and difficult cards. Words «на паузе» and deleted words are left out, and so are themes «на паузе» unless named in \`folders\`. With \`topic\` (a free-text subject like «вечеринка»), \`topic_matches\` lists saved words that fit it: use them by word_id and never put them in new_words (a muted one can't be used at all). \`recent_sets\` are the latest sets with their words, so the next one doesn't repeat them. \`focus\` is the user's «Чаще в упражнениях» (from Settings, or \`focus\` in the input when the user asks otherwise in this chat): when it is on, the matching words (difficult and/or due today) come first and carry \`focus: true\`, and its \`note\` says how many of the questions must be about them; honour it. With \`only\` («по трудным словам», «по словам к повторению», «без тем»), \`words\` are only the user's difficult and/or due words from every theme (\`folders\` still narrows), \`topic\` and \`focus\` are left out, and \`scope\` says how many there are (\`available\`), how many questions to make (\`suggested_items\`: fewer words → a shorter set, at least ${ITEMS_MIN}) and what to do when there are none. With \`verbs\` («упражнение на спряжение глаголов»), \`words\` are only the verbs conjugate items can ask about (\`conjugable: true\`: a saved conjugation or one the app builds). Each word carries its «Уровень языка» (\`level\`). \`level\` says the levels to write the questions at: the ones asked (\`levels\` in the input, «уровня B1» or «уровня B1–B2» in the request) or, without them, the median level of the words (\`from: "auto"\`); follow \`guide\` for the sentences, distractors, item mix and new words.`,
   input: z.object({
     folders: jsonArray(z.array(folderSelector).max(10)).nullable().optional().describe(`Themes to draw words from (id, slug, name or "${INBOX_SELECTOR}"); default every theme.`),
     topic: z.string().trim().max(TOPIC_MAX).nullable().optional().describe("A free-text topic («вечеринка», «в баре»), when the user asked for one."),
@@ -2099,10 +2123,10 @@ export const exerciseMaterial = tool({
         .slice(0, RECENT_SETS)
         .map((s) => ({ id: s.id, title: s.title, topic: s.topic, created_at: s.created_at, count: s.items.length, words: setWords(s) })),
       note: verbs
-        ? `A verb set is a short test: ${VERB_SET_SIZE} items (6–10, at most ${CONJUGATE_MAX} conjugate), mostly conjugate items (word_id, tense, person; the server writes the form and the options) mixing the 4 tenses and the persons, plus 2–3 cloze items with a time marker for passé composé vs imparfait; the same verb at most twice and never back to back. Save it with one create_exercise_set call${only ? ` with scope: "${only}" (scope.note)` : ""}.`
+        ? `A verb set is a short test: ${VERB_SET_SIZE} items (6–10, at most ${CONJUGATE_MAX} conjugate), mostly conjugate items (word_id, tense, person; the server writes the form and the options) mixing the 4 tenses and the persons, plus 2–3 cloze items with a time marker for passé composé vs imparfait; the same verb at most twice and never back to back. Send it in one create_exercise_set call (in the chat: play_exercises)${only ? ` with scope: "${only}" (scope.note)` : ""}.`
         : only
-          ? "Follow scope.note: only these words, each in 2–3 types, the weakest late; save them with one create_exercise_set call with scope."
-          : "Build 10–15 items of at least 3 types, put the weakest words late and twice, and save them with one create_exercise_set call.",
+          ? "Follow scope.note: only these words, each in 2–3 types, the weakest late; send them in one create_exercise_set call with scope (in the chat: play_exercises)."
+          : "Build 10–15 items of at least 3 types, put the weakest words late and twice, and send them in one create_exercise_set call (in the chat: play_exercises).",
     };
   },
 });
@@ -2112,9 +2136,9 @@ const exerciseText = (max: number, what: string) => z.string().max(max).nullable
 const exerciseItemSchema = z.object({
   id: z.union([z.string().max(40), z.number()]).nullable().optional().describe("Ignored: the server numbers the items q1…qN in the order sent."),
   type: z
-    .enum(ITEM_TYPES)
+    .enum(ITEM_TYPES, { error: (issue) => (issue.input === "register" ? REGISTER_GONE : undefined) })
     .describe(
-      "choice: 4 options (answer + 3 distractors). cloze: a French sentence with a gap. register: the user picks the word's slang level (нейтр./fam./arg./vulg.). pairs: match 4–6 words with their translations. conjugate: pick the right form of a verb (word_id or new_ref) for a tense and person; the server writes the infinitive prompt, the answer, the gap («tu ___») and, when left out, 3 distractors from the verb's conjugation.",
+      "choice: 4 options (answer + 3 distractors). cloze: a French sentence with a gap. pairs: match 4–6 words with their translations. conjugate: pick the right form of a verb (word_id or new_ref) for a tense and person; the server writes the infinitive prompt, the answer, the gap («tu ___») and, when left out, 3 distractors from the verb's conjugation.",
     ),
   skill: z
     .enum(SKILLS)
@@ -2126,17 +2150,17 @@ const exerciseItemSchema = z.object({
   tense: z.enum(TENSES).nullable().optional().describe("conjugate only: the tense asked."),
   person: z.enum(PERSONS).nullable().optional().describe("conjugate only: the person asked (il = il / elle / on; the forms have no feminine agreement, so never ask for elle / elles)."),
   ask: z.enum(["fr", "ru"]).nullable().optional().describe("choice + meaning: fr (default) shows the French word with Russian options; ru the reverse. Distractors must be in the options' language (Russian for fr, French for ru): a mix is refused."),
-  word_id: z.string().trim().min(1).max(64).nullable().optional().describe("The library word the item is about (from exercise_material). choice, cloze, register, conjugate: word_id or new_ref."),
+  word_id: z.string().trim().min(1).max(64).nullable().optional().describe("The library word the item is about (from exercise_material). choice, cloze, conjugate: word_id or new_ref."),
   new_ref: z.string().trim().min(1).max(REF_MAX).nullable().optional().describe("A new_words[].ref instead of word_id, for a word that is not in the library."),
-  prompt: exerciseText(TEXT_MAX, "The question on the card (Russian or French). Required for choice skills other than meaning; for cloze and register an optional instruction; conjugate ignores it (the server writes the infinitive)."),
+  prompt: exerciseText(TEXT_MAX, "The question on the card (Russian or French). Required for choice skills other than meaning; for cloze an optional instruction; conjugate ignores it (the server writes the infinitive)."),
   sentence: exerciseText(TEXT_MAX, "cloze only: a natural French sentence with exactly one [[…]] gap around the answer: «J'ai trop [[kiffé]] ce concert.»"),
   sentence_ru: exerciseText(TEXT_MAX, "cloze only: a short Russian hint of the situation. It must never translate the missing word."),
-  answer: exerciseText(ANSWER_MAX, "The right option (choice, cloze; a cloze answer defaults to its gap). Left out for meaning, register, conjugate and pairs: the server writes it (meaning fr→ru: the word's first Russian equivalent, so distractors are single equivalents too)."),
+  answer: exerciseText(ANSWER_MAX, "The right option (choice, cloze; a cloze answer defaults to its gap). Left out for meaning, conjugate and pairs: the server writes it (meaning fr→ru: the word's first Russian equivalent, so distractors are single equivalents too)."),
   distractors: jsonArray(z.array(z.string().max(ANSWER_MAX)).max(6))
     .nullable()
     .optional()
     .describe(
-      "choice and cloze: exactly 3 wrong options, same part of speech, gender, register and about the same length as the answer, each clearly wrong. Empty for register and pairs. conjugate: leave out (the server picks other forms of the verb), or send 3 forms of the same verb without the pronoun.",
+      "choice and cloze: exactly 3 wrong options, same part of speech, gender, register and about the same length as the answer, each clearly wrong. Empty for pairs. conjugate: leave out (the server picks other forms of the verb), or send 3 forms of the same verb without the pronoun.",
     ),
   pairs: jsonArray(z.array(z.string().trim().min(1).max(64)).max(10)).nullable().optional().describe("pairs only: 4–6 word_ids or new_refs with distinct translations; the server builds the tiles."),
   explain_ru: exerciseText(EXPLAIN_MAX, "Optional one-line Russian explanation shown after the answer («верлан от femme»)."),
@@ -2187,44 +2211,93 @@ async function focusShareWarning(deps: ToolDeps, set: ExerciseSet, focus: Exerci
   };
 }
 
+/** A set as Claude sends it: create_exercise_set's input, shared with the chat tools below. */
+const setInput = z.object({
+  client_ref: z
+    .string()
+    .trim()
+    .min(1)
+    .max(40)
+    .describe("A unique name you make up for this set, e.g. «eda-2026-10-23». Keep it when retrying the same set; use a new one for a different set."),
+  title: z.string().trim().min(1).max(TITLE_MAX).describe("Short Russian title the list shows, e.g. «Вечеринка · сленг»."),
+  topic: z.string().trim().max(TOPIC_MAX).nullable().optional().describe("The free-text topic, when the user asked for one («вечеринка»)."),
+  folders: jsonArray(z.array(folderSelector).max(10))
+    .nullable()
+    .optional()
+    .describe(`Themes the set was built from (id, slug, name or "${INBOX_SELECTOR}"). New words the user adds from the app go into the first one.`),
+  items: jsonArray(z.array(exerciseItemSchema).min(ITEMS_MIN).max(ITEMS_MAX)).describe("The questions, in the order they are played: recognise before produce, weak words late."),
+  new_words: jsonArray(z.array(exerciseNewWordSchema).max(NEW_WORDS_MAX))
+    .nullable()
+    .optional()
+    .describe("Words that are not in the library yet, in the add_words format plus ref and source_url. Each gets an intro card before its first item. Must be empty with `scope`."),
+  scope: z
+    .enum(SCOPE_VALUES)
+    .nullable()
+    .optional()
+    .describe("The exercise_material `only` the set was built with (difficult, due or both): the app shows it as «Трудные · все темы» etc. Leave it out for an ordinary set."),
+  levels: jsonArray(z.array(z.enum(EXERCISE_LEVELS)).max(EXERCISE_LEVELS.length))
+    .nullable()
+    .optional()
+    .describe("exercise_material's `level.targets`: the levels the questions were written at; the app shows them on the set's tile («B1–B2»)."),
+  level_auto: z
+    .boolean()
+    .nullable()
+    .optional()
+    .describe("true when they came from the words (exercise_material's `level.from` \"auto\"): the app shows «≈B1»."),
+});
+
+type SetArgs = z.output<typeof setInput>;
+
+/**
+ * A new set's content exactly as create_exercise_set saves it: themes resolved (unknown and deleted
+ * ones refused), completeSet fills what the server writes, validateSet and the scope rule refuse a
+ * broken set with every problem by path. `refusal` opens the message, `retry` says what to call.
+ */
+async function buildSet(deps: ToolDeps, args: SetArgs, folders: readonly Folder[], refusal: string, retry: string): Promise<{ content: ExerciseSetContent; words: Word[] }> {
+  // Ids and order of themes as named; resolveFolder refuses unknown and deleted ones.
+  const folderIds = [...new Set((args.folders ?? []).map((s) => resolveFolder(s, folders)?.id ?? INBOX_SELECTOR))];
+  const words = await deps.repo.words();
+  const ctx = contextFromWords(words, CONJ_DATA);
+  const content = completeSet(
+    {
+      title: args.title,
+      topic: args.topic,
+      folders: folderIds,
+      scope: args.scope ?? null,
+      levels: args.levels ?? [],
+      level_auto: args.level_auto ?? false,
+      // Ids Claude sent are dropped: the server numbers q1…qN, so they never clash.
+      items: args.items.map((item) => ({ ...item, id: null })),
+      new_words: (args.new_words ?? []).map((w) => ({
+        ...w,
+        gender: w.pos === "noun" ? (w.gender ?? "none") : "none",
+        slang_level: (w.slang_level ?? 0) as SlangLevel,
+      })),
+    },
+    ctx,
+  );
+  const check = validateSet(content, ctx);
+  // A scoped set is made only of the user's own words: no new words from the web.
+  const errors = [
+    ...(content.scope && content.new_words.length > 0
+      ? [{ path: "new_words", message: `must be empty in a set with scope "${content.scope}" (only the user's ${FOCUS_WORDS_EN[content.scope]} words); drop the new words and their items` }]
+      : []),
+    ...check.errors,
+  ];
+  if (errors.length > 0) {
+    const lines = errors.slice(0, 30).map((e) => `- ${e.path}: ${e.message}`);
+    const more = errors.length > 30 ? `\n- …and ${errors.length - 30} more` : "";
+    throw new ToolError(`${refusal}. Fix every problem below, then ${retry}:\n${lines.join("\n")}${more}`);
+  }
+  return { content, words };
+}
+
 export const createExerciseSet = tool({
   name: "create_exercise_set",
   title: "Save an exercise set",
   description:
-    `Save one exercise set («Упражнения») that the app plays offline; it never changes the review schedule. Call exercise_material first, then send the whole set in one call: ${ITEMS_MIN}–${ITEMS_MAX} items (10–15 is best) of at least 3 types (a verb set: ${VERB_SET_SIZE} items, mostly conjugate, at most ${CONJUGATE_MAX} conjugate). Items are about library words (word_id) or new words (new_ref → new_words, at most ${NEW_WORDS_MAX}, found with your web search; the user adds them from the app, so never add_words them yourself). The server numbers the items, copies each word into the set, writes the meaning prompt and answer, the register answer, the pairs tiles and the conjugate forms, and checks every rule: a refusal names each problem by path (items[7].distractors …); fix them all and call again with the same client_ref. With \`scope\` (a set from exercise_material \`only\`: only the user's difficult and/or due words) new_words must be empty. \`warnings\` never block (focus_share: the set has fewer questions about the words of the user's saved «Чаще в упражнениях» than it asks for; follow exercise_material's \`focus\` next time; scope_words: a scoped set uses words that are not difficult / due; level_words: words in the sentences, the French options or new_words that the app rates two levels or more above the highest of \`levels\`, a hint to simplify them, the asked words aside). A retry with the same client_ref returns already_saved: true and writes nothing. The result is a short summary, not the set. Undo with delete_exercise_set.`,
-  input: z.object({
-    client_ref: z
-      .string()
-      .trim()
-      .min(1)
-      .max(40)
-      .describe("A unique name you make up for this set, e.g. «eda-2026-10-23». Keep it when retrying the same set; use a new one for a different set."),
-    title: z.string().trim().min(1).max(TITLE_MAX).describe("Short Russian title the list shows, e.g. «Вечеринка · сленг»."),
-    topic: z.string().trim().max(TOPIC_MAX).nullable().optional().describe("The free-text topic, when the user asked for one («вечеринка»)."),
-    folders: jsonArray(z.array(folderSelector).max(10))
-      .nullable()
-      .optional()
-      .describe(`Themes the set was built from (id, slug, name or "${INBOX_SELECTOR}"). New words the user adds from the app go into the first one.`),
-    items: jsonArray(z.array(exerciseItemSchema).min(ITEMS_MIN).max(ITEMS_MAX)).describe("The questions, in the order they are played: recognise before produce, weak words late."),
-    new_words: jsonArray(z.array(exerciseNewWordSchema).max(NEW_WORDS_MAX))
-      .nullable()
-      .optional()
-      .describe("Words that are not in the library yet, in the add_words format plus ref and source_url. Each gets an intro card before its first item. Must be empty with `scope`."),
-    scope: z
-      .enum(SCOPE_VALUES)
-      .nullable()
-      .optional()
-      .describe("The exercise_material `only` the set was built with (difficult, due or both): the app shows it as «Трудные · все темы» etc. Leave it out for an ordinary set."),
-    levels: jsonArray(z.array(z.enum(EXERCISE_LEVELS)).max(EXERCISE_LEVELS.length))
-      .nullable()
-      .optional()
-      .describe("exercise_material's `level.targets`: the levels the questions were written at; the app shows them on the set's tile («B1–B2»)."),
-    level_auto: z
-      .boolean()
-      .nullable()
-      .optional()
-      .describe("true when they came from the words (exercise_material's `level.from` \"auto\"): the app shows «≈B1»."),
-  }),
+    `Save one exercise set («Упражнения») that the app plays offline; it never changes the review schedule. For a set to play in the app («в приложении», or a request pasted from the app); for a round in the chat use play_exercises. Call exercise_material first, then send the whole set in one call: ${ITEMS_MIN}–${ITEMS_MAX} items (10–15 is best) of at least 3 types (a verb set: ${VERB_SET_SIZE} items, mostly conjugate, at most ${CONJUGATE_MAX} conjugate). Items are about library words (word_id) or new words (new_ref → new_words, at most ${NEW_WORDS_MAX}, found with your web search; the user adds them from the app, so never add_words them yourself). The server numbers the items, copies each word into the set, writes the meaning prompt and answer, the pairs tiles and the conjugate forms, and checks every rule: a refusal names each problem by path (items[7].distractors …); fix them all and call again with the same client_ref. With \`scope\` (a set from exercise_material \`only\`: only the user's difficult and/or due words) new_words must be empty. \`warnings\` never block (focus_share: the set has fewer questions about the words of the user's saved «Чаще в упражнениях» than it asks for; follow exercise_material's \`focus\` next time; scope_words: a scoped set uses words that are not difficult / due; level_words: words in the sentences, the French options or new_words that the app rates two levels or more above the highest of \`levels\`, a hint to simplify them, the asked words aside). A retry with the same client_ref returns already_saved: true and writes nothing. The result is a short summary, not the set: don't write the questions into the chat. Undo with delete_exercise_set.`,
+  input: setInput,
   write: true,
   retryHint: "Retrying with the same client_ref is safe: a set that was saved comes back as already_saved.",
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -2244,41 +2317,7 @@ export const createExerciseSet = tool({
     if (stored) {
       throw new ToolError(`The set saved with this client_ref («${stored.title}») was deleted. Bring it back with restore_exercise_set (id ${stored.id}), or use a new client_ref.`);
     }
-    // Ids and order of themes as named; resolveFolder refuses unknown and deleted ones.
-    const folderIds = [...new Set((args.folders ?? []).map((s) => resolveFolder(s, folders)?.id ?? INBOX_SELECTOR))];
-    const words = await deps.repo.words();
-    const ctx = contextFromWords(words, CONJ_DATA);
-    const content = completeSet(
-      {
-        title: args.title,
-        topic: args.topic,
-        folders: folderIds,
-        scope: args.scope ?? null,
-        levels: args.levels ?? [],
-        level_auto: args.level_auto ?? false,
-        // Ids Claude sent are dropped: the server numbers q1…qN, so they never clash.
-        items: args.items.map((item) => ({ ...item, id: null })),
-        new_words: (args.new_words ?? []).map((w) => ({
-          ...w,
-          gender: w.pos === "noun" ? (w.gender ?? "none") : "none",
-          slang_level: (w.slang_level ?? 0) as SlangLevel,
-        })),
-      },
-      ctx,
-    );
-    const check = validateSet(content, ctx);
-    // A scoped set is made only of the user's own words: no new words from the web.
-    const errors = [
-      ...(content.scope && content.new_words.length > 0
-        ? [{ path: "new_words", message: `must be empty in a set with scope "${content.scope}" (only the user's ${FOCUS_WORDS_EN[content.scope]} words); drop the new words and their items` }]
-        : []),
-      ...check.errors,
-    ];
-    if (errors.length > 0) {
-      const lines = errors.slice(0, 30).map((e) => `- ${e.path}: ${e.message}`);
-      const more = errors.length > 30 ? `\n- …and ${errors.length - 30} more` : "";
-      throw new ToolError(`The set was not saved. Fix every problem below, then call create_exercise_set again with the same client_ref:\n${lines.join("\n")}${more}`);
-    }
+    const { content, words } = await buildSet(deps, args, folders, "The set was not saved", "call create_exercise_set again with the same client_ref");
     const now = deps.now().toISOString();
     const row: ExerciseSet = { id, ...content, source: "chat", created_at: now, updated_at: now, deleted_at: null };
     const saved = await writeExerciseSet(deps, row, "A set with this client_ref was saved at the same time. Call list_exercise_sets to see it.");
@@ -2299,11 +2338,312 @@ export const createExerciseSet = tool({
   },
 });
 
+// «Упражнения в чате»: the same set played right in the chat. play_exercises shows the player (an
+// MCP App, CHAT_PLAYER_URI), exercise_artifact hands it over as an HTML page, and both write
+// nothing; save_exercise_result saves the set and the round only when the user agrees.
+
+/** play_exercises / exercise_artifact: a new set (as for create_exercise_set), or `set_id` of a saved one. */
+const chatSetInput = setInput.partial({ client_ref: true, title: true, items: true }).extend({
+  set_id: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .nullable()
+    .optional()
+    .describe("Instead of the set's fields: play a saved set again (its id from list_exercise_sets, or a previous result's set_id)."),
+});
+
+type ChatSetArgs = z.output<typeof chatSetInput>;
+
+/** The new set's fields, or a refusal naming what is missing. */
+function newSetArgs(args: ChatSetArgs): SetArgs {
+  const { client_ref, title, items } = args;
+  if (!client_ref || !title || !items) {
+    throw new ToolError("Send either set_id (a saved set) or the set itself: client_ref, title and items, as for create_exercise_set.");
+  }
+  return { ...args, client_ref, title, items };
+}
+
+/**
+ * The items of a stored set that the chat plays, as the app would: not about a library word deleted
+ * or «на паузе» since (lib/exercises.ts playContext), and of a type still made (old register items
+ * and unknown types are skipped).
+ */
+function chatItemIds(set: Pick<ExerciseSet, "items">, words: readonly Word[]): string[] {
+  const blocked = new Set(words.filter((w) => w.deleted_at !== null || w.muted).map((w) => w.id));
+  const made = new Set<string>(ITEM_TYPES);
+  const types = new Map(set.items.map((i) => [i.id, i.type as string]));
+  return playableItemIds(set, blocked).filter((id) => made.has(types.get(id) ?? ""));
+}
+
+const chatSet = (clientRef: string, setId: string, content: ExerciseSetContent, saved: boolean): ChatPlayerSet => ({
+  kind: "kartochki-exercise-set",
+  version: 1,
+  client_ref: clientRef,
+  set_id: setId,
+  title: content.title,
+  topic: content.topic,
+  folders: content.folders,
+  scope: content.scope,
+  levels: content.levels,
+  level_auto: content.level_auto,
+  items: content.items,
+  new_words: content.new_words,
+  saved,
+});
+
+/**
+ * The set the player gets: a saved one by `set_id` (its playable items; a stored set has no
+ * client_ref, so its id stands in), else the new set built and checked as create_exercise_set does,
+ * never written. A client_ref whose set is saved already is refused, so a round's answers always
+ * match the questions that are saved under it.
+ */
+async function chatPlayerSet(deps: ToolDeps, args: ChatSetArgs, toolName: string): Promise<{ set: ChatPlayerSet; skipped: number }> {
+  const sets = await deps.repo.exerciseSets();
+  if (args.set_id) {
+    const stored = sets.find((s) => s.id === args.set_id);
+    if (!stored) throw new ToolError(`No exercise set with id "${args.set_id}". Call list_exercise_sets for the sets.`);
+    if (stored.deleted_at !== null) throw new ToolError(`The set «${stored.title}» was deleted. Bring it back with restore_exercise_set (id ${stored.id}) first, if the user wants it.`);
+    const ids = new Set(chatItemIds(stored, await deps.repo.words()));
+    if (ids.size === 0) {
+      throw new ToolError(`Nothing of «${stored.title}» can be played: its words were deleted or paused since it was made, or its questions are of a type no longer used. Make a new set instead.`);
+    }
+    const items = stored.items.filter((i) => ids.has(i.id));
+    return { set: chatSet(stored.id, stored.id, { ...stored, items }, true), skipped: stored.items.length - items.length };
+  }
+  const input = newSetArgs(args);
+  const id = exerciseSetId(input.client_ref);
+  const stored = sets.find((s) => s.id === id);
+  if (stored) {
+    throw new ToolError(
+      `A set with this client_ref is saved already («${stored.title}»${stored.deleted_at !== null ? ", deleted since" : ""}): to play it again pass set_id "${stored.id}" alone; for a different set use a new client_ref.`,
+    );
+  }
+  const { content } = await buildSet(deps, input, await deps.repo.folders(), "The set was not shown", `call ${toolName} again with the same client_ref`);
+  return { set: chatSet(input.client_ref, id, content, false), skipped: 0 };
+}
+
+const questionsText = (set: ChatPlayerSet, skipped: number) =>
+  `«${set.title}», ${set.items.length} questions` +
+  (set.new_words.length > 0 ? `, ${set.new_words.length} new words with intro cards` : "") +
+  (skipped > 0 ? ` (${skipped} skipped: their words were deleted or paused, or their type is no longer used)` : "");
+
+const SAVE_ONLY_IF_ASKED = `Nothing is saved unless the user agrees: then ${SAVE_RESULT_TOOL} saves the round to «Упражнения»`;
+
+export const playExercises = tool({
+  name: "play_exercises",
+  title: "Play exercises in the chat",
+  description:
+    `Show an exercise round right in the chat («Упражнения в чате»): an interactive player with the app's rules and look (4 options, «Не знаю», a miss comes back up to ${MAX_ATTEMPTS} times, intro cards for new words, pairs, conjugation, a summary at the end). Use it when the user asks for exercises in the chat («в чате», «здесь», «прямо тут»); for the app use create_exercise_set. Call exercise_material first, then send the set exactly as for create_exercise_set (same fields and rules; a refusal names each problem by path: fix them all and call again with the same client_ref), or \`set_id\` alone to play a saved set again. Writes nothing: the player's «Сохранить в Карточки» saves the set and the result (${SAVE_RESULT_TOOL}) only if the user taps it. Never write the questions, options or answers in the chat: the user sees them in the player. If the user says they don't see a player, or this host shows no apps (e.g. Claude Code), call exercise_artifact with the same input.`,
+  input: chatSetInput,
+  write: false,
+  // The tool's MCP App: the host renders the player and hands it the result's structuredContent.
+  // "ui/resourceUri" is the flat key of the spec's drafts, still read by older hosts.
+  meta: { ui: { resourceUri: CHAT_PLAYER_URI }, "ui/resourceUri": CHAT_PLAYER_URI },
+  annotations: READ,
+  async run(deps, args) {
+    const { set, skipped } = await chatPlayerSet(deps, args, "play_exercises");
+    const message =
+      `The player is shown in the chat: ${questionsText(set, skipped)}; set_id ${set.set_id}${set.saved ? " (saved in «Упражнения» already: saving adds only the result)" : ""}. ` +
+      `Don't repeat the questions, options or answers in the chat; say in a line or two that the exercise is ready to play above. ` +
+      `${SAVE_ONLY_IF_ASKED} (the player's «Сохранить в Карточки» does it itself). ` +
+      `If the user says they don't see a player, call exercise_artifact with the same input and publish its HTML as an artifact.`;
+    return { set, message };
+  },
+  reply: (out) => ({ content: [{ type: "text", text: out.message }], structuredContent: out.set as unknown as Record<string, unknown> }),
+});
+
+export const exerciseArtifact = tool({
+  name: "exercise_artifact",
+  title: "Exercise player as an HTML page",
+  description:
+    `The same exercise player as play_exercises, as a standalone HTML page to publish as an artifact: for a host that shows no apps (e.g. Claude Code), when the user doesn't see the player, or wants a page to keep. Same input as play_exercises (the set, or \`set_id\` of a saved one); writes nothing. The result is a one-line instruction and the page's HTML: publish the HTML verbatim as an HTML artifact, and don't write the questions or answers in the chat. Its «Скопировать результат» copies a ${RUN_LINE_PREFIX.trim()} line: save it with ${SAVE_RESULT_TOOL} (run_line) only after the user agrees. An exercise artifact the user already has is rebuilt only when they ask to change it (more questions, another topic): exercise_material, then exercise_artifact keeping its title and topic.`,
+  input: chatSetInput,
+  write: false,
+  annotations: READ,
+  async run(deps, args) {
+    const { set, skipped } = await chatPlayerSet(deps, args, "exercise_artifact");
+    const html = fillArtifact(CHAT_PLAYER_ARTIFACT, set);
+    const saveWith = set.saved ? `set_id "${set.set_id}"` : "the same set input (client_ref, title, items and the rest)";
+    const message =
+      `Publish the HTML in the next part verbatim as an HTML artifact titled «${set.title}» (don't edit, shorten or reformat it), then say in a line that it is ready: ${questionsText(set, skipped)}. ` +
+      `Don't write the questions or answers in the chat. ${SAVE_ONLY_IF_ASKED}: when the user pastes the «Скопировать результат» line (${RUN_LINE_PREFIX.trim()} …) and agrees, call ${SAVE_RESULT_TOOL} with ${saveWith} and run_line.`;
+    return { message, html, set_id: set.set_id };
+  },
+  // The page goes to the model as text, once: no structuredContent copy of it.
+  reply: (out) => ({ content: [{ type: "text", text: out.message }, { type: "text", text: out.html }] }),
+});
+
+/** A run row id for a round played in the chat: "xr-" + sha256(set id, started_at), so a second save is the same row. */
+export const chatRunId = (setId: string, startedAt: string): string =>
+  "xr-" + createHash("sha256").update(`${setId}\n${startedAt}`).digest("hex").slice(0, 24);
+
+/** Answer rows of a round: every attempt, and a pairs board's mismatches (ITEMS_MAX × attempts, with room). */
+const ANSWERS_MAX = 400;
+
+const isoTime = z
+  .string()
+  .trim()
+  .max(40)
+  .refine((s) => !Number.isNaN(Date.parse(s)), "not a date-time");
+const toIso = (s: string) => new Date(s).toISOString();
+
+const answerSchema = z.object({
+  item_id: z.string().trim().min(1).max(40),
+  word_id: z.string().trim().min(1).max(64).nullable().optional(),
+  new_ref: z.string().trim().min(1).max(REF_MAX).nullable().optional(),
+  attempt: z.number().int().min(1).max(MAX_ATTEMPTS),
+  outcome: z.enum(["correct", "wrong", "dont_know"]),
+  chosen: z.string().max(ANSWER_MAX).nullable().optional(),
+  ms: z.number().int().min(0).nullable().optional(),
+  at: isoTime,
+});
+
+/** The round to save: the pasted run line, else the player's fields. */
+function chatRunOf(args: { client_ref?: string | null; run_line?: string | null; started_at?: string | null; finished_at?: string | null; answers?: unknown[] | null }): Omit<ChatRunResult, "client_ref"> & { answers: ExerciseAnswer[] } {
+  let raw: { started_at?: string | null; finished_at?: string | null; answers?: unknown };
+  if (args.run_line) {
+    const parsed = parseRunLine(args.run_line);
+    if (!parsed) throw new ToolError(`run_line is not a result line: paste the whole line the artifact copied, starting with "${RUN_LINE_PREFIX.trim()}".`);
+    if (args.client_ref && parsed.client_ref !== args.client_ref) {
+      throw new ToolError(`run_line is the result of another set (client_ref "${parsed.client_ref}", not "${args.client_ref}"): send that set's input with it.`);
+    }
+    raw = parsed;
+  } else raw = args;
+  const started = isoTime.safeParse(raw.started_at);
+  if (!started.success) throw new ToolError("started_at is missing or not a date-time: send the result line (run_line), or started_at and answers.");
+  const finished = raw.finished_at == null ? null : isoTime.safeParse(raw.finished_at);
+  const answers = z.array(answerSchema).max(ANSWERS_MAX).safeParse(raw.answers);
+  if (!answers.success) {
+    throw new ToolError(`The answers are not a result: ${answers.error.issues.slice(0, 5).map((i) => `answers.${i.path.join(".")}: ${i.message}`).join("; ")}.`);
+  }
+  return {
+    started_at: toIso(started.data),
+    finished_at: finished?.success ? toIso(finished.data) : null,
+    answers: answers.data.map((a) => ({
+      item_id: a.item_id,
+      word_id: a.word_id ?? null,
+      new_ref: a.new_ref ?? null,
+      attempt: a.attempt,
+      outcome: a.outcome,
+      chosen: a.chosen ?? null,
+      ms: a.ms ?? null,
+      at: toIso(a.at),
+    })),
+  };
+}
+
+/** The words a run missed, as list_exercise_sets shows them. */
+const missedView = (run: Pick<ExerciseRun, "answers">, s: ExerciseSet) =>
+  missedWords(run, s).map((m) => ({ ...(m.word_id ? { word_id: m.word_id } : { new_ref: m.new_ref }), fr: m.fr, ru: m.ru, chosen: m.chosen }));
+
+export const saveExerciseResult = tool({
+  name: SAVE_RESULT_TOOL,
+  title: "Save a chat exercise result",
+  description:
+    `Save a round played in the chat (play_exercises or an exercise artifact) to «Упражнения»: the set, if it isn't saved yet (source chat, id from client_ref), and the result, so list_exercise_sets and exercise_material see it. Only when the user agrees: the player's «Сохранить в Карточки» calls it itself; from an artifact the user pastes its «Скопировать результат» line (${RUN_LINE_PREFIX.trim()} …): ask before saving, then send it as run_line with the same set input you played (or set_id for a saved set). The score is recomputed here, and answers to questions that are not in the set are ignored. The same round (client_ref and started_at) is saved once: a repeat returns already_saved and writes nothing. Never changes the review schedule. Undo: delete_exercise_set when this call added the set; a result alone can't be removed.`,
+  input: chatSetInput.extend({
+    run_line: z
+      .string()
+      .max(100_000)
+      .nullable()
+      .optional()
+      .describe(`The line the artifact's «Скопировать результат» copied ("${RUN_LINE_PREFIX.trim()} {…}"), as the user pasted it; instead of started_at, finished_at and answers.`),
+    started_at: isoTime.nullable().optional().describe("When the round started (the player's result)."),
+    finished_at: isoTime.nullable().optional().describe("When it ended; null when the user left it unfinished."),
+    answers: jsonArray(z.array(answerSchema).max(ANSWERS_MAX)).nullable().optional().describe("The player's answer rows, one per attempt (pairs: one per mismatch too)."),
+  }),
+  write: true,
+  retryHint: "Retrying with the same input is safe: a round that was saved comes back as already_saved.",
+  // The player calls it from the chat (MCP Apps `tools/call`), and so can Claude.
+  meta: { ui: { visibility: ["model", "app"] } },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  async run(deps, args) {
+    const result = chatRunOf(args);
+    const [sets, folders] = await Promise.all([deps.repo.exerciseSets(), deps.repo.folders()]);
+    const ownId = args.client_ref ? exerciseSetId(args.client_ref) : null;
+    const setId = args.set_id ?? ownId;
+    if (!setId) throw new ToolError("Send the set (client_ref, title, items, as you played it) or set_id of a saved set, with the result.");
+    const stored = sets.find((s) => s.id === setId);
+    if (stored && stored.deleted_at !== null) {
+      throw new ToolError(`The set «${stored.title}» was deleted, so nothing was saved. Bring it back with restore_exercise_set (id ${stored.id}) and save again, if the user wants.`);
+    }
+    if (!stored && setId !== ownId) throw new ToolError(`No exercise set with id "${setId}". Call list_exercise_sets for the sets.`);
+    let set: ExerciseSet;
+    let words: Word[];
+    if (stored) {
+      set = stored;
+      words = await deps.repo.words();
+    } else {
+      // Built from the set as played and checked again, so a round never saves a set the rules refuse.
+      const built = await buildSet(deps, newSetArgs(args), folders, "Nothing was saved", `call ${SAVE_RESULT_TOOL} again with the same client_ref`);
+      const now = deps.now().toISOString();
+      set = { id: setId, ...built.content, source: "chat", created_at: now, updated_at: now, deleted_at: null };
+      words = built.words;
+    }
+
+    // The questions the chat played, as the app would count them (item_ids [] = every item).
+    const played = chatItemIds(set, words);
+    const itemIds = played.length === set.items.length ? [] : played;
+    const inRun = new Set(played);
+    const answers = result.answers.filter((a) => inRun.has(a.item_id));
+    if (answers.length === 0) throw new ToolError("The result has no answers to this set's questions, so nothing was saved.");
+    const runId = chatRunId(set.id, result.started_at);
+    const done = (await deps.repo.exerciseRunsSince(result.started_at)).find((r) => r.id === runId);
+    if (done) {
+      return {
+        saved: true,
+        already_saved: true,
+        set_id: set.id,
+        run: { id: done.id, first_try: done.first_try, total: done.total, missed: missedView(done, set) },
+        message: "This round was saved before, so nothing was written.",
+        undo: null,
+      };
+    }
+
+    const created = !stored;
+    if (created) set = await writeExerciseSet(deps, set, `A set with this client_ref was saved at the same time. Call ${SAVE_RESULT_TOOL} again to add the result.`);
+    const score = scoreRun({ item_ids: itemIds, answers }, set);
+    const now = deps.now().toISOString();
+    const row: ExerciseRun = {
+      id: runId,
+      set_id: set.id,
+      kind: "set",
+      item_ids: itemIds,
+      started_at: result.started_at,
+      finished_at: result.finished_at,
+      answers,
+      total: score.total,
+      first_try: score.first_try,
+      updated_at: now,
+      deleted_at: null,
+    };
+    const [run] = await deps.repo.upsert("exercise_runs", [row]);
+    if (!run || run.updated_at !== row.updated_at) throw new ToolError(`The result was saved at the same time. Call ${SAVE_RESULT_TOOL} again to see it.`);
+    return {
+      saved: true,
+      already_saved: false,
+      set_id: set.id,
+      set_saved: created,
+      set: setSummary(set),
+      run: { id: run.id, first_try: run.first_try, total: run.total, missed: missedView(run, set) },
+      ...(answers.length < result.answers.length ? { ignored_answers: result.answers.length - answers.length } : {}),
+      // A run has no undo of its own (only the playing side writes runs, and the app has no way to
+      // remove one); a set this call added takes its result with it when deleted.
+      undo: created ? { tool: "delete_exercise_set", id: set.id } : null,
+      note: created
+        ? `Undo deletes the whole set with its result. ${SYNC_NOTE}`
+        : `The set was saved before: only the result was added, and it can't be undone on its own (delete_exercise_set would hide the whole set). ${SYNC_NOTE}`,
+    };
+  },
+});
+
 export const listExerciseSets = tool({
   name: "list_exercise_sets",
   title: "List exercise sets",
   description:
-    "List the user's exercise sets («Упражнения»), newest first: title, themes, `scope` (difficult / due / both for a set made only of those words, else null), number of questions by type, new words, and `last_run` (the latest playthrough of the whole set that has answers, a finished one first: when, whether it was finished, first-try score, and the words missed with the wrong options picked; register misses carry no options). `last_mistakes_round`, when there is one, is the latest «Повторить ошибки» round in the app over the misses. Use it for «работа над ошибками» and to find a set's id for delete_exercise_set.",
+    "List the user's exercise sets («Упражнения»), newest first: title, themes, `scope` (difficult / due / both for a set made only of those words, else null), number of questions by type, new words, and `last_run` (the latest playthrough of the whole set that has answers, a finished one first: when, whether it was finished, first-try score, and the words missed with the wrong options picked; a round played in the chat counts once saved with save_exercise_result). `last_mistakes_round`, when there is one, is the latest «Повторить ошибки» round in the app over the misses. Use it for «работа над ошибками» and to find a set's id for delete_exercise_set.",
   input: z.object({
     limit: z.number().int().min(1).max(50).default(20),
     include_deleted: z.boolean().default(false).describe("Also list deleted sets (restore_exercise_set brings one back)."),
@@ -2339,7 +2679,7 @@ export const listExerciseSets = tool({
       finished: run.finished_at !== null || runSettled(s, run),
       first_try: run.first_try,
       total: run.total,
-      missed: missedWords(run, s).map((m) => ({ ...(m.word_id ? { word_id: m.word_id } : { new_ref: m.new_ref }), fr: m.fr, ru: m.ru, chosen: m.chosen })),
+      missed: missedView(run, s),
     });
     return {
       total: sets.filter((s) => args.include_deleted || s.deleted_at === null).length,
@@ -2409,6 +2749,7 @@ async function execute<S extends z.ZodObject>(spec: ToolSpec<S>, deps: ToolDeps,
   }
   try {
     const out = await spec.run(deps, args);
+    if (spec.reply) return spec.reply(out);
     return { content: [{ type: "text", text: JSON.stringify(out) }], structuredContent: out };
   } catch (error) {
     if (error instanceof ToolError) return errorResult(error.message);
@@ -2433,7 +2774,13 @@ function register<S extends z.ZodObject>(server: McpServer, deps: ToolDeps, spec
   // Explicit type arguments: with a generic schema the SDK's callback type can't be resolved.
   server.registerTool<StandardSchemaWithJSON, StandardSchemaWithJSON>(
     spec.name,
-    { title: spec.title, description: spec.description, inputSchema: spec.input, annotations: { title: spec.title, ...spec.annotations } },
+    {
+      title: spec.title,
+      description: spec.description,
+      inputSchema: spec.input,
+      annotations: { title: spec.title, ...spec.annotations },
+      ...(spec.meta ? { _meta: spec.meta } : {}),
+    },
     (args) => execute(spec, deps, args as z.output<S>),
   );
 }
@@ -2464,7 +2811,24 @@ export const TOOL_NAMES = [
   listExerciseSets.name,
   deleteExerciseSet.name,
   restoreExerciseSet.name,
+  playExercises.name,
+  exerciseArtifact.name,
+  saveExerciseResult.name,
 ] as const;
+
+/**
+ * The chat player (MCP App) play_exercises points at. Self-contained: inline scripts and styles,
+ * system fonts, no network, so it needs no CSP domains. No `_meta.ui.domain`: a host derives the
+ * sandbox origin from the server URL, and ours carries the secret.
+ */
+function registerChatPlayer(server: McpServer): void {
+  server.registerResource(
+    "exercise_player",
+    CHAT_PLAYER_URI,
+    { title: "Упражнение", description: "The «Карточки» exercise player shown by play_exercises.", mimeType: MCP_APP_MIME },
+    async () => ({ contents: [{ uri: CHAT_PLAYER_URI, mimeType: MCP_APP_MIME, text: CHAT_PLAYER_HTML }] }),
+  );
+}
 
 export function registerTools(server: McpServer, deps: ToolDeps): void {
   register(server, deps, searchWords);
@@ -2492,6 +2856,10 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   register(server, deps, listExerciseSets);
   register(server, deps, deleteExerciseSet);
   register(server, deps, restoreExerciseSet);
+  register(server, deps, playExercises);
+  register(server, deps, exerciseArtifact);
+  register(server, deps, saveExerciseResult);
+  registerChatPlayer(server);
 }
 
 export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard app for colloquial French; the user is a Russian speaker. A card is a French word or phrase (fr) with its Russian translation (ru). Words are grouped into themes («темы»); «${INBOX_NAME}» (inbox) holds words without a theme.
@@ -2507,16 +2875,18 @@ export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard
 - Before adding more than 5 words, and before any move, delete, or renaming, pausing or deleting a theme (update_folder, delete_folder), list what will change and wait for the user's OK.
 - «На паузе»: a theme (update_folder \`muted\`) or a word (update_word \`muted\`) stays in the library with its progress but never comes up in review or practice; \`false\` brings it back. When list_folders shows many themes with words still \`new\` and some of them look like later steps of a sequence (levels, lessons, chapters, a course or book order) or like topics the user said can wait, suggest pausing those so only the current ones reach review: name the themes to pause and the ones that stay, and wait for the OK. When the user moves on, suggest bringing the next ones back. Never pause or unpause on your own.
 - After a change, say what changed and how to undo it with the result's \`undo\` (delete_words, restore_words, restore_moves, set_word_levels, update_study_plan, restore_folder, delete_field, restore_field, delete_exercise_set or restore_exercise_set).
-- Exercises («Упражнения»: «сделай упражнение / тест / квиз по теме …»): call exercise_material first, then save the whole set with exactly one create_exercise_set call. Never write the questions into the chat instead; the app plays the set offline and it never changes the review schedule.
+- Exercises («Упражнения»: «сделай упражнение / тест / квиз по теме …»): call exercise_material first, then send the whole set in one call; where it is played decides which. «В приложении», a request pasted from the app, or no place named → create_exercise_set (the app plays it offline). «В чате», «здесь», «прямо тут» → play_exercises, which shows a player in the chat; «ещё раз» for a saved set → play_exercises with its set_id. Never write the questions, options or answers in the chat yourself. If the user says they don't see a player, or the host shows no apps (e.g. Claude Code), call exercise_artifact with the same input and publish its HTML as an HTML artifact verbatim. Exercises never change the review schedule.
+- A round played in the chat reaches the app only if the user agrees: the player's «Сохранить в Карточки» saves it itself; from an artifact the user pastes its «Скопировать результат» line (KARTOCHKI_RUN …): ask before saving, then call save_exercise_result with it as run_line and the set input you played (or set_id). Never save one unasked.
+- An exercise artifact the user already has: rebuild it only when they ask to change it (more questions, another topic): exercise_material, then exercise_artifact keeping its title and topic, and publish the new HTML.
 - For a free-text topic, use the saved words in topic_matches by word_id. Words found with web search go in new_words (at most 8, each checked in at least 2 sources, slang_level by the rubric, source_url); never add_words them without the user's OK, since the user adds them from the app.
 - choice and cloze have 4 options: the answer plus 3 distractors of the same part of speech, gender, register and length, with exactly one best answer. A cloze's sentence_ru hints at the situation and never translates the gap.
 - Order the items recognise-before-produce (meaning fr→ru and pairs before ru→fr and cloze), put the weakest words (first in exercise_material) late and twice, keep the same word apart, and use 10–15 items of at least 3 types.
 - Honour exercise_material's \`focus\` (the user's «Чаще в упражнениях»): at least the share it names of the questions about the words marked focus: true, even for a plain «сделай упражнение»; pass \`focus\` to exercise_material only when the user asks otherwise in the chat.
-- «По трудным словам», «по словам к повторению», «без тем / из всех тем»: exercise_material \`only\` (difficult, due or both), then create_exercise_set with the same \`scope\`: only those words, \`scope.suggested_items\` questions (a shorter set when there are few, each word in 2–3 types), no new_words; with none available, say so instead of making a set.
-- «Уровень набора» («уровня B1», «уровня B1–B2», «уровень B2» in the request; one or several): pass them as exercise_material \`levels\`; without them, exercise_material's \`level\` takes the words' level. Write the questions at \`level.targets\` following each one's guide (sentence length and tenses, how close the distractors are, recognition vs production, the level of new words), several levels spread about evenly, easier first; never by swapping the library words; save with create_exercise_set \`levels\` (plus \`level_auto: true\` when they came from the words).
+- «По трудным словам», «по словам к повторению», «без тем / из всех тем»: exercise_material \`only\` (difficult, due or both), then the set (create_exercise_set, or play_exercises in the chat) with the same \`scope\`: only those words, \`scope.suggested_items\` questions (a shorter set when there are few, each word in 2–3 types), no new_words; with none available, say so instead of making a set.
+- «Уровень набора» («уровня B1», «уровня B1–B2», «уровень B2» in the request; one or several): pass them as exercise_material \`levels\`; without them, exercise_material's \`level\` takes the words' level. Write the questions at \`level.targets\` following each one's guide (sentence length and tenses, how close the distractors are, recognition vs production, the level of new words), several levels spread about evenly, easier first; never by swapping the library words; send the set with \`levels\` (plus \`level_auto: true\` when they came from the words).
 - «Спряжение глаголов» («упражнение на спряжение глаголов»): exercise_material \`verbs: true\`, then a short set of ${VERB_SET_SIZE} items (6–10): mostly conjugate items (word_id, tense, person; the server writes the form and the options) mixing the 4 tenses and the persons, with 30–40% of the passé composé on être or pronominal verbs; plus 2–3 cloze items with a verb gap and a time marker (hier / tous les jours / demain) for passé composé vs imparfait; the same verb at most twice, never back to back; never elle / elles (the forms have no feminine agreement).
 - «Работа над ошибками»: list_exercise_sets' last_run.missed and exercise_material's signals (ex_misses, confusions) say what to drill; reuse a confused option as a distractor only where it is in the item's options' language (a Russian one for meaning fr→ru, a French one for cloze and ru→fr).
-- After saving, give the set's title and number of questions and how to undo it; it shows in «Упражнения» after the app's next sync.
+- After create_exercise_set or save_exercise_result, give the set's title and number of questions and how to undo it; it shows in «Упражнения» after the app's next sync.
 - Make write calls one at a time, never in parallel: each reads the current rows first, and parallel writes to the same words conflict or slip past the duplicate check.
 - Changes reach the app on its next sync (when it is opened or focused). Reviewing and grading cards happen in the app only.
 - Talk about the app's features plainly; never call them "AI".`;
