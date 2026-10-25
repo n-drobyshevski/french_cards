@@ -1,6 +1,7 @@
 // What the player tells Claude: the one-line result it puts into the model's context when a round
 // ends (ui/update-model-context), and the user message «Обсудить ошибки» sends (ui/message).
 import type { MissedWord, RunScore } from "@/lib/core/exercises";
+import type { ExamMiss } from "./exam";
 
 export const plural = (n: number, forms: readonly [string, string, string]) => {
   const m10 = n % 10;
@@ -16,15 +17,20 @@ const listed = (missed: readonly MissedWord[]) => missed.map((m) => `${m.fr} (${
  * «Упражнение «Сленг» в чате: 3 из 5 с первого раза; ошибки: les flics (копы). Не сохранено в Карточки.»
  * `saved`: the round was saved to the app; a «Повторить ошибки» round is never saved on its own.
  */
-export function roundSummary(title: string, kind: "set" | "mistakes", score: RunScore, missed: readonly MissedWord[], saved: boolean): string {
+export function roundSummary(title: string, kind: "set" | "mistakes", score: RunScore, missed: readonly MissedWord[], saved: boolean, questions: readonly ExamMiss[] = []): string {
   const head = kind === "mistakes" ? `Повтор ошибок упражнения «${title}» в чате` : `Упражнение «${title}» в чате`;
-  const errors = missed.length > 0 ? `; ошибки: ${listed(missed)}` : "; без ошибок";
+  const all = [listed(missed), ...questions.map((q) => `вопрос к тексту «${q.item.prompt ?? ""}»`)].filter(Boolean);
+  const errors = all.length > 0 ? `; ошибки: ${all.join(", ")}` : "; без ошибок";
   const tail = kind === "mistakes" ? "" : saved ? " Результат сохранён в Карточки." : " Результат не сохранён в Карточки (сохраняется только по кнопке в плеере).";
   return `${head}: ${score.first_try} из ${score.total} с первого раза${errors}.${tail}`;
 }
 
-/** «Разбери мои ошибки в упражнении «…»: les flics — копы (мой ответ: «давай»); …» */
-export function mistakesMessage(title: string, missed: readonly MissedWord[]): string {
+/**
+ * «Разбери мои ошибки в упражнении «…»: les flics — копы (мой ответ: «давай»); …», then the missed
+ * questions to texts: «Combien faut-il payer ? — верно «2 010 €» (мой ответ: «1 620 €»)».
+ */
+export function mistakesMessage(title: string, missed: readonly MissedWord[], questions: readonly ExamMiss[] = []): string {
   const lines = missed.map((m) => `${m.fr} — ${m.ru}${m.chosen.length ? ` (мой ответ: ${m.chosen.map((c) => `«${c}»`).join(", ")})` : ""}`);
+  for (const q of questions) lines.push(`${q.item.prompt ?? ""} — верно «${q.right}»${q.chosen !== null ? ` (мой ответ: «${q.chosen}»)` : ""}`);
   return `Разбери мои ошибки в упражнении «${title}»: ${lines.join("; ")}.`;
 }

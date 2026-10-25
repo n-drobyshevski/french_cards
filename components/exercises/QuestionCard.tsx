@@ -7,7 +7,7 @@ import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { SlangMeter } from "@/components/ui/SlangMeter";
 import { TENSE_NAMES } from "@/lib/core/conj-display";
-import { CLOZE_PROMPT, CONJ_PROMPT, PAIRS_PROMPT, clozeParts } from "@/lib/core/exercises";
+import { CLOZE_PROMPT, CONJ_PROMPT, PAIRS_PROMPT, clozeParts, passageLines } from "@/lib/core/exercises";
 import type { ExerciseItem, ExerciseSkill } from "@/lib/types";
 import { ClozeLine } from "./ClozeLine";
 import { isRussian } from "./player-state";
@@ -30,6 +30,8 @@ export function cardLabel(item: Pick<ExerciseItem, "type" | "skill" | "ask"> & P
       return { label: "Пропуск", detail: null };
     case "pairs":
       return { label: "Пары", detail: null };
+    case "reading":
+      return { label: "Текст", detail: null };
     case "choice": {
       const skill = item.skill ?? "meaning";
       const detail =
@@ -122,6 +124,38 @@ function Prompt({ text, open }: { text: string; open?: WordLink | null }) {
 const question = "m-0 mt-5 text-[15px] leading-5 text-muted md:mt-1.5 md:leading-6";
 
 /**
+ * A reading item's text (Ex-Reading-App): a quoted block on a 2px rule, its kind as the mono
+ * caption («ANNONCE»), the French text in Newsreader 15 line by line as written, an ad's «Loyer :»
+ * lead-ins semibold (passageLines, as the chat player sets them).
+ */
+function Passage({ item }: { item: Pick<ExerciseItem, "passage" | "passage_label"> }) {
+  return (
+    <figure className="m-0 border-l-2 border-rule py-0.5 pl-3">
+      {item.passage_label && <figcaption className="font-mono text-[11px] leading-4 tracking-[.06em] text-muted">{item.passage_label}</figcaption>}
+      {passageLines(item.passage ?? "").map((lines, p) => (
+        <p
+          key={p}
+          lang="fr"
+          className={cx("m-0 font-serif text-[15px] leading-5 text-ink md:text-[17px] md:leading-6", p > 0 ? "mt-2" : item.passage_label && "mt-1")}
+        >
+          {lines.map((line, i) => (
+            <span key={i}>
+              {i > 0 && <br />}
+              {line.label && <b className="font-semibold">{line.label}</b>}
+              {line.label && " "}
+              {line.text}
+            </span>
+          ))}
+        </p>
+      ))}
+    </figure>
+  );
+}
+
+/** The question about the text, in French (Newsreader medium 22; 24 from 768). */
+const READING_QUESTION = "m-0 mt-4 font-serif text-[22px] leading-[26px] font-medium tracking-[-0.01em] break-words md:mt-5 md:text-[24px] md:leading-8";
+
+/**
  * The conjugate infinitive, one step below frSize on md: the infinitive, the pronoun line and the
  * question must fit the 296px card with «Ошиблись раньше — ещё раз» on a retry.
  */
@@ -162,7 +196,8 @@ export interface Written {
 /**
  * The question as the review index card (SPEC.md «Упражнения» → Player): 46px header with the red
  * rule — mono skill label left (ЗНАЧЕНИЕ · FR → RU / ФОРМА · RU → FR / ВЕРЛАН / СИТУАЦИЯ / ПРОПУСК /
- * ПАРЫ / СПРЯЖЕНИЕ · PASSÉ COMPOSÉ), «ПОВТОР» on a requeued item, the slang meter right — the question, the stamp, and
+ * ПАРЫ / СПРЯЖЕНИЕ · PASSÉ COMPOSÉ / ТЕКСТ), «ПОВТОР» on a requeued item, the slang meter (a text: its
+ * «≈B1») right — the question, the stamp, and
  * the footer «НАБОР: … · ИЗ ЧАТА». From 768 a 296px card. Phones (`phone`, X-Player-B):
  * PhoneQuestionCard below.
  */
@@ -228,6 +263,16 @@ export function QuestionCard(props: QuestionCardProps) {
         </>
       );
       break;
+    case "reading":
+      body = (
+        <>
+          <Passage item={item} />
+          <h2 lang="fr" className={READING_QUESTION}>
+            {item.prompt ?? ""}
+          </h2>
+        </>
+      );
+      break;
   }
 
   return (
@@ -240,14 +285,18 @@ export function QuestionCard(props: QuestionCardProps) {
       className={cx(
         cardShell,
         "relative min-h-[220px] outline-none flex-1 max-md:[@media(max-height:740px)]:min-h-[180px] md:min-h-0 md:flex-none",
-        item.type === "pairs" ? "md:min-h-[296px]" : "md:h-[296px]",
+        // A board or a text sets its own height; the other cards keep the 296px of the deck.
+        item.type === "pairs" || item.type === "reading" ? "md:min-h-[296px]" : "md:h-[296px]",
       )}
     >
       <QuestionHeader item={item} repeat={repeat} pairsCount={pairsCount} />
       <div
         className={cx(
           "flex min-h-0 flex-1 flex-col px-6 md:px-10",
-          item.type === "pairs" ? "justify-center py-4 md:justify-start md:pt-6" : "justify-center pb-6 md:justify-start md:pt-8 md:pb-2",
+          item.type === "pairs"
+            ? "justify-center py-4 md:justify-start md:pt-6"
+            : // A text card keeps a band free for the stamp above the footer (it lands bottom-right).
+              cx("justify-center pb-6 md:justify-start md:pt-8", item.type === "reading" ? "md:pb-[72px]" : "md:pb-2"),
         )}
       >
         {body}
@@ -294,6 +343,14 @@ function QuestionHeader({ item, repeat, pairsCount }: { item: ExerciseItem; repe
       }
     >
       {word && showsMeter(item) && <SlangMeter level={word.slang_level} verlan={word.verlan} />}
+      {/* A text's level, as Claude wrote it for («Мини-TCF»): «≈B1» right (Ex-Reading-App). */}
+      {item.type === "reading" && item.level && (
+        // aria-label on a plain span is not read: the sentence is sr-only text.
+        <span className="font-mono text-[11px] tracking-[.06em] text-muted">
+          <span aria-hidden="true">≈{item.level}</span>
+          <span className="sr-only">Уровень языка: примерно {item.level}, от Claude</span>
+        </span>
+      )}
     </CardHeader>
   );
 }
@@ -314,7 +371,8 @@ function isParagraph(text: string): boolean {
  * Where the stamp lands on a phone card (X-Player-B): beside the headword when it is short enough to
  * leave the right end free (hero French up to 9 letters, a 32px Russian word up to 11, a conjugate
  * infinitive up to 14), on the second line of a cloze sentence that takes two lines with a short
- * second one (20–30 characters), else over the header's right end — never over the prompt.
+ * second one (20–30 characters), beside a text's question when it is short (up to 34 characters, set
+ * narrower to leave the room: Ex-Reading-App), else over the header's right end — never over the prompt.
  */
 export function stampPlace(item: Pick<ExerciseItem, "type" | "prompt" | "word" | "sentence">): StampPlace {
   const text = headwordText(item);
@@ -330,10 +388,15 @@ export function stampPlace(item: Pick<ExerciseItem, "type" | "prompt" | "word" |
     case "choice":
       if (isParagraph(text)) return "head";
       return text.length <= (isRussian(text) ? 11 : 9) ? "line1" : "head";
+    case "reading":
+      return (item.prompt ?? "").length <= READING_STAMP_MAX ? "question" : "head";
     default:
       return "head";
   }
 }
+
+/** A text's question up to this long takes the stamp beside it (in a 190px column). */
+const READING_STAMP_MAX = 34;
 
 /** «flic — разговорное «полицейский»»: the French term before the dash is set in italic Newsreader. */
 export function explainParts(text: string): { term: string | null; rest: string } {
@@ -443,8 +506,8 @@ function ExplainLine({ text, answered, ruled = false, indent = false }: { text: 
  * written once given — the stamp beside it, then explain_ru. The French word on the card opens the
  * word sheet after the answer. Cloze: the gap in the sentence is the blank. Pairs: the board's
  * rows (the player passes them as children). Conjugate: the infinitive, then the pronouns with the
- * blank, the tense in the header. No set footer, no repeat line (the ПОВТОР tag and the hollow tick
- * say it).
+ * blank, the tense in the header. Reading: the text as a quoted block, the question, the blank.
+ * No set footer, no repeat line (the ПОВТОР tag and the hollow tick say it).
  */
 function PhoneQuestionCard({ item, attempt, answered, pairsCount, stamp, children, written = null, explain = null, onWord = null }: QuestionCardProps) {
   const word = item.word;
@@ -542,7 +605,26 @@ function PhoneQuestionCard({ item, attempt, answered, pairsCount, stamp, childre
       );
       break;
     }
+    case "reading": {
+      // The stamp beside a short question rides with it (the text above has any height).
+      const beside = stampPlace(item) === "question";
+      body = (
+        <>
+          <Passage item={item} />
+          <div className={cx("relative", beside && "-mx-5 px-5")}>
+            <h2 lang="fr" className={cx(READING_QUESTION, beside && "max-w-[190px]")}>
+              {item.prompt ?? ""}
+            </h2>
+            {beside && stamp}
+          </div>
+          <AnswerLine lead={equals} written={shown} />
+          <ExplainLine text={explain} answered={answered} indent />
+        </>
+      );
+      break;
+    }
   }
+  const stampBeside = item.type === "reading" && stampPlace(item) === "question";
 
   return (
     <article
@@ -554,8 +636,10 @@ function PhoneQuestionCard({ item, attempt, answered, pairsCount, stamp, childre
       className={cx(cardShell, "relative outline-none")}
     >
       <QuestionHeader item={item} repeat={attempt > 1} pairsCount={pairsCount} />
-      <div className={cx("flex flex-col px-6 pb-5", item.type === "pairs" ? "pt-4" : "pt-[30px]")}>{body}</div>
-      {stamp}
+      <div className={cx("flex flex-col", item.type === "reading" ? "px-5 pt-4 pb-[18px]" : cx("px-6 pb-5", item.type === "pairs" ? "pt-4" : "pt-[30px]"))}>
+        {body}
+      </div>
+      {!stampBeside && stamp}
     </article>
   );
 }

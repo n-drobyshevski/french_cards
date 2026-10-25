@@ -50,7 +50,7 @@ import { takePendingExercise, type PendingExercise } from "./exercise-request";
 import { FeedbackLine } from "./FeedbackLine";
 import { MatchPairs, PairsRows, PairsSlips } from "./MatchPairs";
 import { NewWordCard } from "./NewWordCard";
-import { OptionGrid } from "./OptionGrid";
+import { OptionGrid, optionLayout } from "./OptionGrid";
 import { QuestionCard, stampPlace, type Written } from "./QuestionCard";
 import { Stamp } from "./Stamp";
 import { exerciseKeyAction, INPUT_GUARD_MS, isTypingTarget, keepsActivationKeys, RESULT_LOCK_MS } from "./player-keys";
@@ -551,7 +551,7 @@ function PlayerSession() {
         )}
         {board && phone && <PairsSlips board={board} state={pairsState} onTap={onPairTap} revealed={revealed} disabled={locked} />}
         {options && (
-          <OptionGrid options={options.options} correct={options.correct} result={result} onPick={pick} locked={leaving} />
+          <OptionGrid options={options.options} correct={options.correct} result={result} onPick={pick} locked={leaving} layout={optionLayout(item, options.options)} />
         )}
         {/* The fixed action zone: «Не знаю», then «Дальше» (from 768 the result line) in the same place (no layout shift). */}
         <div className={phone ? "mt-4 mb-7 h-[52px] shrink-0" : "mt-4 h-[200px] shrink-0 pb-4 max-md:[@media(max-height:740px)]:h-[136px] md:h-16 md:pb-0"}>

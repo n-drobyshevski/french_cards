@@ -17,6 +17,24 @@ export interface OptionGridProps {
   renderOption?: (option: string, index: number, verdict: TileVerdict) => ReactNode;
   /** Blocks taps (the card is leaving). */
   locked?: boolean;
+  /** How the tiles take long options (a text's French answers): see `optionLayout`. Default "grid". */
+  layout?: OptionLayout;
+}
+
+/**
+ * "grid": the fixed 2×2 slips (two lines at most); "wrap": the 2×2 grid with tiles that grow to
+ * the whole option; "rows": one option per row, for options too long for half the width.
+ */
+export type OptionLayout = "grid" | "wrap" | "rows";
+
+/**
+ * A reading item's options are French phrases of any length (the TCF's): over 18 characters the
+ * tiles grow with them, over 48 they take a row each. Every other item keeps the fixed grid.
+ */
+export function optionLayout(item: { type: string }, options: readonly string[]): OptionLayout {
+  if (item.type !== "reading") return "grid";
+  const longest = Math.max(0, ...options.map((o) => o.length));
+  return longest > 48 ? "rows" : longest > 18 ? "wrap" : "grid";
 }
 
 // Every tone keeps the ✓ / ✕ corner clear (the label never reflows when the answer lands); the
@@ -43,14 +61,15 @@ const SLIP_LINE_TONE: Record<TileVerdict, string> = {
  * Phones (X-Player-B): Russian in Plex 17, French in regular Newsreader; `strong` (the right slip
  * once answered) sets it medium.
  */
-export function OptionText({ text, strong = false }: { text: string; strong?: boolean }) {
+export function OptionText({ text, strong = false, clamp = true }: { text: string; strong?: boolean; clamp?: boolean }) {
   const ru = isRussian(text);
   return (
     <span
       lang={ru ? "ru" : "fr"}
       className={cx(
         // A word longer than the tile breaks (hyphenated where the browser can) instead of running under the ✓ / ✕ or being clipped.
-        "line-clamp-2 min-w-0 hyphens-auto [overflow-wrap:anywhere]",
+        "min-w-0 hyphens-auto [overflow-wrap:anywhere]",
+        clamp && "line-clamp-2",
         // Russian options read as plain text on phones (L-ExPlayer-B), medium from 768.
         ru ? "text-[16px] leading-[22px] max-md:text-[17px] md:font-medium" : "font-serif text-[19px] leading-6 font-medium max-md:font-normal",
         strong && "max-md:font-medium",
@@ -68,9 +87,10 @@ export function OptionText({ text, strong = false }: { text: string; strong?: bo
  * good border + check, a wrong pick a 1px again border + cross, the rest dim; the tapped tile
  * flashes its tone first (MOTION-SPEC §5.15). Screen readers hear «верный ответ» / «ваш ответ».
  */
-export function OptionGrid({ options, correct, result, onPick, renderOption, locked = false }: OptionGridProps) {
+export function OptionGrid({ options, correct, result, onPick, renderOption, locked = false, layout = "grid" }: OptionGridProps) {
+  const grows = layout !== "grid";
   return (
-    <div role="group" aria-label="Варианты ответа" className="mt-4 grid shrink-0 grid-cols-2 gap-2">
+    <div role="group" aria-label="Варианты ответа" className={cx("mt-4 grid shrink-0 gap-2", layout === "rows" ? "grid-cols-1" : "grid-cols-2")}>
       {options.map((option, i) => {
         const verdict = tileVerdict(i, correct, result);
         const tapped = result?.pick === i;
@@ -85,8 +105,10 @@ export function OptionGrid({ options, correct, result, onPick, renderOption, loc
               if (!locked) onPick(i);
             }}
             className={cx(
-              "press relative flex h-[76px] min-w-0 items-center overflow-hidden rounded-card bg-surface text-left disabled:cursor-default md:h-16",
-              "max-md:flex-col max-md:items-stretch max-md:rounded-chip max-md:justify-end max-md:[@media(max-height:740px)]:h-16",
+              "press relative flex min-w-0 items-center overflow-hidden rounded-card bg-surface text-left disabled:cursor-default",
+              "max-md:flex-col max-md:items-stretch max-md:rounded-chip max-md:justify-end",
+              // Long options: the tile grows to the whole text (the ✓ / ✕ corner stays clear above it on phones).
+              grows ? "min-h-[76px] py-3 max-md:pt-8 md:min-h-16" : "h-[76px] md:h-16 max-md:[@media(max-height:740px)]:h-16",
               TONE[verdict],
             )}
           >
@@ -110,7 +132,7 @@ export function OptionGrid({ options, correct, result, onPick, renderOption, loc
               >
                 {i + 1}
               </kbd>
-              {renderOption ? renderOption(option, i, verdict) : <OptionText text={option} strong={verdict === "right"} />}
+              {renderOption ? renderOption(option, i, verdict) : <OptionText text={option} strong={verdict === "right"} clamp={!grows} />}
             </span>
             {(verdict === "right" || verdict === "wrong") && (
               <>

@@ -267,7 +267,7 @@ describe("validateSet", () => {
   it("refuses a new register item: the type is no longer made", () => {
     const set = withInput(2, { type: "register", word_id: "w-bagnole" }, true);
     expect(paths(set)).toEqual(["items[2].type"]);
-    expect(errorAt(set, "items[2].type")).toBe("register items are no longer made; use one of choice, cloze, pairs, conjugate");
+    expect(errorAt(set, "items[2].type")).toBe("register items are no longer made; use one of choice, cloze, pairs, conjugate, reading");
   });
 
   it("needs 4–6 unique, live pairs words (new words allowed)", () => {
@@ -307,7 +307,7 @@ describe("validateSet", () => {
     expect(errorAt(withItem(1, { id: "q1" }), "items[1].id")).toMatch(/duplicate/);
     expect(errorAt(withItem(1, { id: "" }), "items[1].id")).toBe("required");
     expect(errorAt(withItem(1, { id: "q".repeat(21) }), "items[1].id")).toMatch(/too long/);
-    expect(errorAt(withItem(1, { type: "typed" as never }), "items[1].type")).toBe("one of choice, cloze, pairs, conjugate");
+    expect(errorAt(withItem(1, { type: "typed" as never }), "items[1].type")).toBe("one of choice, cloze, pairs, conjugate, reading");
   });
 
   it("reports every problem at once", () => {
@@ -316,6 +316,86 @@ describe("validateSet", () => {
     set.items[4] = { ...set.items[4], distractors: ["ouf"] };
     expect(validateSet(set, ctx)).toMatchObject({ ok: false });
     expect(paths(set)).toEqual(["items[0].word_id", "items[4].distractors"]);
+  });
+});
+
+describe("reading items («текст»)", () => {
+  const PASSAGE = "À louer — Lyon 7e, T2 de 42 m².\nLoyer : 780 € + 60 € de charges.\n  Caution :   un mois hors charges.\n\n\nFrais d'agence : 390 €.";
+  const READING: ExerciseItemInput = {
+    type: "reading",
+    passage: PASSAGE,
+    passage_label: "annonce",
+    prompt: "Combien faut-il payer à l'entrée ?",
+    answer: "2 010 €",
+    distractors: ["1 620 €", "840 €", "1 170 €"],
+    explain_ru: "Первый месяц с charges 840 € + залог 780 € + агентству 390 €.",
+    level: "B1",
+  };
+  const withReading = (patch: Partial<ExerciseItemInput> = {}) => {
+    const input = goodInput();
+    return completeSet({ ...input, items: [...input.items, { ...READING, ...patch }] }, ctx);
+  };
+  const at = (set: ExerciseSetContent, field: string) => errorAt(set, `items[6].${field}`);
+
+  it("keeps the text (line breaks too), the upper-cased label and the level; validates a good one", () => {
+    const set = withReading();
+    expect(set.items[6]).toMatchObject({
+      type: "reading",
+      skill: null,
+      word_id: null,
+      word: null,
+      passage: "À louer — Lyon 7e, T2 de 42 m².\nLoyer : 780 € + 60 € de charges.\nCaution : un mois hors charges.\n\nFrais d'agence : 390 €.",
+      passage_label: "ANNONCE",
+      level: "B1",
+      distractors: ["1 620 €", "840 €", "1 170 €"],
+    });
+    expect(validateSet(set, ctx)).toEqual({ ok: true, errors: [] });
+    // A library word is optional, the level is kept on any type, and other items gain no new keys.
+    const linked = withReading({ word_id: "w-thune" });
+    expect(linked.items[6].word?.fr).toBe("la thune");
+    expect(paths(linked)).toEqual([]);
+    expect(withInput(0, { level: "A2" }).items[0].level).toBe("A2");
+    expect(withInput(0, { level: "Z9" as never }).items[0]).not.toHaveProperty("level");
+    expect(set.items[0]).not.toHaveProperty("passage");
+  });
+
+  it("refuses a missing or Russian text, a Russian option, a wrong count and a bad word", () => {
+    expect(at(withReading({ passage: null }), "passage")).toBe("required");
+    expect(at(withReading({ passage: "Trop court." }), "passage")).toMatch(/too short/);
+    expect(at(withReading({ passage: "x".repeat(901) }), "passage")).toMatch(/too long/);
+    expect(at(withReading({ passage: "Сдаётся квартира в Лионе, 42 метра, 780 евро в месяц плюс коммуналка." }), "passage")).toMatch(/French/);
+    expect(at(withReading({ prompt: null }), "prompt")).toBe("required");
+    expect(at(withReading({ prompt: "Сколько платить?" }), "prompt")).toMatch(/French/);
+    expect(at(withReading({ distractors: ["1 620 €", "840 €"] }), "distractors")).toMatch(/exactly 3/);
+    expect(at(withReading({ distractors: ["1 620 €", "840 €", "2 010 €"] }), "distractors[2]")).toMatch(/equals the answer/);
+    expect(at(withReading({ distractors: ["1 620 €", "840 €", "1 620 €"] }), "distractors[2]")).toMatch(/duplicate/);
+    expect(at(withReading({ distractors: ["1 620 €", "840 €", "две тысячи"] }), "distractors[2]")).toMatch(/French/);
+    expect(at(withReading({ word_id: "w-gone" }), "word_id")).toMatch(/no such word/);
+    expect(at(withReading({ new_ref: "n1" }), "new_ref")).toMatch(/no new word/);
+    expect(at(withReading({ passage_label: "UNE TRÈS LONGUE ÉTIQUETTE" }), "passage_label")).toMatch(/too long/);
+    expect(at(withReading({ passage_label: "<b>!" }), "passage_label")).toMatch(/letters/);
+  });
+
+  it("plays like a choice item: the answer among 4 shuffled options", () => {
+    const item = withReading().items[6];
+    const positions = new Set<number>();
+    for (let seed = 1; seed <= 40; seed++) {
+      const { options, correct } = optionsFor(item, seededRandom(seed));
+      expect(options).toHaveLength(4);
+      expect(options[correct]).toBe("2 010 €");
+      positions.add(correct);
+    }
+    expect(positions.size).toBe(4);
+  });
+
+  it("counts as a played type; a set of texts is not «few types»; a miss without a word names none", () => {
+    const set = withReading();
+    expect(playedItems(set.items)).toHaveLength(7);
+    const texts = Array.from({ length: 6 }, (_, i) => ({ ...set.items[6], id: `t${i}` }));
+    expect(warningsFor({ items: texts, new_words: [] }).map((w) => w.code)).not.toContain("few_types");
+    const reading = set.items[6];
+    expect(scoreRun({ item_ids: [], answers: [answer(reading.id, 1, "wrong", { chosen: "840 €" })] }, set)).toMatchObject({ total: 7, answered: 1, first_try: 0 });
+    expect(missedWords({ answers: [answer(reading.id, 1, "wrong", { chosen: "840 €" })] }, set)).toEqual([]);
   });
 });
 

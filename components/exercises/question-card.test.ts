@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { activePairRow } from "./MatchPairs";
 import { sourceDomain } from "./NewWordCard";
+import { optionLayout } from "./OptionGrid";
 import { cardLabel, explainParts, showsMeter, stampPlace } from "./QuestionCard";
 
 const word = { fr: "relou", ru: "надоедливый", pos: "adj" as const, gender: "none" as const, slang_level: 1 as const, verlan: true, example_fr: null, example_ru: null };
@@ -17,6 +18,19 @@ describe("cardLabel", () => {
     expect(cardLabel({ type: "pairs", skill: null, ask: null }).label).toBe("Пары");
     expect(cardLabel({ type: "conjugate", skill: null, ask: null, tense: "passe_compose" })).toEqual({ label: "Спряжение", detail: "Passé composé" });
     expect(cardLabel({ type: "conjugate", skill: null, ask: null, tense: null })).toEqual({ label: "Спряжение", detail: null });
+  });
+});
+
+describe("reading cards («текст»)", () => {
+  it("are labelled «Текст», take the stamp beside a short question, and grow their tiles with long options", () => {
+    expect(cardLabel({ type: "reading", skill: null, ask: null })).toEqual({ label: "Текст", detail: null });
+    const reading = { type: "reading" as const, word: null, sentence: null };
+    expect(stampPlace({ ...reading, prompt: "Combien faut-il payer à l'entrée ?" })).toBe("question");
+    expect(stampPlace({ ...reading, prompt: "Pourquoi l'auteur du message écrit-il à ses voisins ?" })).toBe("head");
+    expect(optionLayout({ type: "reading" }, ["2 010 €", "840 €", "1 170 €", "1 620 €"])).toBe("grid");
+    expect(optionLayout({ type: "reading" }, ["Pour se plaindre du bruit", "Pour inviter", "Pour s'excuser", "Pour vendre"])).toBe("wrap");
+    expect(optionLayout({ type: "reading" }, ["Pour prévenir ses voisins des travaux prévus la semaine prochaine", "a", "b", "c"])).toBe("rows");
+    expect(optionLayout({ type: "choice" }, ["Pour prévenir ses voisins des travaux prévus la semaine prochaine", "a", "b", "c"])).toBe("grid");
   });
 });
 

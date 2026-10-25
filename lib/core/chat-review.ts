@@ -58,6 +58,13 @@ export interface WordReviewRow {
   origin: string | null;
   /** The level the app would show (≈, estimated) or the one Claude gave. */
   level: Cefr | null;
+  /** The level Claude gave (add_words `cefr`, sent back as is); null = the app estimates `level` itself. */
+  cefr?: Cefr | null;
+  /**
+   * The add_words word fields the card doesn't show (tags, custom_fields, conjugation,
+   * both_directions), as Claude gave them: sent back unchanged with the word. Missing when none.
+   */
+  extra?: Record<string, unknown>;
   /** The theme it would go to. */
   folder: ReviewFolder;
   /** The theme was named by the user (folder_chosen_by_user); a theme the user picks in the page counts too. */
@@ -76,6 +83,11 @@ export interface WordsReview {
   folders: ReviewFolder[];
   /** Where the words came from, as a mono label («ИЗ СКРИНШОТА», «ИЗ ПЕСНИ»); null when not said. */
   source_label: string | null;
+  /**
+   * The app's address (origin, no trailing slash) for «Открыть «Жильё» в Карточках ↗» after adding
+   * (reviewFolderUrl); null / missing when the server doesn't know it, and the link is left out.
+   */
+  app_url?: string | null;
 }
 
 export type ChatReview = LevelsReview | WordsReview;
@@ -87,4 +99,9 @@ export function asChatReview(value: unknown): ChatReview | null {
   if (v.kind !== "kartochki-levels" && v.kind !== "kartochki-words") return null;
   if (!Array.isArray(v.rows)) return null;
   return v as ChatReview;
+}
+
+/** The app's page of a theme («Входящие» for null), as the app routes it (/library/[id], /library/inbox). */
+export function reviewFolderUrl(appUrl: string, folderId: string | null): string {
+  return `${appUrl.replace(/\/+$/, "")}/library/${encodeURIComponent(folderId ?? "inbox")}`;
 }

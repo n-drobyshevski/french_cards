@@ -22,6 +22,8 @@ export function cardLabel(item: ExerciseItem): { label: string; detail: string |
       return { label: "Пропуск", detail: null };
     case "pairs":
       return { label: "Пары", detail: null };
+    case "reading":
+      return { label: "Текст", detail: null };
     default:
       return { label: SKILL_LABEL[item.skill ?? "meaning"] ?? SKILL_LABEL.meaning, detail: null };
   }
@@ -76,12 +78,17 @@ export function conjSize(text: string): string {
   return text.length <= 28 ? "fr32" : frSize(text);
 }
 
-/** Where the stamp lands: beside a short headword, on the second line of a two-line cloze, else over the header's end. */
-export function stampPlace(item: ExerciseItem): "line1" | "line2" | "head" {
+/**
+ * Where the stamp lands: beside a short headword, on the second line of a two-line cloze, beside a
+ * reading item's question (under its text, Ex-Reading-App), else over the header's end.
+ */
+export function stampPlace(item: ExerciseItem): "line1" | "line2" | "head" | "question" {
   const text = item.prompt ?? item.word?.fr ?? "";
   switch (item.type) {
     case "pairs":
       return "head";
+    case "reading":
+      return "question";
     case "cloze": {
       const n = (item.sentence ?? "").replace(/\[\[|\]\]/g, "").length;
       return n >= 20 && n <= 30 ? "line2" : "head";
@@ -135,3 +142,8 @@ export function sourceDomain(url: string | null): string | null {
 export function deckEdges(left: number): number {
   return left >= 10 ? 3 : left >= 2 ? 2 : left >= 1 ? 1 : 0;
 }
+
+/** Long options read better as rows (A–D) than as 2×2 slips: any option over this many characters. */
+export const ROW_OPTIONS_OVER = 22;
+
+export const optionRows = (options: readonly string[]) => options.some((o) => o.length > ROW_OPTIONS_OVER);

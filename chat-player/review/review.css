@@ -1,0 +1,622 @@
+/* The review page's look («Уровни слов» Chat-Levels-A / -Saved, «Новые слова» Chat-Words-A / -Theme /
+   -Added), over the shared tokens and sheet. */
+@import "../base.css";
+
+.sheet {
+  position: relative;
+}
+/* Fullscreen: the sheet fills the host's frame; the list scrolls with the page. */
+html[data-display="fullscreen"] #app {
+  max-width: 640px;
+}
+.rhead {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 12px;
+  border-bottom: 2px solid var(--red);
+}
+.rhead .sl.strong {
+  text-transform: uppercase;
+}
+.rhead .dim {
+  font-weight: 400;
+  color: var(--muted);
+}
+.rhead .good {
+  color: var(--good);
+}
+.rnote {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+.wait {
+  padding: 20px 16px;
+  color: var(--muted);
+  animation: pulse 1.2s var(--ease-standard) infinite alternate;
+}
+.wait.still {
+  animation: none;
+}
+
+/* The checkbox: 44px target, 20px box */
+.cb {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  margin: 0 -10px 0 -12px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: none;
+}
+.cb[aria-disabled="true"] {
+  cursor: default;
+}
+.box {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--boundary);
+  border-radius: 2px;
+  background: var(--surface);
+}
+.box.on {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.box.off:not(.on) {
+  border: 1px solid var(--rule);
+  background: var(--surface-2);
+}
+.written .box.on {
+  border-color: var(--boundary);
+  background: var(--boundary);
+}
+
+/* A word in a row: French in serif over the Russian */
+.lw {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.lfr {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 500 17px/22px var(--serif);
+}
+.lru {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--muted);
+}
+.tagline {
+  font: 400 10px/16px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* --- «Уровни слов» --------------------------------------------------------------------------- */
+.lrows {
+  margin: 0;
+  padding: 0 12px;
+  list-style: none;
+}
+.lrows li {
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--surface-2);
+}
+.lrows li:last-child {
+  border-bottom: 0;
+}
+.lrows li.tall {
+  min-height: 68px;
+}
+.lrows li.locked .lfr {
+  color: var(--muted);
+}
+.written .lrows li .lfr,
+.written .lrows li .lru {
+  color: var(--boundary);
+}
+.lr {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+.seg {
+  height: 32px;
+  display: grid;
+  grid-template-columns: repeat(6, 27px);
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--surface);
+}
+.seg button {
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-right: 1px solid var(--rule);
+  background: none;
+  font: 400 11px/1 var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.seg button:last-child {
+  border-right: 0;
+}
+.seg button:not([aria-disabled]):hover {
+  background: var(--hover-surface);
+}
+.seg button.on {
+  background: var(--ink);
+  color: var(--on-ink);
+  font-weight: 500;
+}
+.seg button.dict {
+  color: var(--ink);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.seg.off {
+  border-color: var(--surface-2);
+}
+.seg.off button {
+  color: var(--boundary);
+  cursor: default;
+}
+.seg.off button.on {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.written li:not(.locked) .seg.off button.on {
+  background: var(--boundary);
+  color: var(--on-ink);
+}
+.ldict {
+  font-size: 11px;
+  line-height: 14px;
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+/* «Показать все 15 · ЕЩЁ 8» */
+.more {
+  width: 100%;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+}
+.u {
+  text-decoration: underline;
+  text-decoration-color: var(--boundary);
+  text-underline-offset: 3px;
+}
+.more .mono {
+  font-weight: 400;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.more .end {
+  margin-left: auto;
+  color: var(--muted);
+}
+.lrows + .more {
+  border-top: 1px solid var(--surface-2);
+}
+.rfoot .more {
+  width: auto;
+  height: 44px;
+  flex-shrink: 0;
+  padding: 0 2px;
+}
+
+/* The foot: the write button, the quiet next step */
+.rfoot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid var(--rule);
+}
+.rfoot.col {
+  flex-direction: column;
+  align-items: stretch;
+}
+.rfoot .btn {
+  height: 48px;
+}
+.rfoot .btn.line {
+  border-color: var(--ink);
+}
+.btn-n {
+  font: 400 13px/1 var(--mono);
+  letter-spacing: 0.04em;
+}
+.link {
+  flex-shrink: 0;
+  height: 32px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.link.big {
+  height: 48px;
+  padding: 0 6px;
+}
+.link:disabled {
+  color: var(--muted);
+  text-decoration: none;
+}
+.receipt {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 20px;
+}
+.receipt svg {
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--good);
+}
+.receipt .link {
+  height: 20px;
+}
+.err {
+  padding: 0 12px 12px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--again);
+}
+.rfoot.col .err {
+  padding: 0;
+}
+.notice {
+  padding: 10px 12px 0;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--muted);
+}
+
+/* --- «Новые слова» --------------------------------------------------------------------------- */
+.wbar {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 13px;
+  line-height: 18px;
+}
+.wbar-k {
+  white-space: nowrap;
+  color: var(--muted);
+}
+.wall {
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  font-weight: 500;
+}
+.wall .u {
+  text-decoration-color: var(--ink);
+}
+.wbar-x {
+  height: 44px;
+  margin-left: auto;
+  padding: 0 0 0 8px;
+  border: 0;
+  background: none;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.wrows {
+  margin: 0;
+  padding: 0 12px;
+  list-style: none;
+}
+.wrows li {
+  min-height: 58px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-bottom: 1px solid var(--rule);
+}
+.wrows li:last-child {
+  border-bottom: 0;
+}
+.wrows li.open {
+  margin: 0 -12px;
+  padding: 0 12px;
+  background: var(--hover-surface);
+}
+.wrows .cb {
+  margin: 0 0 0 -12px;
+}
+.wfr {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  white-space: nowrap;
+}
+.wfr .lfr {
+  min-width: 0;
+}
+.wg {
+  flex-shrink: 0;
+  margin-left: 6px;
+  font: 400 11px/16px var(--mono);
+  color: var(--muted);
+}
+.wrows li.dup .lfr {
+  color: var(--muted);
+  text-decoration-thickness: 1px;
+}
+.already {
+  flex: none;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 4px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  font: 400 10px/14px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.wr {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+.wtop {
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.wmeter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.segs {
+  display: inline-flex;
+  gap: 2px;
+}
+.segs i {
+  width: 10px;
+  height: 3px;
+  background: var(--rule);
+}
+.segs i.on {
+  background: var(--ink);
+}
+.segs.vulg i.on {
+  background: var(--red);
+}
+.wabbr {
+  font: italic 13px/16px var(--serif);
+  color: var(--muted);
+}
+.wlvl {
+  min-width: 28px;
+  text-align: right;
+  font: 400 11px/16px var(--mono);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  color: var(--muted);
+}
+.chip {
+  height: 30px;
+  margin-right: -4px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: none;
+}
+.chip > span {
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 4px 0 6px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--surface);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.chip[aria-expanded="true"] > span {
+  border-color: var(--ink);
+  background: var(--surface-2);
+}
+.chip[aria-expanded="true"] svg {
+  rotate: 180deg;
+}
+
+/* The theme picker (Chat-Words-Theme) */
+.picker {
+  position: absolute;
+  z-index: 2;
+  width: 236px;
+  max-width: calc(100% - 24px);
+  padding: 4px 0;
+  border: 1px solid var(--ink);
+  border-radius: 6px;
+  background: var(--surface);
+  animation: fade 110ms var(--ease-enter) both;
+}
+.ptitle {
+  height: 28px;
+  padding: 8px 12px 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 400 11px/16px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.ptitle .keep {
+  text-transform: none;
+}
+.plist {
+  max-height: 264px;
+  margin-top: 4px;
+  overflow-y: auto;
+}
+.popt {
+  width: 100%;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  border: 0;
+  background: none;
+  font-size: 14px;
+  line-height: 20px;
+  text-align: left;
+}
+.popt:hover,
+.popt.on {
+  background: var(--paper);
+}
+.popt.on .pname {
+  font-weight: 500;
+}
+.pcheck {
+  width: 14px;
+  flex-shrink: 0;
+  display: flex;
+}
+.pname {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pname.inbox {
+  flex: 0 1 auto;
+  margin-right: auto;
+  border-bottom: 1px dashed var(--boundary);
+}
+.pcount {
+  font: 400 11px/16px var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+/* Added (Chat-Words-Added) */
+.added {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid var(--ink);
+}
+.ahead {
+  flex: 1;
+  min-width: 0;
+  font: 500 19px/24px var(--serif);
+  letter-spacing: -0.005em;
+}
+.added .dot {
+  color: var(--muted);
+}
+.added .link {
+  margin: -8px 0;
+}
+.arows {
+  margin: 0;
+  padding: 0 12px;
+  list-style: none;
+}
+.arows li {
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--rule);
+}
+.arows li:last-child {
+  border-bottom: 0;
+}
+.arows .lfr {
+  flex-shrink: 0;
+  max-width: 55%;
+}
+.arows .ok {
+  flex-shrink: 0;
+  color: var(--good);
+}
+.arows li.off svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.arows li.off .lfr {
+  max-width: none;
+  font-weight: 400;
+  color: var(--muted);
+}
+.arows li.off .lru {
+  flex-shrink: 0;
+}
+.skipped {
+  padding-top: 14px;
+  border-top: 1px solid var(--rule);
+}
+.skipped > .sl {
+  padding: 0 12px 4px;
+}

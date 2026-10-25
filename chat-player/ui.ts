@@ -3,24 +3,27 @@
 // answer written on the card, the 2×2 slips, the ВЕРНО / НЕВЕРНО stamp, «Дальше» after every
 // answer; then «ИТОГ НАБОРА» with the strip and the misses. The components it follows:
 // components/exercises/{QuestionCard,OptionGrid,ClozeLine,MatchPairs,Stamp,FeedbackLine,
-// NewWordCard,DonePhone}.tsx. Every function builds fresh DOM from the round's state.
+// NewWordCard,DonePhone}.tsx; a reading item («текст») as Ex-Reading-App: its text on the card, the
+// question, the slips (A–D rows when an option is long). Every function builds fresh DOM from the
+// round's state. The exam («Мини-TCF») has its own screens in exam-ui.ts.
 import { counterLabel, formatCounter, isRussian, resultTone, tileVerdict, type PairsState, type PlayerResult } from "@/components/exercises/player-state";
 import type { StripMark } from "@/components/ui/SessionStrip";
-import { CLOZE_PROMPT, CONJ_PROMPT, PAIRS_PROMPT, clozeParts, type ExerciseOptions } from "@/lib/core/exercises";
+import { CLOZE_PROMPT, CONJ_PROMPT, PAIRS_PROMPT, clozeParts, passageLines, type ExerciseOptions } from "@/lib/core/exercises";
 import { SLANG_LABELS, type ExerciseItem, type ExerciseNewWord, type ExercisePairTile, type SlangLevel } from "@/lib/types";
-import { cardLabel, conjSize, deckEdges, explainParts, frSize, isParagraph, posAbbr, selfEvident, showsMeter, skillQuestion, sourceDomain, stampPlace } from "./card";
+import { cardLabel, conjSize, deckEdges, explainParts, frSize, isParagraph, optionRows, posAbbr, selfEvident, showsMeter, skillQuestion, sourceDomain, stampPlace } from "./card";
 import { h, icon, type Child } from "./dom";
+import { questionLine, type ExamMiss } from "./exam";
 import type { Round } from "./round";
 import { plural } from "./texts";
 
-const cls = (...names: (string | false | null | undefined)[]) => names.filter(Boolean).join(" ");
+export const cls = (...names: (string | false | null | undefined)[]) => names.filter(Boolean).join(" ");
 
 // --- Parts ---------------------------------------------------------------------------------------
 
 const SLANG_NAMES_RU = ["нейтральный", "фамильярный", "арго", "вульгарный"] as const;
 
 /** The 4-segment slang meter (components/ui/SlangMeter): vulg. in red ink, the italic abbreviation after it. */
-function meter(level: SlangLevel, verlan: boolean, row = false): HTMLElement {
+export function meter(level: SlangLevel, verlan: boolean, row = false): HTMLElement {
   const segs = h("span", { class: cls("segs", row && "sm", level === 3 && "vulg"), "aria-hidden": "true" }, [0, 1, 2, 3].map((i) => h("i", { class: i <= level ? "on" : null })));
   const label = verlan ? `${SLANG_LABELS[level]} · verl.` : SLANG_LABELS[level];
   return h(
@@ -36,13 +39,29 @@ function cardHead(label: Child[], right: Child = null): HTMLElement {
   return h("div", { class: "head" }, h("span", { class: "label" }, label), right);
 }
 
+/** «≈B1»: a question's level, mono, at the header's end (a reading item, Ex-Reading-App). */
+const levelMark = (level: string) => h("span", { class: "lvl", "aria-label": `Уровень ${level}` }, `≈${level}`);
+
 function questionHead(item: ExerciseItem, attempt: number, pairsCount: string | null): HTMLElement {
   const { label, detail } = cardLabel(item);
   return cardHead(
     [h("b", null, label), detail && h("span", null, `· ${detail}`), pairsCount && h("span", null, `· ${pairsCount}`), attempt > 1 && h("span", { class: "tag" }, "Повтор")],
-    item.word && showsMeter(item) ? meter(item.word.slang_level, item.word.verlan) : null,
+    item.word && showsMeter(item) ? meter(item.word.slang_level, item.word.verlan) : item.type === "reading" && item.level ? levelMark(item.level) : null,
   );
 }
+
+/** A reading item's text: its kind in mono over the French in serif, «Loyer :» labels in bold, on a left rule. */
+export function passageBlock(text: string, label: string | null): HTMLElement {
+  return h(
+    "figure",
+    { class: "passage" },
+    label && h("figcaption", { lang: "fr" }, label),
+    passageLines(text).map((p) => h("p", { lang: "fr" }, p.map((l, i) => [i > 0 && h("br"), l.label && [h("b", null, l.label), " "], l.text]))),
+  );
+}
+
+/** «A»…«D» in front of option rows. */
+export const LETTERS = ["A", "B", "C", "D", "E", "F"] as const;
 
 /** Deck edges under the card (1–3 by the questions left), deepest first. */
 function deck(left: number, card: HTMLElement): HTMLElement {
@@ -200,6 +219,24 @@ function optionGrid(options: ExerciseOptions, result: PlayerResult | null, on: P
   );
 }
 
+/** Long options as A–D rows (a reading item's French answers): the same verdicts as the slips. */
+function optionList(options: ExerciseOptions, result: PlayerResult | null, on: PlayHandlers): HTMLElement {
+  return h(
+    "div",
+    { role: "group", "aria-label": "Варианты ответа", class: "rows" },
+    options.options.map((text, i) => {
+      const verdict = tileVerdict(i, options.correct, result);
+      return h(
+        "button",
+        { type: "button", class: `xopt ${verdict}`, "data-option": i + 1, "aria-keyshortcuts": String(i + 1), disabled: result !== null, onclick: () => on.pick(i) },
+        h("span", { class: "xl", "aria-hidden": "true" }, LETTERS[i]),
+        h("span", { lang: isRussian(text) ? "ru" : "fr", class: "xt" }, text),
+        (verdict === "right" || verdict === "wrong") && [icon(verdict === "right" ? "check" : "close", 18, 2, "xm"), h("span", { class: "sr" }, verdict === "right" ? "верный ответ" : "ваш ответ")],
+      );
+    }),
+  );
+}
+
 function questionCard(round: Round, item: ExerciseItem, options: ExerciseOptions | null, board: Board | null, on: PlayHandlers): HTMLElement {
   const head = round.head;
   const attempt = head?.kind === "item" ? head.attempt : 1;
@@ -209,6 +246,9 @@ function questionCard(round: Round, item: ExerciseItem, options: ExerciseOptions
   const written: Written | null =
     options && result ? { right: options.options[options.correct], wrong: result.pick !== null && result.pick !== options.correct ? options.options[result.pick] : null } : null;
   const word = item.word;
+  const tone = resultTone(result);
+  const verdict = tone === "right" || tone === "wrong" ? tone : null;
+  const place = stampPlace(item);
   let body: Child[] = [];
   switch (item.type) {
     case "choice": {
@@ -244,15 +284,23 @@ function questionCard(round: Round, item: ExerciseItem, options: ExerciseOptions
       ];
       break;
     }
+    case "reading":
+      body = [
+        item.passage && passageBlock(item.passage, item.passage_label ?? null),
+        // The stamp lands beside the question, wherever the text above ends.
+        h("div", { class: "rq" }, h("h2", { lang: "fr", class: "fr rq-t" }, item.prompt ?? ""), verdict && place === "question" && stamp(verdict, "beside")),
+        answerLine(equals(), written),
+        explainLine(item.explain_ru, answered, "indent"),
+      ];
+      break;
   }
-  const tone = resultTone(result);
   const pairsCount = item.type === "pairs" ? `${pairs.matched.length} из ${item.tiles.length}` : null;
   return h(
     "article",
     { class: "card", "aria-label": cardLabel(item).label, "data-exercise-card": item.type, "data-focus": "", tabindex: "-1" },
     questionHead(item, attempt, pairsCount),
-    h("div", { class: item.type === "pairs" ? "body pairs" : "body" }, body),
-    (tone === "right" || tone === "wrong") && stamp(tone, stampPlace(item)),
+    h("div", { class: item.type === "pairs" ? "body pairs" : item.type === "reading" ? "body reading" : "body" }, body),
+    verdict && place !== "question" && stamp(verdict, place),
   );
 }
 
@@ -316,7 +364,7 @@ export function playView(round: Round, on: PlayHandlers, animate: boolean): HTML
     stage = [
       deck(left, questionCard(round, item, options, board, on)),
       board && pairsSlips(board, round.pairsState(), result?.outcome === "dont_know", result !== null, on),
-      options && optionGrid(options, result, on),
+      options && (optionRows(options.options) ? optionList(options, result, on) : optionGrid(options, result, on)),
       // The fixed action zone: «Не знаю», then «Дальше» in the same place (no layout shift).
       h(
         "div",
@@ -428,6 +476,7 @@ export function doneView(props: DoneProps): HTMLElement {
   const { round, mode, discussed, animate, on } = props;
   const score = round.score();
   const missed = round.missedWords();
+  const questions = round.missedQuestions();
   const missedItems = round.missedItemIds();
   const repeat = missedItems.length > 0 ? missed.length || missedItems.length : 0;
   return h(
@@ -458,6 +507,7 @@ export function doneView(props: DoneProps): HTMLElement {
           ),
         ),
       ),
+    questions.length > 0 && h("section", { class: "sec", "aria-label": "Вопросы к текстам" }, h("h2", null, "Вопросы к текстам"), missList(questions)),
     h(
       "div",
       { class: "actions" },
@@ -467,8 +517,38 @@ export function doneView(props: DoneProps): HTMLElement {
         "div",
         { class: "row" },
         h("button", { type: "button", class: "text-act", onclick: () => on.again() }, "Ещё раз"),
-        mode === "app" && missed.length > 0 && h("button", { type: "button", class: "text-act", disabled: discussed, onclick: () => on.discuss() }, discussed ? "Отправлено в чат" : "Обсудить ошибки"),
+        mode === "app" && missed.length + questions.length > 0 && h("button", { type: "button", class: "text-act", disabled: discussed, onclick: () => on.discuss() }, discussed ? "Отправлено в чат" : "Обсудить ошибки"),
       ),
     ),
   );
 }
+
+/** Missed questions as rows (Chat-TCF-Done «Ошибки»): the level, the question, your answer struck, the right one. */
+export function missList(misses: readonly ExamMiss[]): HTMLElement {
+  return h(
+    "ol",
+    { class: "xmiss" },
+    misses.map((m) =>
+      h(
+        "li",
+        null,
+        h("span", { class: "xml" }, m.item.level ?? ""),
+        h(
+          "span",
+          { class: "xmb" },
+          h("span", { lang: "fr", class: "xmq" }, questionLine(m.item)),
+          h(
+            "span",
+            { class: "xma" },
+            m.chosen === null
+              ? h("span", { class: "xmn" }, "нет ответа")
+              : [h("span", { class: "sr" }, "Ваш ответ: "), h("s", { lang: isRussian(m.chosen) ? "ru" : "fr" }, m.chosen)],
+            h("span", { class: "sr" }, ". Верный ответ: "),
+            h("span", { lang: isRussian(m.right) ? "ru" : "fr", class: "xmr" }, m.right),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+

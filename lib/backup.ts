@@ -105,8 +105,12 @@ const isOptionalText = (v: unknown) => v === null || v === undefined || typeof v
 /** An exercise item the player can show: the arrays its type reads, and text where text goes. */
 function isExerciseItem(v: unknown): boolean {
   if (!isRecord(v) || !isText(v.id) || !EXERCISE_ITEM_TYPES.includes(v.type as ExerciseItemType)) return false;
-  if (![v.answer, v.prompt, v.sentence, v.sentence_ru, v.explain_ru, v.word_id, v.new_ref].every(isOptionalText)) return false;
-  if ((v.type === "choice" || v.type === "cloze" || v.type === "conjugate") && !(Array.isArray(v.distractors) && v.distractors.every(isText))) return false;
+  if (![v.answer, v.prompt, v.sentence, v.sentence_ru, v.explain_ru, v.word_id, v.new_ref, v.passage_label].every(isOptionalText)) return false;
+  // `level` («Мини-TCF», any type) came later: missing or null on older items.
+  if (!(v.level === undefined || v.level === null || isCefr(v.level))) return false;
+  if ((v.type === "choice" || v.type === "cloze" || v.type === "conjugate" || v.type === "reading") && !(Array.isArray(v.distractors) && v.distractors.every(isText))) return false;
+  // A reading card shows its text above the question.
+  if (v.type === "reading" && !isText(v.passage)) return false;
   // A conjugate card shows its tense in the header and its sentence's gap.
   if (v.type === "conjugate" && !(EXERCISE_TENSES.includes(v.tense as ExerciseTense) && EXERCISE_PERSONS.includes(v.person as ExercisePerson) && isText(v.sentence))) return false;
   if (v.type === "pairs") {

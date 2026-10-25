@@ -270,6 +270,10 @@ describe("import", () => {
           { ...set, id: "x-13", items: [{ id: "q1", type: "conjugate", tense: "futur", person: "tu", distractors: [] }] },
           { ...set, id: "x-14", items: [{ id: "q1", type: "conjugate", tense: "futur", person: "tu", sentence: "tu [[kifferas]]" }] },
           { ...set, id: "x-11", items: [{ id: "q1", type: "conjugate", tense: "futur", person: "tu", sentence: "tu [[kifferas]]", answer: "kifferas", distractors: ["kiffes", "kiffais", "as kiffé"] }] },
+          // A reading item needs its text; a level is A1…C2 or nothing.
+          { ...set, id: "x-15", items: [{ id: "q1", type: "reading", prompt: "Combien ?", answer: "2 010 €", distractors: ["840 €", "1 170 €", "1 620 €"] }] },
+          { ...set, id: "x-16", items: [{ id: "q1", type: "reading", passage: "À louer…", prompt: "Combien ?", answer: "2 010 €", distractors: [], level: "B9" }] },
+          { ...set, id: "x-17", items: [{ id: "q1", type: "reading", passage: "À louer…", passage_label: "ANNONCE", level: "B1", prompt: "Combien ?", answer: "2 010 €", distractors: ["840 €", "1 170 €", "1 620 €"] }] },
         ],
         exercise_runs: [
           { ...run, id: "r-2", answers: null },
@@ -277,9 +281,9 @@ describe("import", () => {
         ],
       },
     });
-    expect(malformed.exercise_sets.skipped).toBe(11);
-    expect(malformed.exercise_sets.inserted).toBe(1);
-    expect(await db.exercise_sets.count()).toBe(2);
+    expect(malformed.exercise_sets.skipped).toBe(13);
+    expect(malformed.exercise_sets.inserted).toBe(2);
+    expect(await db.exercise_sets.count()).toBe(3);
     expect(malformed.exercise_runs.skipped).toBe(2);
 
     // A scoped set («Трудные · все темы») keeps its scope through export and import, a set's level its level.

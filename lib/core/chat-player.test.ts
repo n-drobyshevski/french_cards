@@ -12,7 +12,7 @@ import {
   type ChatPlayerSet,
   type ChatRunResult,
 } from "./chat-player";
-import { CHAT_PLAYER_ARTIFACT, CHAT_PLAYER_HTML } from "../mcp/chat-player-html";
+import { CHAT_PLAYER_ARTIFACT, CHAT_PLAYER_HTML, CHAT_REVIEW_HTML } from "../mcp/chat-player-html";
 
 const item = (over: Partial<ExerciseItem>): ExerciseItem => ({
   id: "i", type: "choice", skill: null, ask: null, tense: null, person: null, word_id: null, new_ref: null,
@@ -81,6 +81,8 @@ describe("chat player contract", () => {
   it("puts the set into the artifact so it can never close the script, and names the page after it", () => {
     expect(CHAT_PLAYER_ARTIFACT.split(ARTIFACT_SET_SLOT)).toHaveLength(2);
     expect(CHAT_PLAYER_HTML).not.toContain(ARTIFACT_SET_SLOT);
+    expect(CHAT_REVIEW_HTML).not.toContain(ARTIFACT_SET_SLOT);
+    expect(CHAT_REVIEW_HTML).toContain('data-mode="app"');
     const page = fillArtifact(CHAT_PLAYER_ARTIFACT, set);
     expect(page).not.toContain(ARTIFACT_SET_SLOT);
     expect(page).not.toContain("</script> & co");

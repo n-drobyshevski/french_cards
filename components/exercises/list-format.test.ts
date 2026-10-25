@@ -225,6 +225,8 @@ describe("phone tiles (E1 A)", () => {
     expect(setKind(typed(["conjugate", "conjugate", "conjugate", "choice"]))).toBe("спряжение");
     expect(setKind(typed(["cloze", "cloze", "cloze", "choice", "pairs"]))).toBe("пропуски");
     expect(setKind(typed(["pairs", "pairs", "choice"]))).toBe("пары");
+    expect(setKind(typed(["reading", "reading", "reading", "choice", "cloze"]))).toBe("тексты");
+    expect(setKind(typed(["reading", "reading", "choice", "cloze"]))).toBeNull();
     // Old register items are not played: they neither name a kind nor dilute one.
     expect(setKind(typed(["register", "register", "register", "choice"]))).toBeNull();
     expect(setKind(typed(["cloze", "register", "register", "cloze", "choice"]))).toBe("пропуски");

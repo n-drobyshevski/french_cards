@@ -63,9 +63,10 @@ export function setThemesLine(
 const KIND_NAMES: readonly (readonly [ExerciseItemType, string])[] = [
   ["cloze", "пропуски"],
   ["pairs", "пары"],
+  ["reading", "тексты"],
 ];
 
-/** «спряжение», «пропуски», «пары»; null for a mixed set (or mostly «choice»). Only played items count. */
+/** «спряжение», «пропуски», «пары», «тексты»; null for a mixed set (or mostly «choice»). Only played items count. */
 export function setKind(all: readonly Pick<ExerciseItem, "type">[]): string | null {
   const items = playedItems(all);
   if (items.length === 0) return null;

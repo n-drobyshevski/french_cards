@@ -18,6 +18,7 @@ import {
 import type { ChatPlayerSet, ChatRunResult } from "@/lib/core/chat-player";
 import { buildQueue, missedItemIds, missedWords, optionsFor, pairsBoard, runItems, scoreRun, type ExerciseOptions } from "@/lib/core/exercises";
 import type { ExerciseAnswer, ExerciseOutcome } from "@/lib/types";
+import type { ExamMiss } from "./exam";
 
 const newId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
 
@@ -166,6 +167,21 @@ export class Round {
 
   missedItemIds() {
     return missedItemIds(this.run());
+  }
+
+  /**
+   * Reading questions missed that are about no word (missedWords can't list them): the question,
+   * the first wrong pick (null for «Не знаю») and the answer, for «Ошибки» and «Обсудить ошибки».
+   */
+  missedQuestions(): ExamMiss[] {
+    const out: ExamMiss[] = [];
+    for (const id of this.missedItemIds()) {
+      const item = this.set.items.find((i) => i.id === id);
+      if (!item || item.type !== "reading" || item.word_id || item.new_ref) continue;
+      const chosen = this.answers.find((a) => a.item_id === id && a.outcome !== "correct" && a.chosen !== null)?.chosen ?? null;
+      out.push({ item, chosen, right: item.answer ?? "" });
+    }
+    return out;
   }
 
   result(): ChatRunResult {

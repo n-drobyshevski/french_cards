@@ -1,132 +1,6 @@
-/* The chat player's look: the app's tokens (app/globals.css, light and dark) and the phone player
-   (X-Player-B) / done screen (X-Done-B) measures. Newsreader and IBM Plex are not available in a
-   sandboxed chat frame, so the families fall back to the stacks the app names after them; an MCP
-   App host's --font-sans / --font-mono take the sans and mono. */
-:root {
-  --paper: #f1f1ee;
-  --surface: #ffffff;
-  --surface-2: #e8e8e4;
-  --ink: #111111;
-  --muted: #5a5a57;
-  --rule: #d6d6d1;
-  --red: #c8331f;
-  --again: #b3261e;
-  --good: #1d6b45;
-  --on-ink: #ffffff;
-  --ink-press: #2a2a2a;
-  --hover: #e8e8e4;
-  --hover-surface: #f4f4f1;
-  --boundary: #8a8a85;
-  --edge: #d6d6d1;
-  --serif: Newsreader, Georgia, "Times New Roman", serif;
-  --sans: var(--font-sans, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif);
-  --mono: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Consolas, monospace);
-  --ease-enter: cubic-bezier(0, 0, 0.3, 1);
-  --ease-standard: cubic-bezier(0.2, 0, 0.38, 0.9);
-  --ease-press: cubic-bezier(0.2, 0, 0, 1);
-  --ms: 1;
-  color-scheme: light;
-}
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --paper: #121212;
-    --surface: #1b1b1a;
-    --surface-2: #262624;
-    --ink: #ececea;
-    --muted: #a3a39e;
-    --rule: #33332f;
-    --red: #ff6a52;
-    --again: #ff7b70;
-    --good: #5cc58f;
-    --on-ink: #121212;
-    --ink-press: #d6d6d1;
-    --hover: #222220;
-    --hover-surface: #242422;
-    --boundary: #6e6e69;
-    --edge: #4a4a45;
-    color-scheme: dark;
-  }
-}
-:root[data-theme="dark"] {
-  --paper: #121212;
-  --surface: #1b1b1a;
-  --surface-2: #262624;
-  --ink: #ececea;
-  --muted: #a3a39e;
-  --rule: #33332f;
-  --red: #ff6a52;
-  --again: #ff7b70;
-  --good: #5cc58f;
-  --on-ink: #121212;
-  --ink-press: #d6d6d1;
-  --hover: #222220;
-  --hover-surface: #242422;
-  --boundary: #6e6e69;
-  --edge: #4a4a45;
-  color-scheme: dark;
-}
-@media (prefers-reduced-motion: reduce) {
-  :root {
-    --ms: 0;
-  }
-}
-
-* {
-  box-sizing: border-box;
-}
-html,
-body {
-  margin: 0;
-}
-body {
-  background: var(--paper);
-  color: var(--ink);
-  font: 400 15px/20px var(--sans);
-  -webkit-font-smoothing: antialiased;
-  -webkit-text-size-adjust: 100%;
-}
-/* In the chat the host's own background shows around the cards. */
-html[data-mode="app"] body {
-  background: transparent;
-}
-button {
-  font: inherit;
-  color: inherit;
-  margin: 0;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-button:disabled {
-  cursor: default;
-}
-:focus-visible {
-  outline: 2px solid var(--ink);
-  outline-offset: 2px;
-}
-[tabindex="-1"]:focus {
-  outline: none;
-}
-.sr {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
-}
-#app {
-  max-width: 560px;
-  margin: 0 auto;
-  padding: 12px 16px 20px;
-}
-h1,
-h2,
-p {
-  margin: 0;
-}
+/* The chat player's look: the phone player (X-Player-B), the done screen (X-Done-B) and «Мини-TCF»
+   (Chat-TCF-*) measures, over the shared tokens. */
+@import "./base.css";
 
 /* --- Head: «набор: …» and the tick row ------------------------------------------------------- */
 .meta {
@@ -734,63 +608,6 @@ p {
   flex-direction: column;
   justify-content: center;
 }
-.quiet {
-  align-self: center;
-  height: 44px;
-  padding: 0 16px;
-  border: 0;
-  background: none;
-  font-weight: 500;
-  color: var(--muted);
-}
-.btn {
-  width: 100%;
-  height: 52px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  border: 1px solid var(--ink);
-  border-radius: 6px;
-  background: var(--ink);
-  color: var(--on-ink);
-  font-weight: 500;
-  transition: scale 110ms var(--ease-press);
-}
-.btn:not(:disabled):active {
-  scale: 0.98;
-  border-color: var(--ink-press);
-  background: var(--ink-press);
-}
-.btn.line {
-  border-color: var(--boundary);
-  background: var(--surface);
-  color: var(--ink);
-}
-.btn.line:not(:disabled):active {
-  border-color: var(--boundary);
-  background: var(--surface-2);
-}
-.btn:disabled {
-  opacity: 0.6;
-}
-.text-act {
-  height: 44px;
-  padding: 0 16px;
-  border: 0;
-  background: none;
-  font-weight: 500;
-  color: var(--ink);
-  text-decoration: underline;
-  text-decoration-color: var(--boundary);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 4px;
-}
-.text-act:disabled {
-  color: var(--muted);
-  text-decoration: none;
-}
 
 /* The intro card of a web word */
 .nw {
@@ -854,6 +671,516 @@ p {
 .foot b {
   font-weight: 400;
   color: var(--ink);
+}
+
+/* A reading item («текст», Ex-Reading-App): its text on a left rule, the question, the stamp beside it */
+.lvl {
+  flex-shrink: 0;
+  font: 400 11px/16px var(--mono);
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.body.reading {
+  padding-top: 20px;
+}
+.passage {
+  margin: 0;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--rule);
+}
+.passage figcaption {
+  font: 400 11px/16px var(--mono);
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.passage p {
+  margin-top: 4px;
+  font: 15px/20px var(--serif);
+  overflow-wrap: break-word;
+}
+.passage p + p {
+  margin-top: 8px;
+}
+/* 600, not the mockup's 500: without Newsreader the fallback serif has no medium and would stay regular. */
+.passage b {
+  font-weight: 600;
+}
+/* The question, and the stamp beside it once answered (in the flow: the question makes room). */
+.rq {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-top: 20px;
+}
+.rq-t {
+  flex: 1;
+  min-width: 0;
+  font-size: 24px;
+  line-height: 30px;
+  letter-spacing: -0.01em;
+}
+.stamp.beside {
+  position: relative;
+  flex-shrink: 0;
+  margin: 4px -6px 0 0;
+}
+.body.reading .aline {
+  margin-top: 14px;
+}
+/* A French option as the answer is a phrase, not a headword: one step smaller. */
+.body.reading .written s.fr-t {
+  font-size: 17px;
+  line-height: 22px;
+}
+.body.reading .right.fr-t {
+  font-size: 21px;
+  line-height: 28px;
+}
+/* Long options: A–D rows (the exam's, with the practice verdicts) */
+.rows {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.xopt {
+  position: relative;
+  min-height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 10px 10px;
+  border: 1px solid var(--boundary);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  transition: scale 110ms var(--ease-press);
+}
+.xopt:not(:disabled):hover {
+  background: var(--hover-surface);
+}
+.xopt:not(:disabled):active {
+  scale: 0.99;
+}
+.xl {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  font: 400 12px/1 var(--mono);
+  color: var(--muted);
+}
+.xt {
+  flex: 1;
+  min-width: 0;
+  font-size: 15px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+.xopt.picked {
+  padding: 9px 11px 9px 9px;
+  border: 2px solid var(--ink);
+}
+.xopt.picked .xl {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--on-ink);
+  font-weight: 500;
+}
+.xopt.picked .xt {
+  font-weight: 500;
+}
+.xopt.right {
+  padding: 9px 11px 9px 9px;
+  border: 2px solid var(--good);
+  color: var(--good);
+}
+.xopt.right .xl {
+  border-color: var(--good);
+  color: var(--good);
+}
+.xopt.right .xt {
+  font-weight: 500;
+}
+.xopt.wrong {
+  border-color: var(--again);
+  color: var(--again);
+}
+.xopt.wrong .xl {
+  border-color: var(--again);
+  color: var(--again);
+}
+.xopt.dim {
+  border-color: var(--rule);
+  color: var(--muted);
+}
+.xm {
+  flex-shrink: 0;
+}
+
+/* --- «Мини-TCF» (Chat-TCF-*): one sheet (base.css) with the red rule ----------------------------- */
+.sbody {
+  padding: 16px 16px 0;
+}
+.stitle {
+  font: 500 28px/32px var(--serif);
+  letter-spacing: -0.01em;
+  overflow-wrap: anywhere;
+}
+.swords {
+  margin-top: 6px;
+  font: italic 15px/20px var(--serif);
+  color: var(--muted);
+}
+.srow {
+  margin-top: 10px;
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.srow.mid {
+  margin-top: 16px;
+  align-items: center;
+}
+.skey {
+  width: 64px;
+  flex-shrink: 0;
+  font: 400 11px/16px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.sval {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  line-height: 18px;
+}
+.lvstrip {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  font: 400 11px/1 var(--mono);
+  letter-spacing: 0.04em;
+}
+.lvstrip span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-right: 1px solid var(--rule);
+  color: var(--boundary);
+}
+.lvstrip span:last-child {
+  border-right: 0;
+}
+.lvstrip span.on {
+  background: var(--ink);
+  color: var(--on-ink);
+  font-weight: 500;
+  border-right-color: var(--muted);
+}
+.rules {
+  margin: 16px 16px 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--rule);
+}
+.rules li {
+  min-height: 40px;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--surface-2);
+}
+.rules li:last-child {
+  border-bottom: 0;
+}
+.rn {
+  width: 20px;
+  flex-shrink: 0;
+  font: 400 11px/20px var(--mono);
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+.sfoot {
+  padding: 12px 16px 16px;
+  border-top: 1px solid var(--rule);
+}
+.btn-time {
+  font: 400 12px/1 var(--mono);
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+}
+.shint {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+  color: var(--muted);
+}
+/* The question */
+.xhead {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 16px;
+}
+.xhead .sl {
+  flex: 1;
+}
+.xcount {
+  font: 500 13px/16px var(--mono);
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.xcount span {
+  color: var(--boundary);
+}
+.timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 500 13px/16px var(--mono);
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.timer.low {
+  color: var(--again);
+}
+.xprog {
+  position: relative;
+  height: 2px;
+  background: var(--surface-2);
+}
+.xprog span {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--ink);
+  transition: width 240ms var(--ease-standard);
+}
+.xbody {
+  padding: 14px 16px 0;
+}
+.xq {
+  margin-top: 14px;
+  font: 500 19px/24px var(--serif);
+  overflow-wrap: break-word;
+}
+.xq:first-child {
+  margin-top: 4px;
+}
+.xq .gap {
+  width: 2.6em;
+}
+.xw {
+  margin-top: 4px;
+  font: 500 26px/32px var(--serif);
+  letter-spacing: -0.01em;
+  overflow-wrap: break-word;
+}
+.xw.ru {
+  font-family: var(--sans);
+  font-size: 22px;
+  line-height: 28px;
+}
+.xw + .xq {
+  margin-top: 8px;
+}
+.xsub {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--muted);
+}
+.xbody .rows {
+  margin-top: 12px;
+}
+.xfoot {
+  padding: 12px 16px 14px;
+}
+.xfoot.col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--rule);
+}
+.xfoot .btn {
+  height: 48px;
+}
+.xfoot .hint {
+  margin: 0;
+}
+/* The result */
+.dsum {
+  padding: 14px 16px;
+}
+.dscore {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 10px;
+}
+.dscore .big {
+  font: 500 30px/36px var(--serif);
+  letter-spacing: -0.01em;
+}
+.dtime {
+  font: 400 13px/16px var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.chips {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(var(--n, 3), minmax(0, 1fr));
+  gap: 6px;
+  font: 400 12px/16px var(--mono);
+  letter-spacing: 0.04em;
+}
+.chip {
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--boundary);
+  border-radius: 4px;
+}
+.chip b {
+  font-weight: 500;
+}
+.chip.ok {
+  border-color: var(--good);
+  color: var(--good);
+}
+.chip.no {
+  border-color: var(--again);
+  color: var(--again);
+}
+.tilde {
+  color: var(--muted);
+}
+.anim .chip {
+  animation: write 240ms var(--ease-enter) calc(120ms + var(--i, 0) * 40ms) both;
+}
+.dnote {
+  margin-top: 10px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+.derr {
+  padding: 10px 16px 0;
+  border-top: 1px solid var(--rule);
+}
+.derr h2 {
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  color: var(--muted);
+}
+.xmiss {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.xmiss li {
+  display: flex;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--surface-2);
+}
+.xmiss li:last-child {
+  border-bottom: 0;
+}
+.sec .xmiss {
+  padding: 0 12px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--surface);
+}
+.xml {
+  width: 22px;
+  flex-shrink: 0;
+  font: 400 11px/20px var(--mono);
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.sec .xml:empty {
+  display: none;
+}
+.xmb {
+  flex: 1;
+  min-width: 0;
+}
+.xmq {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 15px/20px var(--serif);
+}
+.xma {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.xma s {
+  flex-shrink: 0;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--again);
+  text-decoration-thickness: 1px;
+}
+.xmn {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.xmr {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+  color: var(--good);
+}
+.drow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.drow .btn.line {
+  height: 44px;
+  border-color: var(--ink);
+}
+.drow .status {
+  min-height: 44px;
+  padding: 0 12px;
+  font-size: 14px;
+  line-height: 18px;
+}
+.drow .text-act {
+  flex-shrink: 0;
+  padding: 0 10px;
 }
 
 /* --- Done ---------------------------------------------------------------------------------- */
@@ -1030,44 +1357,4 @@ p {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-}
-
-@keyframes enter {
-  from {
-    opacity: 0;
-    transform: translateX(calc(24px * var(--ms)));
-  }
-}
-@keyframes fade {
-  from {
-    opacity: 0;
-  }
-}
-@keyframes stamp {
-  from {
-    opacity: 0;
-    transform: rotate(-4deg) scale(calc(1 + 0.15 * var(--ms)));
-  }
-}
-@keyframes flash {
-  40% {
-    opacity: 1;
-  }
-}
-@keyframes miss {
-  from {
-    border-color: var(--again);
-    color: var(--again);
-  }
-}
-@keyframes write {
-  from {
-    opacity: calc(1 - var(--ms));
-    transform: translateY(calc(4px * var(--ms)));
-  }
-}
-@keyframes pulse {
-  to {
-    opacity: 0.5;
-  }
 }

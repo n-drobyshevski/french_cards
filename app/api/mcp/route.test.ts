@@ -10,7 +10,8 @@ vi.mock("@/lib/mcp/repo", async (importOriginal) => ({
 
 import { resetRateLimits } from "@/lib/ai/rate-limit";
 import { CHAT_PLAYER_URI, MCP_APP_MIME } from "@/lib/core/chat-player";
-import { CHAT_PLAYER_HTML } from "@/lib/mcp/chat-player-html";
+import { CHAT_REVIEW_URI } from "@/lib/core/chat-review";
+import { CHAT_PLAYER_HTML, CHAT_REVIEW_HTML } from "@/lib/mcp/chat-player-html";
 import { DELETE, GET, OPTIONS, PATCH, POST, PUT } from "./[key]/route";
 
 const SECRET = "test-secret-test-secret-test-secret-42";
@@ -110,7 +111,7 @@ describe("/api/mcp/[key]", () => {
     expect((await rpc(SECRET, "initialize")).status).toBe(404);
   });
 
-  it("initializes and lists the 28 tools with titles and annotations", async () => {
+  it("initializes and lists the 30 tools with titles and annotations", async () => {
     const version = await initialize();
     const res = await rpc(SECRET, "tools/list", {}, { "mcp-protocol-version": version });
     expect(res.headers.get("cache-control")).toBe("no-store");
@@ -132,6 +133,8 @@ describe("/api/mcp/[key]", () => {
         "list_folders",
         "move_words",
         "play_exercises",
+        "propose_levels",
+        "propose_words",
         "restore_exercise_set",
         "restore_field",
         "restore_folder",
@@ -158,7 +161,7 @@ describe("/api/mcp/[key]", () => {
     expect(byName.get("delete_words")?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
   });
 
-  it("serves the chat exercise player as an MCP App that play_exercises points at", async () => {
+  it("serves the chat exercise player and the review page as MCP Apps that their tools point at", async () => {
     const version = await initialize();
     const h = { "mcp-protocol-version": version };
     const tools = (await message(await rpc(SECRET, "tools/list", {}, h))).result?.tools as { name: string; _meta?: Record<string, unknown> }[];
@@ -166,10 +169,19 @@ describe("/api/mcp/[key]", () => {
     expect(byName.get("play_exercises")?._meta).toMatchObject({ ui: { resourceUri: CHAT_PLAYER_URI } });
     expect(byName.get("save_exercise_result")?._meta).toEqual({ ui: { visibility: ["model", "app"] } });
     expect(byName.get("create_exercise_set")?._meta).toBeUndefined();
+    expect(byName.get("propose_levels")?._meta).toMatchObject({ ui: { resourceUri: CHAT_REVIEW_URI } });
+    expect(byName.get("propose_words")?._meta).toMatchObject({ ui: { resourceUri: CHAT_REVIEW_URI } });
+    // The tools the review page calls keep the default visibility (the model and the app).
+    for (const name of ["add_words", "set_word_levels", "delete_words"]) expect(byName.get(name)?._meta).toBeUndefined();
     const listed = (await message(await rpc(SECRET, "resources/list", {}, h))).result?.resources;
-    expect(listed).toEqual([expect.objectContaining({ uri: CHAT_PLAYER_URI, mimeType: MCP_APP_MIME })]);
+    expect(listed).toEqual([
+      expect.objectContaining({ name: "exercise_player", uri: CHAT_PLAYER_URI, mimeType: MCP_APP_MIME }),
+      expect.objectContaining({ name: "review_page", uri: CHAT_REVIEW_URI, mimeType: MCP_APP_MIME }),
+    ]);
     const read = (await message(await rpc(SECRET, "resources/read", { uri: CHAT_PLAYER_URI }, h))).result?.contents as unknown[];
     expect(read).toEqual([{ uri: CHAT_PLAYER_URI, mimeType: MCP_APP_MIME, text: CHAT_PLAYER_HTML }]);
+    const review = (await message(await rpc(SECRET, "resources/read", { uri: CHAT_REVIEW_URI }, h))).result?.contents as unknown[];
+    expect(review).toEqual([{ uri: CHAT_REVIEW_URI, mimeType: MCP_APP_MIME, text: CHAT_REVIEW_HTML }]);
   });
 
   it("refuses subscriptions/listen at once instead of holding a stream open", async () => {
@@ -185,6 +197,19 @@ describe("/api/mcp/[key]", () => {
     );
     const reply = await Promise.race([message(res), new Promise<never>((_, reject) => setTimeout(() => reject(new Error("stream left open")), 2000))]);
     expect(reply.error).toMatchObject({ message: "Subscription limit reached" });
+  });
+
+  it("gives propose_words the app's own origin, for the card's link back into the app", async () => {
+    const version = await initialize();
+    const args = { words: [{ fr: "avoir le seum", ru: "беситься" }, { fr: "la thune", ru: "бабки", pos: "noun", gender: "f" }], folder_chosen_by_user: false };
+    const res = await rpc(SECRET, "tools/call", { name: "propose_words", arguments: args }, { "mcp-protocol-version": version });
+    const result = (await message(res)).result as { isError?: boolean; structuredContent: { app_url: string; rows: { fr: string; checked: boolean }[] } };
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent.app_url).toBe("https://frenchcards.vercel.app");
+    expect(result.structuredContent.rows.map((r) => [r.fr, r.checked])).toEqual([
+      ["avoir le seum", false],
+      ["la thune", true],
+    ]);
   });
 
   it("calls search_words against the repo", async () => {

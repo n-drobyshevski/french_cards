@@ -4,7 +4,7 @@
 //
 // Server side: `completeSet(input, ctx)` fills the server-written parts (ids, word snapshots, the
 // choice/meaning prompt and answer, pairs tiles, the conjugate answer, gap and distractors from the
-// verb's conjugation), then `validateSet(set, ctx)`
+// verb's conjugation, a reading item's text and label), then `validateSet(set, ctx)`
 // refuses a broken set with path-precise errors and `warningsFor(set)` lists what is merely weak.
 // App side: `optionsFor`, `clozeParts`, `pairsBoard`, `buildQueue` / `requeue` / `resumeQueue`,
 // `scoreRun`, `missedWords`, and the request texts the user copies into Claude.
@@ -40,12 +40,12 @@ export const EXERCISE_ID_PREFIX = "x-";
  * Every item type a stored set can hold: what old rows and backups are read with. «register» (pick
  * нейтр. / fam. / arg. / vulg.) is no longer made or played; its items stay in old sets only.
  */
-export const EXERCISE_ITEM_TYPES: readonly ExerciseItemType[] = ["choice", "cloze", "register", "pairs", "conjugate"];
+export const EXERCISE_ITEM_TYPES: readonly ExerciseItemType[] = ["choice", "cloze", "register", "pairs", "conjugate", "reading"];
 /**
  * The item types still made and played. Anything else in a stored set (an old register item, a type
  * a newer connector invents) is left out of the round, its score and its count, as if it were not there.
  */
-export const PLAYED_ITEM_TYPES: readonly ExerciseItemType[] = ["choice", "cloze", "pairs", "conjugate"];
+export const PLAYED_ITEM_TYPES: readonly ExerciseItemType[] = ["choice", "cloze", "pairs", "conjugate", "reading"];
 /** An item of a type the player plays (PLAYED_ITEM_TYPES). */
 export const isPlayedItem = (item: Pick<ExerciseItem, "type">): boolean => PLAYED_ITEM_TYPES.includes(item.type);
 /** The items of a set that count: its played ones, in set order («8 вопросов», the round, the score). */
@@ -68,6 +68,11 @@ export const TEXT_MAX = 300;
 export const ANSWER_MAX = 120;
 export const EXPLAIN_MAX = 200;
 export const REF_MAX = 20;
+/** reading («текст»): the French text, a whole short one (an ad, a message, a notice, a short article). */
+export const PASSAGE_MIN = 40;
+export const PASSAGE_MAX = 900;
+/** reading: the text's kind, a mono label («ANNONCE», «MESSAGE», «ARTICLE», «AVIS»). */
+export const PASSAGE_LABEL_MAX = 20;
 /** At least this many other items between two items about the same word, where possible. */
 export const MIN_GAP = 2;
 /** An item missed this many times leaves the round instead of coming back again. */
@@ -139,6 +144,11 @@ export interface ExerciseItemInput {
   distractors?: readonly string[] | null;
   pairs?: readonly string[] | null;
   explain_ru?: string | null;
+  /** reading: the French text (line breaks kept) and its kind («annonce» → «ANNONCE»). */
+  passage?: string | null;
+  passage_label?: string | null;
+  /** The item's CEFR level («Мини-TCF»), any type; anything but A1…C2 is dropped. */
+  level?: Cefr | null;
 }
 
 export interface ExerciseNewWordInput {
@@ -257,6 +267,22 @@ const clean = (s: unknown): string | null => {
 const cleanList = (list: unknown): string[] =>
   Array.isArray(list) ? list.map((x) => (typeof x === "string" ? x.replace(/\s+/g, " ").trim() : "")) : [];
 
+/**
+ * A reading text: spaces and tabs run together and each line trimmed, but its line breaks kept (an
+ * ad reads line by line), at most one empty line in a row. No-break spaces stay («2 010 €», « ? »).
+ */
+const cleanPassage = (s: unknown): string | null => {
+  if (typeof s !== "string") return null;
+  const t = s
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  return t ? t : null;
+};
+
 const isLevel = (n: unknown): n is SlangLevel => n === 0 || n === 1 || n === 2 || n === 3;
 
 /** A word's Russian equivalents: «девушка, тёлка» → ["девушка", "тёлка"] (ru holds one to three, comma-separated). */
@@ -374,6 +400,7 @@ export function completeSet(input: ExerciseSetInput, ctx: ExerciseContext): Exer
     const type = raw.type;
     const pairs = type === "pairs";
     const conjugateItem = type === "conjugate";
+    const reading = type === "reading";
     const skill = type === "choice" ? (raw.skill ?? "meaning") : null;
     const ask = skill === "meaning" ? (raw.ask ?? "fr") : null;
     const tense = conjugateItem ? (raw.tense ?? null) : null;
@@ -384,7 +411,7 @@ export function completeSet(input: ExerciseSetInput, ctx: ExerciseContext): Exer
     let prompt = clean(raw.prompt);
     let answer = clean(raw.answer);
     let sentence = type === "cloze" ? clean(raw.sentence) : null;
-    let distractors = type === "choice" || type === "cloze" ? cleanList(raw.distractors) : [];
+    let distractors = type === "choice" || type === "cloze" || reading ? cleanList(raw.distractors) : [];
     if (skill === "meaning" && word) {
       prompt ??= ask === "ru" ? word.ru : word.fr;
       // One equivalent, the shape of a distractor (a whole «девушка, тёлка» list would stand out).
@@ -428,6 +455,9 @@ export function completeSet(input: ExerciseSetInput, ctx: ExerciseContext): Exer
       tiles: refs.map(tileOf).filter((t): t is ExercisePairTile => t !== null),
       explain_ru: clean(raw.explain_ru),
       word,
+      // Only where they mean something: the other items' rows stay as they were.
+      ...(reading ? { passage: cleanPassage(raw.passage), passage_label: clean(raw.passage_label)?.toLocaleUpperCase("fr") ?? null } : {}),
+      ...(isCefr(raw.level) ? { level: raw.level } : {}),
     };
   });
 
@@ -458,6 +488,8 @@ export interface ExerciseValidation {
 }
 
 const CLOZE_SPAN = /\[\[([^[\]]*)\]\]/g;
+/** A passage label once upper-cased: letters and digits, with spaces, dots, dashes, slashes between. */
+const PASSAGE_LABEL = /^[\p{Lu}\p{N}](?:[\p{Lu}\p{N} .'’/·-]*[\p{Lu}\p{N}.])?$/u;
 
 /** A cloze sentence split at its one [[answer]] span; null unless there is exactly one non-empty span. */
 export function clozeParts(sentence: string): { before: string; after: string; answer: string } | null {
@@ -467,6 +499,39 @@ export function clozeParts(sentence: string): { before: string; after: string; a
   const answer = m[1].trim();
   if (!answer) return null;
   return { before: sentence.slice(0, m.index), after: sentence.slice(m.index + m[0].length), answer };
+}
+
+/** One line of a reading text: a leading «Loyer :» label (set in bold) and the rest. */
+export interface PassageLine {
+  label: string | null;
+  text: string;
+}
+
+const LINE_LABEL = /^([^:\n]{1,32}?[ \u00a0]?:)[ \u00a0]+(\S.*)$/;
+
+/**
+ * A reading text as paragraphs of lines (an empty line parts paragraphs). An ad's «Loyer : 780 €»
+ * lines keep their label apart, to be set in bold as in Ex-Reading-App (the app's card and the chat
+ * player alike), but only when the text reads as such a list (two labelled lines or more, a label of
+ * at most four words): a colon inside an article's sentence stays plain.
+ */
+export function passageLines(text: string): PassageLine[][] {
+  const paragraphs = text
+    .replace(/\r\n?/g, "\n")
+    .split(/\n[ \t]*\n/)
+    .map((p) => p.split("\n").map((l) => l.trim()).filter(Boolean))
+    .filter((p) => p.length > 0);
+  const labelOf = (line: string) => {
+    const m = LINE_LABEL.exec(line);
+    return m && m[1].trim().split(/\s+/).length <= 5 ? m : null;
+  };
+  const listed = paragraphs.flat().filter((l) => labelOf(l)).length >= 2;
+  return paragraphs.map((p) =>
+    p.map((line) => {
+      const m = listed ? labelOf(line) : null;
+      return m ? { label: m[1], text: m[2] } : { label: null, text: line };
+    }),
+  );
 }
 
 /**
@@ -538,8 +603,11 @@ export function validateSet(set: ExerciseSetContent, ctx: ExerciseContext): Exer
     // choice/meaning fr→ru: every equivalent of the word is a right answer, so none may be a distractor.
     const meaning = item.type === "choice" && item.skill === "meaning";
     const synonyms = new Set(meaning && item.ask === "fr" && item.word ? ruEquivalents(item.word.ru).map(searchKey) : []);
-    // choice/meaning: all four options in one language (ask "fr" → Russian options, "ru" → French).
-    const russian = meaning && item.answer ? isRussian(item.answer) : null;
+    // choice/meaning: all four options in one language (ask "fr" → Russian options, "ru" → French);
+    // reading: all four French, like the text and the question (the TCF's options).
+    const reading = item.type === "reading";
+    const russian = meaning && item.answer ? isRussian(item.answer) : reading ? false : null;
+    if (reading && item.answer && isRussian(item.answer)) err(`${p}.answer`, "must be French, like the text and the question");
     const seen = new Set<string>();
     list.forEach((d, j) => {
       const dp = `${p}.distractors[${j}]`;
@@ -550,7 +618,14 @@ export function validateSet(set: ExerciseSetContent, ctx: ExerciseContext): Exer
       else if (synonyms.has(key)) err(dp, `«${d}» is a translation of the word itself (its ru is «${item.word!.ru}»)`);
       else if (seen.has(key)) err(dp, `duplicate distractor «${d}»`);
       else if (russian !== null && isRussian(d) !== russian) {
-        err(dp, russian ? 'must be Russian like the answer (ask "fr" shows the French word, the options are Russian)' : 'must be French like the answer (ask "ru" shows the Russian, the options are French)');
+        err(
+          dp,
+          reading
+            ? "must be French, like the text and the question"
+            : russian
+              ? 'must be Russian like the answer (ask "fr" shows the French word, the options are Russian)'
+              : 'must be French like the answer (ask "ru" shows the Russian, the options are French)',
+        );
       }
       seen.add(key);
     });
@@ -570,7 +645,7 @@ export function validateSet(set: ExerciseSetContent, ctx: ExerciseContext): Exer
     // choice/meaning: the server writes the prompt and answer from the word; when the word does not
     // resolve, only the word_id / new_ref error is reported (never «prompt: required»).
     const unresolved = item.type === "choice" && item.skill === "meaning" && !item.word;
-    text(`${p}.prompt`, item.prompt, TEXT_MAX, item.type === "choice" && !unresolved);
+    text(`${p}.prompt`, item.prompt, TEXT_MAX, (item.type === "choice" && !unresolved) || item.type === "reading");
 
     switch (item.type) {
       case "choice":
@@ -648,6 +723,23 @@ export function validateSet(set: ExerciseSetContent, ctx: ExerciseContext): Exer
         }
         if (!tenseOk || !personOk) break;
         if (!item.sentence || !clozeParts(item.sentence)) err(`${p}.sentence`, "must be built by the server from the verb's conjugation");
+        checkOptions(p, item);
+        break;
+      }
+      case "reading": {
+        // The word is optional (the text may be about none of the user's words); a new one has no place.
+        if (item.new_ref) err(`${p}.new_ref`, "reading items take no new word; word_id (a library word the text uses) is optional");
+        else if (item.word_id) checkWordRef(`${p}.word_id`, item.word_id);
+        text(`${p}.passage`, item.passage, PASSAGE_MAX, true);
+        if (typeof item.passage === "string" && item.passage && item.passage.length <= PASSAGE_MAX) {
+          if (item.passage.length < PASSAGE_MIN) err(`${p}.passage`, `too short (${item.passage.length} < ${PASSAGE_MIN} characters): a whole short text, an ad, a message or a notice`);
+          else if (isRussian(item.passage)) err(`${p}.passage`, "must be French (the text the question is about)");
+        }
+        text(`${p}.passage_label`, item.passage_label, PASSAGE_LABEL_MAX, false);
+        if (typeof item.passage_label === "string" && item.passage_label.length <= PASSAGE_LABEL_MAX && item.passage_label && !PASSAGE_LABEL.test(item.passage_label)) {
+          err(`${p}.passage_label`, "the text's kind in a word or two, letters only («ANNONCE», «MESSAGE», «ARTICLE»)");
+        }
+        if (typeof item.prompt === "string" && isRussian(item.prompt)) err(`${p}.prompt`, "must be French: the question about the text, as in the TCF");
         checkOptions(p, item);
         break;
       }
@@ -756,14 +848,18 @@ const containsWord = (hay: string, needle: string) => {
 const stemsOf = (item: ExerciseItem): string[] =>
   [item.prompt, item.sentence?.replace(CLOZE_SPAN, " "), item.sentence_ru].filter((s): s is string => !!s);
 
+/** At least half reading items: a set of texts («Мини-TCF», TCF «compréhension écrite»), one type by design. */
+export const isReadingSet = (items: readonly Pick<ExerciseItem, "type">[]): boolean => items.filter((i) => i.type === "reading").length * 2 >= items.length;
+
 /** At least half conjugate items: a «Спряжение глаголов» set (conjugate plus a few cloze, by design; 3 + 3 counts). */
 export const isVerbSet = (items: readonly Pick<ExerciseItem, "type">[]): boolean => items.filter((i) => i.type === "conjugate").length * 2 >= items.length;
 
 /**
- * What makes a set weak, without blocking it: fewer than 3 item types (not in a verb set); the answer is the longest
- * option in more than 60% of choice/cloze items; an answer shows in a stem (its own, or another
- * item's about a different word); the same word in two consecutive items; more than 30% of the
- * set's words are new.
+ * What makes a set weak, without blocking it: fewer than 3 item types (not in a verb set or a set
+ * of texts); the answer is the longest option in more than 60% of choice/cloze/reading items; an
+ * answer shows in a stem (its own, or another item's about a different word; a reading answer only
+ * in its own question: it is meant to be found in its text); the same word in two consecutive
+ * items; more than 30% of the set's words are new.
  */
 export function warningsFor(set: Pick<ExerciseSet, "items" | "new_words">): ExerciseWarning[] {
   const out: ExerciseWarning[] = [];
@@ -771,11 +867,11 @@ export function warningsFor(set: Pick<ExerciseSet, "items" | "new_words">): Exer
 
   // Only the types still played count: an old register item adds no variety the user sees.
   const types = new Set(playedItems(items).map((i) => i.type));
-  if (types.size < 3 && !isVerbSet(playedItems(items))) {
+  if (types.size < 3 && !isVerbSet(playedItems(items)) && !isReadingSet(playedItems(items))) {
     out.push({ code: "few_types", message: `only ${types.size} item type(s); use at least 3 (${PLAYED_ITEM_TYPES.join(", ")})` });
   }
 
-  const optioned = items.filter((i) => (i.type === "choice" || i.type === "cloze") && i.answer && (i.distractors ?? []).length > 0);
+  const optioned = items.filter((i) => (i.type === "choice" || i.type === "cloze" || i.type === "reading") && i.answer && (i.distractors ?? []).length > 0);
   const longest = optioned.filter((i) => i.answer!.length > Math.max(...i.distractors.map((d) => d.length))).length;
   if (optioned.length >= 3 && longest / optioned.length > 0.6) {
     out.push({
@@ -798,6 +894,7 @@ export function warningsFor(set: Pick<ExerciseSet, "items" | "new_words">): Exer
       out.push({ code: "stem_leak", path: `items[${i}]`, message: `the answer «${ownLeak}» shows in the item's own stem` });
       return;
     }
+    if (item.type === "reading") return;
     const mine = new Set(itemWordKeys(item));
     for (let j = 0; j < items.length; j++) {
       const other = items[j];
@@ -858,7 +955,7 @@ export interface ExerciseOptions {
 }
 
 /**
- * The options of an item as the grid shows them: choice / cloze shuffle the answer among its
+ * The options of an item as the grid shows them: choice / cloze / conjugate / reading shuffle the answer among its
  * distractors (reshuffle on each attempt with a new `random`); pairs (and a type no longer played)
  * has none (see `pairsBoard`).
  */

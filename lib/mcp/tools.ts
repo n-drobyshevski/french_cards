@@ -44,6 +44,9 @@ import {
   MAX_ATTEMPTS,
   missedWords,
   NEW_WORDS_MAX,
+  PASSAGE_LABEL_MAX,
+  PASSAGE_MAX,
+  PASSAGE_MIN,
   parseScope,
   playableItemIds,
   REF_MAX,
@@ -65,14 +68,15 @@ import {
   matchesFocus,
   parseExerciseFocus,
 } from "@/lib/core/exercise-focus";
-import { CHAT_ITEM_TYPES, CHAT_PLAYER_URI, fillArtifact, MCP_APP_MIME, parseRunLine, RUN_LINE_PREFIX, SAVE_RESULT_TOOL, type ChatPlayerSet, type ChatRunResult } from "@/lib/core/chat-player";
+import { CHAT_ITEM_TYPES, CHAT_PLAYER_URI, EXAM_SECONDS_PER_ITEM, fillArtifact, MCP_APP_MIME, parseRunLine, RUN_LINE_PREFIX, SAVE_RESULT_TOOL, type ChatPlayerSet, type ChatRunResult } from "@/lib/core/chat-player";
+import { CHAT_REVIEW_URI, type LevelReviewRow, type LevelsReview, type ReviewFolder, type WordReviewRow, type WordsReview } from "@/lib/core/chat-review";
 import { matchesSearch, normalizeLemma, searchHaystack, searchKey } from "@/lib/core/text";
 import { buildWord, cleanText, directionsOf, isMovable, isPaused, pausedFolderIds } from "@/lib/core/words";
 import { cleanConjugation, cleanOrigin, conjugate, ORIGIN_MAX, type ConjData } from "@/lib/core/conjugate";
 import conjTable from "@/public/lexique/fr-conj.json";
 import { newId } from "@/lib/id";
 import { folderOrderOf, planDay } from "@/lib/core/plan";
-import { CEFR_LEVELS, STORED_LEVEL_SOURCES, type Cefr, type LevelResolver, type StoredLevelSource } from "@/lib/core/level";
+import { CEFR_LEVELS, STORED_LEVEL_SOURCES, storedLevel, type Cefr, type LevelResolver, type StoredLevelSource } from "@/lib/core/level";
 import { migrateStudyPlan, NEW_WORDS_MAX as PLAN_NEW_WORDS_MAX, NEW_WORDS_MIN as PLAN_NEW_WORDS_MIN, parseStudyPlan, REVIEW_CAP_MAX, REVIEW_CAP_MIN, sameStudyPlan, STUDY_PLAN_PREF, type StudyPlan } from "@/lib/core/study-plan";
 import { cardStatus, newReviewState, retrievability, reviewStateId, wordStatus, type CardStatus } from "@/lib/scheduler";
 import type {
@@ -105,7 +109,7 @@ import { lemmaLevel, serverLevels } from "./levels";
 import { HISTORY_DAYS_MAX, historyRange, progressHistory } from "./history";
 import { studyDay, studyDayStartBefore } from "./study-day";
 import { planFitLogsFrom, planFitView, serverPlanFit } from "./plan-fit";
-import { CHAT_PLAYER_ARTIFACT, CHAT_PLAYER_HTML } from "./chat-player-html";
+import { CHAT_PLAYER_ARTIFACT, CHAT_PLAYER_HTML, CHAT_REVIEW_HTML } from "./chat-player-html";
 
 export interface ToolDeps {
   repo: McpRepo;
@@ -113,6 +117,8 @@ export interface ToolDeps {
   userId: string;
   /** IANA zone for the study day. */
   timeZone: string;
+  /** The app's origin (no trailing slash), for links back into it from the chat; missing when unknown. */
+  appUrl?: string | null;
   now: () => Date;
 }
 
@@ -962,17 +968,21 @@ export const updateStudyPlan = tool({
   },
 });
 
+/** add_words' words and themes, shared with propose_words (its dry run). */
+const addWordsInput = z.object({
+  words: z.array(newWordSchema).min(1).max(50),
+  folder: folderSelector.optional().describe(`Theme for all words: id, slug or name (default «${INBOX_NAME}»).`),
+  folder_chosen_by_user: z
+    .boolean()
+    .describe("True when the user named the theme (it then stays put during automatic sorting); false when you picked it."),
+});
+
 export const addWords = tool({
   name: "add_words",
   title: "Add words",
   description:
-    `Add 1–50 new words. Each gets review cards (FR→RU, and RU→FR unless both_directions is false). Words whose French form is already saved are skipped (on_duplicate "skip", the default) and listed in \`duplicates\`. Fill in everything you can: ru, slang_level (0 neutral, 1 familier, 2 argot, 3 vulgaire), verlan, pos, gender for nouns, and a short example_fr with example_ru. \`cefr\` («Уровень языка») is optional: the app estimates a level itself, and \`added\` shows the \`level\` each word got. \`folder\` is a theme id, slug or name (default «${INBOX_NAME}»); set folder_chosen_by_user to true only when the user named the theme (per word, \`folder\` and folder_chosen_by_user override the call's). Optional \`custom_fields\` sets the user's custom fields by name (list_fields). List the words and get the user's OK before adding more than 5. Undo with delete_words and the returned ids.`,
-  input: z.object({
-    words: z.array(newWordSchema).min(1).max(50),
-    folder: folderSelector.optional().describe(`Theme for all words: id, slug or name (default «${INBOX_NAME}»).`),
-    folder_chosen_by_user: z
-      .boolean()
-      .describe("True when the user named the theme (it then stays put during automatic sorting); false when you picked it."),
+    `Add 1–50 new words. Each gets review cards (FR→RU, and RU→FR unless both_directions is false). Words whose French form is already saved are skipped (on_duplicate "skip", the default) and listed in \`duplicates\`. Fill in everything you can: ru, slang_level (0 neutral, 1 familier, 2 argot, 3 vulgaire), verlan, pos, gender for nouns, and a short example_fr with example_ru. \`cefr\` («Уровень языка») is optional: the app estimates a level itself, and \`added\` shows the \`level\` each word got. \`folder\` is a theme id, slug or name (default «${INBOX_NAME}»); set folder_chosen_by_user to true only when the user named the theme (per word, \`folder\` and folder_chosen_by_user override the call's). Optional \`custom_fields\` sets the user's custom fields by name (list_fields). Before adding more than 5, show them with propose_words (its card adds them on the user's tap), or, where the user sees no card, list them and get the user's OK. Undo with delete_words and the returned ids.`,
+  input: addWordsInput.extend({
     on_duplicate: z.enum(["skip", "add"]).default("skip").describe('"add" saves a word even if the same French form exists.'),
   }),
   write: true,
@@ -1074,6 +1084,127 @@ export const addWords = tool({
       note: SYNC_NOTE,
     };
   },
+});
+
+// «Проверка» in the chat (lib/core/chat-review.ts): propose_words and propose_levels show the review
+// page (an MCP App, CHAT_REVIEW_URI) with what Claude proposes, and write nothing; the page itself
+// calls add_words / set_word_levels on the user's tap, and delete_words / set_word_levels' undo for
+// «Отменить».
+
+const REVIEW_META = { ui: { resourceUri: CHAT_REVIEW_URI }, "ui/resourceUri": CHAT_REVIEW_URI };
+
+/** «слово / слова / слов» for the review pages' notes to Claude. */
+function ruCount(n: number, forms: readonly [one: string, few: string, many: string]): string {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  const form = m10 === 1 && m100 !== 11 ? forms[0] : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? forms[1] : forms[2];
+  return `${n} ${form}`;
+}
+const WORDS_RU = ["слово", "слова", "слов"] as const;
+
+/** The themes the «Новые слова» picker offers: «Входящие» first, then the live themes in order, each with its live words. */
+function reviewFolders(folders: readonly Folder[], words: readonly Word[]): ReviewFolder[] {
+  const live = new Map(liveFolders(folders).map((f) => [f.id, f]));
+  const counts = new Map<string | null, number>();
+  for (const w of words) {
+    if (w.deleted_at !== null) continue;
+    const key = placeOf(w, live)?.id ?? null;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return [{ id: null, name: INBOX_NAME, count: counts.get(null) ?? 0 }, ...[...live.values()].map((f) => ({ id: f.id, name: f.name, count: counts.get(f.id) ?? 0 }))];
+}
+
+export const proposeWords = tool({
+  name: "propose_words",
+  title: "Show new words for review",
+  description: `Show new words in the chat for the user to check before they are added («Новые слова»): a card lists them with their translation, the app's level, the register and the theme, words already saved unchecked and marked; the user can uncheck words and change a theme, then the card's «Добавить N» adds them itself (add_words) and offers «Отменить». Use it instead of a text list for words from a text, a screenshot, a song or a conversation. Same input as add_words (the words with every field you can fill, \`folder\`, folder_chosen_by_user), plus an optional source_label; the themes are checked and the duplicates found exactly as add_words does. Writes nothing. Never list the words in the chat as well. If the user says they see no card (or the host shows no apps, e.g. Claude Code), list the words in text instead, wait for the OK and call add_words.`,
+  input: addWordsInput.extend({
+    source_label: z
+      .string()
+      .trim()
+      .max(40)
+      .nullable()
+      .optional()
+      .describe("Where the words come from, a short Russian label the card shows in capitals: «из скриншота», «из песни», «из статьи»."),
+  }),
+  write: false,
+  meta: REVIEW_META,
+  annotations: READ,
+  async run(deps, args) {
+    const wantsFields = args.words.some((w) => w.custom_fields !== undefined);
+    const [folders, words, defs] = await Promise.all([
+      deps.repo.folders(),
+      deps.repo.words(),
+      wantsFields ? deps.repo.fieldDefs() : Promise.resolve([] as FieldDef[]),
+    ]);
+    const callFolder = args.folder === undefined ? null : resolveFolder(args.folder, folders);
+    const targets = args.words.map((w) => (w.folder === undefined ? callFolder : resolveFolder(w.folder, folders)));
+    // Fields that don't fit are refused now, as add_words would, not when the user taps «Добавить».
+    for (const w of args.words) if (w.custom_fields) applyCustomFields([], w.custom_fields, defs);
+    const live = new Map(liveFolders(folders).map((f) => [f.id, f]));
+    const picker = reviewFolders(folders, words);
+    const pickerById = new Map(picker.map((f) => [f.id, f]));
+    const byLemma = new Map<string, Word>();
+    for (const w of words) if (w.deleted_at === null) byLemma.set(normalizeLemma(w.fr), w);
+    const levels = serverLevels();
+    const seen = new Set<string>();
+    const rows: WordReviewRow[] = [];
+    args.words.forEach((input, i) => {
+      // The same word twice in one batch is shown once (add_words would skip the second).
+      const key = normalizeLemma(input.fr);
+      if (seen.has(key)) return;
+      seen.add(key);
+      const dup = byLemma.get(key);
+      const fr = cleanText(input.fr) ?? input.fr;
+      const pos = input.pos ?? "other";
+      const slang = (input.slang_level ?? 0) as SlangLevel;
+      const verlan = input.verlan ?? false;
+      const cefr = input.cefr ?? null;
+      const exampleFr = cleanText(input.example_fr);
+      // The add_words fields the card doesn't show: the card sends them back with the word.
+      const extra = Object.fromEntries(
+        Object.entries({ tags: input.tags, custom_fields: input.custom_fields, conjugation: input.conjugation, both_directions: input.both_directions }).filter(([, v]) => v !== undefined),
+      );
+      rows.push({
+        key: String(i),
+        fr,
+        ru: cleanText(input.ru) ?? input.ru,
+        pos,
+        gender: pos === "noun" ? (input.gender ?? "none") : "none",
+        slang_level: slang,
+        verlan,
+        note: cleanText(input.note),
+        example_fr: exampleFr,
+        example_ru: exampleFr ? cleanText(input.example_ru) : null,
+        origin: cleanOrigin(input.origin),
+        // The level add_words' result would show: Claude's, else the app's estimate.
+        level: levels.level({ fr, pos, slang_level: slang, verlan, cefr, cefr_source: cefr ? "chat" : null })?.level ?? null,
+        cefr,
+        ...(Object.keys(extra).length > 0 ? { extra } : {}),
+        folder: pickerById.get(targets[i]?.id ?? null)!,
+        folder_chosen_by_user: input.folder_chosen_by_user ?? args.folder_chosen_by_user,
+        duplicate: dup ? { id: dup.id, fr: dup.fr, folder_name: folderRef(placeOf(dup, live)).name } : null,
+        checked: !dup,
+      });
+    });
+    const review: WordsReview = {
+      kind: "kartochki-words",
+      version: 1,
+      rows,
+      folders: picker,
+      source_label: cleanText(args.source_label),
+      app_url: deps.appUrl ? deps.appUrl.replace(/\/+$/, "") : null,
+    };
+    const fresh = rows.filter((r) => r.checked).length;
+    const dups = rows.length - fresh;
+    const message =
+      `Показал ${ruCount(rows.length, WORDS_RU)} на проверку в карточке «Новые слова»: ${fresh} к добавлению` +
+      (dups > 0 ? `, ${dups} уже есть в Карточках (сняты)` : "") +
+      `. Не перечисляй их в чате; пользователь добавит их в карточке (её «Добавить» сама вызывает add_words и предлагает «Отменить»). ` +
+      `Скажи в одной строке, что слова ждут проверки выше. Если пользователь скажет, что карточки не видно, перечисли слова текстом, дождись OK и вызови add_words.`;
+    return { review, message };
+  },
+  reply: (out) => ({ content: [{ type: "text", text: out.message }], structuredContent: out.review as unknown as Record<string, unknown> }),
 });
 
 export const updateWord = tool({
@@ -1209,7 +1340,7 @@ export const SET_LEVELS_MAX = 100;
 export const setWordLevels = tool({
   name: "set_word_levels",
   title: "Set word levels",
-  description: `Set «Уровень языка» (CEFR A1…C2) on up to ${SET_LEVELS_MAX} words in one call; each level is saved as set by you (level_source chat), null clears a stored level. Words whose level the user picked (level_source user) are skipped and listed in \`skipped_user\`, unless overwrite_user is true because the user asked to change those. For filling missing levels: search_words level "none", list the words with the levels you propose and wait for the user's OK, then send them in batches of 10–15 together with a few words of known level as anchors in your reasoning. Undo with set_word_levels and the returned \`undo\` (items and overwrite_user as given); words whose level changed since that call are left alone and listed in \`changed_since\`.`,
+  description: `Set «Уровень языка» (CEFR A1…C2) on up to ${SET_LEVELS_MAX} words in one call; each level is saved as set by you (level_source chat), null clears a stored level. Words whose level the user picked (level_source user) are skipped and listed in \`skipped_user\`, unless overwrite_user is true because the user asked to change those. For filling missing levels: search_words level "none", then propose_levels in batches of 15 (its card saves them on the user's tap, with this tool); where the user sees no card, list the words with the levels you propose, wait for the OK and send them here in batches of 10–15, with a few words of known level as anchors in your reasoning. Undo with set_word_levels and the returned \`undo\` (items and overwrite_user as given); words whose level changed since that call are left alone and listed in \`changed_since\`.`,
   input: z.object({
     items: z.array(levelItemSchema).min(1).max(SET_LEVELS_MAX),
     overwrite_user: z.boolean().default(false).describe("True only when the user asked to change levels they set themselves."),
@@ -1280,6 +1411,65 @@ export const setWordLevels = tool({
       note: SYNC_NOTE,
     };
   },
+});
+
+/** «Уровни слов»: how many words one card shows (the page's «Следующие 15 ›» asks for the next batch). */
+export const PROPOSE_LEVELS_MAX = 50;
+
+export const proposeLevels = tool({
+  name: "propose_levels",
+  title: "Show proposed word levels",
+  description: `Show «Уровень языка» levels you propose for words in the chat, for the user to check («Уровни слов»): a card lists the words with your level preselected on an A1…C2 scale, the app's dictionary estimate when it differs, and the user's own levels greyed out (never saved over); the user corrects what they want, then the card's «Сохранить» saves them itself (set_word_levels) and offers «Отменить». Use it for «проставь уровни» instead of listing levels in text: search_words level "none", rate a batch of 15 (${LEVEL_RUBRIC}), then propose_levels with their ids; its «Следующие 15 ›» asks you for the next batch. Unknown or deleted ids are refused by path. \`remaining\` in the card counts the words still without a level besides these. Writes nothing; never list the words and levels in the chat as well. If the user says they see no card (or the host shows no apps), list them in text, wait for the OK and call set_word_levels.`,
+  input: z.object({
+    items: z
+      .array(
+        z.object({
+          id: z.string().trim().min(1).max(64).describe("Word id from search_words."),
+          cefr: cefrLevel.describe("The level you propose."),
+        }),
+      )
+      .min(1)
+      .max(PROPOSE_LEVELS_MAX)
+      .describe("The words and your levels, about 15 at a time."),
+  }),
+  write: false,
+  meta: REVIEW_META,
+  annotations: READ,
+  async run(deps, args) {
+    const live = new Map((await deps.repo.words()).filter((w) => w.deleted_at === null).map((w) => [w.id, w]));
+    const problems = args.items.flatMap((item, i) => (live.has(item.id) ? [] : [`- items[${i}].id: no such word "${item.id}"`]));
+    if (problems.length > 0) throw new ToolError(`Nothing was shown. Fix every problem below (ids from search_words), then call propose_levels again:\n${problems.join("\n")}`);
+    const levels = serverLevels();
+    // The last proposal for a word wins, as in set_word_levels.
+    const rows: LevelReviewRow[] = [...new Map(args.items.map((i) => [i.id, i.cefr])).entries()].map(([id, proposed]) => {
+      const w = live.get(id)!;
+      const current = levels.level(w);
+      return {
+        id,
+        fr: w.fr,
+        ru: w.ru,
+        pos: w.pos,
+        proposed,
+        current: current?.level ?? null,
+        current_source: current?.source ?? null,
+        dictionary: levels.level({ ...w, cefr: null, cefr_source: null })?.level ?? null,
+        locked: storedLevel(w)?.source === "user",
+      };
+    });
+    const shown = new Set(rows.map((r) => r.id));
+    // As search_words level "none": no stored level and no estimate.
+    const remaining = [...live.values()].filter((w) => !shown.has(w.id) && !levels.level(w)).length;
+    const review: LevelsReview = { kind: "kartochki-levels", version: 1, rows, remaining };
+    const locked = rows.filter((r) => r.locked).length;
+    const message =
+      `Показал ${ruCount(rows.length, WORDS_RU)} на проверку в карточке «Уровни слов»` +
+      (locked > 0 ? ` (у ${locked} уровень указал сам пользователь: они не сохранятся)` : "") +
+      `; без уровня ещё ${remaining}. Не перечисляй их в чате; пользователь сохранит в карточке (её «Сохранить» сама вызывает set_word_levels и предлагает «Отменить»). ` +
+      `Её «Следующие 15» просит следующую партию: тогда search_words level "none" и снова propose_levels. ` +
+      `Если пользователь скажет, что карточки не видно, перечисли слова с уровнями текстом, дождись OK и вызови set_word_levels.`;
+    return { review, message };
+  },
+  reply: (out) => ({ content: [{ type: "text", text: out.message }], structuredContent: out.review as unknown as Record<string, unknown> }),
 });
 
 export const moveWords = tool({
@@ -1673,8 +1863,8 @@ export const restoreFolder = tool({
 const DAY_MS = 86_400_000;
 // No «register» (pick нейтр. / fam. / arg. / vulg.): it is no longer made, and old sets' register
 // items are skipped wherever a set is played (isRegisterItem).
-const ITEM_TYPES = ["choice", "cloze", "pairs", "conjugate"] as const satisfies readonly ExerciseItemType[];
-const REGISTER_GONE = "register items are no longer used; use choice/cloze/pairs/conjugate";
+const ITEM_TYPES = ["choice", "cloze", "pairs", "conjugate", "reading"] as const satisfies readonly ExerciseItemType[];
+const REGISTER_GONE = "register items are no longer used; use choice/cloze/pairs/conjugate/reading";
 /** An item of the dropped «register» type, in an older stored set (typed loosely: the type may leave ExerciseItemType). */
 const isRegisterItem = (item: { type: string } | undefined): boolean => item?.type === "register";
 const SKILLS = ["meaning", "form", "neutral", "verlan", "situation"] as const satisfies readonly ExerciseSkill[];
@@ -2133,6 +2323,9 @@ export const exerciseMaterial = tool({
   },
 });
 
+/** reading: the length a TCF-like text should have (the hard limits are PASSAGE_MIN–PASSAGE_MAX). */
+const READING_CHARS = "300–700";
+
 const exerciseText = (max: number, what: string) => z.string().max(max).nullable().optional().describe(what);
 
 const exerciseItemSchema = z.object({
@@ -2140,7 +2333,7 @@ const exerciseItemSchema = z.object({
   type: z
     .enum(ITEM_TYPES, { error: (issue) => (issue.input === "register" ? REGISTER_GONE : undefined) })
     .describe(
-      "choice: 4 options (answer + 3 distractors). cloze: a French sentence with a gap. pairs: match 4–6 words with their translations. conjugate: pick the right form of a verb (word_id or new_ref) for a tense and person; the server writes the infinitive prompt, the answer, the gap («tu ___») and, when left out, 3 distractors from the verb's conjugation.",
+      `choice: 4 options (answer + 3 distractors). cloze: a French sentence with a gap. pairs: match 4–6 words with their translations. conjugate: pick the right form of a verb (word_id or new_ref) for a tense and person; the server writes the infinitive prompt, the answer, the gap («tu ___») and, when left out, 3 distractors from the verb's conjugation. reading («текст», TCF «compréhension écrite»): a short realistic French text (passage: an ad, a message, a notice, a short article, ${READING_CHARS} characters), a French question about it (prompt) and 4 French options (answer + 3 distractors), exactly one clearly right by the text and the others plausible but contradicted or not said by it; word_id optional (a library word the text uses), never new_ref.`,
     ),
   skill: z
     .enum(SKILLS)
@@ -2154,18 +2347,42 @@ const exerciseItemSchema = z.object({
   ask: z.enum(["fr", "ru"]).nullable().optional().describe("choice + meaning: fr (default) shows the French word with Russian options; ru the reverse. Distractors must be in the options' language (Russian for fr, French for ru): a mix is refused."),
   word_id: z.string().trim().min(1).max(64).nullable().optional().describe("The library word the item is about (from exercise_material). choice, cloze, conjugate: word_id or new_ref."),
   new_ref: z.string().trim().min(1).max(REF_MAX).nullable().optional().describe("A new_words[].ref instead of word_id, for a word that is not in the library."),
-  prompt: exerciseText(TEXT_MAX, "The question on the card (Russian or French). Required for choice skills other than meaning; for cloze an optional instruction; conjugate ignores it (the server writes the infinitive)."),
+  prompt: exerciseText(
+    TEXT_MAX,
+    "The question on the card (Russian or French). Required for choice skills other than meaning and for reading (the question in French: «Que propose l'annonce ?», «Pourquoi Léa écrit-elle ?»); for cloze an optional instruction; conjugate ignores it (the server writes the infinitive).",
+  ),
   sentence: exerciseText(TEXT_MAX, "cloze only: a natural French sentence with exactly one [[…]] gap around the answer: «J'ai trop [[kiffé]] ce concert.»"),
   sentence_ru: exerciseText(TEXT_MAX, "cloze only: a short Russian hint of the situation. It must never translate the missing word."),
-  answer: exerciseText(ANSWER_MAX, "The right option (choice, cloze; a cloze answer defaults to its gap). Left out for meaning, conjugate and pairs: the server writes it (meaning fr→ru: the word's first Russian equivalent, so distractors are single equivalents too)."),
+  answer: exerciseText(
+    ANSWER_MAX,
+    "The right option (choice, cloze, reading: in French; a cloze answer defaults to its gap). Left out for meaning, conjugate and pairs: the server writes it (meaning fr→ru: the word's first Russian equivalent, so distractors are single equivalents too).",
+  ),
   distractors: jsonArray(z.array(z.string().max(ANSWER_MAX)).max(6))
     .nullable()
     .optional()
     .describe(
-      "choice and cloze: exactly 3 wrong options, same part of speech, gender, register and about the same length as the answer, each clearly wrong. Empty for pairs. conjugate: leave out (the server picks other forms of the verb), or send 3 forms of the same verb without the pronoun.",
+      "choice, cloze and reading: exactly 3 wrong options, same part of speech, gender, register and about the same length as the answer, each clearly wrong (reading: French, wrong by the text). Empty for pairs. conjugate: leave out (the server picks other forms of the verb), or send 3 forms of the same verb without the pronoun.",
     ),
   pairs: jsonArray(z.array(z.string().trim().min(1).max(64)).max(10)).nullable().optional().describe("pairs only: 4–6 word_ids or new_refs with distinct translations; the server builds the tiles."),
   explain_ru: exerciseText(EXPLAIN_MAX, "Optional one-line Russian explanation shown after the answer («верлан от femme»)."),
+  passage: z
+    .string()
+    .max(PASSAGE_MAX)
+    .nullable()
+    .optional()
+    .describe(
+      `reading only: the French text (${PASSAGE_MIN}–${PASSAGE_MAX} characters, best ${READING_CHARS}; line breaks kept), realistic and at the item's level, on the user's themes, using some of their words; never Russian.`,
+    ),
+  passage_label: z
+    .string()
+    .max(PASSAGE_LABEL_MAX)
+    .nullable()
+    .optional()
+    .describe("reading only: the text's kind in a word or two, shown as a mono label: ANNONCE, MESSAGE, ARTICLE, AVIS, COURRIEL, AFFICHE."),
+  level: cefrLevel
+    .nullable()
+    .optional()
+    .describe("The question's CEFR level (A1…C2), any type: required on every item of an exam («Мини-TCF», play_exercises mode \"exam\"), whose result is shown by level; optional elsewhere."),
 });
 
 const exerciseNewWordSchema = newWordSchema.pick({ fr: true, ru: true, note: true, example_fr: true, example_ru: true, pos: true, gender: true, slang_level: true, verlan: true, origin: true }).extend({
@@ -2393,6 +2610,9 @@ const chatSet = (clientRef: string, setId: string, content: ExerciseSetContent, 
   items: content.items,
   new_words: content.new_words,
   saved,
+  // play_exercises sets an exam's; the artifact always plays a practice round.
+  mode: "practice",
+  time_limit_s: null,
 });
 
 /**
@@ -2433,24 +2653,82 @@ const questionsText = (set: ChatPlayerSet, skipped: number) =>
 
 const SAVE_ONLY_IF_ASKED = `Nothing is saved unless the user agrees: then ${SAVE_RESULT_TOOL} saves the round to «Упражнения»`;
 
+/** «Мини-TCF» (play_exercises mode "exam"): how many questions, and the overall time it may take. */
+export const EXAM_ITEMS_MIN = 8;
+export const EXAM_ITEMS_MAX = 20;
+const EXAM_TIME_MIN_S = 60;
+const EXAM_TIME_MAX_S = 3600;
+
+/**
+ * What keeps a set from being played as an exam: 8–20 questions, each with its level (the result is
+ * shown by level), none a pairs board (nothing to pick A–D), no new words (no intro cards in an exam).
+ * A new set's problems are named by input path; a saved one's by its question ids.
+ */
+function examProblems(set: ChatPlayerSet): string[] {
+  const out: string[] = [];
+  const at = (item: ExerciseItem, i: number) => (set.saved ? `${item.id}` : `items[${i}]`);
+  const n = set.items.length;
+  if (n < EXAM_ITEMS_MIN || n > EXAM_ITEMS_MAX) out.push(`items: an exam has ${EXAM_ITEMS_MIN}–${EXAM_ITEMS_MAX} questions (about 12 is best), not ${n}`);
+  set.items.forEach((item, i) => {
+    if (item.type === "pairs") out.push(`${at(item, i)}.type: pairs can't be an exam question (nothing to pick A–D); use reading, choice, cloze or conjugate`);
+    if (!item.level) out.push(`${at(item, i)}.level: required in an exam: every question carries its level (A1…C2), the result is shown by level`);
+  });
+  if (set.new_words.length > 0) out.push("new_words: must be empty in an exam (no intro cards): ask about the user's own words and texts");
+  return out;
+}
+
+/** play_exercises: the set, and how to play it. */
+const playInput = chatSetInput.extend({
+  mode: z
+    .enum(["practice", "exam"])
+    .nullable()
+    .optional()
+    .describe(
+      `practice (default): the usual round. exam: «Мини-TCF» («мини-TCF», «как на экзамене», «пробный TCF»): a start card, one overall timer, every question once in order, no feedback, no «Не знаю», no going back, then a result by level; needs ${EXAM_ITEMS_MIN}–${EXAM_ITEMS_MAX} items (about 12), each with its \`level\`, no pairs and no new_words.`,
+    ),
+  time_limit_s: z
+    .number()
+    .int()
+    .min(EXAM_TIME_MIN_S)
+    .max(EXAM_TIME_MAX_S)
+    .nullable()
+    .optional()
+    .describe(`exam only: the overall time in seconds; default ${EXAM_SECONDS_PER_ITEM} a question (as in the TCF). Ignored in practice.`),
+});
+
 export const playExercises = tool({
   name: "play_exercises",
   title: "Play exercises in the chat",
   description:
-    `Show an exercise round right in the chat («Упражнения в чате»): an interactive player with the app's rules and look (4 options, «Не знаю», a miss comes back up to ${MAX_ATTEMPTS} times, intro cards for new words, pairs, conjugation, a summary at the end). Use it when the user asks for exercises in the chat («в чате», «здесь», «прямо тут»); for the app use create_exercise_set. Call exercise_material first, then send the set exactly as for create_exercise_set (same fields and rules; a refusal names each problem by path: fix them all and call again with the same client_ref), or \`set_id\` alone to play a saved set again. Writes nothing: the player's «Сохранить в Карточки» saves the set and the result (${SAVE_RESULT_TOOL}) only if the user taps it. Never write the questions, options or answers in the chat: the user sees them in the player. If the user says they don't see a player, or this host shows no apps (e.g. Claude Code), call exercise_artifact with the same input.`,
-  input: chatSetInput,
+    `Show an exercise round right in the chat («Упражнения в чате»): an interactive player with the app's rules and look (4 options, «Не знаю», a miss comes back up to ${MAX_ATTEMPTS} times, intro cards for new words, pairs, conjugation, reading texts, a summary at the end). Use it when the user asks for exercises in the chat («в чате», «здесь», «прямо тут»); for the app use create_exercise_set. mode "exam" plays it as «Мини-TCF» («мини-TCF», «как на экзамене», «пробный TCF»): ${EXAM_ITEMS_MIN}–${EXAM_ITEMS_MAX} questions (about 12, A2 to B2 unless the user asked for other levels), each with its \`level\`, about half reading items on the user's themes and the rest meaning / cloze about their words, no pairs and no new_words; one timer for all (time_limit_s, default ${EXAM_SECONDS_PER_ITEM} s a question), no feedback until the result by level. Call exercise_material first, then send the set exactly as for create_exercise_set (same fields and rules; a refusal names each problem by path: fix them all and call again with the same client_ref), or \`set_id\` alone to play a saved set again. Writes nothing: the player's «Сохранить в Карточки» saves the set and the result (${SAVE_RESULT_TOOL}) only if the user taps it. Never write the questions, options or answers in the chat: the user sees them in the player. If the user says they don't see a player, or this host shows no apps (e.g. Claude Code), call exercise_artifact with the same input.`,
+  input: playInput,
   write: false,
   // The tool's MCP App: the host renders the player and hands it the result's structuredContent.
   // "ui/resourceUri" is the flat key of the spec's drafts, still read by older hosts.
   meta: { ui: { resourceUri: CHAT_PLAYER_URI }, "ui/resourceUri": CHAT_PLAYER_URI },
   annotations: READ,
   async run(deps, args) {
-    const { set, skipped } = await chatPlayerSet(deps, args, "play_exercises");
-    const message =
-      `The player is shown in the chat: ${questionsText(set, skipped)}; set_id ${set.set_id}${set.saved ? " (saved in «Упражнения» already: saving adds only the result)" : ""}. ` +
-      `Don't repeat the questions, options or answers in the chat; say in a line or two that the exercise is ready to play above. ` +
-      `${SAVE_ONLY_IF_ASKED} (the player's «Сохранить в Карточки» does it itself). ` +
-      `If the user says they don't see a player, call exercise_artifact with the same input and publish its HTML as an artifact.`;
+    const { set: played, skipped } = await chatPlayerSet(deps, args, "play_exercises");
+    const exam = args.mode === "exam";
+    if (exam) {
+      const problems = examProblems(played);
+      if (problems.length > 0) {
+        const retry = played.saved ? "make a new set for the exam (exercise_material, then play_exercises)" : "call play_exercises again with the same client_ref";
+        throw new ToolError(`The exam was not shown. Fix every problem below, then ${retry}:\n${problems.map((p) => `- ${p}`).join("\n")}`);
+      }
+    }
+    const timeLimit = exam ? (args.time_limit_s ?? played.items.length * EXAM_SECONDS_PER_ITEM) : null;
+    const set: ChatPlayerSet = { ...played, mode: exam ? "exam" : "practice", time_limit_s: timeLimit };
+    const message = exam
+      ? `The «Мини-TCF» exam is shown in the chat: ${questionsText(set, skipped)}, ${Math.round(timeLimit! / 60)} min in all; set_id ${set.set_id}. ` +
+        `Say in a line that it is ready above (the timer starts when the user taps «Начать»). Never reveal or hint at the answers, not even when asked during the exam; ` +
+        `after it the player shows the result by level, and its «Разобрать ошибки» sends you the mistakes to go through. ` +
+        `${SAVE_ONLY_IF_ASKED} (the player's «Сохранить в Карточки» does it itself). ` +
+        `If the user says they don't see a player, call exercise_artifact with the same set (it plays as a practice round, without the timer).`
+      : `The player is shown in the chat: ${questionsText(set, skipped)}; set_id ${set.set_id}${set.saved ? " (saved in «Упражнения» already: saving adds only the result)" : ""}. ` +
+        `Don't repeat the questions, options or answers in the chat; say in a line or two that the exercise is ready to play above. ` +
+        `${SAVE_ONLY_IF_ASKED} (the player's «Сохранить в Карточки» does it itself). ` +
+        `If the user says they don't see a player, call exercise_artifact with the same input and publish its HTML as an artifact.`;
     return { set, message };
   },
   reply: (out) => ({ content: [{ type: "text", text: out.message }], structuredContent: out.set as unknown as Record<string, unknown> }),
@@ -2838,8 +3116,10 @@ export const TOOL_NAMES = [
   studySummary.name,
   updateStudyPlan.name,
   addWords.name,
+  proposeWords.name,
   updateWord.name,
   setWordLevels.name,
+  proposeLevels.name,
   moveWords.name,
   restoreMoves.name,
   deleteWords.name,
@@ -2859,16 +3139,23 @@ export const TOOL_NAMES = [
 ] as const;
 
 /**
- * The chat player (MCP App) play_exercises points at. Self-contained: inline scripts and styles,
- * system fonts, no network, so it needs no CSP domains. No `_meta.ui.domain`: a host derives the
- * sandbox origin from the server URL, and ours carries the secret.
+ * The chat's MCP Apps: the exercise player play_exercises points at, and the review page of
+ * propose_levels / propose_words. Self-contained: inline scripts and styles, system fonts, no
+ * network, so they need no CSP domains. No `_meta.ui.domain`: a host derives the sandbox origin
+ * from the server URL, and ours carries the secret.
  */
-function registerChatPlayer(server: McpServer): void {
+function registerChatApps(server: McpServer): void {
   server.registerResource(
     "exercise_player",
     CHAT_PLAYER_URI,
     { title: "Упражнение", description: "The «Карточки» exercise player shown by play_exercises.", mimeType: MCP_APP_MIME },
     async () => ({ contents: [{ uri: CHAT_PLAYER_URI, mimeType: MCP_APP_MIME, text: CHAT_PLAYER_HTML }] }),
+  );
+  server.registerResource(
+    "review_page",
+    CHAT_REVIEW_URI,
+    { title: "Проверка", description: "The «Карточки» review card shown by propose_levels and propose_words.", mimeType: MCP_APP_MIME },
+    async () => ({ contents: [{ uri: CHAT_REVIEW_URI, mimeType: MCP_APP_MIME, text: CHAT_REVIEW_HTML }] }),
   );
 }
 
@@ -2883,8 +3170,10 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   register(server, deps, studySummary);
   register(server, deps, updateStudyPlan);
   register(server, deps, addWords);
+  register(server, deps, proposeWords);
   register(server, deps, updateWord);
   register(server, deps, setWordLevels);
+  register(server, deps, proposeLevels);
   register(server, deps, moveWords);
   register(server, deps, restoreMoves);
   register(server, deps, deleteWords);
@@ -2901,7 +3190,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   register(server, deps, playExercises);
   register(server, deps, exerciseArtifact);
   register(server, deps, saveExerciseResult);
-  registerChatPlayer(server);
+  registerChatApps(server);
 }
 
 export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard app for colloquial French; the user is a Russian speaker. A card is a French word or phrase (fr) with its Russian translation (ru). Words are grouped into themes («темы»); «${INBOX_NAME}» (inbox) holds words without a theme.
@@ -2910,22 +3199,25 @@ export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard
 - Set folder_chosen_by_user to true only when the user named the theme; otherwise pick a fitting theme yourself, or leave the word in the inbox.
 - A word can carry origin («Происхождение»: one Russian line, e.g. «верлан от lourd», «от volonté „воля“ + -aire») and, for verbs, a conjugation (présent, passé composé, imparfait, futur; six forms each with pronouns). The app builds most conjugations itself from Lexique: search_words shows conjugation_builtin false where it cannot. Fill them with update_word when the user asks (e.g. «заполни происхождение для слов из темы X»), checking forms you are not sure of; never overwrite an existing origin or conjugation unless asked.
 - Cards can carry the user's custom fields («Свои поля»): list_fields shows the shared ones and what to write in each. Set them by name with custom_fields in add_words or update_word (null clears one); search_words shows them. Use a name not in list_fields only when the user asks for a field on that one word. create_field, update_field and delete_field manage the shared fields; ask the user before creating or deleting one.
-- «Уровень языка» (CEFR A1…C2): search_words shows each word's \`level\` and \`level_source\`; most are estimates the app computes from its dictionary (flelex, freq), which you leave alone. To fill the missing ones (search_words level "none"), list the words with the levels you propose and wait for the OK, then save them with set_word_levels in batches of 10–15. Rate a word as a textbook or DELF / TCF list would, against words of known level; skip argot, vulgar words and verlan unless asked. Never change a level the user set (level_source user) unless they ask.
+- «Уровень языка» (CEFR A1…C2): search_words shows each word's \`level\` and \`level_source\`; most are estimates the app computes from its dictionary (flelex, freq), which you leave alone. To fill the missing ones («проставь уровни»; search_words level "none"), rate a batch of 15 and show it with propose_levels: a card where the user checks your levels and saves them; don't list them in text. Its «Следующие 15» asks for the next batch. If the user says they see no card, list the words with your levels in text, wait for the OK, then set_word_levels in batches of 10–15. Rate a word as a textbook or DELF / TCF list would, against words of known level; skip argot, vulgar words and verlan unless asked. Never change a level the user set (level_source user) unless they ask.
 - «План повторения» (how many new words a day, the review cap, the order of new words, when RU→FR starts): study_summary's \`plan.settings\` shows it; change it with update_study_plan only when the user asks (e.g. «давай 15 новых слов в день», «новые по темам»), then say what changed and what today looks like (study_summary).
 - study_summary's \`plan_fit\` compares the plan with the user's usual study days (days without study are not data). When \`plan_fit.suggestion\` is set and the conversation is about the plan, pace, load or progress, you may propose it once per conversation: name the usual number, the plan, and \`forecast_30d\`, offer it as an option, wait for the OK, then update_study_plan. Never change the plan on your own, never open a conversation with it, never call fewer study days a failure.
 - «Прогресс» («как у меня с прогрессом за месяц?»): study_summary \`history_days\` (30 for a month); summarize the trends (знаю, помню ≈, «Верно») in a few lines; mention the streak at most once and never push it.
-- Before adding more than 5 words, and before any move, delete, or renaming, pausing or deleting a theme (update_folder, delete_folder), list what will change and wait for the user's OK.
+- New words from a text, a screenshot, a song or a conversation («добавь слова из …»): propose_words with every field filled (a card where the user unchecks words, changes themes and adds them; duplicates are marked), never a text list as well. If the user says they see no card, list the words in text and wait for the OK, then add_words.
+- Before adding more than 5 words (unless through propose_words' card), and before any move, delete, or renaming, pausing or deleting a theme (update_folder, delete_folder), list what will change and wait for the user's OK.
 - «На паузе»: a theme (update_folder \`muted\`) or a word (update_word \`muted\`) stays in the library with its progress but never comes up in review or practice; \`false\` brings it back. When list_folders shows many themes with words still \`new\` and some of them look like later steps of a sequence (levels, lessons, chapters, a course or book order) or like topics the user said can wait, suggest pausing those so only the current ones reach review: name the themes to pause and the ones that stay, and wait for the OK. When the user moves on, suggest bringing the next ones back. Never pause or unpause on your own.
 - After a change, say what changed and how to undo it with the result's \`undo\` (delete_words, restore_words, restore_moves, set_word_levels, update_study_plan, restore_folder, delete_field, restore_field, delete_exercise_set or restore_exercise_set).
 - Exercises («Упражнения»: «сделай упражнение / тест / квиз по теме …»): call exercise_material first, then send the whole set in one call; where it is played decides which. «В приложении», a request pasted from the app, or no place named → create_exercise_set (the app plays it offline). «В чате», «здесь», «прямо тут» → play_exercises, which shows a player in the chat; «ещё раз» for a saved set → play_exercises with its set_id. Never write the questions, options or answers in the chat yourself, not even when play_exercises is missing from your tools (an old copy of this connector): then ask the user to reconnect «Карточки» in the connector settings and open a new chat, and offer create_exercise_set meanwhile. If the user says they don't see a player, or the host shows no apps (e.g. Claude Code), call exercise_artifact with the same input and publish its HTML as an HTML artifact verbatim. Exercises never change the review schedule.
 - A round played in the chat reaches the app only if the user agrees: the player's «Сохранить в Карточки» saves it itself; from an artifact the user pastes its «Скопировать результат» line (KARTOCHKI_RUN …): ask before saving, then call save_exercise_result with it as run_line and the set input you played (or set_id). Never save one unasked.
 - An exercise artifact the user already has: rebuild it only when they ask to change it (more questions, another topic): exercise_material, then exercise_artifact keeping its title and topic, and publish the new HTML.
 - For a free-text topic, use the saved words in topic_matches by word_id. Words found with web search go in new_words (at most 8, each checked in at least 2 sources, slang_level by the rubric, source_url); never add_words them without the user's OK, since the user adds them from the app.
-- choice and cloze have 4 options: the answer plus 3 distractors of the same part of speech, gender, register and length, with exactly one best answer. A cloze's sentence_ru hints at the situation and never translates the gap.
+- choice, cloze and reading have 4 options: the answer plus 3 distractors of the same part of speech, gender, register and length, with exactly one best answer. A cloze's sentence_ru hints at the situation and never translates the gap.
 - Order the items recognise-before-produce (meaning fr→ru and pairs before ru→fr and cloze), put the weakest words (first in exercise_material) late and twice, keep the same word apart, and use 10–15 items of at least 3 types.
 - Honour exercise_material's \`focus\` (the user's «Чаще в упражнениях»): at least the share it names of the questions about the words marked focus: true, even for a plain «сделай упражнение»; pass \`focus\` to exercise_material only when the user asks otherwise in the chat.
 - «По трудным словам», «по словам к повторению», «без тем / из всех тем»: exercise_material \`only\` (difficult, due or both), then the set (create_exercise_set, or play_exercises in the chat) with the same \`scope\`: only those words, \`scope.suggested_items\` questions (a shorter set when there are few, each word in 2–3 types), no new_words; with none available, say so instead of making a set.
 - «Уровень набора» («уровня B1», «уровня B1–B2», «уровень B2» in the request; one or several): pass them as exercise_material \`levels\`; without them, exercise_material's \`level\` takes the words' level. Write the questions at \`level.targets\` following each one's guide (sentence length and tenses, how close the distractors are, recognition vs production, the level of new words), several levels spread about evenly, easier first; never by swapping the library words; send the set with \`levels\` (plus \`level_auto: true\` when they came from the words).
+- «Мини-TCF» («мини-TCF», «как на экзамене», «пробный TCF»): exercise_material with \`levels\` as the user asked, else ["A2", "B1", "B2"], then play_exercises mode "exam" with about 12 items from A2 to B2, easier first, each with its \`level\`: about half reading items (a short realistic French text on the user's themes, 300–700 characters, a French question, 4 French options, one clearly right by the text), the rest meaning / cloze about their words; no pairs, no new_words. Never reveal or hint at the answers before the exam ends; afterwards go through the mistakes only when asked («Разобрать ошибки»), and say that the result is an estimate, not a TCF score.
+- A reading item («текст», TCF «compréhension écrite») can be in any set: passage, passage_label (ANNONCE, MESSAGE, ARTICLE, AVIS…), prompt (the French question), answer and 3 distractors, all in French; word_id optional.
 - «Спряжение глаголов» («упражнение на спряжение глаголов»): exercise_material \`verbs: true\`, then a short set of ${VERB_SET_SIZE} items (6–10): mostly conjugate items (word_id, tense, person; the server writes the form and the options) mixing the 4 tenses and the persons, with 30–40% of the passé composé on être or pronominal verbs; plus 2–3 cloze items with a verb gap and a time marker (hier / tous les jours / demain) for passé composé vs imparfait; the same verb at most twice, never back to back; never elle / elles (the forms have no feminine agreement).
 - «Работа над ошибками»: list_exercise_sets' last_run.missed and exercise_material's signals (ex_misses, confusions) say what to drill; reuse a confused option as a distractor only where it is in the item's options' language (a Russian one for meaning fr→ru, a French one for cloze and ru→fr).
 - After create_exercise_set or save_exercise_result, give the set's title and number of questions and how to undo it; it shows in «Упражнения» after the app's next sync.

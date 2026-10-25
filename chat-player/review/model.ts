@@ -1,0 +1,201 @@
+// The review page's rules (lib/core/chat-review.ts has the contract): the rows as the user edits
+// them, what the page sends to the connector's write tools (set_word_levels, add_words, and their
+// undos set_word_levels / delete_words, in the shapes lib/mcp/tools.ts takes), how it reads their
+// results back, and the lines it shows and tells Claude. Pure: views.ts draws it, review-main.ts runs it.
+import type { LevelReviewRow, LevelsReview, ReviewFolder, WordReviewRow, WordsReview } from "@/lib/core/chat-review";
+import { isCefr, type Cefr } from "@/lib/core/level";
+import { plural } from "../texts";
+
+const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+const list = (v: unknown): Record<string, unknown>[] => (Array.isArray(v) ? v.filter(isObject) : []);
+const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
+
+export const WORDS = ["слово", "слова", "слов"] as const;
+const LEVELS = ["уровень", "уровня", "уровней"] as const;
+
+/** Rows shown in the chat before «Показать все» (Chat-Levels-A: 7, Chat-Words-A: 6); one more is shown rather than «ещё 1». */
+export const INLINE_LEVELS = 7;
+export const INLINE_WORDS = 6;
+export const inlineCount = (total: number, limit: number) => (total <= limit + 1 ? total : limit);
+
+// --- «Уровни слов» -------------------------------------------------------------------------------
+
+export interface LevelRow {
+  row: LevelReviewRow;
+  checked: boolean;
+  /** The level picked: Claude's proposal until the user taps another. A locked row shows its current one. */
+  level: Cefr;
+}
+
+export function levelRows(review: LevelsReview): LevelRow[] {
+  return review.rows.map((row) => ({ row, checked: !row.locked, level: row.locked ? (row.current ?? row.proposed) : row.proposed }));
+}
+
+/** The rows «Сохранить N» writes: checked and not set by the user. */
+export const levelsToSave = (rows: readonly LevelRow[]) => rows.filter((r) => r.checked && !r.row.locked);
+
+/** set_word_levels' arguments (its input: items of word_id + cefr; the user's own levels are never overwritten). */
+export function setLevelsArguments(rows: readonly LevelRow[]): { items: { word_id: string; cefr: Cefr }[] } {
+  return { items: levelsToSave(rows).map((r) => ({ word_id: r.row.id, cefr: r.level })) };
+}
+
+/** What set_word_levels did, as the receipt needs it; `undo` is the call that puts it back. */
+export interface LevelsSaved {
+  saved: number;
+  /** Levels the user set: the locked rows (not sent) and the server's skipped_user. */
+  skipped: number;
+  /** Not written: not found, changed meanwhile, or a failed write. */
+  failed: number;
+  undo: { items: unknown[]; overwrite_user: boolean } | null;
+}
+
+export function readLevelsResult(data: Record<string, unknown>, lockedNotSent: number): LevelsSaved {
+  const undo = isObject(data.undo) && Array.isArray(data.undo.items) ? { items: data.undo.items, overwrite_user: data.undo.overwrite_user === true } : null;
+  const count = (key: string) => (Array.isArray(data[key]) ? (data[key] as unknown[]).length : 0);
+  return {
+    saved: count("updated") + count("unchanged"),
+    skipped: lockedNotSent + count("skipped_user"),
+    failed: count("not_found") + count("conflicts") + count("changed_since") + count("failed"),
+    undo,
+  };
+}
+
+/** «Сохранено 14 уровней · 1 пропущено (вы указали сами)». */
+export function levelsReceipt(s: LevelsSaved): string {
+  const parts = [`Сохранено ${s.saved} ${plural(s.saved, LEVELS)}`];
+  // «1 пропущено»: the count as a tally, as the mockup has it.
+  if (s.skipped > 0) parts.push(`${s.skipped} пропущено (вы указали сами)`);
+  if (s.failed > 0) parts.push(`${s.failed} не сохранено`);
+  return parts.join(" · ");
+}
+
+/** For Claude (ui/update-model-context): what was saved, and where the user changed the proposal. */
+export function levelsContext(rows: readonly LevelRow[], s: LevelsSaved): string {
+  const sent = levelsToSave(rows);
+  const changed = sent.filter((r) => r.level !== r.row.proposed).map((r) => `${r.row.fr} ${r.row.proposed}→${r.level}`);
+  const unchecked = rows.filter((r) => !r.checked && !r.row.locked).map((r) => r.row.fr);
+  return [
+    `В окне «Уровни слов» пользователь сохранил ${s.saved} ${plural(s.saved, LEVELS)}: ${sent.map((r) => `${r.row.fr} ${r.level}`).join(", ")}.`,
+    changed.length > 0 && `Поправил предложенное: ${changed.join(", ")}.`,
+    unchecked.length > 0 && `Снял галочку (не сохранено): ${unchecked.join(", ")}.`,
+    s.skipped > 0 && `Пропущено ${s.skipped} (уровень указал сам пользователь).`,
+    s.failed > 0 && `Не сохранено ${s.failed}: проверь их через search_words.`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
+
+/** «Предложи уровни для следующих 15 слов без уровня» (`remaining`: words still without one, when known). */
+export function nextLevelsMessage(remaining: number | null, batch = 15): string {
+  const n = remaining === null ? batch : Math.min(batch, remaining);
+  // «для следующих 4 слов»: after «следующих» the noun is genitive plural whatever the number.
+  return n === 1 ? "Предложи уровень для следующего слова без уровня" : `Предложи уровни для следующих ${n} слов без уровня`;
+}
+
+// --- «Новые слова» -------------------------------------------------------------------------------
+
+export interface WordRow {
+  row: WordReviewRow;
+  checked: boolean;
+  folder: ReviewFolder;
+  /** The theme was named by the user, or picked here: folder_chosen_by_user. */
+  chosen: boolean;
+}
+
+export function wordRows(review: WordsReview): WordRow[] {
+  return review.rows.map((row) => ({ row, checked: row.checked && !row.duplicate, folder: row.folder, chosen: row.folder_chosen_by_user }));
+}
+
+export const wordsToAdd = (rows: readonly WordRow[]) => rows.filter((r) => r.checked && !r.row.duplicate);
+
+export const sameFolder = (a: ReviewFolder, b: ReviewFolder) => a.id === b.id;
+
+/** «Тема для всех»: the theme every word that can be added shares; null when they differ. */
+export function commonFolder(rows: readonly WordRow[]): ReviewFolder | null {
+  const open = rows.filter((r) => !r.row.duplicate);
+  if (open.length === 0) return null;
+  return open.every((r) => sameFolder(r.folder, open[0].folder)) ? open[0].folder : null;
+}
+
+/** add_words' theme selector: the theme's id, or "inbox" for «Входящие». */
+const folderSelector = (f: ReviewFolder) => f.id ?? "inbox";
+
+/**
+ * add_words' arguments: each checked word with its own theme and folder_chosen_by_user (true when
+ * the user named the theme or picked it here); the call's flag is true only when it is for all.
+ */
+export function addWordsArguments(rows: readonly WordRow[]): { words: Record<string, unknown>[]; folder_chosen_by_user: boolean } {
+  const add = wordsToAdd(rows);
+  const words = add.map(({ row, folder, chosen }) => {
+    // What the card doesn't show (tags, custom_fields, conjugation, both_directions) goes back as Claude gave it.
+    const w: Record<string, unknown> = { ...row.extra, fr: row.fr, ru: row.ru, pos: row.pos, slang_level: row.slang_level, verlan: row.verlan };
+    if (row.pos === "noun") w.gender = row.gender;
+    for (const key of ["note", "example_fr", "example_ru", "origin"] as const) if (row[key]) w[key] = row[key];
+    // Claude's own level, sent back as it came; without it the app estimates one.
+    if (row.cefr) w.cefr = row.cefr;
+    w.folder = folderSelector(folder);
+    w.folder_chosen_by_user = chosen;
+    return w;
+  });
+  return { words, folder_chosen_by_user: add.length > 0 && add.every((r) => r.chosen) };
+}
+
+export interface AddedWord {
+  id: string;
+  fr: string;
+  ru: string;
+  folder: ReviewFolder;
+  level: Cefr | null;
+}
+
+export interface WordsAdded {
+  added: AddedWord[];
+  /** Words the server found saved already (the page's own duplicates are listed apart). */
+  duplicates: { fr: string; folder_name: string }[];
+  /** delete_words' ids: the undo. */
+  undoIds: string[];
+}
+
+const folderOf = (v: unknown): ReviewFolder => {
+  const f = isObject(v) ? v : {};
+  return { id: str(f.id), name: str(f.name) ?? "Входящие", count: 0 };
+};
+
+export function readWordsResult(data: Record<string, unknown>): WordsAdded {
+  const added = list(data.added)
+    .map((w) => ({ id: str(w.id) ?? "", fr: str(w.fr) ?? "", ru: str(w.ru) ?? "", folder: folderOf(w.folder), level: isCefr(w.level) ? w.level : null }))
+    .filter((w) => w.id);
+  const duplicates = list(data.duplicates).map((d) => ({ fr: str(d.fr) ?? "", folder_name: folderOf(isObject(d.existing) ? d.existing.folder : null).name }));
+  const undo = isObject(data.undo) && Array.isArray(data.undo.ids) ? data.undo.ids.filter((id): id is string => typeof id === "string") : added.map((w) => w.id);
+  return { added, duplicates, undoIds: undo };
+}
+
+/** «Добавлено 9 слов в «Жильё»»; «Добавлено 9 слов: 7 в «Жильё», 2 во «Входящие»» across themes. */
+export function addedHeadline(added: readonly AddedWord[]): string {
+  const n = added.length;
+  const groups = new Map<string, { name: string; n: number }>();
+  for (const w of added) {
+    const key = w.folder.id ?? "";
+    groups.set(key, { name: w.folder.name, n: (groups.get(key)?.n ?? 0) + 1 });
+  }
+  const into = (name: string) => `${/^[Вв][^аеёиоуыэюяАЕЁИОУЫЭЮЯ]/.test(name) ? "во" : "в"} «${name}»`;
+  const head = `Добавлено ${n} ${plural(n, WORDS)}`;
+  if (groups.size === 1) return `${head} ${into([...groups.values()][0].name)}`;
+  return `${head}: ${[...groups.values()].map((g) => `${g.n} ${into(g.name)}`).join(", ")}`;
+}
+
+/** The one theme the words went to (for «Открыть «Жильё» в Карточках»); null across themes. */
+export function addedFolder(added: readonly AddedWord[]): ReviewFolder | null {
+  if (added.length === 0) return null;
+  return added.every((w) => sameFolder(w.folder, added[0].folder)) ? added[0].folder : null;
+}
+
+/** For Claude: what was added where, and what was skipped. */
+export function wordsContext(result: WordsAdded, skipped: readonly string[]): string {
+  return [
+    `В окне «Новые слова» пользователь добавил ${result.added.length} ${plural(result.added.length, WORDS)}: ${result.added.map((w) => `${w.fr} → «${w.folder.name}»`).join(", ")}.`,
+    skipped.length > 0 && `Не добавлены (уже есть или сняты): ${skipped.join(", ")}.`,
+  ]
+    .filter(Boolean)
+    .join(" ");
+}

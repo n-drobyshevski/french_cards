@@ -14,14 +14,18 @@ export const maxDuration = 60;
 const notFound = () =>
   new Response("Not Found", { status: 404, headers: { "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" } });
 
-/** A stateless handler: mcp-handler builds a fresh McpServer (and repo) for every request. */
-function handlerFor(config: McpConfig) {
+/**
+ * A stateless handler: mcp-handler builds a fresh McpServer (and repo) for every request. `appUrl`
+ * is the request's origin: the connector is served by the app itself.
+ */
+function handlerFor(config: McpConfig, appUrl: string) {
   return createMcpHandler(
     (server) =>
       registerTools(server, {
         repo: createMcpRepo(config),
         userId: config.userId,
         timeZone: config.timeZone,
+        appUrl,
         now: () => new Date(),
       }),
     // The tool list never changes, so no `subscriptions/listen` stream: each would hold a function open until maxDuration.
@@ -34,7 +38,7 @@ async function handle(req: Request, ctx: RouteContext<"/api/mcp/[key]">): Promis
   const config = resolveMcpAccess(key);
   if (!config) return notFound();
   try {
-    const res = await handlerFor(config)(req);
+    const res = await handlerFor(config, new URL(req.url).origin)(req);
     const headers = new Headers(res.headers);
     headers.set("Cache-Control", "no-store");
     return new Response(res.body, { status: res.status, statusText: res.statusText, headers });

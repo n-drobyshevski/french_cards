@@ -2,14 +2,16 @@ import { cx } from "@/components/ui/cx";
 
 /**
  * Where the stamp lands on a phone card (X-Player-B): beside a short headword (`line1`, 26px under
- * the header rule), on the second line of a two-line cloze sentence (`line2`), or over the header's
- * right end (`head`) where it would cover a long prompt or a pairs board.
+ * the header rule), on the second line of a two-line cloze sentence (`line2`), beside a text's short
+ * question (`question`: the card renders it inside the question's block, whatever the text above it
+ * takes), or over the header's right end (`head`) where it would cover a long prompt or a pairs board.
  */
-export type StampPlace = "line1" | "line2" | "head";
+export type StampPlace = "line1" | "line2" | "question" | "head";
 
 const PHONE_PLACE: Record<StampPlace, string> = {
   line1: "max-md:top-[72px]",
   line2: "max-md:top-[118px]",
+  question: "max-md:top-[6px]",
   head: "max-md:top-[3px]",
 };
 

@@ -8,7 +8,9 @@ import { folderOrderOf, planDay } from "@/lib/core/plan";
 import { LEGACY_STUDY_PLAN, parseStudyPlan, type StudyPlan } from "@/lib/core/study-plan";
 import { newReviewState, retrievability } from "@/lib/scheduler";
 import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ProgressDay, ReviewLog, ReviewState, UserPref, Word } from "@/lib/types";
-import { ARTIFACT_SET_SLOT, CHAT_PLAYER_URI, runLine, type ChatPlayerSet } from "@/lib/core/chat-player";
+import { ARTIFACT_SET_SLOT, CHAT_PLAYER_URI, EXAM_SECONDS_PER_ITEM, runLine, type ChatPlayerSet } from "@/lib/core/chat-player";
+import { asChatReview, CHAT_REVIEW_URI, type LevelsReview, type WordsReview } from "@/lib/core/chat-review";
+import { addWordsArguments, wordRows } from "@/chat-player/review/model";
 import { createFakeRepo, type FakeRepo } from "./fake-repo";
 import { planFitLogsFrom } from "./plan-fit";
 import { RepoError } from "./repo";
@@ -33,6 +35,8 @@ import {
   listFolders,
   moveWords,
   playExercises,
+  proposeLevels,
+  proposeWords,
   resolveFolder,
   restoreExerciseSet,
   restoreField,
@@ -2033,7 +2037,7 @@ describe("exercises («Упражнения»)", () => {
     it("refuses register items everywhere a set is sent", async () => {
       const fake = fakeLib();
       const items = [...ITEMS.slice(0, 6), { type: "register", word_id: "w-relou" }];
-      const gone = "items.6.type: register items are no longer used; use choice/cloze/pairs/conjugate";
+      const gone = "items.6.type: register items are no longer used; use choice/cloze/pairs/conjugate/reading";
       expect(await refused(createExerciseSet, fake, set({ items }))).toBe(gone);
       expect(await refused(playExercises, fake, set({ items }))).toBe(gone);
       expect(await refused(exerciseArtifact, fake, set({ items }))).toBe(gone);
@@ -2118,6 +2122,59 @@ describe("exercises («Упражнения»)", () => {
       expect(await refused(saveExerciseResult, fake, { set_id: "x-nope", started_at: at, answers: [answer("q1", "correct", null, at)] })).toMatch(/No exercise set/);
       expect(await refused(saveExerciseResult, fake, { client_ref: "new-1", started_at: at, answers: [answer("q1", "correct", null, at)] })).toMatch(/not saved yet: send it/);
       expect(fake.writes).toHaveLength(1);
+    });
+
+    describe("reading items and «Мини-TCF» (mode exam)", () => {
+      const READING = {
+        type: "reading",
+        passage_label: "annonce",
+        passage:
+          "Appartement à louer, 2 pièces, 45 m², quartier calme près de la gare.\nLoyer : 850 € charges comprises. Libre au 1er décembre.\nContactez Mme Durand le soir après 18 h.",
+        prompt: "Quand peut-on appeler Mme Durand ?",
+        answer: "Le soir, après 18 h",
+        distractors: ["Le matin, avant 9 h", "Le week-end seulement", "À midi, pendant la pause"],
+        level: "A2",
+      };
+      const levelled = ITEMS.filter((i) => i.type !== "pairs").map((i, n) => ({ ...i, level: n < 3 ? "A2" : "B1" }));
+      // 6 questions about the words, then 2 texts: 8, the fewest an exam takes.
+      const examItems = [...levelled, READING, { ...READING, prompt: "Combien coûte l'appartement par mois ?", answer: "850 €, charges comprises", distractors: ["850 €, sans les charges", "45 € par mètre carré", "18 € par jour"], level: "B1" }];
+
+      it("takes a reading item in any set, with its text, label and level", async () => {
+        const fake = fakeLib();
+        await ok(createExerciseSet, fake, set({ items: [...ITEMS, READING] }));
+        const [row] = stored(fake);
+        expect(row.items[7]).toMatchObject({ id: "q8", type: "reading", passage_label: "ANNONCE", prompt: "Quand peut-on appeler Mme Durand ?", answer: "Le soir, après 18 h", level: "A2", word: null });
+        expect(row.items[7].passage).toContain("\nLoyer : 850 €");
+        const { set: shown } = await shownSet(fake, set({ client_ref: "fete-2", items: [...ITEMS, READING] }));
+        expect(shown).toMatchObject({ mode: "practice", time_limit_s: null });
+        expect(shown.items[7]).toMatchObject({ type: "reading", passage_label: "ANNONCE" });
+      });
+
+      it("play_exercises plays an exam with one timer, by default 90 s a question", async () => {
+        const fake = fakeLib();
+        const { set: shown, text } = await shownSet(fake, set({ items: examItems, mode: "exam" }));
+        expect(shown).toMatchObject({ mode: "exam", time_limit_s: 8 * EXAM_SECONDS_PER_ITEM });
+        expect(shown.items.map((i) => i.level)).toEqual(["A2", "A2", "A2", "B1", "B1", "B1", "A2", "B1"]);
+        expect(text).toMatch(/Мини-TCF.*8 questions, 12 min/);
+        expect(text).toMatch(/Never reveal/);
+        expect(text).not.toContain("Le soir, après 18 h");
+        const { set: timed } = await shownSet(fake, set({ items: examItems, mode: "exam", time_limit_s: 600 }));
+        expect(timed.time_limit_s).toBe(600);
+        expect(await refused(playExercises, fake, set({ items: examItems, mode: "exam", time_limit_s: 30 }))).toMatch(/time_limit_s/);
+        expect(fake.writes).toEqual([]);
+      });
+
+      it("refuses an exam with a question without its level, a pairs board or too few questions, by path", async () => {
+        const fake = fakeLib();
+        const items = examItems.map((i, n) => (n === 2 ? { ...i, level: null } : i));
+        expect(await refused(playExercises, fake, set({ items, mode: "exam" }))).toMatch(/exam was not shown[\s\S]*items\[2\]\.level: required in an exam/);
+        const withPairs = [...examItems, { type: "pairs", pairs: ["w-meuf", "w-bagnole", "w-keuf", "w-ouf"], level: "A2" }];
+        expect(await refused(playExercises, fake, set({ items: withPairs, mode: "exam" }))).toMatch(/items\[8\]\.type: pairs can't be an exam question/);
+        expect(await refused(playExercises, fake, set({ items: examItems.slice(0, 7), mode: "exam" }))).toMatch(/items: an exam has 8–20 questions/);
+        // The same items play as an ordinary round.
+        expect((await shownSet(fake, set({ items }))).set.mode).toBe("practice");
+        expect(fake.writes).toEqual([]);
+      });
     });
 
     it("save_exercise_result keeps only what the player could have recorded, and no other set's line", async () => {
@@ -2309,5 +2366,123 @@ describe("«Уровень языка»", () => {
     expect(res.updated.map((u) => u.id)).toEqual(["b"]);
     expect(fake.tables.words.get("a")).toMatchObject({ cefr: "A2", cefr_source: "user" });
     expect(fake.tables.words.get("b")).toMatchObject({ cefr: null, cefr_source: null });
+  });
+
+  it("propose_levels shows a batch for the user to check, with the user's own levels locked, and writes nothing", async () => {
+    const fake = seed();
+    const res = await callTool(proposeLevels, deps(fake), {
+      items: [
+        { id: "a", cefr: "A2" },
+        { id: "c", cefr: "B1" },
+        { id: "d", cefr: "B1" },
+      ],
+    });
+    expect(res.isError).toBeFalsy();
+    expect(proposeLevels.meta).toMatchObject({ ui: { resourceUri: CHAT_REVIEW_URI } });
+    const review = asChatReview(res.structuredContent) as LevelsReview;
+    expect(review).toMatchObject({ kind: "kartochki-levels", version: 1, remaining: 1 });
+    expect(review.rows).toEqual([
+      { id: "a", fr: "le loyer", ru: "квартплата", pos: "noun", proposed: "A2", current: "B1", current_source: "flelex", dictionary: "B1", locked: false },
+      { id: "c", fr: "faire la queue", ru: "стоять в очереди", pos: "expression", proposed: "B1", current: null, current_source: null, dictionary: null, locked: false },
+      expect.objectContaining({ id: "d", proposed: "B1", current: "A2", current_source: "user", locked: true }),
+    ]);
+    const text = (res.content[0] as { text: string }).text;
+    expect(text).toMatch(/Показал 3 слова на проверку.*у 1 уровень указал сам пользователь.*без уровня ещё 1/);
+    expect(text).toMatch(/Не перечисляй их в чате/);
+    expect(fake.writes).toEqual([]);
+  });
+
+  it("propose_levels refuses unknown and deleted words by path", async () => {
+    const fake = seed();
+    fake.tables.words.set("e", { ...fake.tables.words.get("e")!, deleted_at: OLD.toISOString() });
+    const text = await refused(proposeLevels, fake, { items: [{ id: "a", cefr: "A2" }, { id: "nope", cefr: "B1" }, { id: "e", cefr: "C1" }] });
+    expect(text).toMatch(/Nothing was shown[\s\S]*items\[1\]\.id: no such word "nope"[\s\S]*items\[2\]\.id: no such word "e"/);
+    expect(await refused(proposeLevels, fake, { items: [{ id: "a", cefr: "B3" }] })).toMatch(/cefr/);
+  });
+});
+
+describe("propose_words («Новые слова»)", () => {
+  const seed = () =>
+    createFakeRepo({
+      folders: FOLDERS,
+      words: [
+        word("t", "la thune", "бабки", { pos: "noun", gender: "f", slang_level: 1, folder_id: "f-dengi" }),
+        word("s", "avoir le seum", "беситься", { folder_id: "f-old" }),
+        { ...word("x", "le fric", "бабло"), deleted_at: OLD.toISOString() },
+      ],
+    });
+
+  it("shows the words as add_words would add them, duplicates unchecked, with the user's themes, and writes nothing", async () => {
+    const fake = seed();
+    const res = await callTool(proposeWords, { ...deps(fake), appUrl: "https://frenchcards.vercel.app/" }, {
+      words: [
+        { fr: "La  thune", ru: "бабки", pos: "noun", gender: "f", slang_level: 1 },
+        { fr: "le loyer", ru: "квартплата", pos: "noun", gender: "m", example_fr: "Le loyer a encore augmenté.", example_ru: "Квартплата опять выросла." },
+        { fr: "le fric", ru: "бабло", pos: "noun", gender: "m", slang_level: 1, cefr: "B1", folder: "inbox", folder_chosen_by_user: false },
+        { fr: "le loyer", ru: "аренда", pos: "noun" },
+      ],
+      folder: "Деньги",
+      folder_chosen_by_user: true,
+      source_label: "из скриншота",
+    });
+    expect(res.isError).toBeFalsy();
+    expect(proposeWords.meta).toMatchObject({ ui: { resourceUri: CHAT_REVIEW_URI } });
+    const review = asChatReview(res.structuredContent) as WordsReview;
+    const dengi = { id: "f-dengi", name: "Деньги", count: 1 };
+    const inbox = { id: null, name: "Входящие", count: 1 };
+    expect(review).toMatchObject({ kind: "kartochki-words", version: 1, source_label: "из скриншота", app_url: "https://frenchcards.vercel.app" });
+    // «Входящие» first (a word in a deleted theme counts there), then the live themes in order.
+    expect(review.folders).toEqual([inbox, dengi, { id: "f-emotsii", name: "Эмоции", count: 0 }, { id: "f-zamok", name: "Замок", count: 0 }]);
+    // The second «le loyer» is shown once, as add_words would skip it.
+    expect(review.rows.map((r) => r.key)).toEqual(["0", "1", "2"]);
+    expect(review.rows[0]).toMatchObject({ fr: "La thune", duplicate: { id: "t", fr: "la thune", folder_name: "Деньги" }, checked: false });
+    expect(review.rows[1]).toEqual({
+      key: "1",
+      fr: "le loyer",
+      ru: "квартплата",
+      pos: "noun",
+      gender: "m",
+      slang_level: 0,
+      verlan: false,
+      note: null,
+      example_fr: "Le loyer a encore augmenté.",
+      example_ru: "Квартплата опять выросла.",
+      origin: null,
+      level: "B1",
+      cefr: null,
+      folder: dengi,
+      folder_chosen_by_user: true,
+      duplicate: null,
+      checked: true,
+    });
+    // A deleted word is no duplicate; a word's own theme and choice override the call's.
+    expect(review.rows[2]).toMatchObject({ fr: "le fric", level: "B1", cefr: "B1", folder: inbox, folder_chosen_by_user: false, duplicate: null, checked: true });
+    const text = (res.content[0] as { text: string }).text;
+    expect(text).toMatch(/Показал 3 слова на проверку.*2 к добавлению, 1 уже есть/);
+    expect(text).not.toContain("квартплата");
+    expect(fake.writes).toEqual([]);
+  });
+
+  it("hands the fields the card doesn't show back to add_words with the card's call", async () => {
+    const fake = seed();
+    const res = await callTool(proposeWords, deps(fake), {
+      words: [{ fr: "le loyer", ru: "квартплата", pos: "noun", gender: "m", tags: ["аренда"], both_directions: false }, { fr: "la coloc", ru: "совместная квартира" }],
+      folder: "Деньги",
+      folder_chosen_by_user: false,
+    });
+    const review = res.structuredContent as unknown as WordsReview;
+    expect(review.rows[0].extra).toEqual({ tags: ["аренда"], both_directions: false });
+    expect(review.rows[1].extra).toBeUndefined();
+    // What the card sends on «Добавить 2», exactly as add_words takes it.
+    const out = await ok(addWords, fake, addWordsArguments(wordRows(review)));
+    const saved = fake.tables.words.get(out.added[0].id)!;
+    expect(saved).toMatchObject({ fr: "le loyer", tags: ["аренда"], both_directions: false, folder_id: "f-dengi", folder_source: "auto" });
+  });
+
+  it("refuses an unknown theme before showing anything", async () => {
+    const fake = seed();
+    expect(await refused(proposeWords, fake, { words: [{ fr: "le loyer", ru: "квартплата" }], folder: "Жильё", folder_chosen_by_user: true })).toMatch(/Unknown theme "Жильё"/);
+    const res = await callTool(proposeWords, deps(fake), { words: [{ fr: "le loyer", ru: "квартплата" }], folder_chosen_by_user: false });
+    expect((res.structuredContent as unknown as WordsReview).app_url).toBeNull();
   });
 });

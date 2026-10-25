@@ -1,16 +1,16 @@
 # Упражнения: the full rubric
 
-How to write an exercise set for `create_exercise_set` (the app) or `play_exercises` / `exercise_artifact` (the chat): the same set, the same rules. It plays as a 2×2 grid of options (pairs have their own board), one question at a time; a wrong answer or «Не знаю» brings the question back later. Results come back through `list_exercise_sets` (`last_run`) and `exercise_material` (`signals`); a chat round only once it is saved (see «В чате» below).
+How to write an exercise set for `create_exercise_set` (the app) or `play_exercises` / `exercise_artifact` (the chat): the same set, the same rules. It plays as a 2×2 grid of options (pairs have their own board; a reading item's long options go one per row), one question at a time; a wrong answer or «Не знаю» brings the question back later. The «Мини-TCF» exam (below) plays the same items once each, against the clock. Results come back through `list_exercise_sets` (`last_run`) and `exercise_material` (`signals`); a chat round only once it is saved (see «В чате» below).
 
 ## The set
 
 - **Size:** 10–15 items (the server takes 6–20). Match the size the user asked for («12 вопросов»). A verb set is shorter: see «Спряжение глаголов» below.
-- **Types:** at least 3 of `choice`, `cloze`, `pairs`, `conjugate`. A good mix for 12: 7–8 choice (several skills), 2–3 cloze, 1 pairs; `conjugate` belongs mostly to verb sets. There is no `register` type any more: the server refuses it.
+- **Types:** at least 3 of `choice`, `cloze`, `pairs`, `conjugate`, `reading`. A good mix for 12: 7–8 choice (several skills), 2–3 cloze, 1 pairs; `conjugate` belongs mostly to verb sets, and `reading` to «Мини-TCF» and to sets the user asks to be about texts («с текстами», «как в TCF»), though one or two fit any set from B1 up. A set that is at least half reading items is not warned for fewer types. There is no `register` type any more: the server refuses it.
 - **Words:** 8–12 different words. Each new word (from the web) has at least one recognition item before any production item, and new words stay under a third of the set's words.
 - **Order** (the player keeps it, in the app and in the chat):
   1. Recognise first: `choice` meaning with `ask: "fr"` (French shown, Russian options) and `pairs`.
   2. Then judge: `situation`, `verlan`, `neutral`.
-  3. Produce last: `choice` meaning with `ask: "ru"`, `form`, `cloze`, `conjugate`.
+  3. Produce last: `choice` meaning with `ask: "ru"`, `form`, `cloze`, `conjugate`. A `reading` item goes after the recognition items of the words its text uses.
   4. The weakest words (the top of `exercise_material`'s list, or last run's `missed`) appear late **and twice**, in two different types, with at least two other items between them.
 - **Focus («Чаще в упражнениях»):** see the next section.
 - **Title:** short Russian, at most 60 characters: «Еда · 12 вопросов», «Вечеринка · сленг», «Ошибки: meuf, relou».
@@ -111,12 +111,87 @@ The server turns `{ "word_id": "w-aller", "tense": "passe_compose", "person": "n
 | `cloze` | `word_id` or `new_ref`, `sentence` with exactly one `[[gap]]`, optional `sentence_ru`, 3 `distractors` | `answer` (the gap, when left out) |
 | `pairs` | `pairs`: 4–6 `word_id`s / `new_ref`s | the tiles |
 | `conjugate` | `word_id` (or `new_ref`) of a verb, `tense` (`present`, `passe_compose`, `imparfait`, `futur`), `person` (`je`, `tu`, `il`, `nous`, `vous`, `ils`); optionally 3 `distractors` (forms of the same verb without the pronoun) | `prompt` (the infinitive), `sentence` (the pronouns and the gap: «tu [[as kiffé]]»), `answer`, and 3 `distractors` from the verb's other forms when left out |
+| `reading` | `passage` (French, 40–900 characters, best 300–700; line breaks kept), `passage_label` (ANNONCE, MESSAGE, COURRIEL, ARTICLE, AVIS, AFFICHE…; letters only, up to 20), `prompt` (the question, in French), `answer` and 3 `distractors` (French); optionally `word_id` (a library word the text uses; never `new_ref`) | the label in capitals; the word snapshot when there is a `word_id` |
 
 - Skills: `form` = the right French form for a Russian cue; `neutral` = the neutral equivalent of a slang word; `verlan` = the verlan form or its source; `situation` = what you would say in a described situation (a full short reply as the answer).
-- `explain_ru` (optional, one line, at most 200 characters) shows after the answer: the verlan source, a nuance, a false friend.
+- `explain_ru` (optional, one line, at most 200 characters) shows after the answer: the verlan source, a nuance, a false friend; for `reading`, where the text says it.
+- `level` (optional, A1…C2, any type): the question's level. The app shows it as «≈B1» on the card; an exam needs it on every item and shows its result by level.
 - Don't send `id`s: the server numbers the items `q1…qN`.
 
-## Distractors (choice and cloze: exactly 3; conjugate: the server's)
+## Reading («текст»)
+
+A question about a short French text, as in the TCF's compréhension écrite. The app and the chat show the text as a quoted block with its mono label, then the question and 4 options; a miss stamps «НЕВЕРНО» and shows the right answer and `explain_ru`, as for choice.
+
+- **The text:** realistic French of its genre, the kind a learner meets in France: a flat ad, a message from a friend or a landlord, an email from the préfecture or the CAF, a building notice, a short news or opinion piece. On the user's themes, using a few of their words (from `exercise_material`), with names, places, prices and dates. 300–700 characters (the server takes 40–900); no translation from Russian, no stiff textbook French.
+- **The level** (`level`) is the text's difficulty, and the question follows it:
+
+  | Level | Text | Question |
+  |---|---|---|
+  | A2 | 300–400 characters, a message, an ad or a notice; présent, passé composé, futur proche; everyday facts | an explicit fact: when, where, how much, who |
+  | B1 | 400–550, a letter, an email, a notice with conditions | a reason or a simple inference: why someone writes, what to do, what is included |
+  | B2 | 500–700, an article or an opinion with connectors (pourtant, alors que, en revanche) | the author's view, a cause, a nuance; distractors close in meaning |
+  | C1 | up to 900, an argued text | what is implied, the tone, a concession |
+
+- **The question** is in French (the server refuses Russian): «Que propose l'annonce ?», «Pourquoi Léa écrit-elle à son propriétaire ?», «Que pense l'auteur de … ?». It is answered from the text alone, never from outside knowledge.
+- **Exactly one clearly right answer**, said in the text (A2–B1) or plainly implied by it (B2+). Paraphrase it rather than copying the text's words.
+- **3 distractors plausible from the text** but contradicted by it or not said: another price or day from the text, a partial sum, the right fact for the wrong person, what the text says will *not* happen. They may reuse the text's words (so word-matching finds nothing). Same shape and length as the answer, French, distinct.
+- **One question per text.** For two questions on the same text, write two items with different passages; the same text twice gives the answer away.
+- **Leak checks:** the answer is not in the question; no other item's stem gives it. (The server checks a reading item's own question only, since the answer is meant to be found in the text.)
+- **`passage_label`:** the genre in one word or two: ANNONCE, MESSAGE, SMS, COURRIEL, LETTRE, AVIS, AFFICHE, ARTICLE, BLOG.
+- **`word_id`:** when the text turns on one of the user's words (le loyer, la caution), so a miss counts against it; else leave it out (a miss is scored, but adds no word to the mistakes).
+
+Example (B1, `Жильё`; the word id shortened as above):
+
+```json
+{
+  "type": "reading",
+  "level": "B1",
+  "word_id": "w-loyer",
+  "passage_label": "ANNONCE",
+  "passage": "À louer — Lyon 7e, T2 de 42 m², 3e étage sans ascenseur, à cinq minutes du métro Jean-Macé.\nLoyer : 780 € par mois + 60 € de charges (eau froide et entretien de l'immeuble).\nCaution : un mois de loyer hors charges.\nFrais d'agence : 390 € à la signature du bail.\nPréavis : un mois (zone tendue).\nLibre le 1er décembre. Visites le samedi matin, sur rendez-vous uniquement.",
+  "prompt": "Combien faut-il payer à l'entrée dans le logement ?",
+  "answer": "2 010 €",
+  "distractors": ["1 620 €", "1 170 €", "840 €"],
+  "explain_ru": "Первый месяц с charges 840 € + залог 780 € + агентству 390 €."
+}
+```
+
+Why it works: a real ad's shorthand (T2, charges, zone tendue) at B1; the answer is worked out from three lines of the text, not copied from one; each distractor is a sum a hurried reader makes (840 + 780, 780 + 390, the first month alone); four options of the same shape.
+
+Bad and good:
+- **Answerable without the text** — bad: «Qu'est-ce qu'une caution ?». Good: a question only this text answers.
+- **Two defensible answers** — bad: «Karim ne vient pas samedi» next to «Karim est occupé samedi». Good: one of them, and distractors the text rules out.
+- **The answer copied, the distractors invented** — bad: the answer repeats the text's line word for word, the distractors appear nowhere in it. Good: the answer paraphrased, the distractors built from the text's own facts.
+- **A Russian question or options** — refused by the server; the whole item is French, `explain_ru` aside.
+
+## «Мини-TCF» (exam mode)
+
+`play_exercises` with `mode: "exam"` plays the set as a short timed test (the chat only; `create_exercise_set` and `exercise_artifact` keep the normal practice round). The player shows a start card («МИНИ-TCF · 12 ВОПРОСОВ · 18 МИН», the levels strip from the items' levels, «Состав» by type: «6 текстов · 4 значения · 2 пропуска», three rules, «Начать 18:00»), then one question at a time with the countdown (red under 2:00): pick A–D, then «Ответить»; no stamp, no feedback, no requeue, no «Не знаю», no going back. When the time is up the test ends and the questions left count as wrong. The result card: «8 из 12 · 14:05», a chip per level (✓ 80 % or more right, ~ in between, ✗ under half), «Это ориентир, не балл TCF.», the mistakes (level, the question, the pick struck, the right answer), «Разобрать ошибки», «Сохранить в Карточки», «Ещё раз».
+
+- **Size:** about 12 items (the server takes 8–20); `time_limit_s` (60–3600) only when the user asked for a time, else 90 s a question.
+- **Levels:** `level` on every item (refused without). A2 → B2 by default, easier first; at least 3 items per level, so a chip means something (12: about 4 A2, 5 B1, 3 B2).
+- **Mix:** about half `reading` (different genres), the rest `choice` (meaning, situation) and `cloze` about the user's words, `conjugate` if it fits; no `pairs` and no `new_words` (refused). The distractor, leak and level rules above apply unchanged.
+- **During the test** never reveal or hint at an answer, even when asked. **After it**, «Разобрать ошибки» sends the mistakes (question, pick, right answer): explain each from its text in a line or two, in Russian, and offer a round on the weak level. The result is an estimate, not a TCF score.
+- **Saving** works as for any chat round («Сохранить в Карточки»); the saved set plays in the app as a practice round (named «тексты» when more than half are reading items).
+
+Outline of a 12-question exam on «Жильё» and «Администрация»:
+
+| # | Level | Type | About |
+|---|---|---|---|
+| 1 | A2 | choice meaning fr | le loyer |
+| 2 | A2 | reading MESSAGE | a friend can't help with the move on Saturday |
+| 3 | A2 | cloze | la coloc |
+| 4 | A2 | reading AFFICHE | the building's water cut: which day, what time |
+| 5 | B1 | reading ANNONCE | the example above: what to pay on entry |
+| 6 | B1 | choice situation | le préavis: what you say to the landlord |
+| 7 | B1 | reading COURRIEL | why Mme Roux writes to the préfecture |
+| 8 | B1 | cloze | la démarche |
+| 9 | B1 | reading AVIS | the CAF's notice: which document is missing |
+| 10 | B2 | choice meaning ru | l'état des lieux |
+| 11 | B2 | reading ARTICLE | rents in the banlieue: what the author observes |
+| 12 | B2 | cloze | l'enjeu |
+
+## Distractors (choice, cloze and reading: exactly 3; conjugate: the server's)
 
 1. **Same part of speech, gender and number** as the answer: a feminine noun with its article among feminine nouns with theirs; a past participle among past participles.
 2. **Same register:** slang answers among slang distractors, neutral among neutral (except in `neutral` items, where the distractors are neutral too and wrong in meaning).
@@ -265,6 +340,7 @@ Why it works: recognition first (items 1–3), judgement next (4–8), productio
 The same set, played right in the chat («давай здесь», «в чате», «прямо тут»): `play_exercises` takes exactly the fields of `create_exercise_set`, checks them the same way and writes nothing; the player shows in the chat with the app's rules and look (the question card, 4 options, «Не знаю», a miss back up to 3 times, intro cards for new words, «ИТОГ НАБОРА» at the end). Everything above applies: size, mix, order, distractors, leak checks.
 
 - **Never** write the questions, options or answers in the chat: the player shows them. A line or two that it is ready is enough.
+- Reading items play in the chat as in the app; `mode: "exam"` turns the round into the «Мини-TCF» above.
 - No player (Claude Code, or the user doesn't see one): `exercise_artifact` with the same input, and publish its HTML verbatim as an HTML artifact.
 - Replay a saved set with `play_exercises` `{ set_id }` alone; a `client_ref` that is saved already is refused.
 - Saving is the user's choice: the player's «Сохранить в Карточки» saves the set (if new) and the round by itself; a pasted «Скопировать результат» line (`KARTOCHKI_RUN …`) is saved with `save_exercise_result` (`run_line` + the set input you played, or `set_id`) only after you asked and the user said yes. The server recomputes the score and ignores answers to questions that are not in the set.
