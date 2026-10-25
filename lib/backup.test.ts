@@ -246,7 +246,7 @@ describe("import", () => {
     expect(res.exercise_sets).toEqual({ inserted: 1, updated: 0, skipped: 0, deleted: 0 });
     expect(res.exercise_runs).toEqual({ inserted: 1, updated: 0, skipped: 0, deleted: 0 });
     // A set from before migrations 0013 / 0017 has no scope or level: an ordinary set (null, no level).
-    expect(await db.exercise_sets.get("x-1")).toEqual({ ...set, scope: null, level: null, level_auto: false });
+    expect(await db.exercise_sets.get("x-1")).toEqual({ ...set, scope: null, levels: [], level_auto: false });
     expect(await db.exercise_runs.get("r-1")).toEqual(run);
     expect((await db.outbox.toArray()).map((o) => o.key)).toEqual(expect.arrayContaining(["exercise_sets:x-1", "exercise_runs:r-1"]));
 
@@ -285,14 +285,14 @@ describe("import", () => {
     // A scoped set («Трудные · все темы») keeps its scope through export and import, a set's level its level.
     await clearAll();
     await db.exercise_sets.put({ ...set, id: "x-9", scope: "difficult" } as never);
-    await db.exercise_sets.put({ ...set, id: "x-10", scope: null, level: "B2", level_auto: true } as never);
-    await db.exercise_sets.put({ ...set, id: "x-12", scope: null, level: "Z9", level_auto: true } as never);
+    await db.exercise_sets.put({ ...set, id: "x-10", scope: null, levels: ["B2", "B1", "C2"], level_auto: true } as never);
+    await db.exercise_sets.put({ ...set, id: "x-12", scope: null, levels: ["Z9"], level_auto: true } as never);
     const scopedJson = await exportBackupJson(later(30));
     await clearAll();
     expect((await importBackup(scopedJson)).exercise_sets).toEqual({ inserted: 3, updated: 0, skipped: 0, deleted: 0 });
-    expect(await db.exercise_sets.get("x-9")).toEqual({ ...set, id: "x-9", scope: "difficult", level: null, level_auto: false });
-    expect(await db.exercise_sets.get("x-10")).toMatchObject({ level: "B2", level_auto: true });
-    expect(await db.exercise_sets.get("x-12")).toMatchObject({ level: null, level_auto: false });
+    expect(await db.exercise_sets.get("x-9")).toEqual({ ...set, id: "x-9", scope: "difficult", levels: [], level_auto: false });
+    expect(await db.exercise_sets.get("x-10")).toMatchObject({ levels: ["B1", "B2", "C1"], level_auto: true });
+    expect(await db.exercise_sets.get("x-12")).toMatchObject({ levels: [], level_auto: false });
 
     await clearAll();
     const old = await importBackup({ format: "kartochki-backup", version: 1, exported_at: T0.toISOString(), tables: { words: [], folders: [] } });

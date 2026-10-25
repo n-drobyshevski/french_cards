@@ -42,7 +42,7 @@ A set made **only** of the user's difficult words, the words due today, or both,
 
 ## «Уровень набора» (`level`)
 
-The user can ask for a set at a level («Сделай в Карточках 12 вопросов уровня B1 по теме …», on a computer «…, 12 вопросов, уровень B1, …»). Pass it to `exercise_material` as `level`. Without one («Авто»), `exercise_material`'s `level` takes the median level of the theme's neutral words (`from: "auto"`; B1 when none has a level). Either way, write at `level.target` and save with `level` (and `level_auto: true` for «Авто»).
+The user can ask for a set at one level or several («Сделай в Карточках 12 вопросов уровня B1 по теме …», «… уровня B1–B2 …», on a computer «…, 12 вопросов, уровень B1–B2, …»). Pass them to `exercise_material` as `levels` (["B1", "B2"]). Without them («Авто»), `exercise_material`'s `level` takes the median level of the theme's neutral words (`from: "auto"`; B1 when none has a level). Either way, write at `level.targets` and save with `levels` (and `level_auto: true` for «Авто»). With several levels, spread the questions about evenly across them, the easier ones first (B1–B2 in 12: about 6 at B1, then 6 at B2), each written by its row below.
 
 The level shapes **the questions, not the words**: the library words from `exercise_material` stay, even one above the level; everything around them follows the level.
 
@@ -53,7 +53,7 @@ The level shapes **the questions, not the words**: the library words from `exerc
 | B2 | 12–18 words with a subordinate clause or connector (bien que, alors que, pourtant), opinions and society | close in meaning: near-synonyms, false friends, a wrong collocation or register | mostly production (cloze, meaning ru→fr, situation) | B1–B2 |
 | C1 | longer, with nuance (subjonctif, concession, nominalisation), abstract or idiomatic | differ by nuance, collocation or register only | mostly production and situation | B2–C1 |
 
-- Keep every other word of a cloze sentence and of the French options at the level or below. `create_exercise_set` warns `level_words` when the app's dictionary puts one two levels or more above it (it only rates words written in their dictionary form, and leaves out the asked words and names). Simplify those words next time; the warning never blocks.
+- Keep every other word of a cloze sentence and of the French options at the level or below. `create_exercise_set` warns `level_words` when the app's dictionary puts one two levels or more above the highest level (it only rates words written in their dictionary form, and leaves out the asked words and names). Simplify those words next time; the warning never blocks.
 - A2 example (le logement): «Je cherche un [[logement]] près de la gare.» — B2: «Bien que le loyer soit élevé, ce [[logement]] reste prisé des étudiants.»
 - A higher level never means rarer library words or trick questions: one best answer, as always.
 

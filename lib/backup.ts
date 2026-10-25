@@ -1,5 +1,5 @@
 // JSON export of every table, and import that merges by updated_at (newer row wins).
-import { EXERCISE_ITEM_TYPES, EXERCISE_PERSONS, EXERCISE_SCOPES, EXERCISE_TENSES } from "./core/exercises";
+import { cleanLevels, EXERCISE_ITEM_TYPES, EXERCISE_PERSONS, EXERCISE_SCOPES, EXERCISE_TENSES } from "./core/exercises";
 import { isCefr, isStoredLevelSource } from "./core/level";
 import { db, legacyReviewSets } from "./db";
 import { DEFAULT_SETTINGS, SYNC_TABLES, type ExerciseItemType, type ExercisePerson, type ExerciseScope, type ExerciseSet, type ExerciseTense, type Settings, type SyncTable, type Syncable, type Word } from "./types";
@@ -121,7 +121,7 @@ const DEEP: Partial<Record<SyncTable, (row: Record<string, unknown>) => boolean>
   exercise_sets: (row) =>
     // `scope` came with migration 0013: older backups have none (read as null).
     (row.scope === undefined || row.scope === null || EXERCISE_SCOPES.includes(row.scope as ExerciseScope)) &&
-    // `level` / `level_auto` came with migration 0017; a junk level is dropped (NORMALIZE).
+    // `levels` / `level_auto` came with migration 0017; junk levels are dropped (NORMALIZE).
     (row.level_auto === undefined || typeof row.level_auto === "boolean") &&
     (row.items as unknown[]).every(isExerciseItem) &&
     (row.new_words as unknown[]).every((w) => isRecord(w) && isText(w.ref) && isText(w.fr) && isText(w.ru)),
@@ -138,7 +138,8 @@ const NORMALIZE: Partial<Record<SyncTable, (row: Syncable) => Record<string, unk
   },
   exercise_sets: (row) => {
     const s = row as Partial<ExerciseSet>;
-    return { scope: s.scope ?? null, level: isCefr(s.level) ? s.level : null, level_auto: isCefr(s.level) && s.level_auto === true };
+    const levels = cleanLevels(s.levels);
+    return { scope: s.scope ?? null, levels, level_auto: levels.length > 0 && s.level_auto === true };
   },
 };
 

@@ -1208,7 +1208,7 @@ describe("exercises («Упражнения»)", () => {
     expect(exerciseSetId(" fete-1 ")).toBe(id);
     expect(out).toEqual({
       already_saved: false,
-      set: { id, title: "Вечеринка · сленг", count: 7, by_type: { choice: 4, cloze: 1, register: 1, pairs: 1 }, new_words: 0, level: null },
+      set: { id, title: "Вечеринка · сленг", count: 7, by_type: { choice: 4, cloze: 1, register: 1, pairs: 1 }, new_words: 0, levels: [] },
       warnings: expect.any(Array),
       undo: { tool: "delete_exercise_set", id },
       note: expect.stringMatching(/next sync/),
@@ -1373,7 +1373,7 @@ describe("exercises («Упражнения»)", () => {
     ],
     new_words: [],
     scope: null,
-    level: null,
+    levels: [],
     level_auto: false,
     source: "chat",
     created_at: "2026-10-20T10:00:00.000Z",
@@ -1445,36 +1445,42 @@ describe("exercises («Упражнения»)", () => {
       ],
     });
     const auto = await ok(exerciseMaterial, fake, {});
-    expect(auto.level).toMatchObject({ target: "B1", from: "auto", words_level: "B1" });
+    expect(auto.level).toMatchObject({ targets: ["B1"], from: "auto", words_level: "B1" });
     expect(auto.level.note).toMatch(/level_auto: true/);
-    expect(auto.level.guide).toMatch(/^B1:/);
+    expect(Object.keys(auto.level.guide)).toEqual(["B1"]);
+    expect(auto.level.guide.B1).toMatch(/^B1:/);
     expect(auto.words.find((w: { id: string }) => w.id === "w-logement")).toMatchObject({ level: "A2", level_source: "flelex" });
-    const asked = await ok(exerciseMaterial, fake, { level: "C1" });
-    expect(asked.level).toMatchObject({ target: "C1", from: "request" });
+    const asked = await ok(exerciseMaterial, fake, { levels: ["C1"] });
+    expect(asked.level).toMatchObject({ targets: ["C1"], from: "request" });
     expect(asked.level).not.toHaveProperty("words_level");
     expect(asked.level.note).not.toMatch(/level_auto/);
-    expect(await refused(exerciseMaterial, fake, { level: "C2" })).toBeTruthy();
+    expect(await refused(exerciseMaterial, fake, { levels: ["C2"] })).toBeTruthy();
+    // Several levels (also as a JSON string): spread across them, the highest sets the bar.
+    const two = await ok(exerciseMaterial, fake, { levels: '["B2", "B1"]' });
+    expect(two.level).toMatchObject({ targets: ["B1", "B2"], from: "request" });
+    expect(Object.keys(two.level.guide)).toEqual(["B1", "B2"]);
+    expect(two.level.note).toMatch(/Spread the questions about evenly across B1–B2.*at B2 or below.*levels: \["B1","B2"\]/);
     // Words with no level at all (verlan): B1, the TCF middle.
     const verlan = createFakeRepo({ words: [LIB[1], LIB[4]] });
-    expect((await ok(exerciseMaterial, verlan, {})).level).toMatchObject({ target: "B1", from: "auto", words_level: null });
+    expect((await ok(exerciseMaterial, verlan, {})).level).toMatchObject({ targets: ["B1"], from: "auto", words_level: null });
   });
 
   it("«Уровень набора»: create_exercise_set stores the level and names harder words around the asked one", async () => {
     const fake = fakeLib();
     const hard = { type: "cloze", word_id: "w-kiffer", sentence: "Nonobstant le préavis, j'ai trop [[kiffé]] ce concert.", distractors: ["bouffé", "galéré", "flippé"] };
-    const out = await ok(createExerciseSet, fake, set({ items: [...ITEMS, hard], level: "B1", level_auto: true }));
-    expect(out.set).toMatchObject({ level: "B1", level_auto: true });
-    expect(stored(fake)[0]).toMatchObject({ level: "B1", level_auto: true });
+    const out = await ok(createExerciseSet, fake, set({ items: [...ITEMS, hard], levels: ["B1"], level_auto: true }));
+    expect(out.set).toMatchObject({ levels: ["B1"], level_auto: true });
+    expect(stored(fake)[0]).toMatchObject({ levels: ["B1"], level_auto: true });
     const level = (out.warnings ?? []).filter((w) => w.code === "level_words");
     expect(level.find((w) => "path" in w && w.path === "items[7]")?.message).toMatch(/«nonobstant» ≈C2, «préavis» ≈C2/);
     // The asked word, its gap, everyday words and inflected forms («trop», «concert», «j'ai») pass.
     expect(level.map((w) => w.message).join(" ")).not.toMatch(/kiff|concert|trop|«ai»/);
-    // No level: nothing stored, nothing checked; listed as null.
+    // No level: nothing stored, nothing checked; listed as [].
     const plain = await ok(createExerciseSet, fake, set({ client_ref: "fete-2", items: [...ITEMS, hard] }));
-    expect(plain.set.level).toBeNull();
+    expect(plain.set.levels).toEqual([]);
     expect((plain.warnings ?? []).some((w) => w.code === "level_words")).toBe(false);
     const listed = await ok(listExerciseSets, fake, {});
-    expect(listed.sets.map((s: { level: string | null }) => s.level).sort()).toEqual(["B1", null].sort());
+    expect(listed.sets.map((s) => s.levels.join("+")).sort()).toEqual(["", "B1"]);
   });
 
   it("exercise_material ranks words weakest first from runs, low ratings and difficult cards, without muted or deleted words", async () => {

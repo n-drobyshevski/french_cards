@@ -1,5 +1,5 @@
 // Pure helpers for the «Упражнения» list (tiles, resume card, waiting line, request summaries).
-import { buildRequestText, isVerbSet, parseScope, pickedLevel, runSettled, scoreRun, setLevelLabel, type ExerciseLevel } from "@/lib/core/exercises";
+import { buildRequestText, isVerbSet, levelsText, parseScope, pickedLevels, runSettled, scoreRun, setLevelLabel, type ExerciseLevel } from "@/lib/core/exercises";
 import type { StripMark } from "@/components/ui/SessionStrip";
 import type { ExerciseItem, ExerciseItemType, ExerciseRun, ExerciseScope, ExerciseSet } from "@/lib/types";
 import { attemptMarks } from "./player-state";
@@ -104,7 +104,7 @@ export interface TileLines {
  * the web words.
  */
 export function tileLines(
-  set: Pick<ExerciseSet, "title" | "folders" | "topic" | "items" | "new_words"> & Partial<Pick<ExerciseSet, "scope" | "level" | "level_auto">>,
+  set: Pick<ExerciseSet, "title" | "folders" | "topic" | "items" | "new_words"> & Partial<Pick<ExerciseSet, "scope" | "levels" | "level_auto">>,
   names: ReadonlyMap<string, string>,
 ): TileLines {
   const scope = parseScope(set.scope);
@@ -202,35 +202,34 @@ export interface RequestChoice {
   scope?: ExerciseScope | null;
   /** «Спряжение глаголов»: a short verb test (allowNew ignored). */
   conjugation?: boolean;
-  /** «Уровень набора»: null = «Авто». */
-  level?: ExerciseLevel | null;
+  /** «Уровень набора»: one or several levels; none = «Авто». */
+  levels?: readonly ExerciseLevel[];
   /** «Авто»'s level now (shown, never copied). */
   autoLevel?: ExerciseLevel | null;
 }
 
+/** What one level does to the set: it shapes the questions, never which words are asked. */
+const LEVEL_HINTS: Record<ExerciseLevel, string> = {
+  A2: "A2 — короткие фразы о повседневном, варианты явно разные по смыслу. Слова темы те же.",
+  B1: "B1 — фразы на 8–12 слов о жизни во Франции, варианты из той же темы. Слова темы те же.",
+  B2: "B2 — длиннее и абстрактнее, варианты близкие по смыслу: синонимы, ложные друзья, регистр.",
+  C1: "C1 — оттенки смысла, subjonctif и устойчивые сочетания; варианты различаются нюансом.",
+};
+
 /**
- * What a level does to the set (the level slot's panel and the desktop row): the level shapes the
- * questions, never which words are asked.
+ * The level panel's line (the phone slot and the desktop row): what one level does, how several
+ * share the set, or what «Авто» takes.
  */
-export function levelHint(level: ExerciseLevel | null, autoLevel: ExerciseLevel | null): string {
-  switch (level) {
-    case null:
-      return autoLevel
-        ? `По уровню выбранных слов — сейчас ≈${autoLevel}. Claude подберёт фразы и варианты под него.`
-        : "По уровню выбранных слов. Claude подберёт фразы и варианты под него.";
-    case "A2":
-      return "A2 — короткие фразы о повседневном, варианты явно разные по смыслу. Слова темы те же.";
-    case "B1":
-      return "B1 — фразы на 8–12 слов о жизни во Франции, варианты из той же темы. Слова темы те же.";
-    case "B2":
-      return "B2 — длиннее и абстрактнее, варианты близкие по смыслу: синонимы, ложные друзья, регистр.";
-    case "C1":
-      return "C1 — оттенки смысла, subjonctif и устойчивые сочетания; варианты различаются нюансом.";
-  }
+export function levelHint(levels: readonly ExerciseLevel[], autoLevel: ExerciseLevel | null): string {
+  if (levels.length === 1) return LEVEL_HINTS[levels[0]];
+  if (levels.length > 1) return `Вопросы поровну на ${levelsText(levels)}: от простых фраз к более сложным. Слова темы те же.`;
+  return autoLevel
+    ? `По уровню выбранных слов — сейчас ≈${autoLevel}. Claude подберёт фразы и варианты под него.`
+    : "По уровню выбранных слов. Claude подберёт фразы и варианты под него.";
 }
 
 /** «уровень B1» / «уровень примерно B1» for a tile's accessible name; "" without a level. */
-function spokenLevel(set: Partial<Pick<ExerciseSet, "level" | "level_auto">>): string {
+function spokenLevel(set: Partial<Pick<ExerciseSet, "levels" | "level_auto">>): string {
   const label = setLevelLabel(set);
   return label ? `уровень ${label.replace("≈", "примерно ")}` : "";
 }
@@ -243,9 +242,9 @@ const SCOPE_SUMMARIES: Record<ExerciseScope, string> = {
 };
 
 /** «вечеринка», 12 вопросов — the waiting line and the offline bar; «спряжение, «Люди», 8 вопросов» for a verb test. */
-export function requestSummary({ folders, topic, size, scope, conjugation, level }: Pick<RequestChoice, "folders" | "topic" | "size" | "scope" | "conjugation" | "level">): string {
+export function requestSummary({ folders, topic, size, scope, conjugation, levels }: Pick<RequestChoice, "folders" | "topic" | "size" | "scope" | "conjugation" | "levels">): string {
   const verbs = conjugation ? "спряжение, " : "";
-  const lv = level ? `, ${level}` : "";
+  const lv = levels?.length ? `, ${levelsText(levels)}` : "";
   if (scope) return `${verbs}${SCOPE_SUMMARIES[scope]}, ${nQuestions(size)}${lv}`;
   const names = [...new Set(folders.map((f) => f.trim()).filter(Boolean))];
   const custom = topic?.replace(/\s+/g, " ").trim();
@@ -255,24 +254,24 @@ export function requestSummary({ folders, topic, size, scope, conjugation, level
 
 /**
  * «Скопировать запрос на похожий»: the same themes or topic (or scope), size, new-word choice and
- * picked level («Авто» stays «Авто»); a verb set stays one.
+ * picked levels («Авто» stays «Авто»); a verb set stays one.
  */
 export function similarRequest(
-  set: Pick<ExerciseSet, "folders" | "topic" | "items" | "new_words"> & Partial<Pick<ExerciseSet, "scope" | "level" | "level_auto">>,
+  set: Pick<ExerciseSet, "folders" | "topic" | "items" | "new_words"> & Partial<Pick<ExerciseSet, "scope" | "levels" | "level_auto">>,
   names: ReadonlyMap<string, string>,
 ): { text: string; summary: string } {
   const scope = parseScope(set.scope);
   const conjugation = isVerbSet(set.items);
-  const level = pickedLevel(set);
+  const levels = pickedLevels(set);
   const choice: RequestChoice = scope
-    ? { folders: [], topic: null, size: set.items.length, allowNew: false, scope, conjugation, level }
+    ? { folders: [], topic: null, size: set.items.length, allowNew: false, scope, conjugation, levels }
     : {
         folders: setFolderNames(set, names),
         topic: set.topic,
         size: set.items.length,
         allowNew: !conjugation && set.new_words.length > 0,
         conjugation,
-        level,
+        levels,
       };
   return { text: buildRequestText(choice), summary: requestSummary(choice) };
 }

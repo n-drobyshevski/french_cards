@@ -6,8 +6,7 @@
 // another device show their result but are never written here.
 // Exercises never touch review_state or review_log. Pure rules live in lib/core/exercises.ts.
 import { useLiveQuery } from "dexie-react-hooks";
-import { countFirstTry, itemWordKeys, parseScope, runItems, runSettled } from "./core/exercises";
-import { isCefr } from "./core/level";
+import { cleanLevels, countFirstTry, itemWordKeys, parseScope, runItems, runSettled } from "./core/exercises";
 import { isPaused, pausedFolderIds } from "./core/words";
 import { db, liveRows, newId } from "./db";
 import { isDueToday } from "./folders";
@@ -23,11 +22,11 @@ const runsByNewest = (a: ExerciseRun, b: ExerciseRun) => b.started_at.localeComp
 
 /**
  * A set as the app reads it: rows synced before migration 0013 have no `scope`, before 0017 no
- * `level` / `level_auto` (an old backup neither).
+ * `levels` / `level_auto` (an old backup neither).
  */
 const withScope = (set: ExerciseSet): ExerciseSet => {
-  const level = isCefr(set.level) ? set.level : null;
-  return { ...set, scope: parseScope(set.scope), level, level_auto: level !== null && set.level_auto === true };
+  const levels = cleanLevels(set.levels);
+  return { ...set, scope: parseScope(set.scope), levels, level_auto: levels.length > 0 && set.level_auto === true };
 };
 
 /** Live sets, newest first (use inside useLiveQuery). */

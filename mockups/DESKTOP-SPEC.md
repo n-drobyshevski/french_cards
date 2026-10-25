@@ -1035,9 +1035,10 @@ Everything phones can do, desktop can do too. Where the boards above differ, thi
   сегодня» shows the row «Упражнение по трудным словам · N ›» under «Трудные». Copies end in the snackbar «Запрос
   скопирован» with «Открыть Claude ↗».
 - **«Уровень набора»** (added 2026-10-25; SPEC.md «Упражнения» L1 A / L2 A, board `D-Exercise-Level`): the request
-  builder (right column, dialog) gets a «Уровень» row under «Вопросов»: the label left, a mono text radio group
-  «Авто · A2 · B1 · B2 · C1» right (the «Вопросов» Segmented look), and one 12 muted line under it (`levelHint`).
-  The request text adds «, уровень B1» after the size («Сделай упражнение в Карточках: темы «Люди», «Эмоции»,
+  builder (right column, dialog) gets a «Уровень» row under «Вопросов»: the label left, mono text toggles
+  «Авто · A2 · B1 · B2 · C1» right (the «Вопросов» Segmented look, `aria-pressed`; several levels at once, «Авто»
+  clears them), and one 12 muted line under it (`levelHint`). The request text adds «, уровень B1» («B1–B2») after
+  the size («Сделай упражнение в Карточках: темы «Люди», «Эмоции»,
   12 вопросов, уровень B1, можно новые слова.»); «Авто» adds nothing. Tiles: «12 ВОПРОСОВ · B1» («≈B1» from
   «Авто»), as on phones.
 - **«План дня»** (added 2026-10-24; SPEC.md «План дня и уровень языка», picks R22 D1 C, D2 A+B, D3 B, D4 A;

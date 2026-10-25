@@ -63,7 +63,7 @@ describe("unplayed sets («Упражнения» count)", () => {
     items: [],
     new_words: [],
     scope: null,
-    level: null,
+    levels: [],
     level_auto: false,
     source: "claude",
     created_at,

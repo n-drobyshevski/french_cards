@@ -36,7 +36,9 @@ import {
   ruEquivalents,
   isVerbSet,
   levelWarnings,
-  pickedLevel,
+  pickedLevels,
+  cleanLevels,
+  levelsText,
   scoreRun,
   setLevelLabel,
   toExerciseLevel,
@@ -1056,38 +1058,51 @@ describe("«Уровень набора»", () => {
     expect(autoLevelOf([w("C2", 1)], (x) => x.level)).toBeNull();
   });
 
-  it("a set shows «B1», or «≈B1» from «Авто»; only a picked level is asked again", () => {
-    expect(setLevelLabel({ level: "B1", level_auto: false })).toBe("B1");
-    expect(setLevelLabel({ level: "B1", level_auto: true })).toBe("≈B1");
-    expect(setLevelLabel({})).toBeNull();
-    expect(setLevelLabel({ level: "Z9" as never })).toBeNull();
-    expect(pickedLevel({ level: "B2", level_auto: false })).toBe("B2");
-    expect(pickedLevel({ level: "B2", level_auto: true })).toBeNull();
+  it("several levels: cleaned, in order, neighbours read as a range", () => {
+    expect(cleanLevels(["B2", "A1", "B2", "x", "C2"])).toEqual(["A2", "B2", "C1"]);
+    expect(cleanLevels(null)).toEqual([]);
+    expect(levelsText(["B1"])).toBe("B1");
+    expect(levelsText(["B2", "B1"])).toBe("B1–B2");
+    expect(levelsText(["A2", "B1", "B2"])).toBe("A2–B2");
+    expect(levelsText(["A2", "B2", "C1"])).toBe("A2, B2–C1");
+    expect(levelsText([])).toBe("");
   });
 
-  it("the request texts say the level after the size; «Авто» copies nothing", () => {
-    expect(buildRequestText({ ...base, level: "B2" })).toBe("Сделай упражнение в Карточках по теме «Люди», 12 вопросов, уровень B2, можно новые слова.");
-    expect(buildRequestText({ ...base, scope: "difficult", level: "A2" })).toBe("Сделай упражнение в Карточках по трудным словам из всех тем, 12 вопросов, уровень A2.");
-    expect(buildRequestText({ ...base, level: null, autoLevel: "B1" })).toBe(buildRequestText(base));
-    expect(requestSentence({ ...base, level: "B1" })).toMatchObject({
+  it("a set shows «B1–B2», or «≈B1» from «Авто»; only picked levels are asked again", () => {
+    expect(setLevelLabel({ levels: ["B1"], level_auto: false })).toBe("B1");
+    expect(setLevelLabel({ levels: ["B1", "B2"], level_auto: false })).toBe("B1–B2");
+    expect(setLevelLabel({ levels: ["B1"], level_auto: true })).toBe("≈B1");
+    expect(setLevelLabel({})).toBeNull();
+    expect(setLevelLabel({ levels: ["Z9" as never] })).toBeNull();
+    expect(pickedLevels({ levels: ["B2", "B1"], level_auto: false })).toEqual(["B1", "B2"]);
+    expect(pickedLevels({ levels: ["B2"], level_auto: true })).toEqual([]);
+  });
+
+  it("the request texts say the levels after the size; «Авто» copies nothing", () => {
+    expect(buildRequestText({ ...base, levels: ["B2"] })).toBe("Сделай упражнение в Карточках по теме «Люди», 12 вопросов, уровень B2, можно новые слова.");
+    expect(buildRequestText({ ...base, levels: ["B1", "B2"] })).toBe("Сделай упражнение в Карточках по теме «Люди», 12 вопросов, уровень B1–B2, можно новые слова.");
+    expect(buildRequestText({ ...base, scope: "difficult", levels: ["A2"] })).toBe("Сделай упражнение в Карточках по трудным словам из всех тем, 12 вопросов, уровень A2.");
+    expect(buildRequestText({ ...base, levels: [], autoLevel: "B1" })).toBe(buildRequestText(base));
+    expect(requestSentence({ ...base, levels: ["B1"] })).toMatchObject({
       level: "уровня B1",
       text: "Сделай в Карточках 12 вопросов уровня B1 по теме «Люди» — можно новые слова.",
     });
-    expect(requestSentence({ ...base, size: 8, conjugation: true, level: "B1" }).text).toBe("Сделай в Карточках 8 вопросов уровня B1 на спряжение глаголов по теме «Люди».");
-    expect(requestSentence({ ...base, scope: "due", level: "C1" }).text).toBe("Сделай в Карточках 12 вопросов уровня C1 по словам к повторению из всех тем.");
+    expect(requestSentence({ ...base, levels: ["A2", "C1"] }).text).toBe("Сделай в Карточках 12 вопросов уровня A2, C1 по теме «Люди» — можно новые слова.");
+    expect(requestSentence({ ...base, size: 8, conjugation: true, levels: ["B1", "B2"] }).text).toBe("Сделай в Карточках 8 вопросов уровня B1–B2 на спряжение глаголов по теме «Люди».");
+    expect(requestSentence({ ...base, scope: "due", levels: ["C1"] }).text).toBe("Сделай в Карточках 12 вопросов уровня C1 по словам к повторению из всех тем.");
     const auto = requestSentence({ ...base, autoLevel: "B1" });
     expect(auto.level).toBe("уровня ≈B1");
     expect(auto.text).toBe("Сделай в Карточках 12 вопросов по теме «Люди» — можно новые слова.");
     expect(requestSentence(base).level).toBe("уровня авто");
   });
 
-  it("the next set keeps a picked level, not «Авто»", () => {
+  it("the next set keeps picked levels, not «Авто»", () => {
     const set = { title: "Жильё", items: [item("q1", "w1"), item("q2", "w2")], new_words: [] };
-    expect(buildFollowUpText({ ...set, level: "B2", level_auto: false }, [])).toBe("Сделай следующее упражнение в Карточках после «Жильё», 2 вопроса, уровень B2.");
-    expect(buildFollowUpText({ ...set, level: "B2", level_auto: true }, [])).toBe("Сделай следующее упражнение в Карточках после «Жильё», 2 вопроса.");
+    expect(buildFollowUpText({ ...set, levels: ["B1", "B2"], level_auto: false }, [])).toBe("Сделай следующее упражнение в Карточках после «Жильё», 2 вопроса, уровень B1–B2.");
+    expect(buildFollowUpText({ ...set, levels: ["B2"], level_auto: true }, [])).toBe("Сделай следующее упражнение в Карточках после «Жильё», 2 вопроса.");
   });
 
-  it("level_words names harder words around the asked one, never the asked words", () => {
+  it("level_words names harder words around the asked one, against the highest level", () => {
     const LEVELS: Record<string, "A1" | "A2" | "B1" | "B2" | "C1" | "C2"> = { nonobstant: "C2", préavis: "C2", logement: "A2", loyer: "B1", revendication: "B2", bail: "C1" };
     const rate = (w: string) => LEVELS[w] ?? null;
     const snap = (fr: string) => ({ fr, ru: "x", pos: "noun" as const, gender: "m" as const, slang_level: 0 as const, verlan: false, example_fr: null, example_ru: null });
@@ -1099,15 +1114,17 @@ describe("«Уровень набора»", () => {
       word: snap("le bail"),
     };
     const ru: ExerciseItem = { ...item("q2", "w-x"), answer: "жильё", distractors: ["аренда", "залог", "квартплата"] };
-    const set = { items: [cloze, ru], new_words: [], level: "A2" as const };
+    const set = { items: [cloze, ru], new_words: [], levels: ["A2" as const] };
     const out = levelWarnings(set, rate);
     // A2 + 2 = B2: «Préavis» capitalised mid-sentence is taken for a name; Russian options are skipped.
     expect(out).toEqual([{ code: "level_words", path: "items[0]", message: expect.stringMatching(/^«nonobstant» ≈C2, «revendication» ≈B2: above the set's level A2/) }]);
-    expect(levelWarnings({ ...set, level: "B1" }, rate).map((w) => w.message)).toEqual([expect.stringMatching(/^«nonobstant» ≈C2:/)]);
-    expect(levelWarnings({ ...set, level: "C1" }, rate)).toEqual([]);
-    expect(levelWarnings({ ...set, level: null }, rate)).toEqual([]);
+    expect(levelWarnings({ ...set, levels: ["B1"] }, rate).map((w) => w.message)).toEqual([expect.stringMatching(/^«nonobstant» ≈C2:/)]);
+    // Several levels: the highest one sets the bar.
+    expect(levelWarnings({ ...set, levels: ["A2", "B1"] }, rate).map((w) => w.message)).toEqual([expect.stringMatching(/^«nonobstant» ≈C2: above the set's level A2–B1/)]);
+    expect(levelWarnings({ ...set, levels: ["C1"] }, rate)).toEqual([]);
+    expect(levelWarnings({ ...set, levels: [] }, rate)).toEqual([]);
     const fresh = { ref: "n1", fr: "nonobstant", ru: "несмотря на", note: null, example_fr: null, example_ru: null, pos: "adv" as const, gender: "none" as const, slang_level: 0 as const, verlan: false, origin: null, source_url: null };
-    expect(levelWarnings({ items: [], new_words: [fresh, { ...fresh, ref: "n2", slang_level: 2 }], level: "B1" }, rate)).toEqual([
+    expect(levelWarnings({ items: [], new_words: [fresh, { ...fresh, ref: "n2", slang_level: 2 }], levels: ["B1"] }, rate)).toEqual([
       { code: "level_words", path: "new_words[0]", message: expect.stringMatching(/^«nonobstant» ≈C2 is above the set's level B1/) },
     ]);
   });

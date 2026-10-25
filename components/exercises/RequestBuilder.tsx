@@ -27,6 +27,7 @@ import {
   buildRequestText,
   CONJ_REQUEST_SIZES,
   EXERCISE_LEVELS,
+  levelsText,
   NEW_WORDS_MAX,
   REQUEST_SIZES,
   requestSentence,
@@ -161,8 +162,8 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
   const [topic, setTopic] = useState("");
   const [size, setSize] = useState<number>(12);
   const [allowNew, setAllowNew] = useState(true);
-  // «Уровень набора» (pick L1 A): null = «Авто», the level of the words.
-  const [level, setLevel] = useState<ExerciseLevel | null>(null);
+  // «Уровень набора» (pick L1 A; several at once since 2026-10-25): none = «Авто», the level of the words.
+  const [levels, setLevels] = useState<readonly ExerciseLevel[]>([]);
   // «Спряжение глаголов»: its own sizes (a short test), so switching it off keeps the usual size.
   const [conjugation, setConjugation] = useState(false);
   const [verbSize, setVerbSize] = useState<number>(8);
@@ -203,7 +204,7 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
     allowNew: allowNew && !conjugation,
     scope,
     conjugation,
-    level,
+    levels,
     autoLevel,
   };
   // Phones copy the sentence they read; desktop keeps the classic text.
@@ -252,9 +253,9 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
         onTopic={setTopic}
         allowNew={allowNew}
         onAllowNew={setAllowNew}
-        level={level}
+        levels={levels}
         autoLevel={autoLevel}
-        onLevel={setLevel}
+        onLevels={setLevels}
         sentence={sentence}
         focusLine={focusLine}
         online={online}
@@ -382,16 +383,10 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
           <span id={`${ids}-level`} className="flex-1 text-[15px] leading-5">
             Уровень
           </span>
-          <Segmented<string>
-            options={[{ value: "auto", label: "Авто" }, ...EXERCISE_LEVELS.map((l) => ({ value: l, label: l }))]}
-            value={level ?? "auto"}
-            onChange={(v) => setLevel(v === "auto" ? null : (v as ExerciseLevel))}
-            ariaLabelledby={`${ids}-level`}
-            mono
-          />
+          <LevelToggles labelledBy={`${ids}-level`} value={levels} onChange={setLevels} />
         </div>
         <p data-level-hint="" className="m-0 text-[12px] leading-4 text-muted">
-          {levelHint(level, autoLevel)}
+          {levelHint(levels, autoLevel)}
         </p>
       </div>
 
@@ -822,49 +817,89 @@ function KindRow({
   );
 }
 
+/** A level tapped on or off; the last one off is «Авто» again (none). Kept in A2…C1 order. */
+const toggleLevel = (levels: readonly ExerciseLevel[], level: ExerciseLevel): ExerciseLevel[] =>
+  EXERCISE_LEVELS.filter((l) => (l === level ? !levels.includes(l) : levels.includes(l)));
+
 /**
- * The level slot's choices (X-Level-A, pick L1 A): «Авто ≈B1» · A2 · B1 · B2 · C1, a radio group
- * (arrows move the choice, as in the kind row).
+ * The level slot's choices (X-Level-A, pick L1 A): «Авто ≈B1» · A2 · B1 · B2 · C1. Several levels
+ * can be on at once (2026-10-25, «B1–B2»): each is a toggle; «Авто» clears them, and turning the
+ * last one off is «Авто» again.
  */
 function LevelChips({
   value,
   autoLevel,
   onChange,
 }: {
-  value: ExerciseLevel | null;
+  value: readonly ExerciseLevel[];
   autoLevel: ExerciseLevel | null;
-  onChange: (level: ExerciseLevel | null) => void;
+  onChange: (levels: readonly ExerciseLevel[]) => void;
 }) {
-  const options: (ExerciseLevel | null)[] = [null, ...EXERCISE_LEVELS];
-  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-    const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
-    if (!step) return;
-    e.preventDefault();
-    const next = (options.indexOf(value) + step + options.length) % options.length;
-    onChange(options[next]);
-    e.currentTarget.querySelectorAll<HTMLButtonElement>("[role='radio']")[next]?.focus();
-  };
   return (
-    <div role="radiogroup" aria-label="Уровень набора" onKeyDown={onKeyDown} className="flex flex-wrap gap-x-1.5">
-      {options.map((l) => (
-        <Chip
-          key={l ?? "auto"}
-          role="radio"
-          selected={l === value}
-          tabIndex={l === value ? 0 : -1}
-          aria-label={l ?? (autoLevel ? `Авто: по уровню выбранных слов, сейчас примерно ${autoLevel}` : "Авто: по уровню выбранных слов")}
-          onClick={() => onChange(l)}
-          className="my-1 !h-9 min-w-11 justify-center gap-1.5 px-3"
-        >
-          {l ?? (
-            <>
-              Авто
-              {autoLevel && <span className="font-mono text-[12px] font-normal opacity-70">≈{autoLevel}</span>}
-            </>
-          )}
-        </Chip>
-      ))}
+    <div role="group" aria-label="Уровень набора, можно несколько" className="flex flex-wrap gap-x-1.5">
+      <Chip
+        selected={value.length === 0}
+        aria-label={autoLevel ? `Авто: по уровню выбранных слов, сейчас примерно ${autoLevel}` : "Авто: по уровню выбранных слов"}
+        onClick={() => onChange([])}
+        className="my-1 !h-9 min-w-11 justify-center gap-1.5 px-3"
+      >
+        Авто
+        {autoLevel && <span className="font-mono text-[12px] font-normal opacity-70">≈{autoLevel}</span>}
+      </Chip>
+      {EXERCISE_LEVELS.map((l) => {
+        const on = value.includes(l);
+        return (
+          <Chip
+            key={l}
+            selected={on}
+            icon={on && value.length > 1 ? "check" : undefined}
+            onClick={() => onChange(toggleLevel(value, l))}
+            className="my-1 !h-9 min-w-11 justify-center gap-1.5 px-3"
+          >
+            {l}
+          </Chip>
+        );
+      })}
     </div>
+  );
+}
+
+/**
+ * Desktop's «Уровень» row (D-Exercise-Level): «Авто · A2 · B1 · B2 · C1» in the «Вопросов» row's mono
+ * look, several levels at once, as on phones.
+ */
+function LevelToggles({
+  labelledBy,
+  value,
+  onChange,
+}: {
+  labelledBy: string;
+  value: readonly ExerciseLevel[];
+  onChange: (levels: readonly ExerciseLevel[]) => void;
+}) {
+  const options: { key: string; label: string; on: boolean; tap: () => void }[] = [
+    { key: "auto", label: "Авто", on: value.length === 0, tap: () => onChange([]) },
+    ...EXERCISE_LEVELS.map((l) => ({ key: l, label: l, on: value.includes(l), tap: () => onChange(toggleLevel(value, l)) })),
+  ];
+  return (
+    <span role="group" aria-labelledby={labelledBy} className="-mr-2.5 inline-flex items-center">
+      {options.map((o, i) => (
+        <span key={o.key} className="inline-flex items-center">
+          {i > 0 && <span aria-hidden="true" className="h-4 w-px bg-rule" />}
+          <button
+            type="button"
+            aria-pressed={o.on}
+            onClick={o.tap}
+            className={cx(
+              "h-8 px-2.5 font-mono text-[14px] tabular-nums",
+              o.on ? "font-semibold text-ink underline decoration-1 underline-offset-4" : "font-medium text-muted hoverable:text-ink",
+            )}
+          >
+            {o.label}
+          </button>
+        </span>
+      ))}
+    </span>
   );
 }
 
@@ -943,9 +978,9 @@ function RequestComposer({
   onTopic,
   allowNew,
   onAllowNew,
-  level,
+  levels,
   autoLevel,
-  onLevel,
+  onLevels,
   sentence,
   focusLine,
   online,
@@ -971,10 +1006,10 @@ function RequestComposer({
   onTopic: (topic: string) => void;
   allowNew: boolean;
   onAllowNew: (on: boolean) => void;
-  /** «Уровень набора»: null = «Авто». */
-  level: ExerciseLevel | null;
+  /** «Уровень набора»: one or several; none = «Авто». */
+  levels: readonly ExerciseLevel[];
   autoLevel: ExerciseLevel | null;
-  onLevel: (level: ExerciseLevel | null) => void;
+  onLevels: (levels: readonly ExerciseLevel[]) => void;
   sentence: RequestSentence;
   focusLine: string | null;
   online: boolean;
@@ -1032,7 +1067,7 @@ function RequestComposer({
           </Slot>{" "}
           <Slot
             open={open === "level"}
-            label={`Уровень: ${level ?? (autoLevel ? `авто, примерно ${autoLevel}` : "авто")}, изменить`}
+            label={`Уровень: ${levels.length ? levelsText(levels) : autoLevel ? `авто, примерно ${autoLevel}` : "авто"}, изменить`}
             controls={`${ids}-level`}
             onClick={() => toggle("level")}
           >
@@ -1090,9 +1125,9 @@ function RequestComposer({
 
       {open === "level" && (
         <div id={`${ids}-level`} className="mt-2.5 flex flex-col rounded-card bg-surface-2 px-2 py-1">
-          <LevelChips value={level} autoLevel={autoLevel} onChange={onLevel} />
+          <LevelChips value={levels} autoLevel={autoLevel} onChange={onLevels} />
           <p data-level-hint="" className="m-0 mx-2 mt-1 mb-2 text-[13px] leading-[18px] text-muted">
-            {levelHint(level, autoLevel)}
+            {levelHint(levels, autoLevel)}
           </p>
         </div>
       )}
