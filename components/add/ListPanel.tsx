@@ -163,10 +163,16 @@ export function ListPanel({
           autoCorrect="off"
           autoCapitalize="none"
           spellCheck={false}
-          className="block max-h-[40vh] min-h-[148px] w-full resize-none rounded-[3px] bg-transparent px-[15px] py-3 text-[15px] leading-6 text-ink outline-none! [field-sizing:content] placeholder:text-muted pointer-coarse:text-[16px]"
+          className={cx(
+            "block w-full resize-none rounded-[3px] bg-transparent px-[15px] py-3 text-[15px] leading-6 text-ink outline-none! [field-sizing:content] placeholder:text-muted pointer-coarse:text-[16px]",
+            // Once the rows are parsed below, the pasted text keeps 3 lines (it scrolls), so the same
+            // words are not shown twice at full length (M-Add-Detect F4 trim).
+            rows.length > 0 ? "max-h-24" : "max-h-[40vh] min-h-[148px]",
+          )}
         />
       </div>
-      <p id={hintId} className="m-0 mx-4 mt-2 text-[13px] leading-5 text-muted">
+      {/* The placeholder shows the format; an unreadable line says what it lacks on its own row. */}
+      <p id={hintId} className="sr-only">
         По слову на строку: французское — русское. Подойдёт тире, двоеточие или табуляция.
       </p>
 
@@ -184,8 +190,9 @@ export function ListPanel({
             </FieldRow>
           </div>
           <section aria-labelledby={headingId} aria-busy={detection?.waiting || undefined}>
-            <SectionHeader id={headingId} title="Разбор" aside={<span className="meta">{`${selected} из ${rows.length}`}</span>} />
-            {detection && <ListStatusSlot status={status} className="mx-4" />}
+            {/* The count lives on «Добавить N слов»; the header stays for screen readers. */}
+            <SectionHeader id={headingId} title={`Разбор · ${selected} из ${rows.length}`} className="sr-only" />
+            {detection && <ListStatusSlot status={status} className="mx-4 mt-2" />}
             <ul className="m-0 mx-4 flex list-none flex-col p-0">
               {rows.map((row) => (
                 <li key={row.key}>
@@ -215,8 +222,7 @@ function ListRowItem({
 }) {
   const invalid = row.status === "invalid";
   const tag = invalid ? (row.problem === "no_french" ? "нет французского" : "нет перевода") : row.status === "ok" ? null : TAGS[row.status];
-  // The example line is there from the start (76px rows, A10), so nothing grows when it lands.
-  const exampleLine = !!detection && show.examples && !invalid;
+  // One 56px height from the start (A10): the example is saved but not listed, so nothing grows when it lands.
   const pending = !!detection?.waiting && !invalid && !row.enrich;
   // What landed is lit (once per row, as its detection arrives).
   const ref = useSpotlight<HTMLButtonElement>(row.enrich);
@@ -230,8 +236,7 @@ function ListRowItem({
       disabled={invalid}
       onClick={onToggle}
       className={cx(
-        "flex w-full items-center gap-3 border-b border-rule bg-transparent text-left text-ink active:bg-surface-2 disabled:active:bg-transparent",
-        exampleLine ? "h-[76px] py-1.5" : "min-h-14 py-2",
+        "flex h-14 w-full items-center gap-3 border-b border-rule bg-transparent py-1.5 text-left text-ink active:bg-surface-2 disabled:active:bg-transparent",
         !row.checked && "text-muted",
       )}
     >
@@ -250,11 +255,6 @@ function ListRowItem({
           {row.fr || "—"}
         </span>
         <span className="truncate text-[14px] leading-5 text-muted">{row.ru || "—"}</span>
-        {exampleLine && (
-          <span lang="fr" className="h-5 truncate font-serif text-[14px] leading-5 text-muted italic">
-            {row.enrich?.example_fr ?? (pending && <PendingDots />)}
-          </span>
-        )}
       </span>
       {(row.enrich || pending) && !tag && (
         <span className="flex max-w-[40%] shrink-0 flex-col items-end gap-1">

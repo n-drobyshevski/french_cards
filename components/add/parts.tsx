@@ -16,10 +16,10 @@ import { Button, IconButton } from "@/components/ui/Button";
 import { AbbrHint } from "@/components/ui/AbbrHint";
 import { Chip } from "@/components/ui/Chip";
 import { Collapse } from "@/components/ui/Collapse";
-import { Icon, type IconName } from "@/components/ui/Icons";
+import { Icon } from "@/components/ui/Icons";
 import { Segmented } from "@/components/ui/Segmented";
 import { SheetCloseButton, SheetTitle } from "@/components/ui/Sheet";
-import { SLANG_NAMES_RU, SlangMeter } from "@/components/ui/SlangMeter";
+import { SLANG_NAMES_RU } from "@/components/ui/SlangMeter";
 import { cx } from "@/components/ui/cx";
 import { SkeletonRow } from "@/components/ui/Skeleton";
 import { StatusLine } from "@/components/ui/StatusLine";
@@ -32,21 +32,22 @@ import type { DuplicateInfo } from "./data";
 import type { SpotField } from "./draft";
 import { choiceKey, choiceName, INBOX_CHOICE, sameChoice, type FolderChoice } from "./folder-choice";
 import { variantKey } from "./combobox";
-import { cardNumber, plural } from "./match";
+import { plural } from "./match";
 
 // ---------------------------------------------------------------------------------------
-// Sheet chrome: «КАРТОЧКА № 159» + close, title + tools, red index-card rule.
+// Sheet chrome (L-Add-B): one 44px row, mono «№ 159» (or the title in «Несколько слов»), back
+// and close, then the red index-card rule. Otherwise the sheet is named by Sheet `title` (sr-only).
 
 export function AddSheetChrome({
   label,
   title,
-  tools,
   onBack,
   backLabel = "Назад",
 }: {
-  label: ReactNode;
-  title: string;
-  tools?: ReactNode;
+  /** Mono catalogue number, shown when there is no visible title. */
+  label?: ReactNode;
+  /** A visible title that also names the sheet («Несколько слов»). */
+  title?: string;
   onBack?: () => void;
   backLabel?: string;
 }) {
@@ -55,43 +56,46 @@ export function AddSheetChrome({
       <div className={cx("mt-1 flex h-11 items-center justify-between pr-1", onBack ? "pl-1" : "pl-4")}>
         <span className="flex min-w-0 items-center">
           {onBack && <IconButton icon="back" label={backLabel} onClick={onBack} />}
-          <span className="meta truncate whitespace-nowrap">{label}</span>
+          {title ? (
+            <SheetTitle className="min-w-0 truncate max-md:text-[19px] max-md:leading-6">{title}</SheetTitle>
+          ) : (
+            <span className="truncate font-mono text-[12px] leading-4 tracking-[.06em] whitespace-nowrap text-muted">{label}</span>
+          )}
         </span>
         <SheetCloseButton />
       </div>
-      <div className="flex h-11 items-center justify-between gap-2 px-4">
-        <SheetTitle className="min-w-0 truncate">{title}</SheetTitle>
-        {tools && <div className="flex shrink-0 items-center gap-2">{tools}</div>}
-      </div>
-      <div aria-hidden="true" className="mt-2 h-0.5 bg-red" />
+      <div aria-hidden="true" className="h-0.5 bg-red" />
     </div>
   );
 }
 
 const TOOL =
-  "relative inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-chip border border-rule bg-surface px-2.5 text-[13px] leading-4 font-medium text-ink no-underline active:bg-surface-2 before:absolute before:-inset-y-1.5 before:inset-x-0 before:content-['']";
+  "inline-flex h-11 shrink-0 items-center gap-2 whitespace-nowrap rounded-[4px] bg-transparent px-3 text-[14px] leading-5 text-ink no-underline active:bg-surface-2";
 
-/** «Скриншот» / «Список» header tools: 32px outlined boxes with a 44px hit area. */
-export function ToolButton({ icon, children, onClick }: { icon: IconName; children: ReactNode; onClick: () => void }) {
+/**
+ * The other ways in, under the empty headword line: «Со скриншота · Списком», two 44px text
+ * buttons split by a hairline. Shown only while the line is empty.
+ */
+export function AddTools({ onScreenshot, onList }: { onScreenshot: () => void; onList: () => void }) {
   return (
-    <button type="button" onClick={onClick} className={TOOL}>
-      <Icon name={icon} size={16} />
-      {children}
-    </button>
-  );
-}
-
-export function ToolLink({ icon, href, children, onClick }: { icon: IconName; href: string; children: ReactNode; onClick?: () => void }) {
-  return (
-    <Link href={href} onClick={onClick} className={TOOL}>
-      <Icon name={icon} size={16} />
-      {children}
-    </Link>
+    <div className="mx-1 mt-2 flex h-11 items-center">
+      <Link href="/import" onClick={onScreenshot} className={TOOL}>
+        <Icon name="camera" size={18} className="text-muted" />
+        Со скриншота
+      </Link>
+      <span aria-hidden="true" className="h-4 w-px bg-rule" />
+      <button type="button" aria-label="Списком — несколько слов сразу" onClick={onList} className={TOOL}>
+        <Icon name="clipboard" size={18} className="text-muted" />
+        Списком
+      </button>
+    </div>
   );
 }
 
 // ---------------------------------------------------------------------------------------
-// Headword: the big 56px input (Newsreader 22). 1px ink border, 2px while focused.
+// Headword (spec change §8): written on the card, a borderless Newsreader 22 line on a 1px ruled
+// baseline that draws to 2px ink left → right while focused (--dur-move, linear; at once under
+// reduced motion). The only input styled this way: search fields stay boxed.
 
 export function HeadwordInput({
   inputRef,
@@ -109,6 +113,7 @@ export function HeadwordInput({
   enterKeyHint,
   autoFocus,
   spot,
+  className = "mt-8",
 }: {
   /** Lit by a pick (useFieldSpotlight). */
   spot?: SpotField;
@@ -128,16 +133,12 @@ export function HeadwordInput({
   onPaste?: ClipboardEventHandler<HTMLInputElement>;
   enterKeyHint?: InputHTMLAttributes<HTMLInputElement>["enterKeyHint"];
   autoFocus?: boolean;
+  /** Top margin: 32px under the red rule on the empty card. */
+  className?: string;
 }) {
   const clearable = Boolean(onClear && value);
   return (
-    <div
-      data-spot={spot}
-      className={cx(
-        "relative mx-4 mt-4 flex h-14 shrink-0 items-center rounded-[4px] border bg-surface focus-within:shadow-[inset_0_0_0_1px_var(--ink)]",
-        invalid ? "border-again focus-within:shadow-[inset_0_0_0_1px_var(--again)]" : "border-ink",
-      )}
-    >
+    <div data-spot={spot} className={cx("group relative mx-4 flex h-12 shrink-0 items-center", className)}>
       <input
         ref={inputRef}
         type="text"
@@ -157,13 +158,13 @@ export function HeadwordInput({
         enterKeyHint={enterKeyHint}
         autoFocus={autoFocus}
         className={cx(
-          "h-full w-full min-w-0 rounded-[3px] bg-transparent pl-[15px] font-serif text-[22px] leading-7 font-medium text-ink outline-none!",
-          "placeholder:font-sans placeholder:text-[15px] placeholder:font-normal placeholder:text-muted",
-          clearable || trailing ? "pr-2" : "pr-[15px]",
+          "h-full w-full min-w-0 bg-transparent p-0 font-serif text-[22px] leading-7 font-medium text-ink outline-none!",
+          "placeholder:font-normal placeholder:text-muted placeholder:italic",
+          (clearable || Boolean(trailing)) && "pr-2",
         )}
       />
       {trailing && (
-        <span className="shrink-0 pr-[15px] whitespace-nowrap">
+        <span className="shrink-0 whitespace-nowrap">
           {typeof trailing === "string" ? (
             <AbbrHint abbr={trailing} align="end" className="text-[15px] leading-5" />
           ) : (
@@ -179,9 +180,17 @@ export function HeadwordInput({
           onClick={onClear}
           // Keep focus (and the on-screen keyboard) in the input.
           onMouseDown={(e) => e.preventDefault()}
-          className="mr-0.5 text-muted"
+          className="-mr-3 text-muted"
         />
       )}
+      <span aria-hidden="true" className={cx("pointer-events-none absolute inset-x-0 bottom-0 h-px", invalid ? "bg-again" : "bg-rule")} />
+      <span
+        aria-hidden="true"
+        className={cx(
+          "pointer-events-none absolute inset-x-0 bottom-0 h-0.5 origin-left scale-x-0 transition-transform duration-(--dur-move) ease-linear group-focus-within:scale-x-100 motion-reduce:transition-none",
+          invalid ? "bg-again" : "bg-ink",
+        )}
+      />
     </div>
   );
 }
@@ -539,6 +548,11 @@ export function DuplicateReveal({ info, children }: { info: DuplicateInfo | null
   );
 }
 
+/**
+ * «Уже есть» as one 64px dashed warn row (Add-Duplicate B): «Уже есть · Деньги» + «Открыть ›» over
+ * the saved translation; the whole row opens the saved word. «Всё равно добавить» is a muted text
+ * action under it (on phones picking a «Вариант» counts as adding anyway too).
+ */
 export function DuplicateNotice({
   info,
   onOpen,
@@ -550,34 +564,29 @@ export function DuplicateNotice({
 }) {
   const where = info.folderName ? `в теме «${info.folderName}»` : "во «Входящих»";
   return (
-    <div role="alert" className="mx-4 mt-4 rounded-card border border-dashed border-warn-edge bg-warn-bg p-4">
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="text-[15px] leading-5 font-semibold text-warn">Уже есть {where}</span>
-        <span className="shrink-0 font-mono text-[11px] leading-4 tracking-[.06em] whitespace-nowrap text-warn">
-          {cardNumber(info.ordinal)}
-        </span>
-      </div>
-      <div className="mt-2 flex min-h-6 items-center justify-between gap-3">
-        <span className="flex min-w-0 items-baseline gap-2 whitespace-nowrap">
-          <span lang="fr" className="truncate font-serif text-[19px] leading-6 font-medium text-ink">
-            {info.word.fr}
+    <div role="alert" className="mx-4 mt-4 flex flex-col">
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={`Уже есть ${where}: ${info.word.fr} — ${info.word.ru}. Открыть`}
+        className="flex h-16 w-full flex-col justify-center gap-0.5 rounded-card border border-dashed border-warn-edge bg-warn-bg px-4 text-left active:bg-surface-2"
+      >
+        <span className="flex w-full items-baseline justify-between gap-3">
+          <span className="min-w-0 truncate text-[15px] leading-5 font-semibold text-warn">Уже есть · {info.folderName ?? "Входящие"}</span>
+          <span className="inline-flex shrink-0 items-center gap-0.5 self-center text-[14px] leading-5 font-medium text-ink">
+            Открыть
+            <Icon name="chevron-right" size={16} />
           </span>
-          <span className="truncate text-[15px] leading-5 text-ink">{info.word.ru}</span>
         </span>
-        <SlangMeter level={info.word.slang_level} verlan={info.word.verlan} />
-      </div>
-      <div className="mt-4 flex items-center gap-4">
-        <Button variant="secondary" size="md" className="px-5" onClick={onOpen}>
-          Открыть
-        </Button>
-        <button
-          type="button"
-          onClick={onAddAnyway}
-          className="h-11 shrink-0 bg-transparent px-1 text-[15px] leading-5 font-medium whitespace-nowrap text-ink active:underline"
-        >
-          Всё равно добавить
-        </button>
-      </div>
+        <span className="w-full truncate text-[14px] leading-5 text-ink">{info.word.ru}</span>
+      </button>
+      <button
+        type="button"
+        onClick={onAddAnyway}
+        className="-mr-1 h-11 self-end bg-transparent px-1 text-[14px] leading-5 whitespace-nowrap text-muted active:underline"
+      >
+        Всё равно добавить
+      </button>
     </div>
   );
 }
@@ -661,9 +670,10 @@ function ChoiceChip({
 const CHIP_ROW = "flex flex-wrap gap-x-2 gap-y-3.5 py-[7px]";
 
 /**
- * «Тема» chips. With an automatic pick: the pick (+ caption «подобрано автоматически» while
- * it stays selected), its alternatives, the dashed «+ новая тема: X», and «Другие» to reveal
- * every theme. Without one: «Входящие» and every theme.
+ * «Тема» chips. With an automatic pick: one row with the pick, its top alternative and «Другие
+ * темы», which opens in place the dashed «+ новая тема: X», the other alternatives and every theme
+ * (a selected one never hides). «подобрано автоматически» is for screen readers: the spotlight
+ * marks the pick. Without a pick: «Входящие» and every theme.
  */
 export function FolderChips({
   value,
@@ -684,16 +694,24 @@ export function FolderChips({
 }) {
   const captionId = useId();
   const all: FolderChoice[] = [INBOX_CHOICE, ...folders.map((f): FolderChoice => ({ kind: "folder", id: f.id }))];
-  const primary: FolderChoice[] = auto ? [auto, ...alternatives] : all;
-  const shownKeys = new Set([...primary, ...(proposal ? [proposal] : [])].map(choiceKey));
-  const rest = auto ? all.filter((c) => !shownKeys.has(choiceKey(c))) : [];
-  const [expanded, setExpanded] = useState(() => rest.some((c) => sameChoice(c, value)));
+  const primary: FolderChoice[] = auto ? [auto, ...alternatives.slice(0, 1)] : all;
+  const rest: FolderChoice[] = [];
+  if (auto) {
+    const seen = new Set(primary.map(choiceKey));
+    for (const c of [...(proposal ? [proposal] : []), ...alternatives.slice(1), ...all]) {
+      if (seen.has(choiceKey(c))) continue;
+      seen.add(choiceKey(c));
+      rest.push(c);
+    }
+  }
+  const [expanded, setExpanded] = useState(false);
+  const held = expanded ? undefined : rest.find((c) => sameChoice(c, value));
   const autoSelected = auto !== null && sameChoice(value, auto);
 
   return (
     <div role="radiogroup" aria-labelledby={labelledBy} className="mt-0.5 flex flex-col">
       <div className={CHIP_ROW}>
-        {primary.map((c, i) => (
+        {[...primary, ...(held ? [held] : [])].map((c, i) => (
           <ChoiceChip
             key={choiceKey(c)}
             choice={c}
@@ -703,21 +721,16 @@ export function FolderChips({
             describedBy={auto && i === 0 ? captionId : undefined}
           />
         ))}
+        {rest.length > 0 && !expanded && (
+          <Chip dropdown aria-expanded={false} onClick={() => setExpanded(true)}>
+            Другие темы
+          </Chip>
+        )}
       </div>
       {autoSelected && (
-        <span id={captionId} className="-mt-0.5 text-[12px] leading-4 text-muted">
+        <span id={captionId} className="sr-only">
           подобрано автоматически
         </span>
-      )}
-      {(proposal || rest.length > 0) && (
-        <div className={CHIP_ROW}>
-          {proposal && <ChoiceChip choice={proposal} folders={folders} selected={sameChoice(value, proposal)} onSelect={onChange} />}
-          {rest.length > 0 && !expanded && (
-            <Chip dropdown aria-expanded={false} onClick={() => setExpanded(true)}>
-              Другие темы
-            </Chip>
-          )}
-        </div>
       )}
       {expanded && rest.length > 0 && (
         <div className={CHIP_ROW}>
@@ -743,9 +756,9 @@ export function SlangPicker({
 }: {
   level: SlangLevel;
   verlan: boolean;
-  /** Show «определён автоматически». */
+  /** «определён автоматически» (for screen readers). */
   auto: boolean;
-  /** Detection has been running for 300 ms: the unknown state and «определяется…». */
+  /** Detection has been running for 300 ms: the unknown meter («определяется…» for screen readers). */
   pending?: boolean;
   /** Detection failed: «не определилось» (muted, no alert). */
   failed?: boolean;
@@ -772,9 +785,11 @@ export function SlangPicker({
         <span id={labelId} className="meta font-medium">
           Уровень сленга
         </span>
+        {/* Only «не определилось» shows: the unknown meter draws the wait and the spotlight marks what
+            detection filled; the words stay for screen readers. */}
         <span role={pending || failed ? "status" : undefined} className="flex items-center gap-2 text-[12px] leading-4 text-muted">
           {pending && <UnknownMeter />}
-          {caption}
+          {caption && <span className={cx(!failed && "sr-only")}>{caption}</span>}
         </span>
       </div>
       <div className="mt-2 flex gap-2">

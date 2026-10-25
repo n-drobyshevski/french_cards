@@ -148,7 +148,7 @@ test("a failed detection says «не определилось», quietly", async
   await expect(sheet.locator("[data-example-pending]")).toHaveCount(0);
 });
 
-test("«Список»: rows are 76px from the start; one status line counts them in", async ({ page }, testInfo) => {
+test("«Список»: rows are 56px from the start; one status line counts them in", async ({ page }, testInfo) => {
   await mockSuggest(page, []);
   const enrich = await gateEnrich(page, (w) => enriched(w, { folder: "INBOX" }));
   await openSheet(page);
@@ -158,7 +158,7 @@ test("«Список»: rows are 76px from the start; one status line counts the
 
   const rows = sheet.getByRole("checkbox");
   await expect(rows).toHaveCount(2);
-  expect(await heights(rows)).toEqual([76, 76]);
+  expect(await heights(rows)).toEqual([56, 56]);
   const status = sheet.locator("[data-list-status]");
   await expect(status.getByText("Определяем").first()).toBeVisible();
   await expect(status.getByText("0 / 2", { exact: true })).toBeVisible();
@@ -167,9 +167,8 @@ test("«Список»: rows are 76px from the start; one status line counts the
 
   const spots = await watchSpotlights(page);
   enrich.release();
-  await expect(sheet.getByText("Exemple avec chelou.")).toBeVisible();
   await expect(status.getByText("Готово · 2 слова").first()).toBeVisible();
-  expect(await heights(rows)).toEqual([76, 76]);
+  expect(await heights(rows)).toEqual([56, 56]);
   // Each row's level, theme and example landed with the paper fade.
   await expect.poll(async () => (await spots()).filter((s) => s === "checkbox").length).toBe(2);
 });

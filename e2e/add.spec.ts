@@ -207,10 +207,9 @@ test("pasted rows show their slang level, example and theme and are saved with t
   await addSheet(page).getByRole("button", { name: "Список" }).click();
   const sheet = page.getByRole("dialog", { name: /Несколько слов/ });
   await sheet.getByRole("textbox", { name: "Список слов" }).fill("la caisse — тачка\nchelou — стрёмный");
-  await expect(sheet.getByText("Exemple avec chelou.")).toBeVisible();
-  await expect(sheet.getByText("Exemple avec la caisse.")).toBeVisible();
   await expect(sheet.getByRole("combobox")).toHaveValue("auto");
   const rows = sheet.getByRole("checkbox");
+  // The example is not listed on the 56px rows; it is saved with the word (checked on the card below).
   await expect(rows.filter({ hasText: "chelou" }).getByText("Эмоции")).toBeVisible();
   await expect(rows.filter({ hasText: "la caisse" }).getByText("Входящие")).toBeVisible();
   await sheet.getByRole("button", { name: "Добавить 2 слова" }).click();
