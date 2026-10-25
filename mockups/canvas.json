@@ -1564,6 +1564,150 @@
    "h": 800,
    "title": "D1 · C — десктоп, листы месяцев",
    "is_interactive": true
+  },
+  "X-List-A.dc.html": {
+   "x": 0,
+   "y": 42416,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения — A Подчистить",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-List-B.dc.html": {
+   "x": 470,
+   "y": 42416,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения — B Картотека",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-List-C.dc.html": {
+   "x": 940,
+   "y": 42416,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения — C Обложки",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-List-B-Empty.dc.html": {
+   "x": 1410,
+   "y": 42416,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения — B пусто",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Request-A.dc.html": {
+   "x": 1880,
+   "y": 42416,
+   "w": 390,
+   "h": 844,
+   "title": "Попросить набор — A «Подчистить»",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Request-B.dc.html": {
+   "x": 2350,
+   "y": 42416,
+   "w": 390,
+   "h": 844,
+   "title": "Попросить набор — B «Одна фраза»",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Request-C.dc.html": {
+   "x": 2820,
+   "y": 42416,
+   "w": 390,
+   "h": 844,
+   "title": "Попросить набор — C «Карточка запроса»",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Player-A.dc.html": {
+   "x": 0,
+   "y": 43580,
+   "w": 390,
+   "h": 844,
+   "title": "Плеер — A Подчистить",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Player-B.dc.html": {
+   "x": 470,
+   "y": 43580,
+   "w": 390,
+   "h": 844,
+   "title": "Плеер — B Карточка с пропуском",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Player-C.dc.html": {
+   "x": 940,
+   "y": 43580,
+   "w": 390,
+   "h": 844,
+   "title": "Плеер — C Слип в слот",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Player-B-Right.dc.html": {
+   "x": 1410,
+   "y": 43580,
+   "w": 390,
+   "h": 844,
+   "title": "Плеер — B Верно",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Player-B-Wrong.dc.html": {
+   "x": 1880,
+   "y": 43580,
+   "w": 390,
+   "h": 844,
+   "title": "Плеер — B Неверно",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Player-B-Types.dc.html": {
+   "x": 2350,
+   "y": 43580,
+   "w": 390,
+   "h": 844,
+   "title": "Плеер — B Типы вопросов",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Done-A.dc.html": {
+   "x": 2820,
+   "y": 43580,
+   "w": 390,
+   "h": 844,
+   "title": "Итог набора — A Подчистить",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Done-B.dc.html": {
+   "x": 3290,
+   "y": 43580,
+   "w": 390,
+   "h": 844,
+   "title": "Итог набора — B Карточка итога",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Done-C.dc.html": {
+   "x": 3760,
+   "y": 43580,
+   "w": 390,
+   "h": 844,
+   "title": "Итог набора — C Разложенные карточки",
+   "is_interactive": true,
+   "radius": 28
   }
  },
  "order": [
@@ -1745,7 +1889,23 @@
   "Progress-Entry.dc.html",
   "D-Progress-A.dc.html",
   "D-Progress-B.dc.html",
-  "D-Progress-C.dc.html"
+  "D-Progress-C.dc.html",
+  "X-List-A.dc.html",
+  "X-List-B.dc.html",
+  "X-List-C.dc.html",
+  "X-List-B-Empty.dc.html",
+  "X-Request-A.dc.html",
+  "X-Request-B.dc.html",
+  "X-Request-C.dc.html",
+  "X-Player-A.dc.html",
+  "X-Player-B.dc.html",
+  "X-Player-C.dc.html",
+  "X-Player-B-Right.dc.html",
+  "X-Player-B-Wrong.dc.html",
+  "X-Player-B-Types.dc.html",
+  "X-Done-A.dc.html",
+  "X-Done-B.dc.html",
+  "X-Done-C.dc.html"
  ],
  "notes": {
   "row1": {
@@ -1978,6 +2138,20 @@
    "text": "33 · Прогресс — десктоп",
    "kind": "title1",
    "maxW": 4480
+  },
+  "row34": {
+   "x": 0,
+   "y": 42296,
+   "text": "34 · Упражнения · главная и запрос",
+   "kind": "title1",
+   "maxW": 1800
+  },
+  "row35": {
+   "x": 0,
+   "y": 43460,
+   "text": "35 · Упражнения · плеер и итог",
+   "kind": "title1",
+   "maxW": 1800
   }
  },
  "designSystems": []
