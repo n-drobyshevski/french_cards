@@ -1,6 +1,10 @@
-// Pure helpers for the Settings screen: sync status line, the new-cards stepper, import summaries.
+// Pure helpers for the Settings screen: sync status line, the new-cards stepper, import summaries,
+// the phone index (its sub-screens and their captions).
 import type { ImportResult } from "@/lib/backup";
-import { pluralRu } from "@/components/review/format";
+import { DIRECTION_LABELS, pluralRu } from "@/components/review/format";
+import { FOCUS_SHARE_PHRASES, FOCUS_TARGET_LABELS } from "@/lib/core/exercise-focus";
+import type { StudyPlan } from "@/lib/core/study-plan";
+import type { ExerciseFocus, Settings } from "@/lib/types";
 
 /** «n.drobyshevski@pm.me» → «n.d…@pm.me» */
 export function shortEmail(email: string): string {
@@ -52,14 +56,6 @@ export interface SyncLine {
   /** A tap can start a sync now. */
   canSync: boolean;
 }
-
-/** Every rest text of the line, for the width lock: the slot is as wide as the widest of them. */
-export const SYNC_LINE_TEXTS = [
-  "Синхронизировано · 00:00",
-  "Синхронизация…",
-  "Нет сети · изменения сохранятся",
-  "Не синхронизировано · Повторить",
-] as const;
 
 const SYNC_ERRORS: Record<SyncErrorKind, string> = {
   server: "Сервер не ответил",
@@ -168,4 +164,78 @@ export function describeLegacyImport(added: number, skipped: number): string {
   if (added > 0) return `Добавлено ${words(added)}`;
   if (skipped > 0) return "Новых слов нет — все уже в библиотеке";
   return "В файле не найдено слов";
+}
+
+// --- The phone index (pick S1 B) ------------------------------------------------------------------
+
+/**
+ * The phone sub-screens of Settings and the desktop section each one stands for: from 768 a
+ * sub-screen's route opens the one settings page at that section, and on phones an old link to a
+ * section (`/settings#set-data`) opens its sub-screen.
+ */
+export const SETTINGS_PAGES = {
+  review: { href: "/settings/review", anchor: "set-review" },
+  exercises: { href: "/settings/exercises", anchor: "set-exercises" },
+  ai: { href: "/settings/ai", anchor: "set-hints" },
+  fields: { href: "/settings/fields", anchor: "set-fields" },
+  data: { href: "/settings/data", anchor: "set-data" },
+} as const;
+
+/** The phone sub-screen of a desktop section anchor («#set-data» → /settings/data); null if none. */
+export function settingsPageForAnchor(hash: string): string | null {
+  const anchor = hash.replace(/^#/, "");
+  return Object.values(SETTINGS_PAGES).find((p) => p.anchor === anchor)?.href ?? null;
+}
+
+/**
+ * «План повторения»: «8 новых · до 200 в день», with no cap «8 новых в день · без лимита». With
+ * «Назавтра» the limit counts cards, and the caption says so: «9 новых карточек · до 225 в день».
+ */
+export function planCaption(plan: Pick<StudyPlan, "new_words" | "review_cap" | "ru_fr">): string {
+  const n = plan.new_words;
+  const fresh = `${n} ${plan.ru_fr === "together" ? pluralRu(n, ["новая карточка", "новые карточки", "новых карточек"]) : pluralRu(n, ["новое", "новых", "новых"])}`;
+  return plan.review_cap === null ? `${fresh} в день · без лимита` : `${fresh} · до ${plan.review_cap} в день`;
+}
+
+/** «Повторение»: «FR → RU · 3 кнопки · свайпы» («без свайпов» when they are off). */
+export function reviewCaption(s: Pick<Settings, "default_direction" | "grade_buttons" | "swipe_grading">): string {
+  return [DIRECTION_LABELS[s.default_direction], `${s.grade_buttons} кнопки`, s.swipe_grading ? "свайпы" : "без свайпов"].join(" · ");
+}
+
+/** «Упражнения»: «Обычно», or «Трудные · половина набора». */
+export function exercisesCaption(focus: ExerciseFocus): string {
+  const target = FOCUS_TARGET_LABELS[focus.target];
+  return focus.target === "normal" ? target : `${target} · ${FOCUS_SHARE_PHRASES[focus.share]}`;
+}
+
+/** The «ИИ» switches as the index names them when they are off. */
+const AI_SWITCHES = [
+  ["suggestions_enabled", "подсказки"],
+  ["slang_detect_enabled", "сленг"],
+  ["examples_enabled", "примеры"],
+  ["auto_sort_enabled", "темы"],
+  ["notes_enabled", "заметки"],
+] as const;
+
+type AiSettings = Pick<Settings, (typeof AI_SWITCHES)[number][0] | "ai_model" | "ai_model_extract">;
+
+const MODEL_WORDS: Record<Settings["ai_model"], string> = { fast: "быстрее", accurate: "точнее" };
+
+/**
+ * «ИИ»: what is off, then the model — «Всё включено · быстрее», «Выключено: примеры, заметки ·
+ * точнее», «Всё выключено · быстрее». Two different models say so: «подсказки быстрее, скриншоты точнее».
+ */
+export function aiCaption(s: AiSettings): string {
+  const off = AI_SWITCHES.filter(([key]) => !s[key]).map(([, name]) => name);
+  const state = off.length === 0 ? "Всё включено" : off.length === AI_SWITCHES.length ? "Всё выключено" : `Выключено: ${off.join(", ")}`;
+  const model =
+    s.ai_model === s.ai_model_extract
+      ? MODEL_WORDS[s.ai_model]
+      : `подсказки ${MODEL_WORDS[s.ai_model]}, скриншоты ${MODEL_WORDS[s.ai_model_extract]}`;
+  return `${state} · ${model}`;
+}
+
+/** «Свои поля»: the names in order, or «Нет полей». */
+export function fieldsCaption(names: readonly string[]): string {
+  return names.length ? names.join(", ") : "Нет полей";
 }

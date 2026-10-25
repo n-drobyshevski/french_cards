@@ -184,6 +184,9 @@ test("medium (1024): rail, no section nav, same form", async ({ page }) => {
 test("phones keep today's settings, without «Клавиши»", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await openSettings(page);
+  // Phones (pick S1 B): the index; the review switches are on its «Повторение» sub-screen.
+  await page.getByRole("link", { name: /^Повторение:/ }).click();
+  await expect(page).toHaveURL(/\/settings\/review$/);
   await expect(page.getByRole("switch", { name: "Свайпы для оценки" })).toBeVisible();
   await expect(page.getByRole("checkbox")).toHaveCount(0);
   await expect(page.getByText("Однобуквенные сочетания")).toHaveCount(0);

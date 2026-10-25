@@ -1,9 +1,10 @@
 "use client";
 
 // Settings «Свои поля»: the shared fields every card gets on its back (lib/custom-fields.ts). One
-// list for both layouts — phone rows open a bottom sheet (with «Выше» / «Ниже»), desktop rows a
+// list for both layouts (on phones the sub-screen /settings/fields) — phone rows open a bottom sheet (with «Выше» / «Ниже»), desktop rows a
 // dialog, with ↑ / ↓ on the row itself. Deleting keeps the values on the words (undo in the snackbar).
-import { useId, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useLiveQuery } from "dexie-react-hooks";
+import { Fragment, useId, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Button, IconButton } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
@@ -15,6 +16,7 @@ import {
   createFieldDef,
   deleteFieldDef,
   FIELD_HINT_MAX,
+  fieldsForDisplay,
   FIELD_LABEL_MAX,
   FieldDefError,
   MAX_FIELD_DEFS,
@@ -25,9 +27,10 @@ import {
   type FieldDefDraft,
 } from "@/lib/custom-fields";
 import { useFormatKeys } from "@/lib/key-names";
-import type { FieldDef } from "@/lib/types";
+import { db } from "@/lib/db";
+import type { FieldDef, Word } from "@/lib/types";
 import { CheckboxRow, DeskButtonRow, DeskSection } from "./DesktopControls";
-import { SettingsButtonRow, SettingsSection } from "./SettingsList";
+import { SettingsButtonRow } from "./SettingsList";
 
 /** The note under the list (both layouts). */
 const FOOTNOTE = "Поля появляются на обороте каждой карточки. Слово может хранить и свои, разовые поля.";
@@ -85,29 +88,53 @@ function useFieldDefsSection() {
   return { defs, editor, current, index, open, close, save, remove, move, setEditor };
 }
 
-/** «Свои поля» in the phone list (between «ИИ» and «Данные»). */
+/**
+ * A real card back for the sample under the phone list: the live word with the most shared fields
+ * filled (the newest on a tie), and those fields in definition order. Undefined while loading, null
+ * when no word has a value yet (then there is no sample: nothing is made up).
+ */
+function useFieldSample(defs: readonly FieldDef[]) {
+  const key = defs.map((d) => `${d.id}:${d.name}`).join("|");
+  return useLiveQuery(async () => {
+    if (!defs.length) return null;
+    const ids = new Set(defs.map((d) => d.id));
+    const filled = (w: Word) => (w.custom_fields ?? []).filter((f) => f.field_id !== null && ids.has(f.field_id) && f.value.trim()).length;
+    let best: Word | null = null;
+    let most = 0;
+    await db.words
+      .filter((w) => w.deleted_at === null && filled(w) > 0)
+      .each((w) => {
+        const n = filled(w);
+        if (n > most || (n === most && best !== null && w.updated_at > best.updated_at)) {
+          best = w;
+          most = n;
+        }
+      });
+    const word = best as Word | null;
+    if (!word) return null;
+    return { fr: word.fr, ru: word.ru, fields: fieldsForDisplay(word, defs).filter((f) => f.shared) };
+  }, [key]); // the definitions, by id and name
+}
+
+/**
+ * Phones: the body of the sub-screen /settings/fields (board L-Settings-B-Fields): one row per field
+ * (name, the hint under it, «авто», ›) opening the edit sheet, «+ Добавить поле», one line on what a
+ * field is, and a real card back from the library showing the fields as cards carry them.
+ */
 export function CustomFieldsSection() {
   const s = useFieldDefsSection();
   const full = s.defs.length >= MAX_FIELD_DEFS;
+  const sample = useFieldSample(s.defs);
   return (
-    <>
-      <SettingsSection
-        title="Свои поля"
-        anchor="set-fields"
-        footer={
-          // What a field is: only until the first one exists (it then shows on every card back).
-          full || s.defs.length === 0 ? (
-            <p className="m-0 border-t border-rule pt-2 text-[12px] leading-4 text-muted">{full ? FULL_NOTE : FOOTNOTE}</p>
-          ) : undefined
-        }
-      >
+    <section aria-label="Свои поля" className="flex shrink-0 flex-col">
+      <div className="mt-4 flex shrink-0 flex-col divide-y divide-rule border-y border-rule">
         {s.defs.map((def) => (
           <button
             key={def.id}
             type="button"
             aria-haspopup="dialog"
             onClick={() => s.open(def)}
-            className="press-tint flex min-h-11 w-full items-center gap-2 bg-transparent py-2 text-left text-ink"
+            className="press-tint flex min-h-14 w-full items-center gap-2 bg-transparent py-2 text-left text-ink"
           >
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate text-[15px] leading-5">{def.name}</span>
@@ -126,7 +153,29 @@ export function CustomFieldsSection() {
             trailing={<Icon name="plus" size={16} className="order-first shrink-0" />}
           />
         )}
-      </SettingsSection>
+      </div>
+      <p className="m-0 mt-3 shrink-0 text-[12px] leading-4 text-muted">{full ? FULL_NOTE : FOOTNOTE}</p>
+      {sample && sample.fields.length > 0 && (
+        <figure
+          aria-label={`Так поля выглядят на карточке: ${sample.fr} — ${sample.ru}; ${sample.fields.map((f) => `${f.label}: ${f.value}`).join("; ")}`}
+          className="m-0 mt-4 shrink-0 overflow-hidden rounded-card border border-rule bg-surface"
+        >
+          <div aria-hidden="true" className="flex h-11 items-center gap-2 border-b-2 border-red px-3">
+            <span lang="fr" className="shrink-0 font-serif text-[19px] leading-6 font-medium whitespace-nowrap">
+              {sample.fr}
+            </span>
+            <span className="min-w-0 truncate text-[13px] leading-4 text-muted">{sample.ru}</span>
+          </div>
+          <dl aria-hidden="true" className="m-0 grid grid-cols-[108px_minmax(0,1fr)] items-baseline gap-y-1.5 px-3 pt-2.5 pb-3">
+            {sample.fields.map((f) => (
+              <Fragment key={f.key}>
+                <dt className="truncate text-[13px] leading-5 text-muted">{f.label}</dt>
+                <dd className="m-0 text-[15px] leading-5 break-words">{f.value}</dd>
+              </Fragment>
+            ))}
+          </dl>
+        </figure>
+      )}
       <FieldDefSheet
         open={s.editor.open}
         onOpenChange={(open) => s.setEditor((e) => ({ ...e, open }))}
@@ -137,7 +186,7 @@ export function CustomFieldsSection() {
         onDelete={s.current ? () => void s.remove() : undefined}
         onMove={s.current ? (step) => s.move(s.current!.id, step) : undefined}
       />
-    </>
+    </section>
   );
 }
 

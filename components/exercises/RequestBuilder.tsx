@@ -4,6 +4,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { CheckMark } from "@/components/library/Checkbox";
+import { SETTINGS_PAGES } from "@/components/settings/format";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { cx } from "@/components/ui/cx";
@@ -206,6 +207,8 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
   }
 
   const panel = variant === "panel";
+  // «Настройки ›» under the request: the desktop page's section, or the phone sub-screen.
+  const wideLayout = panel || (variant === "page" && !compact);
   const label = "meta flex items-baseline justify-between leading-4";
   const newCaption = variant === "page" ? "Claude поищет их в вебе" : `Claude поищет их в вебе, до ${NEW_WORDS_MAX} в наборе`;
 
@@ -337,7 +340,7 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
             <span className="min-w-0 truncate">{focusLine}</span>
             <span aria-hidden="true">·</span>
             <Link
-              href="/settings#set-exercises"
+              href={wideLayout ? `/settings#${SETTINGS_PAGES.exercises.anchor}` : SETTINGS_PAGES.exercises.href}
               className="-my-3.5 inline-flex h-11 shrink-0 items-center text-muted underline decoration-rule decoration-1 underline-offset-2 hoverable:text-ink active:text-ink"
             >
               Настройки ›
@@ -706,7 +709,7 @@ function CompactBuilder({
               <span className="min-w-0 truncate">{focusLine}</span>
               <span aria-hidden="true">·</span>
               <Link
-                href="/settings#set-exercises"
+                href={SETTINGS_PAGES.exercises.href}
                 className="-my-3.5 inline-flex h-11 shrink-0 items-center text-muted underline decoration-rule decoration-1 underline-offset-2 active:text-ink"
               >
                 Настройки ›
