@@ -360,9 +360,9 @@ function PhoneLibrary() {
               <Link
                 href="/progress"
                 aria-label={`Сегодня повторено ${totals.reviewedToday} ${plural(totals.reviewedToday, ["слово", "слова", "слов"])}. Прогресс`}
-                className="-my-3 inline-flex h-11 shrink-0 items-center text-muted no-underline active:text-ink"
+                className="-my-3 inline-flex h-11 min-w-0 items-center text-muted no-underline active:text-ink"
               >
-                {totals.reviewedToday} сегодня
+                <span className="truncate">{totals.reviewedToday} повторено сегодня</span>
               </Link>
             </>
           )}

@@ -73,7 +73,7 @@ test("the Library subline shows the words reviewed today and opens «Прогр�
   await expect(page.getByText("02 / 11", { exact: true })).toBeVisible();
   await page.goto("/library");
   const today = page.getByRole("link", { name: "Сегодня повторено 2 слова. Прогресс" });
-  await expect(today).toHaveText("2 сегодня");
+  await expect(today).toHaveText("2 повторено сегодня");
   await today.click();
   await expect(page).toHaveURL(/\/progress$/);
 });
