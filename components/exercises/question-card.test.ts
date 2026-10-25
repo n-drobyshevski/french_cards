@@ -15,6 +15,8 @@ describe("cardLabel", () => {
     expect(cardLabel({ type: "cloze", skill: null, ask: null }).label).toBe("Пропуск");
     expect(cardLabel({ type: "register", skill: null, ask: null }).label).toBe("Регистр");
     expect(cardLabel({ type: "pairs", skill: null, ask: null }).label).toBe("Пары");
+    expect(cardLabel({ type: "conjugate", skill: null, ask: null, tense: "passe_compose" })).toEqual({ label: "Спряжение", detail: "Passé composé" });
+    expect(cardLabel({ type: "conjugate", skill: null, ask: null, tense: null })).toEqual({ label: "Спряжение", detail: null });
   });
 });
 

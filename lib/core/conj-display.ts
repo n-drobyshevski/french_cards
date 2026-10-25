@@ -6,6 +6,14 @@ import type { Conjugation } from "../types";
 export const CONJ_TENSE_ORDER = ["present", "passe_compose", "imparfait", "futur"] as const;
 export type ConjTenseKey = (typeof CONJ_TENSE_ORDER)[number];
 
+/** A tense's name as the conjugation views and the exercise card header show it. */
+export const TENSE_NAMES: Record<ConjTenseKey, string> = {
+  present: "Présent",
+  passe_compose: "Passé composé",
+  imparfait: "Imparfait",
+  futur: "Futur",
+};
+
 /** When a tense is used, in a few Russian words (under its name). */
 export const TENSE_WHEN: Record<ConjTenseKey, string> = {
   present: "сейчас, обычно",
@@ -25,7 +33,7 @@ export interface FormParts {
   tail: string;
 }
 
-const SUBJECT = /^(je |j['’]|tu |il\/elle |il |elle |on |nous |vous |ils\/elles |ils |elles )/i;
+const SUBJECT = /^(je |j['’]|tu |(?:il|elle|on)(?:\/(?:il|elle|on))* |nous |vous |(?:ils|elles)(?:\/(?:ils|elles))* )/i;
 const REFLEXIVE = /^(me |te |se |nous |vous |m['’]|t['’]|s['’])/i;
 const AUX = new Set(["ai", "as", "a", "avons", "avez", "ont", "suis", "es", "est", "sommes", "êtes", "sont"]);
 

@@ -4,13 +4,13 @@ How to write an exercise set for `create_exercise_set`. The app plays it offline
 
 ## The set
 
-- **Size:** 10–15 items (the server takes 6–20). Match the size the user asked for («12 вопросов»).
-- **Types:** at least 3 of `choice`, `cloze`, `register`, `pairs`. A good mix for 12: 6–7 choice (several skills), 2–3 cloze, 1 register, 1 pairs.
+- **Size:** 10–15 items (the server takes 6–20). Match the size the user asked for («12 вопросов»). A verb set is shorter: see «Спряжение глаголов» below.
+- **Types:** at least 3 of `choice`, `cloze`, `register`, `pairs`. A good mix for 12: 6–7 choice (several skills), 2–3 cloze, 1 register, 1 pairs. `conjugate` belongs to verb sets.
 - **Words:** 8–12 different words. Each new word (from the web) has at least one recognition item before any production item, and new words stay under a third of the set's words.
 - **Order** (the app keeps it):
   1. Recognise first: `choice` meaning with `ask: "fr"` (French shown, Russian options) and `pairs`.
   2. Then judge: `register`, `situation`, `verlan`, `neutral`.
-  3. Produce last: `choice` meaning with `ask: "ru"`, `form`, `cloze`.
+  3. Produce last: `choice` meaning with `ask: "ru"`, `form`, `cloze`, `conjugate`.
   4. The weakest words (the top of `exercise_material`'s list, or last run's `missed`) appear late **and twice**, in two different types, with at least two other items between them.
 - **Focus («Чаще в упражнениях»):** see the next section.
 - **Title:** short Russian, at most 60 characters: «Еда · 12 вопросов», «Вечеринка · сленг», «Ошибки: meuf, relou».
@@ -40,6 +40,51 @@ A set made **only** of the user's difficult words, the words due today, or both,
 - **None available** (`available: 0`): don't save a set; tell the user there are no such words now (e.g. «Сейчас нет слов к повторению»).
 - **Saving:** `create_exercise_set` with `scope` = the same value (the app shows the set as «Трудные · все темы», «К повторению · все темы» or «Трудные и к повторению»). The warning `scope_words` lists items about words that are not difficult / due; the set is saved anyway. The saved «Чаще в упражнениях» share is not checked for a scoped set.
 
+## «Спряжение глаголов» (verb sets)
+
+A short test on the user's verbs. The app's request says «Сделай упражнение на спряжение глаголов в Карточках по теме «…», 8 вопросов.»; a chat request like «потренируй спряжение» means the same.
+
+- `exercise_material` with `verbs: true`: `words` are only the verbs `conjugate` items can use (`conjugable: true`: the word has a saved conjugation, or the app builds one from Lexique). Without `verbs`, conjugable verbs still carry `conjugable: true`.
+- **Size:** 8 items by default (6–10, as asked); at most 10 `conjugate` items in a set (the server refuses more). New words: none.
+- **Mix:** mostly `conjugate`, mixing the four tenses (présent, passé composé, imparfait, futur) and the persons; 30–40 % of the passé composé items on an être verb (aller, venir, partir, arriver…) or a pronominal one (se casser). Then 2–3 `cloze` items whose gap is a verb form and whose sentence carries a time marker («Hier…», «Tous les jours…», «Demain…»): passé composé vs imparfait is the classic trap for a Russian speaker.
+- The same verb at most twice, never in two items in a row.
+- `person`: je, tu, il (= il / elle / on), nous, vous, ils. Never ask for elle / elles: the forms have no feminine agreement.
+- Two types by design: `create_exercise_set` does not warn `few_types` for a set that is mostly `conjugate`.
+
+Example (8 items):
+
+```json
+{
+  "client_ref": "spryazhenie-2026-10-25",
+  "title": "Спряжение · 8 вопросов",
+  "folders": ["Повседневное"],
+  "items": [
+    { "type": "conjugate", "word_id": "w-kiffer", "tense": "present", "person": "nous" },
+    { "type": "conjugate", "word_id": "w-casser", "tense": "passe_compose", "person": "tu" },
+    { "type": "conjugate", "word_id": "w-bouffer", "tense": "imparfait", "person": "ils" },
+    { "type": "conjugate", "word_id": "w-aller", "tense": "futur", "person": "je" },
+    {
+      "type": "cloze",
+      "word_id": "w-bouffer",
+      "sentence": "Hier soir, on [[a bouffé]] chez Karim.",
+      "sentence_ru": "Вчерашний вечер у друга.",
+      "distractors": ["bouffait", "bouffera", "bouffe"]
+    },
+    { "type": "conjugate", "word_id": "w-aller", "tense": "passe_compose", "person": "nous" },
+    { "type": "conjugate", "word_id": "w-kiffer", "tense": "imparfait", "person": "vous" },
+    {
+      "type": "cloze",
+      "word_id": "w-casser",
+      "sentence": "Tous les jours, il [[se cassait]] à cinq heures.",
+      "sentence_ru": "Привычка в прошлом.",
+      "distractors": ["s'est cassé", "se cassera", "se casse"]
+    }
+  ]
+}
+```
+
+The server turns `{ "word_id": "w-aller", "tense": "passe_compose", "person": "nous" }` into the card «aller · nous ___» with the answer «sommes allés» and three other forms of the verb (here «avons allé», «allons», «allions»).
+
 ## Each item
 
 | Type | You send | The server fills |
@@ -49,12 +94,13 @@ A set made **only** of the user's difficult words, the words due today, or both,
 | `cloze` | `word_id` or `new_ref`, `sentence` with exactly one `[[gap]]`, optional `sentence_ru`, 3 `distractors` | `answer` (the gap, when left out) |
 | `register` | `word_id` or `new_ref` | `answer` (the word's level: нейтр. / fam. / arg. / vulg.) |
 | `pairs` | `pairs`: 4–6 `word_id`s / `new_ref`s | the tiles |
+| `conjugate` | `word_id` (or `new_ref`) of a verb, `tense` (`present`, `passe_compose`, `imparfait`, `futur`), `person` (`je`, `tu`, `il`, `nous`, `vous`, `ils`); optionally 3 `distractors` (forms of the same verb without the pronoun) | `prompt` (the infinitive), `sentence` (the pronouns and the gap: «tu [[as kiffé]]»), `answer`, and 3 `distractors` from the verb's other forms when left out |
 
 - Skills: `form` = the right French form for a Russian cue; `neutral` = the neutral equivalent of a slang word; `verlan` = the verlan form or its source; `situation` = what you would say in a described situation (a full short reply as the answer).
 - `explain_ru` (optional, one line, at most 200 characters) shows after the answer: the verlan source, a nuance, a false friend.
 - Don't send `id`s: the server numbers the items `q1…qN`.
 
-## Distractors (choice and cloze: exactly 3)
+## Distractors (choice and cloze: exactly 3; conjugate: the server's)
 
 1. **Same part of speech, gender and number** as the answer: a feminine noun with its article among feminine nouns with theirs; a past participle among past participles.
 2. **Same register:** slang answers among slang distractors, neutral among neutral (except in `neutral` items, where the distractors are neutral too and wrong in meaning).
