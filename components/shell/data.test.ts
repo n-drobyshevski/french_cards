@@ -110,6 +110,7 @@ describe("navKeyForPath", () => {
     expect(navKeyForPath("/library/abc-1")).toBe("theme:abc-1");
     expect(navKeyForPath("/import")).toBe("import");
     expect(navKeyForPath("/context")).toBe("context");
+    expect(navKeyForPath("/progress")).toBe("progress");
     expect(navKeyForPath("/exercises")).toBe("exercises");
     expect(navKeyForPath("/exercises/play")).toBe("exercises");
     expect(navKeyForPath("/settings")).toBe("settings");

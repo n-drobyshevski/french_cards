@@ -1,4 +1,4 @@
-// Global desktop keys (DESKTOP-SPEC §4): N new word, / library search, ? «Клавиши», G then R/E/L/C/I,
+// Global desktop keys (DESKTOP-SPEC §4): N new word, / library search, ? «Клавиши», G then R/E/L/P/C/I,
 // [ sidebar. Bound by `code` so they work on the Russian layout. Pure mapping + guards; GlobalKeys
 // wires them up. Review keys (components/review/keys.ts: Space, Enter, 1–3, ←/→, Z) do not overlap.
 import { isTypingTarget } from "@/components/review/keys";
@@ -7,10 +7,12 @@ import { isTypingTarget } from "@/components/review/keys";
  * event.preventDefault() to claim it; when nobody does, the app goes to /library?focus=search. */
 export const FOCUS_SEARCH_EVENT = "kartochki:focus-search";
 
-/** `G` then R/E/L/C/I must follow within this many ms. */
+/** `G` then R/E/L/P/C/I must follow within this many ms. */
 export const SEQUENCE_MS = 1000;
 
-export const GO_TARGETS = { KeyR: "/", KeyE: "/exercises", KeyL: "/library", KeyC: "/context", KeyI: "/import" } as const;
+// `G P` (Прогресс) is a sequence: a bare `P` stays the done screen's «Ещё практика» (review/keys.ts),
+// and GlobalKeys swallows the second key of a sequence in the capture phase.
+export const GO_TARGETS = { KeyR: "/", KeyE: "/exercises", KeyL: "/library", KeyP: "/progress", KeyC: "/context", KeyI: "/import" } as const;
 
 export type GlobalKeyAction =
   | { type: "add" }

@@ -7,7 +7,7 @@ import { buildWord, type NewWordInput } from "@/lib/core/words";
 import { folderOrderOf, planDay } from "@/lib/core/plan";
 import { LEGACY_STUDY_PLAN, parseStudyPlan, type StudyPlan } from "@/lib/core/study-plan";
 import { newReviewState, retrievability } from "@/lib/scheduler";
-import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ReviewLog, ReviewState, UserPref, Word } from "@/lib/types";
+import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ProgressDay, ReviewLog, ReviewState, UserPref, Word } from "@/lib/types";
 import { createFakeRepo, type FakeRepo } from "./fake-repo";
 import { RepoError } from "./repo";
 import {
@@ -870,6 +870,150 @@ describe("study_summary", () => {
     expect(out.due_cards).toBe(direct.counts.due);
     expect(out.new_cards_available).toBe(direct.counts.new);
     expect(out.plan.new_words_today).toBe(direct.day.budget);
+  });
+});
+
+describe("study_summary history_days («Прогресс»)", () => {
+  const day = (id: string, extra: Partial<ProgressDay> = {}): ProgressDay => ({
+    id,
+    known: 10,
+    learning: 5,
+    fresh: 20,
+    difficult: 1,
+    paused: 2,
+    total: 37,
+    memorized: 12.345,
+    reviews: 4,
+    again: 1,
+    new_introduced: 2,
+    added: 0,
+    source: "live",
+    algo: "6",
+    updated_at: OLD.toISOString(),
+    deleted_at: null,
+    ...extra,
+  });
+  const log = (id: string, wordId: string, review: string, state: ReviewLog["state"], rating: ReviewLog["rating"], deleted = false): ReviewLog => ({
+    id,
+    word_id: wordId,
+    direction: "fr_ru",
+    rating,
+    state,
+    due: review,
+    stability: 30,
+    difficulty: 5,
+    elapsed_days: 1,
+    scheduled_days: 30,
+    review,
+    prev: null,
+    updated_at: review,
+    deleted_at: deleted ? review : null,
+  });
+  const run = (id: string, finishedAt: string | null, deleted = false): ExerciseRun => ({
+    id,
+    set_id: "x-1",
+    kind: "set",
+    item_ids: [],
+    started_at: finishedAt ?? "2026-10-10T12:00:00.000Z",
+    finished_at: finishedAt,
+    answers: [],
+    total: 10,
+    first_try: 8,
+    updated_at: OLD.toISOString(),
+    deleted_at: deleted ? OLD.toISOString() : null,
+  });
+
+  function library() {
+    const known = (s: ReviewState): ReviewState => ({ ...s, state: 2, stability: 30, reps: 4, due: "2026-11-20T08:00:00.000Z", last_review: "2026-10-21T09:00:00.000Z" });
+    return createFakeRepo({
+      folders: FOLDERS,
+      words: [word("a", "pote", "друг"), word("b", "meuf", "девушка"), word("c", "keuf", "мент", { muted: true })],
+      review_state: [
+        ...cards("a").map(known),
+        { ...cards("b")[0], state: 1, stability: 1, reps: 1, due: "2026-10-22T08:10:00.000Z", last_review: "2026-10-22T08:00:00.000Z" },
+        cards("b")[1],
+        ...cards("c"),
+      ],
+      progress_days: [
+        // A five-day run in September, before the range: only the best streak sees it.
+        ...["2026-09-17", "2026-09-18", "2026-09-19", "2026-09-20", "2026-09-21"].map((id) => day(id)),
+        day("2026-10-18", { deleted_at: OLD.toISOString() }),
+        day("2026-10-19"),
+        // Saved before its reviews synced in: the log still makes it active.
+        day("2026-10-20", { reviews: 0, again: 0, source: "replay", memorized: 13.06 }),
+        day("2026-10-21", { known: 11, reviews: 3 }),
+        day("2026-10-22", { known: 99 }), // today is never stored; a stray row is ignored
+      ],
+      review_log: [
+        log("s1", "a", "2026-09-10T08:00:00.000Z", 2, 3), // September «Верно», before the range
+        log("u1", "a", "2026-10-15T08:00:00.000Z", 2, 3, true), // undone: not a day of study
+        log("a1", "a", "2026-10-20T08:00:00.000Z", 2, 3),
+        // 04:30 in Paris: the 21st's first review of the card (in UTC it would still be the 20th).
+        log("a2", "a", "2026-10-21T02:30:00.000Z", 2, 1),
+        log("a3", "a", "2026-10-21T09:00:00.000Z", 3, 3), // a repeat the same day: not counted
+        log("b1", "b", "2026-10-22T08:00:00.000Z", 0, 3), // today, a new card: active, no «Верно»
+      ],
+      exercise_runs: [run("r1", "2026-10-16T12:00:00.000Z"), run("r2", "2026-10-14T12:00:00.000Z", true), run("r3", null)],
+    });
+  }
+
+  it("leaves history out unless asked", async () => {
+    const out = await ok(studySummary, library(), {});
+    expect(out).not.toHaveProperty("history");
+  });
+
+  it("returns the stored days of the range as compact rows, today now, the streak and «Верно» by the zone's study days", async () => {
+    const out = await ok(studySummary, library(), { history_days: 30 });
+    const h = out.history!;
+    expect(h).toMatchObject({ from: "2026-09-23", to: "2026-10-22" });
+    expect(h.columns).toEqual(["day", "known", "learning", "fresh", "paused", "difficult", "memorized", "reviews", "again", "new_introduced", "added", "source"]);
+    expect(h.days).toEqual([
+      ["2026-10-19", 10, 5, 20, 2, 1, 12.3, 4, 1, 2, 0, "live"],
+      ["2026-10-20", 10, 5, 20, 2, 1, 13.1, 0, 0, 2, 0, "replay"],
+      ["2026-10-21", 11, 5, 20, 2, 1, 12.3, 3, 1, 2, 0, "live"],
+    ]);
+    expect(h.today).toMatchObject({ known: 1, learning: 1, fresh: 0, paused: 1, difficult: 0 });
+    // a: two review cards ≈ 0.99; b: one learning card ≈ 1 and one new (0), averaged ≈ 0.5.
+    expect(h.today.memorized).toBeGreaterThan(1.4);
+    expect(h.today.memorized).toBeLessThan(1.6);
+    // Active: 16 (exercise), 19 (stored), 20 (log), 21, 22 (today); the September run of 5 is the best.
+    expect(h.active_days).toBe(5);
+    expect(h.streak).toEqual({ current: 4, best: 5 });
+    expect(h.retention).toEqual({
+      target: 0.9,
+      range: { reviews: 2, rate: 0.5 },
+      months: [
+        { month: "2026-09", reviews: 1, rate: 1 },
+        { month: "2026-10", reviews: 2, rate: 0.5 },
+      ],
+    });
+  });
+
+  it("a short range: only its rows, the streak still from every day; planning is unchanged", async () => {
+    const fake = library();
+    const out = await ok(studySummary, fake, { history_days: 2 });
+    expect(out.history!.from).toBe("2026-10-21");
+    expect(out.history!.days.map((r) => r[0])).toEqual(["2026-10-21"]);
+    expect(out.history!.active_days).toBe(2);
+    expect(out.history!.streak).toEqual({ current: 4, best: 5 });
+    const plain = await ok(studySummary, fake, {});
+    expect({ ...out, history: undefined }).toEqual({ ...plain, history: undefined });
+  });
+
+  it("an empty history", async () => {
+    const out = await ok(studySummary, createFakeRepo({ words: [word("a", "pote", "друг")], review_state: cards("a") }), { history_days: 7 });
+    expect(out.history).toMatchObject({
+      days: [],
+      today: { known: 0, learning: 0, fresh: 1, paused: 0, memorized: 0 },
+      active_days: 0,
+      streak: { current: 0, best: 0 },
+      retention: { range: { reviews: 0, rate: null }, months: [] },
+    });
+  });
+
+  it("refuses a range outside 1–365 days", async () => {
+    await refused(studySummary, library(), { history_days: 0 });
+    await refused(studySummary, library(), { history_days: 366 });
   });
 });
 

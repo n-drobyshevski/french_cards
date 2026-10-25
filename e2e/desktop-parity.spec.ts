@@ -286,3 +286,15 @@ test("«План дня»: the summary opens the plan popover; «Изменит�
   await expect(page).toHaveURL(/\/settings#set-review$/);
   await expect(page.locator("#set-review").getByRole("link", { name: /^План повторения/ })).toContainText("11 слов в день · до 200 повторений");
 });
+
+test("«Прогресс»: the sidebar item and G P open the screen", async ({ page }) => {
+  await page.goto("/library");
+  await page.getByRole("link", { name: "Прогресс", exact: true }).first().click();
+  await expect(page).toHaveURL(/\/progress$/);
+  await expect(page.getByRole("heading", { name: "Прогресс" })).toBeVisible();
+  await page.goto("/library");
+  await page.locator("body").click({ position: { x: 700, y: 400 } });
+  await page.keyboard.press("g");
+  await page.keyboard.press("p");
+  await expect(page).toHaveURL(/\/progress$/);
+});

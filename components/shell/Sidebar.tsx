@@ -167,6 +167,7 @@ function SidebarView({ data, active }: { data: ShellData | undefined; active: Na
         <NavLink href="/" label="Повторение" active={key === "review"} count={data?.due || null} countTone="ink" />
         <NavLink href="/exercises" label="Упражнения" active={key === "exercises"} count={unplayed || null} countTone="ink" />
         <NavLink href="/library" label="Библиотека" active={key === "library"} count={data?.total ?? null} />
+        <NavLink href="/progress" label="Прогресс" active={key === "progress"} />
         <NavLink href="/context" label="Контекст" active={key === "context"} />
         <NavLink href="/import" label="Импорт" active={key === "import"} />
       </nav>
@@ -227,7 +228,7 @@ function RoutedSidebar({ data }: { data: ShellData | undefined }) {
 }
 
 /**
- * Sidebar 248px from 1200 up: mark, «+ Новое слово», Повторение / Упражнения / Библиотека / Контекст / Импорт, themes
+ * Sidebar 248px from 1200 up: mark, «+ Новое слово», Повторение / Упражнения / Библиотека / Прогресс / Контекст / Импорт, themes
  * with guide words (drop targets for dragged words), sync line and «Настройки». Hidden with `[`.
  */
 export function Sidebar({ data }: { data: ShellData | undefined }) {

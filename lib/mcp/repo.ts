@@ -5,7 +5,7 @@
 // the stored row when a write's updated_at is not newer.
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { fromRemoteRow, toRemoteRow } from "@/lib/core/rows";
-import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ReviewLog, ReviewState, UserPref, Word } from "@/lib/types";
+import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ProgressDay, ReviewLog, ReviewState, UserPref, Word } from "@/lib/types";
 import type { McpConfig } from "./config";
 
 /** Keyset page size (the app's PULL_PAGE); a page is never trusted to be the last unless it is empty. */
@@ -28,6 +28,8 @@ export interface TableRows {
   exercise_runs: ExerciseRun;
   /** Preferences: «Чаще в упражнениях» is set in the app; «План повторения» also by the connector (update_study_plan). */
   user_prefs: UserPref;
+  /** Read-only here: «Прогресс», one row per finished study day, written by the app the day after. */
+  progress_days: ProgressDay;
 }
 
 export type WritableTable = "folders" | "words" | "review_state" | "field_defs" | "exercise_sets" | "user_prefs";
@@ -51,6 +53,8 @@ export interface McpRepo {
   exerciseRunsSince(from: string): Promise<ExerciseRun[]>;
   /** Every preference row (`user_prefs`, e.g. `exercise_focus`, `study_plan`), tombstones included. */
   userPrefs(): Promise<UserPref[]>;
+  /** «Прогресс» rows (`id` = study day "YYYY-MM-DD") with `id >= fromDay`, or all of them; tombstones included. Read-only. */
+  progressDays(fromDay?: string): Promise<ProgressDay[]>;
   /** Inserts or replaces rows; returns them as stored (an older-than-stored write comes back unchanged). */
   upsert<T extends WritableTable>(table: T, rows: readonly TableRows[T][]): Promise<TableRows[T][]>;
   /**
@@ -139,6 +143,7 @@ export function createSupabaseRepo(client: SupabaseClient, userId: string): McpR
     exerciseSets: () => fetchAll("exercise_sets"),
     exerciseRunsSince: (from) => fetchAll("exercise_runs", { column: "started_at", op: "gte", value: from }),
     userPrefs: () => fetchAll("user_prefs"),
+    progressDays: (fromDay) => fetchAll("progress_days", fromDay === undefined ? undefined : { column: "id", op: "gte", value: fromDay }),
     async upsert(table, rows) {
       if (rows.length === 0) return [];
       const body = rows.map((row) => ({ ...toRemoteRow(table, row), user_id: userId }));

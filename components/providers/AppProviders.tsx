@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SnackbarProvider } from "@/components/ui/Snackbar";
 import { loadChunk } from "@/lib/chunk-load";
+import { scheduleProgressDays } from "@/lib/progress";
 import { seedIfNeeded } from "@/lib/seed";
 import { startSyncLoop } from "@/lib/sync";
 import { AddSheetProvider } from "./AddSheetContext";
@@ -55,6 +56,7 @@ function useBootstrap(): Boot {
   useEffect(() => {
     active.current = true;
     let stopSync: (() => void) | null = null;
+    let stopProgress: (() => void) | null = null;
     seedIfNeeded()
       .catch((error: unknown) => {
         console.error("First-run database setup failed", error);
@@ -64,10 +66,13 @@ function useBootstrap(): Boot {
         if (!active.current) return;
         setReady(true);
         stopSync = startSyncLoop();
+        // «Прогресс»: store the finished study days (never rejects; sync pulls do it too).
+        stopProgress = scheduleProgressDays();
       });
     return () => {
       active.current = false;
       stopSync?.();
+      stopProgress?.();
     };
   }, []);
 
