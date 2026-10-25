@@ -22,7 +22,7 @@ export const REMOTE_COLUMNS: Record<SyncTable, readonly string[]> = {
   reorg_runs: ["id", "created_at", "applied_at", "moves", "created_folders", "updated_at", "deleted_at"],
   review_sets: ["id", "name", "folders", "statuses", "slang", "added", "mode", "created_at", "updated_at", "deleted_at"],
   field_defs: ["id", "name", "hint", "ai_fill", "sort", "updated_at", "deleted_at"],
-  exercise_sets: ["id", "title", "topic", "folders", "items", "new_words", "scope", "source", "created_at", "updated_at", "deleted_at"],
+  exercise_sets: ["id", "title", "topic", "folders", "items", "new_words", "scope", "level", "level_auto", "source", "created_at", "updated_at", "deleted_at"],
   exercise_runs: ["id", "set_id", "kind", "item_ids", "started_at", "finished_at", "answers", "total", "first_try", "updated_at", "deleted_at"],
   user_prefs: ["id", "value", "updated_at", "deleted_at"],
   progress_days: [

@@ -18,6 +18,7 @@ import {
   playContext,
   recordAnswer,
   resumableRunFor,
+  requestWords,
   restoreSet,
   savedNewWords,
   scopeCounts,
@@ -330,6 +331,17 @@ describe("scope counts («Трудные · 9», «К повторению · 23
     const lib = libraryStatsFrom([live, paused], words.filter((x) => x.deleted_at === null), states.filter((x) => x.deleted_at === null), NOON);
     expect({ difficult: lib.totals.difficult, due: lib.totals.due }).toEqual({ difficult: counts.difficult, due: counts.due });
     expect(scopeCounts([], [], [], NOON)).toEqual({ difficult: 0, due: 0, both: 0 });
+  });
+
+  it("«Авто»'s words: a scope's, else the picked themes', else every unpaused theme's", () => {
+    const ids = (out: Word[]) => out.map((x) => x.id).sort();
+    expect(ids(requestWords(words, states, [paused, live], [], "difficult", NOON))).toEqual(["both", "hard", "split"]);
+    expect(ids(requestWords(words, states, [paused, live], [], "due", NOON))).toEqual(["both", "due", "split"]);
+    expect(ids(requestWords(words, states, [paused, live], ["f-now"], null, NOON))).toEqual(["hard"]);
+    // A paused theme named by the user is used as asked; «Входящие» is "inbox".
+    expect(ids(requestWords(words, states, [paused, live], ["f-later"], null, NOON))).toEqual(["paused-due"]);
+    expect(ids(requestWords(words, states, [paused, live], ["inbox"], null, NOON))).toEqual(["both", "due", "fine", "new", "split"]);
+    expect(ids(requestWords(words, states, [paused, live], [], null, NOON))).toEqual(["both", "due", "fine", "hard", "new", "split"]);
   });
 
   it("reads the device's rows", async () => {

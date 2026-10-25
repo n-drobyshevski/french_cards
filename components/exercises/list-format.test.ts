@@ -4,6 +4,7 @@ import { setPendingExercise, takePendingExercise } from "./exercise-request";
 import {
   firstTryMarks,
   isWaiting,
+  levelHint,
   nNew,
   nQuestions,
   nSets,
@@ -49,6 +50,8 @@ const set = (over: Partial<ExerciseSet> = {}): ExerciseSet => ({
   items: ["q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8"].map(item),
   new_words: [],
   scope: null,
+  level: null,
+  level_auto: false,
   source: "chat",
   created_at: "2026-10-22T10:00:00.000Z",
   updated_at: "2026-10-22T10:00:00.000Z",
@@ -275,6 +278,20 @@ describe("requests", () => {
       summary: "«Люди», 8 вопросов",
     });
     expect(similarRequest(set({ topic: "вечеринка" }), names).text).toBe("Сделай упражнение в Карточках на тему «вечеринка», 8 вопросов.");
+  });
+
+  it("«Уровень набора»: a picked level is asked again and named on the tile; «Авто» reads «примерно»", () => {
+    const names = new Map([["f-people", "Люди"]]);
+    expect(similarRequest(set({ folders: ["f-people"], level: "B2" }), names)).toEqual({
+      text: "Сделай упражнение в Карточках по теме «Люди», 8 вопросов, уровень B2.",
+      summary: "«Люди», 8 вопросов, B2",
+    });
+    expect(similarRequest(set({ folders: ["f-people"], level: "B2", level_auto: true }), names).text).toBe("Сделай упражнение в Карточках по теме «Люди», 8 вопросов.");
+    expect(tileLines(set({ title: "Полиция", level: "B1" }), names).spoken).toBe("все темы, 8 вопросов, уровень B1");
+    expect(tileLines(set({ title: "Полиция", level: "A2", level_auto: true }), names).spoken).toBe("все темы, 8 вопросов, уровень примерно A2");
+    expect(levelHint(null, "B1")).toMatch(/сейчас ≈B1/);
+    expect(levelHint(null, null)).not.toMatch(/≈/);
+    expect(levelHint("B2", "B1")).toMatch(/^B2 — /);
   });
 
   it("summarises and repeats a scoped request", () => {

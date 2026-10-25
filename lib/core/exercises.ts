@@ -10,6 +10,7 @@
 // `scoreRun`, `missedWords`, and the request texts the user copies into Claude.
 import { CONJ_TENSE_ORDER, splitForm } from "./conj-display";
 import { cleanConjugation, conjugate, type ConjData } from "./conjugate";
+import { CEFR_LEVELS, isCefr, type Cefr } from "./level";
 import { isRussian, normalizeLemma, searchKey } from "./text";
 import {
   SLANG_LABELS,
@@ -154,10 +155,53 @@ export interface ExerciseSetInput {
   new_words?: readonly ExerciseNewWordInput[] | null;
   /** A set made only of the user's difficult and/or due words, from every theme (null: an ordinary set). */
   scope?: ExerciseScope | null;
+  /** The level the questions were written for (exercise_material's `level.target`). */
+  level?: Cefr | null;
+  /** True when that level came from «Авто» (exercise_material's `level.from` "auto"). */
+  level_auto?: boolean | null;
 }
 
 /** The content columns of a set (what the connector writes, without id and timestamps). */
-export type ExerciseSetContent = Pick<ExerciseSet, "title" | "topic" | "folders" | "items" | "new_words" | "scope">;
+export type ExerciseSetContent = Pick<ExerciseSet, "title" | "topic" | "folders" | "items" | "new_words" | "scope" | "level" | "level_auto">;
+
+/** The levels a set can be asked at («Уровень набора»): the TCF range; A1 and C2 fold into A2 / C1. */
+export const EXERCISE_LEVELS = ["A2", "B1", "B2", "C1"] as const;
+export type ExerciseLevel = (typeof EXERCISE_LEVELS)[number];
+
+/** A level folded into the request's range: A1 → A2, C2 → C1. */
+export function toExerciseLevel(level: Cefr): ExerciseLevel {
+  return level === "A1" ? "A2" : level === "C2" ? "C1" : level;
+}
+
+/**
+ * «Авто»: the level of the words a set will use — the median of their levels (the lower one of an
+ * even count), folded into A2…C1; null when none of them has a level.
+ */
+export function autoExerciseLevel(levels: readonly (Cefr | null | undefined)[]): ExerciseLevel | null {
+  const ranks = levels.filter(isCefr).map((l) => CEFR_LEVELS.indexOf(l)).sort((a, b) => a - b);
+  if (ranks.length === 0) return null;
+  return toExerciseLevel(CEFR_LEVELS[ranks[(ranks.length - 1) >> 1]]);
+}
+
+/** The level the user picked for a set (not «Авто»), folded into A2…C1; null otherwise. */
+export function pickedLevel(set: Partial<Pick<ExerciseSet, "level" | "level_auto">>): ExerciseLevel | null {
+  return isCefr(set.level) && !set.level_auto ? toExerciseLevel(set.level) : null;
+}
+
+/**
+ * «Авто» over words: the median level of the neutral ones. Slang and verlan words are left out:
+ * their estimate (a rare corpus frequency) says how informal they are, not how hard the set
+ * should be. Null when no neutral word has a level.
+ */
+export function autoLevelOf<W extends { slang_level: number; verlan: boolean }>(words: readonly W[], level: (word: W) => Cefr | null): ExerciseLevel | null {
+  return autoExerciseLevel(words.filter((w) => w.slang_level === 0 && !w.verlan).map(level));
+}
+
+/** A set's level as the app shows it: «B1», «≈B1» when it came from «Авто», null without one. */
+export function setLevelLabel(set: Partial<Pick<ExerciseSet, "level" | "level_auto">>): string | null {
+  if (!isCefr(set.level)) return null;
+  return set.level_auto ? `≈${set.level}` : set.level;
+}
 
 /** The scopes of a set made only of the user's own words, across every theme. */
 export const EXERCISE_SCOPES: readonly ExerciseScope[] = ["difficult", "due", "both"];
@@ -365,6 +409,8 @@ export function completeSet(input: ExerciseSetInput, ctx: ExerciseContext): Exer
     items,
     new_words: newWords,
     scope: parseScope(input.scope),
+    level: isCefr(input.level) ? input.level : null,
+    level_auto: isCefr(input.level) && input.level_auto === true,
   };
 }
 
@@ -589,12 +635,77 @@ export function validateSet(set: ExerciseSetContent, ctx: ExerciseContext): Exer
 // ---------------------------------------------------------------------------------------------
 // Warnings (the set is still saved)
 
-export type ExerciseWarningCode = "few_types" | "longest_answer" | "stem_leak" | "consecutive_word" | "many_new_words";
+export type ExerciseWarningCode = "few_types" | "longest_answer" | "stem_leak" | "consecutive_word" | "many_new_words" | "level_words";
 
 export interface ExerciseWarning {
   code: ExerciseWarningCode;
   message: string;
   path?: string;
+}
+
+/** An elided article or pronoun at the start of a token: «l'enjeu» → «enjeu», «qu'il» → «il». */
+const ELIDED = /^(?:[cdjlmnst]|qu|jusqu|lorsqu|puisqu)['’]/;
+
+/** The words of a French text, lower-cased, elisions dropped; capitalised words after the first (names) are left out. */
+function frenchTokens(text: string): string[] {
+  return (text.match(/[\p{L}'’-]+/gu) ?? [])
+    .filter((t, i) => i === 0 || t[0] === t[0].toLowerCase())
+    .map((t) => t.toLowerCase().replace(ELIDED, "").replace(/^['’-]+|['’-]+$/g, ""))
+    .filter((t) => t.length >= 3 && !HOMOGRAPHS.has(t));
+}
+
+/** Verb forms that are also rarer lemmas («je vis» ≠ «une vis»): never named. */
+const HOMOGRAPHS = new Set(["vis", "mis", "pris", "sus", "vint", "tins"]);
+
+/** How far above a set's level a word may sit before `levelWarnings` names it: B1 lets B2 pass, flags C1. */
+export const LEVEL_GAP = 2;
+
+/**
+ * create_exercise_set's `level_words` warnings (never blocking): words in a set's French sentences
+ * and French options, and new words, that `rate` puts two or more levels (LEVEL_GAP) above the set's
+ * level. The words the set is about (each item's word, every library and new word of the set, the
+ * gap) are left out: the level is about the context around them. `rate` gives a lemma's level or
+ * null (inflected forms are mostly unknown and skipped, so it never guesses).
+ */
+export function levelWarnings(
+  set: Pick<ExerciseSet, "items" | "new_words" | "level">,
+  rate: (word: string) => Cefr | null,
+): ExerciseWarning[] {
+  if (!isCefr(set.level)) return [];
+  const top = CEFR_LEVELS.indexOf(set.level) + LEVEL_GAP;
+  if (top >= CEFR_LEVELS.length) return [];
+  const own = new Set(
+    [...set.items.flatMap((i) => (i.word ? [i.word.fr] : [])), ...set.new_words.map((w) => w.fr)].flatMap((fr) => frenchTokens(fr)),
+  );
+  const above = (word: string) => {
+    const level = rate(word);
+    return level && CEFR_LEVELS.indexOf(level) >= top ? level : null;
+  };
+  const out: ExerciseWarning[] = [];
+  set.items.forEach((item, i) => {
+    const texts: string[] = [];
+    const parts = item.type === "cloze" && item.sentence ? clozeParts(item.sentence) : null;
+    if (parts) texts.push(parts.before, parts.after);
+    if (item.type === "choice" || item.type === "cloze") {
+      texts.push(...[item.answer ?? "", ...(item.distractors ?? [])].filter((o) => o && !isRussian(o)));
+    }
+    const found = new Map<string, Cefr>();
+    for (const token of texts.flatMap(frenchTokens)) {
+      if (own.has(token) || found.has(token)) continue;
+      const level = above(token);
+      if (level) found.set(token, level);
+    }
+    if (found.size > 0) {
+      const list = [...found].slice(0, 6).map(([w, l]) => `«${w}» ≈${l}`).join(", ");
+      out.push({ code: "level_words", path: `items[${i}]`, message: `${list}: above the set's level ${set.level} by the app's dictionary; keep the words around the asked word at ${set.level} or below` });
+    }
+  });
+  set.new_words.forEach((w, i) => {
+    // Argot, vulgar and verlan words have no estimate in the app either.
+    const level = w.slang_level >= 2 || w.verlan ? null : above(w.fr);
+    if (level) out.push({ code: "level_words", path: `new_words[${i}]`, message: `«${w.fr}» ≈${level} is above the set's level ${set.level}; bring new words up to one level above it` });
+  });
+  return out;
 }
 
 /** The words an item is about: its word_id or new_ref, or every word of a pairs item. */
@@ -1004,7 +1115,14 @@ export interface RequestSpec {
   scope?: ExerciseScope | null;
   /** «Спряжение глаголов»: a short test on the verbs of those words; never new words. */
   conjugation?: boolean;
+  /** «Уровень набора»: the level the questions are written for; null = «Авто» (Claude takes the words' level). */
+  level?: ExerciseLevel | null;
+  /** «Авто»'s level as the app sees it now (the phone slot shows «уровня ≈B1»); never copied. */
+  autoLevel?: ExerciseLevel | null;
 }
+
+/** «, уровень B1» in the classic text; nothing for «Авто». */
+const levelPart = (level: ExerciseLevel | null | undefined) => (level ? `, уровень ${level}` : "");
 
 /** «по трудным словам из всех тем»: where a scoped request takes its words from. */
 const SCOPE_WHERE: Record<ExerciseScope, string> = {
@@ -1020,17 +1138,18 @@ const SCOPE_WHERE: Record<ExerciseScope, string> = {
  * «Сделай упражнение в Карточках по всем темам, 12 вопросов.»,
  * «Сделай упражнение в Карточках по трудным словам из всех тем, 12 вопросов.» (a scope: never new words),
  * «Сделай упражнение на спряжение глаголов в Карточках по теме «Люди», 8 вопросов.» (never new words).
+ * A level adds «, уровень B1» after the size: «… 12 вопросов, уровень B1, можно новые слова.»
  */
-export function buildRequestText({ folders, topic, size, allowNew, scope, conjugation }: RequestSpec): string {
+export function buildRequestText({ folders, topic, size, allowNew, scope, conjugation, level }: RequestSpec): string {
   const what = conjugation ? "упражнение на спряжение глаголов" : "упражнение";
-  if (scope) return `Сделай ${what} в Карточках ${SCOPE_WHERE[scope]}, ${questions(size)}.`;
+  if (scope) return `Сделай ${what} в Карточках ${SCOPE_WHERE[scope]}, ${questions(size)}${levelPart(level)}.`;
   const names = [...new Set(folders.map((f) => f.trim()).filter(Boolean))];
   const custom = topic?.replace(/\s+/g, " ").trim() || null;
   let where: string;
   if (names.length === 0) where = custom ? ` на тему ${quoted(custom)}` : " по всем темам";
   else if (names.length === 1) where = ` по теме ${quoted(names[0])}${custom ? ` и на тему ${quoted(custom)}` : ""}`;
   else where = `: темы ${names.map(quoted).join(", ")}${custom ? ` и тема ${quoted(custom)}` : ""}`;
-  return `Сделай ${what} в Карточках${where}, ${questions(size)}${allowNew && !conjugation ? ", можно новые слова" : ""}.`;
+  return `Сделай ${what} в Карточках${where}, ${questions(size)}${levelPart(level)}${allowNew && !conjugation ? ", можно новые слова" : ""}.`;
 }
 
 /**
@@ -1041,6 +1160,8 @@ export function buildRequestText({ folders, topic, size, allowNew, scope, conjug
 export interface RequestSentence {
   /** «12 вопросов» (the count slot). */
   size: string;
+  /** The level slot after the count: «уровня B1», «уровня ≈B1» for «Авто» with a known level, else «уровня авто». */
+  level: string;
   /** «на спряжение глаголов» for a verb test, else null. */
   what: string | null;
   /** The words before the themes slot («по темам», «по теме», «на тему», «по»), or a scope's whole phrase («по трудным словам из всех тем»). */
@@ -1060,15 +1181,18 @@ export interface RequestSentence {
  * «Сделай в Карточках 12 вопросов на тему «вечеринка» — можно новые слова.»,
  * «Сделай в Карточках 12 вопросов по трудным словам из всех тем.» (a scope: never new words),
  * «Сделай в Карточках 8 вопросов на спряжение глаголов по теме «Люди».» (never new words).
+ * The level slot follows the count (X-Level-A, pick L1 A): «Сделай в Карточках 12 вопросов уровня B1
+ * по темам …»; «Авто» shows «уровня ≈B1» but copies nothing (Claude takes the words' level).
  * The desktop builder keeps `buildRequestText`.
  */
-export function requestSentence({ folders, topic, size, allowNew, scope, conjugation }: RequestSpec): RequestSentence {
+export function requestSentence({ folders, topic, size, allowNew, scope, conjugation, level, autoLevel }: RequestSpec): RequestSentence {
   const count = questions(size);
   const what = conjugation ? "на спряжение глаголов" : null;
-  const lead = `Сделай в Карточках ${count}${what ? ` ${what}` : ""}`;
+  const shownLevel = level ? `уровня ${level}` : autoLevel ? `уровня ≈${autoLevel}` : "уровня авто";
+  const lead = `Сделай в Карточках ${count}${level ? ` уровня ${level}` : ""}${what ? ` ${what}` : ""}`;
   if (scope) {
     const where = SCOPE_WHERE[scope];
-    return { size: count, what, where, themes: null, fresh: null, text: `${lead} ${where}.` };
+    return { size: count, level: shownLevel, what, where, themes: null, fresh: null, text: `${lead} ${where}.` };
   }
   const names = [...new Set(folders.map((f) => f.trim()).filter(Boolean))];
   const custom = topic?.replace(/\s+/g, " ").trim() || null;
@@ -1086,7 +1210,7 @@ export function requestSentence({ folders, topic, size, allowNew, scope, conjuga
     copied = names.map(quoted).join(", ") + extra;
   }
   const fresh = conjugation ? null : allowNew ? "можно новые слова" : "без новых слов";
-  return { size: count, what, where, themes: shown, fresh, text: `${lead} ${where} ${copied}${fresh ? ` — ${fresh}` : ""}.` };
+  return { size: count, level: shownLevel, what, where, themes: shown, fresh, text: `${lead} ${where} ${copied}${fresh ? ` — ${fresh}` : ""}.` };
 }
 
 /** The copied text of `requestSentence`. */
@@ -1099,9 +1223,10 @@ export function buildRequestSentence(spec: RequestSpec): string {
  * 12 вопросов, с упором на ошибки: relou, keuf, ouf.» A scoped set keeps its scope: «… в Карточках
  * по трудным словам из всех тем после «Трудные слова», …». A verb set (mostly conjugate) stays one:
  * «Сделай следующее упражнение на спряжение глаголов в Карточках после «Глаголы · passé composé», …».
+ * A level the user picked stays («…, 12 вопросов, уровень B2, …»); «Авто» stays «Авто».
  */
 export function buildFollowUpText(
-  set: Pick<ExerciseSet, "title" | "items" | "new_words"> & Partial<Pick<ExerciseSet, "scope">>,
+  set: Pick<ExerciseSet, "title" | "items" | "new_words"> & Partial<Pick<ExerciseSet, "scope" | "level" | "level_auto">>,
   missed: readonly Pick<MissedWord, "fr">[],
 ): string {
   const scope = parseScope(set.scope);
@@ -1111,5 +1236,6 @@ export function buildFollowUpText(
   const fresh = !scope && !verbs && set.new_words.length > 0 ? ", можно новые слова" : "";
   const where = scope ? ` ${SCOPE_WHERE[scope]}` : "";
   const what = verbs ? "упражнение на спряжение глаголов" : "упражнение";
-  return `Сделай следующее ${what} в Карточках${where} после ${quoted(set.title)}, ${questions(set.items.length)}${focus}${fresh}.`;
+  const level = pickedLevel(set);
+  return `Сделай следующее ${what} в Карточках${where} после ${quoted(set.title)}, ${questions(set.items.length)}${levelPart(level)}${focus}${fresh}.`;
 }

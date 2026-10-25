@@ -1208,7 +1208,7 @@ describe("exercises («Упражнения»)", () => {
     expect(exerciseSetId(" fete-1 ")).toBe(id);
     expect(out).toEqual({
       already_saved: false,
-      set: { id, title: "Вечеринка · сленг", count: 7, by_type: { choice: 4, cloze: 1, register: 1, pairs: 1 }, new_words: 0 },
+      set: { id, title: "Вечеринка · сленг", count: 7, by_type: { choice: 4, cloze: 1, register: 1, pairs: 1 }, new_words: 0, level: null },
       warnings: expect.any(Array),
       undo: { tool: "delete_exercise_set", id },
       note: expect.stringMatching(/next sync/),
@@ -1373,6 +1373,8 @@ describe("exercises («Упражнения»)", () => {
     ],
     new_words: [],
     scope: null,
+    level: null,
+    level_auto: false,
     source: "chat",
     created_at: "2026-10-20T10:00:00.000Z",
     updated_at: "2026-10-20T10:00:00.000Z",
@@ -1431,6 +1433,48 @@ describe("exercises («Упражнения»)", () => {
         missed: [{ word_id: "w-meuf", fr: "la meuf", ru: "девушка", chosen: ["мент"] }],
       },
     });
+  });
+
+  it("«Уровень набора»: exercise_material gives the level to write at — asked, or the words' median («Авто»)", async () => {
+    const fake = createFakeRepo({
+      folders: FOLDERS,
+      words: [
+        word("w-logement", "le logement", "жильё", { pos: "noun", gender: "m", folder_id: "f-dengi" }),
+        word("w-enjeu", "l'enjeu", "ставка", { pos: "noun", gender: "m", folder_id: "f-dengi" }),
+        word("w-demarche", "la démarche", "процедура", { pos: "noun", gender: "f", folder_id: "f-dengi" }),
+      ],
+    });
+    const auto = await ok(exerciseMaterial, fake, {});
+    expect(auto.level).toMatchObject({ target: "B1", from: "auto", words_level: "B1" });
+    expect(auto.level.note).toMatch(/level_auto: true/);
+    expect(auto.level.guide).toMatch(/^B1:/);
+    expect(auto.words.find((w: { id: string }) => w.id === "w-logement")).toMatchObject({ level: "A2", level_source: "flelex" });
+    const asked = await ok(exerciseMaterial, fake, { level: "C1" });
+    expect(asked.level).toMatchObject({ target: "C1", from: "request" });
+    expect(asked.level).not.toHaveProperty("words_level");
+    expect(asked.level.note).not.toMatch(/level_auto/);
+    expect(await refused(exerciseMaterial, fake, { level: "C2" })).toBeTruthy();
+    // Words with no level at all (verlan): B1, the TCF middle.
+    const verlan = createFakeRepo({ words: [LIB[1], LIB[4]] });
+    expect((await ok(exerciseMaterial, verlan, {})).level).toMatchObject({ target: "B1", from: "auto", words_level: null });
+  });
+
+  it("«Уровень набора»: create_exercise_set stores the level and names harder words around the asked one", async () => {
+    const fake = fakeLib();
+    const hard = { type: "cloze", word_id: "w-kiffer", sentence: "Nonobstant le préavis, j'ai trop [[kiffé]] ce concert.", distractors: ["bouffé", "galéré", "flippé"] };
+    const out = await ok(createExerciseSet, fake, set({ items: [...ITEMS, hard], level: "B1", level_auto: true }));
+    expect(out.set).toMatchObject({ level: "B1", level_auto: true });
+    expect(stored(fake)[0]).toMatchObject({ level: "B1", level_auto: true });
+    const level = (out.warnings ?? []).filter((w) => w.code === "level_words");
+    expect(level.find((w) => "path" in w && w.path === "items[7]")?.message).toMatch(/«nonobstant» ≈C2, «préavis» ≈C2/);
+    // The asked word, its gap, everyday words and inflected forms («trop», «concert», «j'ai») pass.
+    expect(level.map((w) => w.message).join(" ")).not.toMatch(/kiff|concert|trop|«ai»/);
+    // No level: nothing stored, nothing checked; listed as null.
+    const plain = await ok(createExerciseSet, fake, set({ client_ref: "fete-2", items: [...ITEMS, hard] }));
+    expect(plain.set.level).toBeNull();
+    expect((plain.warnings ?? []).some((w) => w.code === "level_words")).toBe(false);
+    const listed = await ok(listExerciseSets, fake, {});
+    expect(listed.sets.map((s: { level: string | null }) => s.level).sort()).toEqual(["B1", null].sort());
   });
 
   it("exercise_material ranks words weakest first from runs, low ratings and difficult cards, without muted or deleted words", async () => {
@@ -1566,7 +1610,7 @@ describe("exercises («Упражнения»)", () => {
     expect(await idsFor("бары")).toEqual(["w-rade", "w-zinc"]);
     expect(await idsFor("«вечеринка»")).toContain("w-teuf");
     const [match] = (await ok(exerciseMaterial, fake, { topic: "кабак" })).topic_matches!;
-    expect(match).toEqual({ id: "w-rade", fr: "le rade", ru: "бар, кабак", pos: "noun", gender: "m", slang_level: 1, verlan: false, example_fr: null, example_ru: null, folder: expect.anything() });
+    expect(match).toEqual({ id: "w-rade", fr: "le rade", ru: "бар, кабак", pos: "noun", gender: "m", slang_level: 1, verlan: false, example_fr: null, example_ru: null, folder: expect.anything(), level: "C2", level_source: "flelex" });
     // A null topic is "no topic", as on create_exercise_set.
     expect(await ok(exerciseMaterial, fake, { folders: null, topic: null })).not.toHaveProperty("topic_matches");
   });

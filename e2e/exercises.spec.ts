@@ -366,8 +366,9 @@ test("the empty state builds the request and copies it", async ({ page, context 
   // The themes slot starts open: its chips sit under the sentence.
   await card.getByRole("group", { name: "Темы, можно несколько" }).getByRole("button", { name: /^Полиция/ }).click();
   await said("Сделай в Карточках 12 вопросов по теме «Полиция» — можно новые слова.");
-  // The sentence reads the themes without quotes; the copied text has them.
-  await expect(card.locator("[data-request-sentence]")).toHaveText("Сделай в Карточках 12 вопросов по теме Полиция — можно новые слова.");
+  // The sentence reads the themes without quotes; the copied text has them. «Авто» shows its level
+  // slot but copies nothing (the slang of «Полиция» has no level for it: «уровня авто»).
+  await expect(card.locator("[data-request-sentence]")).toHaveText("Сделай в Карточках 12 вопросов уровня авто по теме Полиция — можно новые слова.");
   await card.getByRole("button", { name: "Вопросов: 12, изменить" }).click();
   await card.getByRole("radio", { name: "8", exact: true }).click();
   await card.getByRole("button", { name: "Новые слова: можно, изменить" }).click();

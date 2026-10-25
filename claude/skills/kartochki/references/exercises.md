@@ -40,6 +40,23 @@ A set made **only** of the user's difficult words, the words due today, or both,
 - **None available** (`available: 0`): don't save a set; tell the user there are no such words now (e.g. «Сейчас нет слов к повторению»).
 - **Saving:** `create_exercise_set` with `scope` = the same value (the app shows the set as «Трудные · все темы», «К повторению · все темы» or «Трудные и к повторению»). The warning `scope_words` lists items about words that are not difficult / due; the set is saved anyway. The saved «Чаще в упражнениях» share is not checked for a scoped set.
 
+## «Уровень набора» (`level`)
+
+The user can ask for a set at a level («Сделай в Карточках 12 вопросов уровня B1 по теме …», on a computer «…, 12 вопросов, уровень B1, …»). Pass it to `exercise_material` as `level`. Without one («Авто»), `exercise_material`'s `level` takes the median level of the theme's neutral words (`from: "auto"`; B1 when none has a level). Either way, write at `level.target` and save with `level` (and `level_auto: true` for «Авто»).
+
+The level shapes **the questions, not the words**: the library words from `exercise_material` stay, even one above the level; everything around them follows the level.
+
+| | Sentences (cloze, situation) | Distractors | Mix | New words |
+|---|---|---|---|---|
+| A2 | 5–8 words, présent and passé composé, concrete everyday scenes | same part of speech, clearly different meaning | mostly recognition (meaning fr→ru, pairs, register); at most a quarter production | A1–A2 |
+| B1 | 8–12 words, the common tenses, life in France (housing, work, administration, health) | from the same theme | about half recognition, half production | up to B1 |
+| B2 | 12–18 words with a subordinate clause or connector (bien que, alors que, pourtant), opinions and society | close in meaning: near-synonyms, false friends, a wrong collocation or register | mostly production (cloze, meaning ru→fr, situation) | B1–B2 |
+| C1 | longer, with nuance (subjonctif, concession, nominalisation), abstract or idiomatic | differ by nuance, collocation or register only | mostly production and situation | B2–C1 |
+
+- Keep every other word of a cloze sentence and of the French options at the level or below. `create_exercise_set` warns `level_words` when the app's dictionary puts one two levels or more above it (it only rates words written in their dictionary form, and leaves out the asked words and names). Simplify those words next time; the warning never blocks.
+- A2 example (le logement): «Je cherche un [[logement]] près de la gare.» — B2: «Bien que le loyer soit élevé, ce [[logement]] reste prisé des étudiants.»
+- A higher level never means rarer library words or trick questions: one best answer, as always.
+
 ## «Спряжение глаголов» (verb sets)
 
 A short test on the user's verbs. The app's request says «Сделай упражнение на спряжение глаголов в Карточках по теме «…», 8 вопросов.», on a phone «Сделай в Карточках 8 вопросов на спряжение глаголов по теме «…».»; a chat request like «потренируй спряжение» means the same.

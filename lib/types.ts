@@ -383,6 +383,13 @@ export interface ExerciseSet extends Syncable {
    * migration 0013), null for a set built from themes or a topic. Older rows have no value: read as null.
    */
   scope: ExerciseScope | null;
+  /**
+   * The CEFR level the questions were written for (the request's «уровня B1», migration 0017): it
+   * shapes the sentences, distractors and item mix, not which words are asked. Null for older sets.
+   */
+  level: Cefr | null;
+  /** True when `level` came from «Авто» (the level of the set's words): the app shows «≈B1». */
+  level_auto: boolean;
   created_at: string;
 }
 

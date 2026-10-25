@@ -121,6 +121,8 @@ const DEEP: Partial<Record<SyncTable, (row: Record<string, unknown>) => boolean>
   exercise_sets: (row) =>
     // `scope` came with migration 0013: older backups have none (read as null).
     (row.scope === undefined || row.scope === null || EXERCISE_SCOPES.includes(row.scope as ExerciseScope)) &&
+    // `level` / `level_auto` came with migration 0017; a junk level is dropped (NORMALIZE).
+    (row.level_auto === undefined || typeof row.level_auto === "boolean") &&
     (row.items as unknown[]).every(isExerciseItem) &&
     (row.new_words as unknown[]).every((w) => isRecord(w) && isText(w.ref) && isText(w.fr) && isText(w.ru)),
 };
@@ -134,7 +136,10 @@ const NORMALIZE: Partial<Record<SyncTable, (row: Syncable) => Record<string, unk
       ? { cefr: w.cefr, cefr_source: isStoredLevelSource(w.cefr_source) ? w.cefr_source : "user" }
       : { cefr: null, cefr_source: null };
   },
-  exercise_sets: (row) => ({ scope: (row as Partial<ExerciseSet>).scope ?? null }),
+  exercise_sets: (row) => {
+    const s = row as Partial<ExerciseSet>;
+    return { scope: s.scope ?? null, level: isCefr(s.level) ? s.level : null, level_auto: isCefr(s.level) && s.level_auto === true };
+  },
 };
 
 function hasFields(table: SyncTable, row: Record<string, unknown>): boolean {

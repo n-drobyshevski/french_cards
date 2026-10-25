@@ -29,13 +29,16 @@ import { DEFAULT_FOLDERS, defaultFolderId, nextFolderSort, pickFolderColor, uniq
 import {
   ANSWER_MAX,
   answerWords,
+  autoLevelOf,
   completeSet,
   CONJUGATE_MAX,
   contextFromWords,
   EXERCISE_ID_PREFIX,
+  EXERCISE_LEVELS,
   EXPLAIN_MAX,
   ITEMS_MAX,
   ITEMS_MIN,
+  levelWarnings,
   missedWords,
   NEW_WORDS_MAX,
   parseScope,
@@ -46,6 +49,7 @@ import {
   TOPIC_MAX,
   validateSet,
   warningsFor,
+  type ExerciseLevel,
 } from "@/lib/core/exercises";
 import {
   DEFAULT_EXERCISE_FOCUS,
@@ -87,7 +91,7 @@ import type {
   Word,
 } from "@/lib/types";
 import { PartialWriteError, RepoError, type McpRepo, type Replacement } from "./repo";
-import { serverLevels } from "./levels";
+import { lemmaLevel, serverLevels } from "./levels";
 import { HISTORY_DAYS_MAX, historyRange, progressHistory } from "./history";
 import { studyDay, studyDayStartBefore } from "./study-day";
 
@@ -1655,7 +1659,21 @@ const byType = (items: ExerciseSet["items"]): Partial<Record<ExerciseItemType, n
   return out;
 };
 
-const setSummary = (s: ExerciseSet) => ({ id: s.id, title: s.title, count: s.items.length, by_type: byType(s.items), new_words: s.new_words.length });
+const setSummary = (s: ExerciseSet) => ({
+  id: s.id,
+  title: s.title,
+  count: s.items.length,
+  by_type: byType(s.items),
+  new_words: s.new_words.length,
+  level: s.level ?? null,
+  ...(s.level && s.level_auto ? { level_auto: true } : {}),
+});
+
+/**
+ * `level_words`: a sentence or option word's level when it is a lemma as written (lemmaLevel); a
+ * new word's (a dictionary form, maybe with its article) as the app rates a saved word.
+ */
+const rateWord = (fr: string) => (/[\s']/.test(fr) ? (serverLevels().level({ fr, pos: "other", slang_level: 0, verlan: false })?.level ?? null) : lemmaLevel(fr));
 
 /** The themes a set names, as {id, name} ("inbox" → «Входящие»; unknown ids left out). */
 function setFolders(s: Pick<ExerciseSet, "folders">, folders: readonly Folder[]): FolderRef[] {
@@ -1875,6 +1893,7 @@ const materialWord = (w: Word, live: ReadonlyMap<string, Folder>) => ({
   example_fr: w.example_fr,
   example_ru: w.example_ru,
   folder: folderRef(placeOf(w, live)),
+  ...levelView(w, serverLevels()),
   ...(isConjugable(w) ? { conjugable: true } : {}),
 });
 
@@ -1919,11 +1938,39 @@ function focusBlock(focus: ExerciseFocus, from: "settings" | "request", availabl
   return { target: focus.target, share: focus.share, from, min_items_for_12: min, available, note };
 }
 
+/**
+ * What a set's level («уровня B1») asks of its questions. The level shapes the sentences, the
+ * distractors, the item mix and the new words; it never changes which library words are asked.
+ */
+const LEVEL_GUIDE: Record<ExerciseLevel, string> = {
+  A2: "A2: short sentences (5–8 words), présent and passé composé, concrete everyday situations; distractors of the same part of speech but clearly different in meaning; mostly recognition (meaning fr→ru, pairs, register), at most a quarter production (meaning ru→fr, cloze); new words A1–A2.",
+  B1: "B1: sentences of 8–12 words, the common tenses (imparfait, futur, conditionnel of politeness), everyday life in France (housing, work, administration, health); distractors from the same theme; about half recognition, half production (cloze, meaning ru→fr, situation); new words up to B1.",
+  B2: "B2: sentences of 12–18 words with a subordinate clause or a connector (bien que, alors que, pourtant), opinions and society (news, work, environment); distractors close in meaning: near-synonyms, false friends, a wrong collocation or register; mostly production (cloze, meaning ru→fr, situation); new words B1–B2.",
+  C1: "C1: longer sentences with nuance (subjonctif, concession, nominalisation), abstract or idiomatic contexts; distractors that differ by nuance, collocation or register only; mostly production and situation items; new words B2–C1.",
+};
+
+/** exercise_material's `level`: the level asked in the request, else the median level of the words in scope («Авто»). */
+function levelBlock(asked: ExerciseLevel | null, words: readonly Word[]) {
+  const levels = serverLevels();
+  const auto = asked ? null : autoLevelOf(words, (w) => levels.level(w)?.level ?? null);
+  const target: ExerciseLevel = asked ?? auto ?? "B1";
+  const from = asked ? "request" : "auto";
+  return {
+    target,
+    from,
+    ...(asked ? {} : { words_level: auto }),
+    guide: LEVEL_GUIDE[target],
+    note:
+      (asked ? `The user asked for ${target}.` : auto ? `No level was asked: ${target} is the median level of these words (slang and verlan aside).` : `No level was asked and no neutral word here has one: write at ${target}.`) +
+      ` Write every question at this level (guide), not just the words: the library words stay as they are, even a harder one; keep the rest of each sentence and the options at ${target} or below. Save the set with level: "${target}"${asked ? "" : ", level_auto: true"}.`,
+  };
+}
+
 export const exerciseMaterial = tool({
   name: "exercise_material",
   title: "Material for an exercise",
   description:
-    `Read what an exercise set («Упражнения») should practise, before create_exercise_set. \`words\`: the live words of the given themes (all themes without \`folders\`), weakest first, each with \`signals\` merged from the last \`days\`: exercise answers (ex_attempts, ex_misses, confusions = wrong options the user picked), reviews graded «Снова»/«Трудно» (review_misses), lapses, due today and difficult cards. Words «на паузе» and deleted words are left out, and so are themes «на паузе» unless named in \`folders\`. With \`topic\` (a free-text subject like «вечеринка»), \`topic_matches\` lists saved words that fit it: use them by word_id and never put them in new_words (a muted one can't be used at all). \`recent_sets\` are the latest sets with their words, so the next one doesn't repeat them. \`focus\` is the user's «Чаще в упражнениях» (from Settings, or \`focus\` in the input when the user asks otherwise in this chat): when it is on, the matching words (difficult and/or due today) come first and carry \`focus: true\`, and its \`note\` says how many of the questions must be about them; honour it. With \`only\` («по трудным словам», «по словам к повторению», «без тем»), \`words\` are only the user's difficult and/or due words from every theme (\`folders\` still narrows), \`topic\` and \`focus\` are left out, and \`scope\` says how many there are (\`available\`), how many questions to make (\`suggested_items\`: fewer words → a shorter set, at least ${ITEMS_MIN}) and what to do when there are none. With \`verbs\` («упражнение на спряжение глаголов»), \`words\` are only the verbs conjugate items can ask about (\`conjugable: true\`: a saved conjugation or one the app builds).`,
+    `Read what an exercise set («Упражнения») should practise, before create_exercise_set. \`words\`: the live words of the given themes (all themes without \`folders\`), weakest first, each with \`signals\` merged from the last \`days\`: exercise answers (ex_attempts, ex_misses, confusions = wrong options the user picked), reviews graded «Снова»/«Трудно» (review_misses), lapses, due today and difficult cards. Words «на паузе» and deleted words are left out, and so are themes «на паузе» unless named in \`folders\`. With \`topic\` (a free-text subject like «вечеринка»), \`topic_matches\` lists saved words that fit it: use them by word_id and never put them in new_words (a muted one can't be used at all). \`recent_sets\` are the latest sets with their words, so the next one doesn't repeat them. \`focus\` is the user's «Чаще в упражнениях» (from Settings, or \`focus\` in the input when the user asks otherwise in this chat): when it is on, the matching words (difficult and/or due today) come first and carry \`focus: true\`, and its \`note\` says how many of the questions must be about them; honour it. With \`only\` («по трудным словам», «по словам к повторению», «без тем»), \`words\` are only the user's difficult and/or due words from every theme (\`folders\` still narrows), \`topic\` and \`focus\` are left out, and \`scope\` says how many there are (\`available\`), how many questions to make (\`suggested_items\`: fewer words → a shorter set, at least ${ITEMS_MIN}) and what to do when there are none. With \`verbs\` («упражнение на спряжение глаголов»), \`words\` are only the verbs conjugate items can ask about (\`conjugable: true\`: a saved conjugation or one the app builds). Each word carries its «Уровень языка» (\`level\`). \`level\` is the level to write the questions at: the one asked (\`level\` in the input, «уровня B1» in the request) or, without one, the median level of the words (\`from: "auto"\`); follow its \`guide\` for the sentences, distractors, item mix and new words.`,
   input: z.object({
     folders: jsonArray(z.array(folderSelector).max(10)).nullable().optional().describe(`Themes to draw words from (id, slug, name or "${INBOX_SELECTOR}"); default every theme.`),
     topic: z.string().trim().max(TOPIC_MAX).nullable().optional().describe("A free-text topic («вечеринка», «в баре»), when the user asked for one."),
@@ -1949,6 +1996,11 @@ export const exerciseMaterial = tool({
       .nullable()
       .optional()
       .describe("true for «упражнение на спряжение глаголов»: only the verbs that conjugate items can use (conjugable: true)."),
+    level: z
+      .enum(EXERCISE_LEVELS)
+      .nullable()
+      .optional()
+      .describe("The level the user asked for («уровня B1», «уровень B2»); leave it out otherwise and `level` comes from the words («Авто»)."),
   }),
   write: false,
   annotations: READ,
@@ -1998,6 +2050,7 @@ export const exerciseMaterial = tool({
         ...(only ? onlyBlock(only, inScope.length, !!targets, verbs) : {}),
       },
       total: inScope.length,
+      level: levelBlock(args.level ?? null, inScope),
       ...(only ? {} : { focus: focusBlock(focus, args.focus ? "request" : "settings", ranked.filter((r) => r.focus).length) }),
       words: ranked.slice(0, args.limit).map(({ w, s, focus: on }) => ({
         ...materialWord(w, ctx.live),
@@ -2103,7 +2156,7 @@ export const createExerciseSet = tool({
   name: "create_exercise_set",
   title: "Save an exercise set",
   description:
-    `Save one exercise set («Упражнения») that the app plays offline; it never changes the review schedule. Call exercise_material first, then send the whole set in one call: ${ITEMS_MIN}–${ITEMS_MAX} items (10–15 is best) of at least 3 types (a verb set: ${VERB_SET_SIZE} items, mostly conjugate, at most ${CONJUGATE_MAX} conjugate). Items are about library words (word_id) or new words (new_ref → new_words, at most ${NEW_WORDS_MAX}, found with your web search; the user adds them from the app, so never add_words them yourself). The server numbers the items, copies each word into the set, writes the meaning prompt and answer, the register answer, the pairs tiles and the conjugate forms, and checks every rule: a refusal names each problem by path (items[7].distractors …); fix them all and call again with the same client_ref. With \`scope\` (a set from exercise_material \`only\`: only the user's difficult and/or due words) new_words must be empty. \`warnings\` never block (focus_share: the set has fewer questions about the words of the user's saved «Чаще в упражнениях» than it asks for; follow exercise_material's \`focus\` next time; scope_words: a scoped set uses words that are not difficult / due). A retry with the same client_ref returns already_saved: true and writes nothing. The result is a short summary, not the set. Undo with delete_exercise_set.`,
+    `Save one exercise set («Упражнения») that the app plays offline; it never changes the review schedule. Call exercise_material first, then send the whole set in one call: ${ITEMS_MIN}–${ITEMS_MAX} items (10–15 is best) of at least 3 types (a verb set: ${VERB_SET_SIZE} items, mostly conjugate, at most ${CONJUGATE_MAX} conjugate). Items are about library words (word_id) or new words (new_ref → new_words, at most ${NEW_WORDS_MAX}, found with your web search; the user adds them from the app, so never add_words them yourself). The server numbers the items, copies each word into the set, writes the meaning prompt and answer, the register answer, the pairs tiles and the conjugate forms, and checks every rule: a refusal names each problem by path (items[7].distractors …); fix them all and call again with the same client_ref. With \`scope\` (a set from exercise_material \`only\`: only the user's difficult and/or due words) new_words must be empty. \`warnings\` never block (focus_share: the set has fewer questions about the words of the user's saved «Чаще в упражнениях» than it asks for; follow exercise_material's \`focus\` next time; scope_words: a scoped set uses words that are not difficult / due; level_words: words in the sentences, the French options or new_words that the app rates two levels or more above \`level\`, a hint to simplify them, the asked words aside). A retry with the same client_ref returns already_saved: true and writes nothing. The result is a short summary, not the set. Undo with delete_exercise_set.`,
   input: z.object({
     client_ref: z
       .string()
@@ -2127,6 +2180,16 @@ export const createExerciseSet = tool({
       .nullable()
       .optional()
       .describe("The exercise_material `only` the set was built with (difficult, due or both): the app shows it as «Трудные · все темы» etc. Leave it out for an ordinary set."),
+    level: z
+      .enum(EXERCISE_LEVELS)
+      .nullable()
+      .optional()
+      .describe("exercise_material's `level.target`: the level the questions were written at; the app shows it on the set's tile."),
+    level_auto: z
+      .boolean()
+      .nullable()
+      .optional()
+      .describe("true when that level came from the words (exercise_material's `level.from` \"auto\"): the app shows «≈B1»."),
   }),
   write: true,
   retryHint: "Retrying with the same client_ref is safe: a set that was saved comes back as already_saved.",
@@ -2157,6 +2220,8 @@ export const createExerciseSet = tool({
         topic: args.topic,
         folders: folderIds,
         scope: args.scope ?? null,
+        level: args.level ?? null,
+        level_auto: args.level_auto ?? false,
         // Ids Claude sent are dropped: the server numbers q1…qN, so they never clash.
         items: args.items.map((item) => ({ ...item, id: null })),
         new_words: (args.new_words ?? []).map((w) => ({
@@ -2193,7 +2258,7 @@ export const createExerciseSet = tool({
     return {
       already_saved: false,
       set: setSummary(saved),
-      warnings: [...warningsFor(saved), ...(extra ? [extra] : [])],
+      warnings: [...warningsFor(saved), ...levelWarnings(saved, rateWord), ...(extra ? [extra] : [])],
       undo: { tool: "delete_exercise_set", id: saved.id },
       note: SYNC_NOTE,
     };
@@ -2413,6 +2478,7 @@ export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard
 - Order the items recognise-before-produce (meaning fr→ru and pairs before ru→fr and cloze), put the weakest words (first in exercise_material) late and twice, keep the same word apart, and use 10–15 items of at least 3 types.
 - Honour exercise_material's \`focus\` (the user's «Чаще в упражнениях»): at least the share it names of the questions about the words marked focus: true, even for a plain «сделай упражнение»; pass \`focus\` to exercise_material only when the user asks otherwise in the chat.
 - «По трудным словам», «по словам к повторению», «без тем / из всех тем»: exercise_material \`only\` (difficult, due or both), then create_exercise_set with the same \`scope\`: only those words, \`scope.suggested_items\` questions (a shorter set when there are few, each word in 2–3 types), no new_words; with none available, say so instead of making a set.
+- «Уровень набора» («уровня B1», «уровень B2» in the request): pass it as exercise_material \`level\`; without one, exercise_material's \`level\` takes the words' level. Write the questions at \`level.target\` following its guide (sentence length and tenses, how close the distractors are, recognition vs production, the level of new words), never by swapping the library words, and save with create_exercise_set \`level\` (plus \`level_auto: true\` when it came from the words).
 - «Спряжение глаголов» («упражнение на спряжение глаголов»): exercise_material \`verbs: true\`, then a short set of ${VERB_SET_SIZE} items (6–10): mostly conjugate items (word_id, tense, person; the server writes the form and the options) mixing the 4 tenses and the persons, with 30–40% of the passé composé on être or pronominal verbs; plus 2–3 cloze items with a verb gap and a time marker (hier / tous les jours / demain) for passé composé vs imparfait; the same verb at most twice, never back to back; never elle / elles (the forms have no feminine agreement).
 - «Работа над ошибками»: list_exercise_sets' last_run.missed and exercise_material's signals (ex_misses, confusions) say what to drill; reuse a confused option as a distractor only where it is in the item's options' language (a Russian one for meaning fr→ru, a French one for cloze and ru→fr).
 - After saving, give the set's title and number of questions and how to undo it; it shows in «Упражнения» after the app's next sync.

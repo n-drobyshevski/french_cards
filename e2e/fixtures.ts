@@ -691,6 +691,9 @@ export interface ExerciseSetSeed {
   new_words?: ExerciseNewWordSeed[];
   /** Only the user's difficult and/or due words, from every theme. */
   scope?: "difficult" | "due" | "both" | null;
+  /** «Уровень набора» (migration 0017); `level_auto` when it came from «Авто». */
+  level?: "A1" | "A2" | "B1" | "B2" | "C1" | "C2" | null;
+  level_auto?: boolean;
 }
 
 /**
@@ -773,6 +776,8 @@ export async function seedExerciseSets(page: Page, sets: readonly ExerciseSetSee
                 items,
                 new_words: newWords,
                 scope: s.scope ?? null,
+                level: s.level ?? null,
+                level_auto: s.level_auto ?? false,
                 source: "chat",
                 created_at: s.created_at ?? now,
                 updated_at: s.created_at ?? now,

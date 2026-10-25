@@ -3,6 +3,7 @@
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { Sheet, SheetCloseButton, SheetTitle } from "@/components/ui/Sheet";
+import { setLevelLabel } from "@/lib/core/exercises";
 import type { ExerciseSet } from "@/lib/types";
 import { CopyGlyph } from "./RequestBuilder";
 
@@ -20,12 +21,17 @@ export interface SetMenuSheetProps {
   onDelete: () => void;
 }
 
-/** A long press (or right click) on a set tile: Начать / Скопировать запрос на похожий / Удалить (with undo). */
+/**
+ * A long press (or right click) on a set tile: Начать / Скопировать запрос на похожий / Удалить (with
+ * undo). The set's level sits by the title («УРОВЕНЬ ≈B1»): a played tile shows its ticks instead.
+ */
 export function SetMenuSheet({ set, open, onOpenChange, resumable = false, onStart, onCopySimilar, onDelete }: SetMenuSheetProps) {
+  const level = set ? setLevelLabel(set) : null;
   return (
     <Sheet open={open} onOpenChange={onOpenChange} dialogWidth={440} description="Действия с набором">
       <div className="flex h-11 shrink-0 items-center justify-between pr-1 pl-4 md:mt-2 md:pl-6">
         <SheetTitle className="min-w-0 truncate">{set?.title ?? "Набор"}</SheetTitle>
+        {level && <span className="meta ml-auto shrink-0 pl-3 leading-4">Уровень {level}</span>}
         <SheetCloseButton />
       </div>
       <div className="mt-2 flex flex-col px-4 pb-4 md:px-6 md:pb-6">

@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type KeyboardEvent,
@@ -22,22 +23,27 @@ import { Toggle } from "@/components/ui/Toggle";
 import { focusSummary } from "@/lib/core/exercise-focus";
 import { db, liveRows } from "@/lib/db";
 import {
+  autoLevelOf,
   buildRequestText,
   CONJ_REQUEST_SIZES,
+  EXERCISE_LEVELS,
   NEW_WORDS_MAX,
   REQUEST_SIZES,
   requestSentence,
+  requestWords,
   SCOPE_LABELS,
   TOPIC_MAX,
   useScopeCounts,
+  type ExerciseLevel,
   type RequestSentence,
   type ScopeCounts,
 } from "@/lib/exercises";
 import { listFolders } from "@/lib/folders";
 import type { ExerciseScope, ExerciseSet } from "@/lib/types";
+import { useLevelData } from "@/lib/use-level-data";
 import { useExerciseFocus } from "@/lib/user-prefs";
 import { CLAUDE_NEW_CHAT_URL, copyRequest } from "./clipboard";
-import { INBOX_KEY, INBOX_NAME, requestSummary, type RequestChoice } from "./list-format";
+import { INBOX_KEY, INBOX_NAME, levelHint, requestSummary, type RequestChoice } from "./list-format";
 
 /** A theme chip: «Входящие» (key "inbox") or a theme, with its live, unpaused word count. */
 export interface ThemeChoice {
@@ -69,6 +75,22 @@ export function useThemeChoices(): ThemeChoice[] | undefined {
     }
     return out;
   }, []);
+}
+
+/**
+ * «Авто»'s level now (the request's «уровня ≈B1»): the median level of the neutral words the request
+ * would use — a scope's words, else the picked themes', else every theme's not «на паузе»
+ * (requestWords, autoLevelOf: as the connector's exercise_material does). Null while loading or
+ * when none has a level.
+ */
+function useAutoLevel(picked: readonly string[], scope: ExerciseScope | null): ExerciseLevel | null {
+  const levels = useLevelData();
+  const key = picked.join("|");
+  const words = useLiveQuery(async () => {
+    const [folders, words, states] = await Promise.all([liveRows(db.folders), liveRows(db.words), scope ? liveRows(db.review_state) : []]);
+    return requestWords(words, states, folders, key ? key.split("|") : [], scope);
+  }, [key, scope]);
+  return useMemo(() => (words ? autoLevelOf(words, (w) => levels.level(w)?.level ?? null) : null), [words, levels]);
 }
 
 /** The copy glyph of the boards (two sheets). */
@@ -139,6 +161,8 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
   const [topic, setTopic] = useState("");
   const [size, setSize] = useState<number>(12);
   const [allowNew, setAllowNew] = useState(true);
+  // «Уровень набора» (pick L1 A): null = «Авто», the level of the words.
+  const [level, setLevel] = useState<ExerciseLevel | null>(null);
   // «Спряжение глаголов»: its own sizes (a short test), so switching it off keeps the usual size.
   const [conjugation, setConjugation] = useState(false);
   const [verbSize, setVerbSize] = useState<number>(8);
@@ -171,6 +195,7 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
   }, [topicOpen]);
 
   const chosen = themes.filter((t) => picked.includes(t.key));
+  const autoLevel = useAutoLevel(scope ? [] : picked, scope);
   const choice: RequestChoice = {
     folders: chosen.map((t) => t.name),
     topic: topicOpen ? topic : null,
@@ -178,6 +203,8 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
     allowNew: allowNew && !conjugation,
     scope,
     conjugation,
+    level,
+    autoLevel,
   };
   // Phones copy the sentence they read; desktop keeps the classic text.
   const sentence = compact ? requestSentence(choice) : null;
@@ -225,6 +252,9 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
         onTopic={setTopic}
         allowNew={allowNew}
         onAllowNew={setAllowNew}
+        level={level}
+        autoLevel={autoLevel}
+        onLevel={setLevel}
         sentence={sentence}
         focusLine={focusLine}
         online={online}
@@ -345,6 +375,24 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
           ariaLabelledby={`${ids}-size`}
           mono
         />
+      </div>
+
+      <div className="flex flex-col border-t border-rule py-1.5">
+        <div className="flex min-h-10 items-center gap-2">
+          <span id={`${ids}-level`} className="flex-1 text-[15px] leading-5">
+            Уровень
+          </span>
+          <Segmented<string>
+            options={[{ value: "auto", label: "Авто" }, ...EXERCISE_LEVELS.map((l) => ({ value: l, label: l }))]}
+            value={level ?? "auto"}
+            onChange={(v) => setLevel(v === "auto" ? null : (v as ExerciseLevel))}
+            ariaLabelledby={`${ids}-level`}
+            mono
+          />
+        </div>
+        <p data-level-hint="" className="m-0 text-[12px] leading-4 text-muted">
+          {levelHint(level, autoLevel)}
+        </p>
       </div>
 
       {scope || conjugation ? null : (
@@ -775,6 +823,52 @@ function KindRow({
 }
 
 /**
+ * The level slot's choices (X-Level-A, pick L1 A): «Авто ≈B1» · A2 · B1 · B2 · C1, a radio group
+ * (arrows move the choice, as in the kind row).
+ */
+function LevelChips({
+  value,
+  autoLevel,
+  onChange,
+}: {
+  value: ExerciseLevel | null;
+  autoLevel: ExerciseLevel | null;
+  onChange: (level: ExerciseLevel | null) => void;
+}) {
+  const options: (ExerciseLevel | null)[] = [null, ...EXERCISE_LEVELS];
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const step = e.key === "ArrowRight" || e.key === "ArrowDown" ? 1 : e.key === "ArrowLeft" || e.key === "ArrowUp" ? -1 : 0;
+    if (!step) return;
+    e.preventDefault();
+    const next = (options.indexOf(value) + step + options.length) % options.length;
+    onChange(options[next]);
+    e.currentTarget.querySelectorAll<HTMLButtonElement>("[role='radio']")[next]?.focus();
+  };
+  return (
+    <div role="radiogroup" aria-label="Уровень набора" onKeyDown={onKeyDown} className="flex flex-wrap gap-x-1.5">
+      {options.map((l) => (
+        <Chip
+          key={l ?? "auto"}
+          role="radio"
+          selected={l === value}
+          tabIndex={l === value ? 0 : -1}
+          aria-label={l ?? (autoLevel ? `Авто: по уровню выбранных слов, сейчас примерно ${autoLevel}` : "Авто: по уровню выбранных слов")}
+          onClick={() => onChange(l)}
+          className="my-1 !h-9 min-w-11 justify-center gap-1.5 px-3"
+        >
+          {l ?? (
+            <>
+              Авто
+              {autoLevel && <span className="font-mono text-[12px] font-normal opacity-70">≈{autoLevel}</span>}
+            </>
+          )}
+        </Chip>
+      ))}
+    </div>
+  );
+}
+
+/**
  * A slot in the request sentence: the ink-underlined words that open their choice in place
  * (the count, the themes) or flip it (new words). The open one sits on a `surface-2` band one line
  * (38px) tall; a 3px band above and below makes the tap area 44px. (A button lays out as an inline
@@ -849,6 +943,9 @@ function RequestComposer({
   onTopic,
   allowNew,
   onAllowNew,
+  level,
+  autoLevel,
+  onLevel,
   sentence,
   focusLine,
   online,
@@ -874,6 +971,10 @@ function RequestComposer({
   onTopic: (topic: string) => void;
   allowNew: boolean;
   onAllowNew: (on: boolean) => void;
+  /** «Уровень набора»: null = «Авто». */
+  level: ExerciseLevel | null;
+  autoLevel: ExerciseLevel | null;
+  onLevel: (level: ExerciseLevel | null) => void;
   sentence: RequestSentence;
   focusLine: string | null;
   online: boolean;
@@ -883,11 +984,11 @@ function RequestComposer({
 }) {
   const ids = useId();
   // The themes are open at first: they are the first thing to choose.
-  const [open, setOpen] = useState<"size" | "themes" | null>("themes");
+  const [open, setOpen] = useState<"size" | "level" | "themes" | null>("themes");
   const topicRef = useRef<HTMLInputElement>(null);
   const focusTopic = useRef(false);
   const themesOpen = open === "themes" && sentence.themes !== null;
-  const toggle = (slot: "size" | "themes") =>
+  const toggle = (slot: "size" | "level" | "themes") =>
     setOpen((now) => (now === slot ? null : slot));
 
   useEffect(() => {
@@ -928,6 +1029,14 @@ function RequestComposer({
             onClick={() => toggle("size")}
           >
             {sentence.size.replace(" ", NBSP)}
+          </Slot>{" "}
+          <Slot
+            open={open === "level"}
+            label={`Уровень: ${level ?? (autoLevel ? `авто, примерно ${autoLevel}` : "авто")}, изменить`}
+            controls={`${ids}-level`}
+            onClick={() => toggle("level")}
+          >
+            {sentence.level.replace(" ", NBSP)}
           </Slot>
           {sentence.what && ` ${sentence.what}`} {where}
           {sentence.themes !== null && (
@@ -976,6 +1085,15 @@ function RequestComposer({
             ariaLabelledby={`${ids}-size-label`}
             mono
           />
+        </div>
+      )}
+
+      {open === "level" && (
+        <div id={`${ids}-level`} className="mt-2.5 flex flex-col rounded-card bg-surface-2 px-2 py-1">
+          <LevelChips value={level} autoLevel={autoLevel} onChange={onLevel} />
+          <p data-level-hint="" className="m-0 mx-2 mt-1 mb-2 text-[13px] leading-[18px] text-muted">
+            {levelHint(level, autoLevel)}
+          </p>
         </div>
       )}
 

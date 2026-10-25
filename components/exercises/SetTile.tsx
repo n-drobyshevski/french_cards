@@ -6,6 +6,7 @@ import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { SessionStrip } from "@/components/ui/SessionStrip";
 import { SkeletonBar } from "@/components/ui/Skeleton";
+import { setLevelLabel } from "@/lib/core/exercises";
 import type { ExerciseSet } from "@/lib/types";
 import { EXERCISE_PLAY_HREF } from "./exercise-request";
 import {
@@ -100,6 +101,9 @@ export function SetTile({
 }: SetTileProps) {
   const longPress = useLongPress(onMenu);
   const total = set.items.length;
+  // «12 ВОПРОСОВ · B1» (pick L2 A; «≈B1» when the level came from «Авто»).
+  const level = setLevelLabel(set);
+  const count = level ? `${nQuestions(total)} · ${level}` : nQuestions(total);
   return (
     <Link
       href={EXERCISE_PLAY_HREF}
@@ -109,7 +113,7 @@ export function SetTile({
       aria-label={
         phone
           ? `${set.title}: ${lines.spoken}. ${state.said}`
-          : `${set.title}: ${nQuestions(total)}, ${themes}. ${state.label}`
+          : `${set.title}: ${nQuestions(total)}${level ? `, уровень ${level.replace("≈", "примерно ")}` : ""}, ${themes}. ${state.label}`
       }
       className={cx(
         TILE,
@@ -151,13 +155,13 @@ export function SetTile({
         </span>
       ) : (
         <span className="meta mt-auto shrink-0 leading-4 tabular-nums md:hidden">
-          {nQuestions(total)}
+          {count}
         </span>
       )}
       <PendingLine className="md:hidden" />
 
       <span className="line-clamp-2 min-h-12 font-serif text-[19px] leading-6 font-medium max-md:hidden">{set.title}</span>
-      <span className="meta mt-1.5 leading-4 tabular-nums max-md:hidden">{nQuestions(total)}</span>
+      <span className="meta mt-1.5 leading-4 tabular-nums max-md:hidden">{count}</span>
       <span className="meta truncate leading-4 max-md:hidden">{themes}</span>
       <span className="meta mt-auto flex items-baseline justify-between gap-2 leading-4 tabular-nums max-md:hidden">
         <span className={cx("font-medium whitespace-nowrap", state.tone === "new" ? "text-red" : "text-ink")}>{state.label}</span>

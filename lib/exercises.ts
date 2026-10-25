@@ -7,12 +7,13 @@
 // Exercises never touch review_state or review_log. Pure rules live in lib/core/exercises.ts.
 import { useLiveQuery } from "dexie-react-hooks";
 import { countFirstTry, itemWordKeys, parseScope, runItems, runSettled } from "./core/exercises";
+import { isCefr } from "./core/level";
 import { isPaused, pausedFolderIds } from "./core/words";
 import { db, liveRows, newId } from "./db";
 import { isDueToday } from "./folders";
 import { wordStatus } from "./scheduler";
 import { findDuplicates, normalizeLemma } from "./text";
-import type { ExerciseAnswer, ExerciseRun, ExerciseSet, Folder, ReviewState, Word } from "./types";
+import type { ExerciseAnswer, ExerciseRun, ExerciseScope, ExerciseSet, Folder, ReviewState, Word } from "./types";
 import { addWords, softDeleteWords, type NewWordInput } from "./words";
 
 export * from "./core/exercises";
@@ -20,8 +21,14 @@ export * from "./core/exercises";
 const byNewest = (a: ExerciseSet, b: ExerciseSet) => b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id);
 const runsByNewest = (a: ExerciseRun, b: ExerciseRun) => b.started_at.localeCompare(a.started_at) || b.id.localeCompare(a.id);
 
-/** A set as the app reads it: rows synced before migration 0013, or from an old backup, have no `scope`. */
-const withScope = (set: ExerciseSet): ExerciseSet => (set.scope === undefined || set.scope === null ? { ...set, scope: null } : { ...set, scope: parseScope(set.scope) });
+/**
+ * A set as the app reads it: rows synced before migration 0013 have no `scope`, before 0017 no
+ * `level` / `level_auto` (an old backup neither).
+ */
+const withScope = (set: ExerciseSet): ExerciseSet => {
+  const level = isCefr(set.level) ? set.level : null;
+  return { ...set, scope: parseScope(set.scope), level, level_auto: level !== null && set.level_auto === true };
+};
 
 /** Live sets, newest first (use inside useLiveQuery). */
 export async function liveSets(): Promise<ExerciseSet[]> {
@@ -138,6 +145,39 @@ export function scopeCounts(
     if (difficult || due) out.both++;
   }
   return out;
+}
+
+/**
+ * The words a request would draw on, for «Авто»'s level (the connector's exercise_material does the
+ * same): a scope's words (difficult and/or due today), else the words of the picked themes ("inbox"
+ * = «Входящие»), else of every theme not «на паузе». Never words «на паузе» themselves.
+ */
+export function requestWords(
+  words: readonly Word[],
+  states: readonly ReviewState[],
+  folders: readonly Pick<Folder, "id" | "muted" | "deleted_at">[],
+  picked: readonly string[],
+  scope: ExerciseScope | null,
+  now: Date = new Date(),
+): Word[] {
+  const live = words.filter((w) => w.deleted_at === null && !w.muted);
+  if (scope) {
+    const paused = pausedFolderIds(folders);
+    const statesByWord = new Map<string, ReviewState[]>();
+    for (const s of states) if (s.deleted_at === null) statesByWord.set(s.word_id, [...(statesByWord.get(s.word_id) ?? []), s]);
+    return live.filter((w) => {
+      if (isPaused(w, paused)) return false;
+      const ws = statesByWord.get(w.id) ?? [];
+      const difficult = wordStatus(ws) === "difficult";
+      const due = ws.some((s) => isDueToday(s, now));
+      return scope === "difficult" ? difficult : scope === "due" ? due : difficult || due;
+    });
+  }
+  const ids = new Set(folders.filter((f) => f.deleted_at === null).map((f) => f.id));
+  const themeOf = (w: Word) => (w.folder_id !== null && ids.has(w.folder_id) ? w.folder_id : "inbox");
+  if (picked.length > 0) return live.filter((w) => picked.includes(themeOf(w)));
+  const paused = pausedFolderIds(folders);
+  return live.filter((w) => !isPaused(w, paused));
 }
 
 /** `scopeCounts` over the device's live rows (use inside useLiveQuery). */
