@@ -20,6 +20,7 @@ import { Icon } from "@/components/ui/Icons";
 import { Segmented } from "@/components/ui/Segmented";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { Toggle } from "@/components/ui/Toggle";
+import { TENSE_NAMES, TENSE_WHEN } from "@/lib/core/conj-display";
 import { focusSummary } from "@/lib/core/exercise-focus";
 import { db, liveRows } from "@/lib/db";
 import {
@@ -27,6 +28,7 @@ import {
   buildRequestText,
   CONJ_REQUEST_SIZES,
   EXERCISE_LEVELS,
+  EXERCISE_TENSES,
   levelsText,
   NEW_WORDS_MAX,
   REQUEST_SIZES,
@@ -40,7 +42,7 @@ import {
   type ScopeCounts,
 } from "@/lib/exercises";
 import { listFolders } from "@/lib/folders";
-import type { ExerciseScope, ExerciseSet } from "@/lib/types";
+import type { ExerciseScope, ExerciseSet, ExerciseTense } from "@/lib/types";
 import { useLevelData } from "@/lib/use-level-data";
 import { useExerciseFocus } from "@/lib/user-prefs";
 import { CLAUDE_NEW_CHAT_URL, copyRequest } from "./clipboard";
@@ -167,6 +169,8 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
   // «Спряжение глаголов»: its own sizes (a short test), so switching it off keeps the usual size.
   const [conjugation, setConjugation] = useState(false);
   const [verbSize, setVerbSize] = useState<number>(8);
+  // «Времена» of the verb test: none = all four.
+  const [tenses, setTenses] = useState<readonly ExerciseTense[]>([]);
   // «Откуда слова» (phones: the kind row): null = the themes below. A scope whose words are gone
   // (all reviewed, paused) falls back to the themes.
   const [scopePick, setScopePick] = useState<ExerciseScope | null>(null);
@@ -206,6 +210,7 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
     conjugation,
     levels,
     autoLevel,
+    tenses: conjugation ? tenses : null,
   };
   // Phones copy the sentence they read; desktop keeps the classic text.
   const sentence = compact ? requestSentence(choice) : null;
@@ -256,6 +261,8 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
         levels={levels}
         autoLevel={autoLevel}
         onLevels={setLevels}
+        tenses={tenses}
+        onTenses={setTenses}
         sentence={sentence}
         focusLine={focusLine}
         online={online}
@@ -364,6 +371,16 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
         onChange={setConjugation}
         className={scope || topicOpen ? "mt-3" : "mt-2.5"}
       />
+
+      {conjugation && (
+        <div data-tenses="" className="flex flex-col pb-2">
+          <span id={`${ids}-tenses`} className="text-[15px] leading-5">
+            Времена
+          </span>
+          <TenseChips labelledBy={`${ids}-tenses`} value={tenses} onChange={setTenses} />
+          <p className="m-0 text-[12px] leading-4 text-muted">{tenseHint(tenses)}</p>
+        </div>
+      )}
 
       <div className="flex h-12 items-center gap-2 border-t border-rule">
         <span id={`${ids}-size`} className="flex-1 text-[15px] leading-5">
@@ -864,6 +881,62 @@ function LevelChips({
   );
 }
 
+/** A tense tapped on or off, kept in table order; none = all four. */
+const toggleTense = (tenses: readonly ExerciseTense[], tense: ExerciseTense): ExerciseTense[] =>
+  EXERCISE_TENSES.filter((t) => (t === tense ? !tenses.includes(t) : tenses.includes(t)));
+
+/** Under the tense chips: «Все четыре времени вперемешку», or when each picked one is used. */
+function tenseHint(tenses: readonly ExerciseTense[]): string {
+  if (tenses.length === 0 || tenses.length === EXERCISE_TENSES.length) return "Все четыре времени вперемешку.";
+  return tenses.map((t) => `${TENSE_NAMES[t]} — ${TENSE_WHEN[t]}`).join(" · ");
+}
+
+/**
+ * «Времена» of a verb test: «Все» · Présent · Passé composé · Imparfait · Futur, several at once;
+ * «Все» clears them, and turning the last one off (or all four on) is «Все» again.
+ */
+function TenseChips({
+  labelledBy,
+  value,
+  onChange,
+  className,
+}: {
+  labelledBy?: string;
+  value: readonly ExerciseTense[];
+  onChange: (tenses: readonly ExerciseTense[]) => void;
+  className?: string;
+}) {
+  const all = value.length === 0 || value.length === EXERCISE_TENSES.length;
+  return (
+    <div
+      role="group"
+      aria-labelledby={labelledBy}
+      aria-label={labelledBy ? undefined : "Времена, можно несколько"}
+      className={cx("flex flex-wrap gap-x-1.5", className)}
+    >
+      <Chip selected={all} onClick={() => onChange([])} className="my-1 !h-9 min-w-11 justify-center px-3">
+        Все
+      </Chip>
+      {EXERCISE_TENSES.map((t) => {
+        const on = !all && value.includes(t);
+        return (
+          <Chip
+            key={t}
+            lang="fr"
+            selected={on}
+            icon={on ? "check" : undefined}
+            data-tense={t}
+            onClick={() => onChange(toggleTense(all ? [] : value, t))}
+            className="my-1 !h-9 gap-1.5 px-3"
+          >
+            {TENSE_NAMES[t]}
+          </Chip>
+        );
+      })}
+    </div>
+  );
+}
+
 /**
  * Desktop's «Уровень» row (D-Exercise-Level): «Авто · A2 · B1 · B2 · C1» in the «Вопросов» row's mono
  * look, several levels at once, as on phones.
@@ -981,6 +1054,8 @@ function RequestComposer({
   levels,
   autoLevel,
   onLevels,
+  tenses,
+  onTenses,
   sentence,
   focusLine,
   online,
@@ -1010,6 +1085,9 @@ function RequestComposer({
   levels: readonly ExerciseLevel[];
   autoLevel: ExerciseLevel | null;
   onLevels: (levels: readonly ExerciseLevel[]) => void;
+  /** «Времена» of a verb test; none = all four. */
+  tenses: readonly ExerciseTense[];
+  onTenses: (tenses: readonly ExerciseTense[]) => void;
   sentence: RequestSentence;
   focusLine: string | null;
   online: boolean;
@@ -1019,11 +1097,11 @@ function RequestComposer({
 }) {
   const ids = useId();
   // The themes are open at first: they are the first thing to choose.
-  const [open, setOpen] = useState<"size" | "level" | "themes" | null>("themes");
+  const [open, setOpen] = useState<"size" | "level" | "tenses" | "themes" | null>("themes");
   const topicRef = useRef<HTMLInputElement>(null);
   const focusTopic = useRef(false);
   const themesOpen = open === "themes" && sentence.themes !== null;
-  const toggle = (slot: "size" | "level" | "themes") =>
+  const toggle = (slot: "size" | "level" | "tenses" | "themes") =>
     setOpen((now) => (now === slot ? null : slot));
 
   useEffect(() => {
@@ -1073,7 +1151,21 @@ function RequestComposer({
           >
             {sentence.level.replace(" ", NBSP)}
           </Slot>
-          {sentence.what && ` ${sentence.what}`} {where}
+          {sentence.what && ` ${sentence.what}`}
+          {sentence.tenses && (
+            <>
+              {" "}
+              <Slot
+                open={open === "tenses"}
+                label={`Времена: ${sentence.tenses}, изменить`}
+                controls={`${ids}-tenses`}
+                onClick={() => toggle("tenses")}
+              >
+                {sentence.tenses}
+              </Slot>
+            </>
+          )}{" "}
+          {where}
           {sentence.themes !== null && (
             <>
               {NBSP}
@@ -1129,6 +1221,13 @@ function RequestComposer({
           <p data-level-hint="" className="m-0 mx-2 mt-1 mb-2 text-[13px] leading-[18px] text-muted">
             {levelHint(levels, autoLevel)}
           </p>
+        </div>
+      )}
+
+      {open === "tenses" && sentence.tenses && (
+        <div id={`${ids}-tenses`} data-tenses="" className="mt-2.5 flex flex-col rounded-card bg-surface-2 px-2 py-1">
+          <TenseChips value={tenses} onChange={onTenses} />
+          <p className="m-0 mx-2 mt-1 mb-2 text-[13px] leading-[18px] text-muted">{tenseHint(tenses)}</p>
         </div>
       )}
 

@@ -274,6 +274,10 @@ describe("phone tiles (E1 A)", () => {
 describe("requests", () => {
   it("summarises a request for the waiting line", () => {
     expect(requestSummary({ folders: [], topic: " вечеринка ", size: 12 })).toBe("«вечеринка», 12 вопросов");
+    expect(requestSummary({ folders: ["Люди"], topic: null, size: 8, conjugation: true, tenses: ["imparfait", "passe_compose"] })).toBe(
+      "спряжение · passé composé и imparfait, «Люди», 8 вопросов",
+    );
+    expect(requestSummary({ folders: ["Люди"], topic: null, size: 8, conjugation: true, tenses: [] })).toBe("спряжение, «Люди», 8 вопросов");
     expect(requestSummary({ folders: ["Люди", "Эмоции"], topic: null, size: 8 })).toBe("«Люди», «Эмоции», 8 вопросов");
     expect(requestSummary({ folders: [], topic: null, size: 16 })).toBe("все темы, 16 вопросов");
   });
@@ -319,9 +323,12 @@ describe("requests", () => {
     const items = set().items.map((it, i) => (i < 6 ? { ...it, type: "conjugate" as const, tense: "futur" as const, person: "tu" as const } : it));
     const newWord = { ref: "n1", fr: "x", ru: "y", note: null, example_fr: null, example_ru: null, pos: "verb" as const, gender: "none" as const, slang_level: 0 as const, verlan: false, origin: null, source_url: null };
     expect(similarRequest(set({ folders: ["f-people"], items, new_words: [newWord] }), names)).toEqual({
-      text: "Сделай упражнение на спряжение глаголов в Карточках по теме «Люди», 8 вопросов.",
-      summary: "спряжение, «Люди», 8 вопросов",
+      text: "Сделай упражнение на спряжение глаголов в Карточках по теме «Люди», 8 вопросов, только futur.",
+      summary: "спряжение · futur, «Люди», 8 вопросов",
     });
+    // Three or four tenses read as the usual mix.
+    const mixed = items.map((it, i) => (i < 3 ? { ...it, tense: (["present", "imparfait", "passe_compose"] as const)[i] } : it));
+    expect(similarRequest(set({ folders: ["f-people"], items: mixed, new_words: [] }), names).summary).toBe("спряжение, «Люди», 8 вопросов");
   });
 });
 

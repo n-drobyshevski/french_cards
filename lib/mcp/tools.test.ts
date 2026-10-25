@@ -9,7 +9,7 @@ import { LEGACY_STUDY_PLAN, parseStudyPlan, type StudyPlan } from "@/lib/core/st
 import { newReviewState, retrievability } from "@/lib/scheduler";
 import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ProgressDay, ReviewLog, ReviewState, UserPref, Word } from "@/lib/types";
 import { ARTIFACT_SET_SLOT, CHAT_PLAYER_URI, EXAM_SECONDS_PER_ITEM, runLine, type ChatPlayerSet } from "@/lib/core/chat-player";
-import { asChatReview, CHAT_REVIEW_URI, type LevelsReview, type WordsReview } from "@/lib/core/chat-review";
+import { asChatReview, CHAT_REVIEW_URI, type ExerciseSetup, type LevelsReview, type WordsReview } from "@/lib/core/chat-review";
 import { addWordsArguments, wordRows } from "@/chat-player/review/model";
 import { createFakeRepo, type FakeRepo } from "./fake-repo";
 import { planFitLogsFrom } from "./plan-fit";
@@ -36,6 +36,7 @@ import {
   moveWords,
   playExercises,
   proposeLevels,
+  setupExercise,
   proposeWords,
   resolveFolder,
   restoreExerciseSet,
@@ -1863,6 +1864,31 @@ describe("exercises («Упражнения»)", () => {
       expect(byId["w-meuf"]).not.toHaveProperty("conjugable");
     });
 
+    it("tenses: exercise_material narrows the verb recipe, the set refuses a conjugate item in another tense", async () => {
+      const fake = fakeLib({ words: VERBS });
+      expect(await refused(exerciseMaterial, fake, { tenses: ["imparfait"] })).toMatch(/tenses is for a verb set/);
+      const one = await ok(exerciseMaterial, fake, { verbs: true, tenses: ["imparfait"] });
+      expect(one.tenses).toEqual(["imparfait"]);
+      expect(one.note).toMatch(/only in imparfait.*at most 2 cloze items whose verb gap is in imparfait.*tenses: \["imparfait"\]/);
+      expect(one.note).not.toMatch(/être or pronominal/);
+      const two = await ok(exerciseMaterial, fake, { verbs: true, tenses: ["imparfait", "passe_compose"] });
+      expect(two.tenses).toEqual(["passe_compose", "imparfait"]);
+      expect(two.note).toMatch(/passé composé vs imparfait.*être or pronominal/);
+      // All four is the usual mix.
+      const all = await ok(exerciseMaterial, fake, { verbs: true, tenses: ["present", "passe_compose", "imparfait", "futur"] });
+      expect(all).not.toHaveProperty("tenses");
+      expect(all.note).toMatch(/mixing the 4 tenses/);
+
+      const msg = await refused(createExerciseSet, fake, { client_ref: "verbs-t", title: "Глаголы", items: VERB_ITEMS, tenses: ["passe_compose", "imparfait"] });
+      expect(msg).toMatch(/items\[0\]\.tense: must be one of passe_compose, imparfait/);
+      expect(msg).toMatch(/items\[4\]\.tense/);
+      expect(msg).not.toMatch(/items\[1\]\.tense/);
+      expect(stored(fake)).toEqual([]);
+      const items = VERB_ITEMS.map((i) => (i.type === "conjugate" ? { ...i, tense: i.tense === "passe_compose" ? "passe_compose" : "imparfait" } : i));
+      await ok(createExerciseSet, fake, { client_ref: "verbs-t", title: "Глаголы", items, tenses: ["passe_compose", "imparfait"] });
+      expect(stored(fake)).toHaveLength(1);
+    });
+
     it("exercise_material verbs: true with only gives one verb-set recipe, saved with scope", async () => {
       const hard = (wordId: string): ReviewState => ({ ...cards(wordId, false)[0], state: 2, reps: 6, lapses: 3, stability: 2, difficulty: 6, due: "2026-10-30T00:00:00.000Z" });
       const words = [...VERBS, word("w-bosser", "bosser", "вкалывать", { pos: "verb" })];
@@ -2463,6 +2489,40 @@ describe("«Уровень языка»", () => {
     expect(text).toMatch(/Показал 3 слова на проверку.*у 1 уровень указал сам пользователь.*без уровня ещё 1/);
     expect(text).toMatch(/Не перечисляй их в чате/);
     expect(fake.writes).toEqual([]);
+  });
+
+  it("setup_exercise shows the setup card with each theme's words and verbs, the presets resolved, and writes nothing", async () => {
+    const fake = createFakeRepo({
+      folders: [folder("people", "01 · Люди", { sort: 0 }), folder("food", "05 · Еда", { sort: 1 }), folder("later", "20 · Потом", { sort: 2, muted: true })],
+      words: [
+        word("w1", "kiffer", "обожать", { pos: "verb", folder_id: "f-people" }),
+        word("w2", "la meuf", "девушка", { pos: "noun", gender: "f", folder_id: "f-people" }),
+        word("w3", "bouffer", "жрать", { pos: "verb", folder_id: "f-food" }),
+        word("w4", "relou", "напряжный", { pos: "adj" }),
+        word("w5", "aller", "идти", { pos: "verb", folder_id: "f-later" }),
+        word("w6", "bosser", "вкалывать", { pos: "verb", folder_id: "f-food", muted: true }),
+      ],
+    });
+    const res = await callTool(setupExercise, deps(fake), { folders: ["01 · Люди", "20 · Потом"], tenses: ["imparfait"], size: 9, levels: ["B1"] });
+    expect(res.isError).toBeFalsy();
+    expect(setupExercise.meta).toMatchObject({ ui: { resourceUri: CHAT_REVIEW_URI } });
+    const setup = asChatReview(res.structuredContent) as ExerciseSetup;
+    expect(setup).toEqual({
+      kind: "kartochki-setup",
+      version: 1,
+      themes: [
+        { id: null, name: "Входящие", count: 1, verbs: 0 },
+        { id: "f-people", name: "01 · Люди", count: 2, verbs: 1 },
+        { id: "f-food", name: "05 · Еда", count: 1, verbs: 1 },
+      ],
+      // A paused theme is not on the card, so it can't be preselected; tenses make it a verb test.
+      preset: { verbs: true, folders: ["f-people"], tenses: ["imparfait"], size: 8, levels: ["B1"] },
+      sizes: [8, 12, 16],
+      verb_sizes: [6, 8, 10],
+    });
+    expect((res.content[0] as { text: string }).text).toMatch(/Настроить упражнение.*«Начать ›» пришлёт запрос/);
+    expect(fake.writes).toEqual([]);
+    expect(await refused(setupExercise, fake, { folders: ["нет такой"] })).toMatch(/нет такой|No theme|theme/i);
   });
 
   it("propose_levels refuses unknown and deleted words by path", async () => {

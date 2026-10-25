@@ -1,7 +1,7 @@
 // Pure helpers for the «Упражнения» list (tiles, resume card, waiting line, request summaries).
-import { buildRequestText, isVerbSet, levelsText, parseScope, pickedLevels, playedItems, runSettled, scoreRun, setLevelLabel, type ExerciseLevel } from "@/lib/core/exercises";
+import { buildRequestText, isVerbSet, levelsText, parseScope, pickedLevels, pickedTenses, playedItems, runSettled, scoreRun, setLevelLabel, setTenses, tensesText, type ExerciseLevel } from "@/lib/core/exercises";
 import type { StripMark } from "@/components/ui/SessionStrip";
-import type { ExerciseItem, ExerciseItemType, ExerciseRun, ExerciseScope, ExerciseSet } from "@/lib/types";
+import type { ExerciseItem, ExerciseItemType, ExerciseRun, ExerciseScope, ExerciseSet, ExerciseTense } from "@/lib/types";
 import { attemptMarks } from "./player-state";
 
 /** Russian plural: [1, 2–4, 5+]. */
@@ -208,6 +208,8 @@ export interface RequestChoice {
   levels?: readonly ExerciseLevel[];
   /** «Авто»'s level now (shown, never copied). */
   autoLevel?: ExerciseLevel | null;
+  /** «Времена» of a verb test; none or all four = every tense. */
+  tenses?: readonly ExerciseTense[] | null;
 }
 
 /** What one level does to the set: it shapes the questions, never which words are asked. */
@@ -243,9 +245,21 @@ const SCOPE_SUMMARIES: Record<ExerciseScope, string> = {
   both: "трудные и к повторению",
 };
 
-/** «вечеринка», 12 вопросов — the waiting line and the offline bar; «спряжение, «Люди», 8 вопросов» for a verb test. */
-export function requestSummary({ folders, topic, size, scope, conjugation, levels }: Pick<RequestChoice, "folders" | "topic" | "size" | "scope" | "conjugation" | "levels">): string {
-  const verbs = conjugation ? "спряжение, " : "";
+/**
+ * «вечеринка», 12 вопросов — the waiting line and the offline bar; «спряжение, «Люди», 8 вопросов» for
+ * a verb test, «спряжение · imparfait, «Люди», 8 вопросов» on some tenses.
+ */
+export function requestSummary({
+  folders,
+  topic,
+  size,
+  scope,
+  conjugation,
+  levels,
+  tenses,
+}: Pick<RequestChoice, "folders" | "topic" | "size" | "scope" | "conjugation" | "levels" | "tenses">): string {
+  const some = conjugation ? pickedTenses(tenses) : null;
+  const verbs = conjugation ? `спряжение${some ? ` · ${tensesText(some)}` : ""}, ` : "";
   const lv = levels?.length ? `, ${levelsText(levels)}` : "";
   if (scope) return `${verbs}${SCOPE_SUMMARIES[scope]}, ${nQuestions(size)}${lv}`;
   const names = [...new Set(folders.map((f) => f.trim()).filter(Boolean))];
@@ -265,8 +279,9 @@ export function similarRequest(
   const scope = parseScope(set.scope);
   const conjugation = isVerbSet(playedItems(set.items));
   const levels = pickedLevels(set);
+  const tenses = conjugation ? setTenses(playedItems(set.items)) : null;
   const choice: RequestChoice = scope
-    ? { folders: [], topic: null, size: set.items.length, allowNew: false, scope, conjugation, levels }
+    ? { folders: [], topic: null, size: set.items.length, allowNew: false, scope, conjugation, levels, tenses }
     : {
         folders: setFolderNames(set, names),
         topic: set.topic,
@@ -274,6 +289,7 @@ export function similarRequest(
         allowNew: !conjugation && set.new_words.length > 0,
         conjugation,
         levels,
+        tenses,
       };
   return { text: buildRequestText(choice), summary: requestSummary(choice) };
 }

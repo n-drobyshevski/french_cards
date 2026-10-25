@@ -5,6 +5,7 @@ import {
   autoLevelOf,
   buildFollowUpText,
   buildQueue,
+  buildChatRequestText,
   buildRequestSentence,
   buildRequestText,
   clozeParts,
@@ -32,6 +33,7 @@ import {
   type QueueEntry,
   requeue,
   requestSentence,
+  setTenses,
   resumeQueue,
   runSettled,
   ruEquivalents,
@@ -755,6 +757,7 @@ describe("request texts", () => {
       size: "12 вопросов",
       level: "уровня авто",
       what: null,
+      tenses: null,
       where: "по темам",
       themes: "Еда, Полиция",
       fresh: "можно новые слова",
@@ -1101,6 +1104,31 @@ describe("conjugate items", () => {
     expect(new Set(options)).toEqual(new Set(["ai kiffé", ...item.distractors]));
   });
 
+  it("asks for some tenses of a verb test, in table order, here or in the chat, and keeps them in the follow-up", () => {
+    const spec = { folders: ["Люди"], topic: null, size: 8, allowNew: false, conjugation: true };
+    expect(buildRequestText({ ...spec, tenses: ["imparfait"] })).toBe("Сделай упражнение на спряжение глаголов в Карточках по теме «Люди», 8 вопросов, только imparfait.");
+    expect(buildRequestText({ ...spec, levels: ["B1"], tenses: ["imparfait", "passe_compose"] })).toBe(
+      "Сделай упражнение на спряжение глаголов в Карточках по теме «Люди», 8 вопросов, уровень B1, только passé composé и imparfait.",
+    );
+    // All four, none, or tenses without a verb test: nothing is added.
+    expect(buildRequestText({ ...spec, tenses: ["present", "passe_compose", "imparfait", "futur"] })).toBe(buildRequestText(spec));
+    expect(buildRequestText({ ...spec, conjugation: false, tenses: ["imparfait"] })).not.toMatch(/imparfait/);
+    expect(buildChatRequestText({ ...spec, tenses: ["present", "imparfait", "futur"] })).toBe(
+      "Сделай упражнение на спряжение глаголов здесь в чате по теме «Люди», 8 вопросов, только présent, imparfait и futur.",
+    );
+    expect(requestSentence({ ...spec, tenses: ["futur"] })).toMatchObject({
+      tenses: "в futur",
+      text: "Сделай в Карточках 8 вопросов на спряжение глаголов в futur по теме «Люди».",
+    });
+    expect(requestSentence(spec)).toMatchObject({ tenses: "во всех временах", text: "Сделай в Карточках 8 вопросов на спряжение глаголов по теме «Люди»." });
+    expect(requestSentence({ ...spec, conjugation: false }).tenses).toBeNull();
+    const items = verbSet([]).items.map((i) => (i.type === "conjugate" ? { ...i, tense: "imparfait" as const } : i));
+    expect(setTenses(items)).toEqual(["imparfait"]);
+    expect(setTenses(verbSet([]).items)).toEqual(["present", "passe_compose"]);
+    expect(setTenses([...items, ...verbSet([]).items])).toBeNull();
+    expect(buildFollowUpText({ ...verbSet([]), items, new_words: [] }, [])).toMatch(/6 вопросов, только imparfait\.$/);
+  });
+
   it("asks for a verb test, never with new words, and keeps it in the follow-up", () => {
     expect(buildRequestText({ folders: ["Люди"], topic: null, size: 8, allowNew: true, conjugation: true })).toBe(
       "Сделай упражнение на спряжение глаголов в Карточках по теме «Люди», 8 вопросов.",
@@ -1110,7 +1138,7 @@ describe("conjugate items", () => {
     );
     const set = { ...verbSet([]), new_words: [] };
     expect(buildFollowUpText(set, [{ fr: "kiffer" }])).toBe(
-      "Сделай следующее упражнение на спряжение глаголов в Карточках после «Глаголы · passé composé», 6 вопросов, с упором на ошибки: kiffer.",
+      "Сделай следующее упражнение на спряжение глаголов в Карточках после «Глаголы · passé composé», 6 вопросов, только présent и passé composé, с упором на ошибки: kiffer.",
     );
   });
 

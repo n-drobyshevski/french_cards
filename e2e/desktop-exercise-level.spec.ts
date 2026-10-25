@@ -26,3 +26,18 @@ test("the builder's «Уровень» row puts one or several levels into the r
 
   await expect(page.getByRole("link", { name: new RegExp(`^${SLANG_SET.title}:`) })).toContainText("5 вопросов · B2");
 });
+
+test("«Спряжение глаголов» shows «Времена»: picked tenses end the request «только …»", async ({ page }) => {
+  await openReview(page);
+  await seedExerciseSets(page, [SLANG_SET]);
+  await page.goto("/exercises");
+  const panel = page.getByRole("complementary", { name: "Попросить набор" });
+  await expect(panel.locator("[data-tenses]")).toHaveCount(0);
+  await panel.getByRole("checkbox", { name: /Спряжение глаголов/ }).click();
+  const tenses = panel.getByRole("group", { name: "Времена" });
+  await expect(tenses.getByRole("button", { name: "Все" })).toHaveAttribute("aria-pressed", "true");
+  await expect(panel).toContainText("Сделай упражнение на спряжение глаголов в Карточках по всем темам, 8 вопросов.");
+  await tenses.getByRole("button", { name: "Futur" }).click();
+  await expect(panel).toContainText("Сделай упражнение на спряжение глаголов в Карточках по всем темам, 8 вопросов, только futur.");
+  await expect(tenses.getByRole("button", { name: "Все" })).toHaveAttribute("aria-pressed", "false");
+});

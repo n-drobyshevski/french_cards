@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { LevelReviewRow, LevelsReview, ReviewFolder, WordReviewRow, WordsReview } from "@/lib/core/chat-review";
+import type { ExerciseSetup, LevelReviewRow, LevelsReview, ReviewFolder, WordReviewRow, WordsReview } from "@/lib/core/chat-review";
 import { reviewFolderUrl } from "@/lib/core/chat-review";
 import {
   addWordsArguments,
@@ -12,6 +12,10 @@ import {
   readLevelsResult,
   readWordsResult,
   setLevelsArguments,
+  setupAvailable,
+  setupRequest,
+  setupState,
+  toggled,
   wordRows,
 } from "./model";
 
@@ -89,5 +93,47 @@ describe("«Новые слова»", () => {
   it("links a theme in the app as the app routes it", () => {
     expect(reviewFolderUrl("https://kartochki.example/", "f-home")).toBe("https://kartochki.example/library/f-home");
     expect(reviewFolderUrl("https://kartochki.example", null)).toBe("https://kartochki.example/library/inbox");
+  });
+});
+
+describe("«Настроить упражнение»", () => {
+  const setup = (preset: Partial<ExerciseSetup["preset"]> = {}): ExerciseSetup => ({
+    kind: "kartochki-setup",
+    version: 1,
+    themes: [
+      { id: null, name: "Входящие", count: 4, verbs: 1 },
+      { id: "f1", name: "01 · Люди", count: 20, verbs: 6 },
+      { id: "f2", name: "02 · Семья", count: 12, verbs: 3 },
+    ],
+    preset: { verbs: false, folders: [], tenses: [], size: null, levels: [], ...preset },
+    sizes: [8, 12, 16],
+    verb_sizes: [6, 8, 10],
+  });
+
+  it("starts from Claude's presets, unknown themes dropped, sizes snapped", () => {
+    expect(setupState(setup())).toEqual({ folders: [], verbs: false, tenses: [], size: 12, verbSize: 8, levels: [], sent: false });
+    expect(setupState(setup({ verbs: true, folders: ["f2", "gone", null], tenses: ["imparfait", "present"], size: 7, levels: ["B2", "A2"] }))).toEqual({
+      folders: ["f2", null],
+      verbs: true,
+      tenses: ["present", "imparfait"],
+      size: 12,
+      verbSize: 6,
+      levels: ["A2", "B2"],
+      sent: false,
+    });
+  });
+
+  it("counts the words (or verbs) of the picked themes, and sends the app's request played in the chat", () => {
+    const s = setup();
+    const state = setupState(s);
+    expect(setupAvailable(s, state)).toBe(36);
+    expect(setupRequest(s, state)).toBe("Сделай упражнение здесь в чате по всем темам, 12 вопросов.");
+    state.verbs = true;
+    state.folders = toggled(s.themes.map((t) => t.id), state.folders, "f1");
+    state.tenses = ["imparfait"];
+    expect(setupAvailable(s, state)).toBe(6);
+    expect(setupRequest(s, state)).toBe("Сделай упражнение на спряжение глаголов здесь в чате по теме «01 · Люди», 8 вопросов, только imparfait.");
+    state.folders = toggled(s.themes.map((t) => t.id), state.folders, null);
+    expect(state.folders).toEqual([null, "f1"]);
   });
 });

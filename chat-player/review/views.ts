@@ -2,7 +2,9 @@
 // Chat-Words-A / Chat-Words-Theme / Chat-Words-Added): one sheet with the red rule, a row per word,
 // the first few in the chat and the rest behind «Показать все» (fullscreen), the write button at the
 // foot; once written, the receipt with «Отменить». Every function builds fresh DOM from the state.
-import type { LevelsReview, ReviewFolder, WordsReview } from "@/lib/core/chat-review";
+import type { ExerciseSetup, LevelsReview, ReviewFolder, WordsReview } from "@/lib/core/chat-review";
+import { TENSE_NAMES, TENSE_WHEN } from "@/lib/core/conj-display";
+import { EXERCISE_LEVELS, EXERCISE_TENSES } from "@/lib/core/exercises";
 import { CEFR_LEVELS, type Cefr } from "@/lib/core/level";
 import { SLANG_LABELS, type Gender, type SlangLevel } from "@/lib/types";
 import { h, icon, type Child } from "../dom";
@@ -16,7 +18,10 @@ import {
   levelsReceipt,
   levelsToSave,
   wordsToAdd,
+  setupAvailable,
+  setupRequest,
   WORDS,
+  type SetupState,
   type LevelRow,
   type LevelsSaved,
   type WordRow,
@@ -388,4 +393,130 @@ function addedView(p: WordsProps, result: WordsAdded, undoing: boolean): HTMLEle
 /** Before the review arrives (Claude still writing the call). */
 export function waitView(text = "Готовим список…", busy = true): HTMLElement {
   return h("section", { class: "sheet", "aria-busy": busy ? "true" : null }, h("div", { class: "rhead" }, h("span", { class: "sl strong" }, "Карточки")), h("p", { class: busy ? "wait" : "wait still", role: "status" }, text));
+}
+
+// --- «Настроить упражнение» ----------------------------------------------------------------------
+
+/** Themes shown before «ещё N» (the picked ones always show). */
+export const INLINE_THEMES = 10;
+
+export interface SetupProps {
+  setup: ExerciseSetup;
+  state: SetupState;
+  /** Every theme shown («ещё N» tapped). */
+  allThemes: boolean;
+  error: string | null;
+  on: {
+    theme(id: string | null): void;
+    allThemes(): void;
+    clearThemes(): void;
+    verbs(): void;
+    tense(tense: string): void;
+    allTenses(): void;
+    size(n: number): void;
+    level(level: string): void;
+    autoLevel(): void;
+    start(): void;
+  };
+}
+
+/** A toggle chip of the card: ink when on, a tick when several can be on. */
+function opt(label: Child, on: boolean, attrs: Record<string, string | null>, onClick: () => void, tick = false): HTMLElement {
+  return h(
+    "button",
+    { type: "button", class: cls("opt", on && "on"), "aria-pressed": String(on), onclick: onClick, ...attrs },
+    tick && on && icon("check", 14, 2),
+    label,
+  );
+}
+
+const block = (label: string, id: string, ...children: Child[]) =>
+  h("div", { class: "sblock" }, h("p", { class: "sl", id }, label), ...children);
+
+export function setupView(p: SetupProps): HTMLElement {
+  const { setup, state, on } = p;
+  const sent = state.sent;
+  const available = setupAvailable(setup, state);
+  const picked = new Set(state.folders);
+  const hidden = p.allThemes ? [] : setup.themes.slice(INLINE_THEMES).filter((t) => !picked.has(t.id));
+  const themes = setup.themes.filter((t) => !hidden.includes(t));
+  const allTenses = state.tenses.length === 0 || state.tenses.length === EXERCISE_TENSES.length;
+  const sizes = state.verbs ? setup.verb_sizes : setup.sizes;
+  const size = state.verbs ? state.verbSize : state.size;
+  const request = setupRequest(setup, state);
+  const unit = state.verbs ? (["глагол", "глагола", "глаголов"] as const) : WORDS;
+  return h(
+    "section",
+    { class: cls("sheet setup", sent && "written"), "aria-label": "Настроить упражнение" },
+    h("div", { class: "rhead" }, h("h1", { class: "sl strong" }, "Упражнение в чате"), h("span", { class: "rnote" }, sent ? "Запрос отправлен" : "Выберите и начните")),
+    h(
+      "fieldset",
+      { class: "sform", disabled: sent },
+      block(
+        "Темы",
+        "su-themes",
+        h(
+          "div",
+          { class: "opts", role: "group", "aria-labelledby": "su-themes" },
+          opt("Все темы", picked.size === 0, { "data-theme": "all" }, () => on.clearThemes()),
+          themes.map((t) =>
+            opt([h("span", null, t.name), h("span", { class: "n" }, String(state.verbs ? t.verbs : t.count))], picked.has(t.id), { "data-theme": t.id ?? "inbox", "aria-label": `${t.name}: ${state.verbs ? t.verbs : t.count} ${plural(state.verbs ? t.verbs : t.count, unit)}` }, () => on.theme(t.id), true),
+          ),
+          hidden.length > 0 && h("button", { type: "button", class: "opt more-opt", onclick: () => on.allThemes() }, `ещё ${hidden.length}`),
+        ),
+      ),
+      h(
+        "div",
+        { class: "sblock row" },
+        checkbox(state.verbs, "Спряжение глаголов", sent, () => on.verbs()),
+        h("span", { class: "grow col" }, h("span", { class: "stitle" }, "Спряжение глаголов"), h("span", { class: "scap" }, "Только глаголы, короткий тест")),
+      ),
+      state.verbs &&
+        block(
+          "Времена",
+          "su-tenses",
+          h(
+            "div",
+            { class: "opts", role: "group", "aria-labelledby": "su-tenses" },
+            opt("Все", allTenses, { "data-tense": "all" }, () => on.allTenses()),
+            EXERCISE_TENSES.map((t) => opt(h("span", { lang: "fr" }, TENSE_NAMES[t]), !allTenses && state.tenses.includes(t), { "data-tense": t }, () => on.tense(t), true)),
+          ),
+          h("p", { class: "scap" }, allTenses ? "Все четыре времени вперемешку." : state.tenses.map((t) => `${TENSE_NAMES[t]} — ${TENSE_WHEN[t]}`).join(" · ")),
+        ),
+      block(
+        "Вопросов",
+        "su-size",
+        h(
+          "div",
+          { class: "seg wide", role: "radiogroup", "aria-labelledby": "su-size" },
+          sizes.map((n) =>
+            h("button", { type: "button", role: "radio", "aria-checked": String(n === size), class: cls(n === size && "on"), "data-size": String(n), onclick: () => on.size(n) }, String(n)),
+          ),
+        ),
+      ),
+      block(
+        "Уровень",
+        "su-level",
+        h(
+          "div",
+          { class: "opts", role: "group", "aria-labelledby": "su-level" },
+          opt("Авто", state.levels.length === 0, { "data-level": "auto" }, () => on.autoLevel()),
+          EXERCISE_LEVELS.map((l) => opt(l, state.levels.includes(l), { "data-level": l }, () => on.level(l), state.levels.length > 1)),
+        ),
+      ),
+    ),
+    h("p", { class: "sreq", "aria-label": `Запрос: ${request}` }, request),
+    h(
+      "div",
+      { class: "rfoot col" },
+      sent
+        ? h("div", { class: "receipt", role: "status" }, icon("check", 18, 2), h("span", { class: "grow" }, "Запрос отправлен — Claude готовит раунд"))
+        : h(
+            "button",
+            { type: "button", class: "btn", disabled: available === 0, onclick: () => on.start() },
+            available === 0 ? (state.verbs ? "Нет глаголов в этих темах" : "Нет слов в этих темах") : "Начать ›",
+          ),
+      errorLine(p.error),
+    ),
+  );
 }

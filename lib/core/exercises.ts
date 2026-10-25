@@ -8,7 +8,7 @@
 // refuses a broken set with path-precise errors and `warningsFor(set)` lists what is merely weak.
 // App side: `optionsFor`, `clozeParts`, `pairsBoard`, `buildQueue` / `requeue` / `resumeQueue`,
 // `scoreRun`, `missedWords`, and the request texts the user copies into Claude.
-import { CONJ_TENSE_ORDER, splitForm } from "./conj-display";
+import { CONJ_TENSE_ORDER, splitForm, TENSE_NAMES } from "./conj-display";
 import { cleanConjugation, conjugate, type ConjData } from "./conjugate";
 import { CEFR_LEVELS, isCefr, type Cefr } from "./level";
 import { isRussian, normalizeLemma, searchKey } from "./text";
@@ -53,6 +53,27 @@ export const playedItems = <I extends Pick<ExerciseItem, "type">>(items: readonl
 export const EXERCISE_SKILLS: readonly ExerciseSkill[] = ["meaning", "form", "neutral", "verlan", "situation"];
 /** A conjugate item's tense and person, in the conjugation table's order (person index = form index). */
 export const EXERCISE_TENSES: readonly ExerciseTense[] = CONJ_TENSE_ORDER;
+
+/** «Времена» of a verb test, in table order; null when none or all four are picked (every tense). */
+export function pickedTenses(tenses: readonly string[] | null | undefined): ExerciseTense[] | null {
+  const picked = EXERCISE_TENSES.filter((t) => tenses?.includes(t));
+  return picked.length === 0 || picked.length === EXERCISE_TENSES.length ? null : picked;
+}
+
+/** «imparfait», «imparfait и passé composé», «présent, imparfait и futur». */
+export function tensesText(tenses: readonly ExerciseTense[]): string {
+  const names = tenses.map((t) => TENSE_NAMES[t].toLowerCase());
+  return names.length < 2 ? (names[0] ?? "") : `${names.slice(0, -1).join(", ")} и ${names[names.length - 1]}`;
+}
+
+/**
+ * The tenses a verb set drills (its conjugate items'), or null when it mixes them: three or four
+ * tenses read as the usual mix, since a short set of all four can miss one by chance.
+ */
+export function setTenses(items: readonly Pick<ExerciseItem, "type" | "tense">[]): ExerciseTense[] | null {
+  const tenses = pickedTenses(items.filter((i) => i.type === "conjugate" && i.tense).map((i) => i.tense as string));
+  return tenses && tenses.length <= 2 ? tenses : null;
+}
 export const EXERCISE_PERSONS: readonly ExercisePerson[] = ["je", "tu", "il", "nous", "vous", "ils"];
 
 export const ITEMS_MIN = 6;
@@ -1253,7 +1274,15 @@ export interface RequestSpec {
   levels?: readonly ExerciseLevel[];
   /** «Авто»'s level as the app sees it now (the phone slot shows «уровня ≈B1»); never copied. */
   autoLevel?: ExerciseLevel | null;
+  /** «Времена» of a verb test (with `conjugation`); none or all four = every tense. */
+  tenses?: readonly ExerciseTense[] | null;
 }
+
+/** «, только imparfait и passé composé» for a verb test on some tenses; nothing for all four. */
+const tensePart = (conjugation: boolean | undefined, tenses: readonly ExerciseTense[] | null | undefined) => {
+  const picked = conjugation ? pickedTenses(tenses) : null;
+  return picked ? `, только ${tensesText(picked)}` : "";
+};
 
 /** «, уровень B1» in the classic text; nothing for «Авто». */
 const levelPart = (levels: readonly ExerciseLevel[] | undefined) => (levels?.length ? `, уровень ${levelsText(levels)}` : "");
@@ -1273,17 +1302,31 @@ const SCOPE_WHERE: Record<ExerciseScope, string> = {
  * «Сделай упражнение в Карточках по трудным словам из всех тем, 12 вопросов.» (a scope: never new words),
  * «Сделай упражнение на спряжение глаголов в Карточках по теме «Люди», 8 вопросов.» (never new words).
  * Levels add «, уровень B1» («B1–B2», «A2, B2») after the size: «… 12 вопросов, уровень B1, можно новые слова.»
+ * A verb test on some tenses ends «…, 8 вопросов, только imparfait и passé composé.»
  */
-export function buildRequestText({ folders, topic, size, allowNew, scope, conjugation, levels }: RequestSpec): string {
+export function buildRequestText(spec: RequestSpec): string {
+  return requestText(spec, "в Карточках");
+}
+
+/**
+ * The setup card's request in the chat («Начать ›»): the same sentence, played here — «Сделай
+ * упражнение на спряжение глаголов здесь в чате по теме «Люди», 8 вопросов, только imparfait.»
+ */
+export function buildChatRequestText(spec: RequestSpec): string {
+  return requestText(spec, "здесь в чате");
+}
+
+function requestText({ folders, topic, size, allowNew, scope, conjugation, levels, tenses }: RequestSpec, place: string): string {
   const what = conjugation ? "упражнение на спряжение глаголов" : "упражнение";
-  if (scope) return `Сделай ${what} в Карточках ${SCOPE_WHERE[scope]}, ${questions(size)}${levelPart(levels)}.`;
+  const tail = `${levelPart(levels)}${tensePart(conjugation, tenses)}`;
+  if (scope) return `Сделай ${what} ${place} ${SCOPE_WHERE[scope]}, ${questions(size)}${tail}.`;
   const names = [...new Set(folders.map((f) => f.trim()).filter(Boolean))];
   const custom = topic?.replace(/\s+/g, " ").trim() || null;
   let where: string;
   if (names.length === 0) where = custom ? ` на тему ${quoted(custom)}` : " по всем темам";
   else if (names.length === 1) where = ` по теме ${quoted(names[0])}${custom ? ` и на тему ${quoted(custom)}` : ""}`;
   else where = `: темы ${names.map(quoted).join(", ")}${custom ? ` и тема ${quoted(custom)}` : ""}`;
-  return `Сделай ${what} в Карточках${where}, ${questions(size)}${levelPart(levels)}${allowNew && !conjugation ? ", можно новые слова" : ""}.`;
+  return `Сделай ${what} ${place}${where}, ${questions(size)}${tail}${allowNew && !conjugation ? ", можно новые слова" : ""}.`;
 }
 
 /**
@@ -1298,6 +1341,8 @@ export interface RequestSentence {
   level: string;
   /** «на спряжение глаголов» for a verb test, else null. */
   what: string | null;
+  /** The tenses slot of a verb test: «во всех временах» (copies nothing), «в imparfait и passé composé»; null otherwise. */
+  tenses: string | null;
   /** The words before the themes slot («по темам», «по теме», «на тему», «по»), or a scope's whole phrase («по трудным словам из всех тем»). */
   where: string;
   /** The themes slot as shown («Еда, Полиция», «всем темам», «вечеринка»); null for a scope (no slot). */
@@ -1318,17 +1363,21 @@ export interface RequestSentence {
  * The level slot follows the count (X-Level-A, pick L1 A; several levels since 2026-10-25): «Сделай
  * в Карточках 12 вопросов уровня B1–B2 по темам …»; «Авто» shows «уровня ≈B1» but copies nothing
  * (Claude takes the words' level).
+ * A verb test's tenses slot follows «на спряжение глаголов»: «… 8 вопросов на спряжение глаголов в
+ * imparfait по теме «Люди».»; «во всех временах» copies nothing.
  * The desktop builder keeps `buildRequestText`.
  */
-export function requestSentence({ folders, topic, size, allowNew, scope, conjugation, levels, autoLevel }: RequestSpec): RequestSentence {
+export function requestSentence({ folders, topic, size, allowNew, scope, conjugation, levels, autoLevel, tenses }: RequestSpec): RequestSentence {
   const count = questions(size);
   const what = conjugation ? "на спряжение глаголов" : null;
   const picked = levelsText(levels ?? []);
   const shownLevel = picked ? `уровня ${picked}` : autoLevel ? `уровня ≈${autoLevel}` : "уровня авто";
-  const lead = `Сделай в Карточках ${count}${picked ? ` уровня ${picked}` : ""}${what ? ` ${what}` : ""}`;
+  const someTenses = conjugation ? pickedTenses(tenses) : null;
+  const shownTenses = conjugation ? (someTenses ? `в ${tensesText(someTenses)}` : "во всех временах") : null;
+  const lead = `Сделай в Карточках ${count}${picked ? ` уровня ${picked}` : ""}${what ? ` ${what}` : ""}${someTenses ? ` в ${tensesText(someTenses)}` : ""}`;
   if (scope) {
     const where = SCOPE_WHERE[scope];
-    return { size: count, level: shownLevel, what, where, themes: null, fresh: null, text: `${lead} ${where}.` };
+    return { size: count, level: shownLevel, what, tenses: shownTenses, where, themes: null, fresh: null, text: `${lead} ${where}.` };
   }
   const names = [...new Set(folders.map((f) => f.trim()).filter(Boolean))];
   const custom = topic?.replace(/\s+/g, " ").trim() || null;
@@ -1346,7 +1395,7 @@ export function requestSentence({ folders, topic, size, allowNew, scope, conjuga
     copied = names.map(quoted).join(", ") + extra;
   }
   const fresh = conjugation ? null : allowNew ? "можно новые слова" : "без новых слов";
-  return { size: count, level: shownLevel, what, where, themes: shown, fresh, text: `${lead} ${where} ${copied}${fresh ? ` — ${fresh}` : ""}.` };
+  return { size: count, level: shownLevel, what, tenses: shownTenses, where, themes: shown, fresh, text: `${lead} ${where} ${copied}${fresh ? ` — ${fresh}` : ""}.` };
 }
 
 /** The copied text of `requestSentence`. */
@@ -1372,5 +1421,6 @@ export function buildFollowUpText(
   const fresh = !scope && !verbs && set.new_words.length > 0 ? ", можно новые слова" : "";
   const where = scope ? ` ${SCOPE_WHERE[scope]}` : "";
   const what = verbs ? "упражнение на спряжение глаголов" : "упражнение";
-  return `Сделай следующее ${what} в Карточках${where} после ${quoted(set.title)}, ${questions(set.items.length)}${levelPart(pickedLevels(set))}${focus}${fresh}.`;
+  const tenses = verbs ? tensePart(true, setTenses(playedItems(set.items))) : "";
+  return `Сделай следующее ${what} в Карточках${where} после ${quoted(set.title)}, ${questions(set.items.length)}${levelPart(pickedLevels(set))}${tenses}${focus}${fresh}.`;
 }

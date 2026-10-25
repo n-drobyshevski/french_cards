@@ -32,6 +32,7 @@ import {
   autoLevelOf,
   cleanLevels,
   completeSet,
+  CONJ_REQUEST_SIZES,
   CONJUGATE_MAX,
   contextFromWords,
   EXERCISE_ID_PREFIX,
@@ -48,8 +49,10 @@ import {
   PASSAGE_MAX,
   PASSAGE_MIN,
   parseScope,
+  pickedTenses,
   playableItemIds,
   REF_MAX,
+  REQUEST_SIZES,
   runSettled,
   scoreRun,
   TEXT_MAX,
@@ -69,7 +72,7 @@ import {
   parseExerciseFocus,
 } from "@/lib/core/exercise-focus";
 import { CHAT_ITEM_TYPES, CHAT_PLAYER_URI, EXAM_SECONDS_PER_ITEM, fillArtifact, MCP_APP_MIME, parseRunLine, RUN_LINE_PREFIX, SAVE_RESULT_TOOL, type ChatPlayerSet, type ChatRunResult } from "@/lib/core/chat-player";
-import { CHAT_REVIEW_URI, type LevelReviewRow, type LevelsReview, type ReviewFolder, type WordReviewRow, type WordsReview } from "@/lib/core/chat-review";
+import { CHAT_REVIEW_URI, type ExerciseSetup, type LevelReviewRow, type LevelsReview, type ReviewFolder, type SetupTheme, type WordReviewRow, type WordsReview } from "@/lib/core/chat-review";
 import { matchesSearch, normalizeLemma, searchHaystack, searchKey } from "@/lib/core/text";
 import { buildWord, cleanText, directionsOf, isMovable, isPaused, pausedFolderIds } from "@/lib/core/words";
 import { cleanConjugation, cleanOrigin, conjugate, ORIGIN_MAX, type ConjData } from "@/lib/core/conjugate";
@@ -2380,6 +2383,19 @@ function levelBlock(askedLevels: readonly ExerciseLevel[], words: readonly Word[
   };
 }
 
+/**
+ * What a verb set mixes: all four tenses with the passé composé vs imparfait cloze items, or only the
+ * tenses asked for (that contrast only when both are among them).
+ */
+function verbTenseRecipe(tenses: readonly ExerciseTense[] | null): string {
+  if (!tenses) return "mixing the 4 tenses and the persons, plus 2–3 cloze items with a time marker for passé composé vs imparfait";
+  const names = tenses.join(", ");
+  const contrast = tenses.includes("passe_compose") && tenses.includes("imparfait");
+  return `only in ${names} (the user asked for ${tenses.length === 1 ? "this tense" : "these tenses"}; spread them about evenly), mixing the persons, plus ${
+    contrast ? "2–3 cloze items with a time marker for passé composé vs imparfait" : `at most 2 cloze items whose verb gap is in ${names}, or none`
+  }${tenses.includes("passe_compose") ? "; 30–40% of the passé composé on être or pronominal verbs" : ""}`;
+}
+
 export const exerciseMaterial = tool({
   name: "exercise_material",
   title: "Material for an exercise",
@@ -2410,6 +2426,10 @@ export const exerciseMaterial = tool({
       .nullable()
       .optional()
       .describe("true for «упражнение на спряжение глаголов»: only the verbs that conjugate items can use (conjugable: true)."),
+    tenses: jsonArray(z.array(z.enum(TENSES)).min(1).max(TENSES.length))
+      .nullable()
+      .optional()
+      .describe("With verbs: the tenses the user asked for («только imparfait» → [\"imparfait\"], «passé composé и imparfait» → [\"passe_compose\", \"imparfait\"]); leave it out for all four."),
     levels: jsonArray(z.array(z.enum(EXERCISE_LEVELS)).max(EXERCISE_LEVELS.length))
       .nullable()
       .optional()
@@ -2438,6 +2458,8 @@ export const exerciseMaterial = tool({
     // (not with `only`: a scoped set takes the words the app counts, never paused ones).
     const scoped = only ? scopeWords(words, ctx, only, targetIds) : exerciseScope(words, ctx, targetIds);
     const verbs = args.verbs === true;
+    if (args.tenses?.length && !verbs) throw new ToolError("tenses is for a verb set: pass verbs: true with it, or leave tenses out.");
+    const tenses = verbs ? pickedTenses(args.tenses) : null;
     const inScope = verbs ? scoped.filter(isConjugable) : scoped;
     const liveSets = sets.filter((s) => s.deleted_at === null);
     const signals = weaknessSignals(inScope, ctx, logs, runs, new Map(sets.map((s) => [s.id, s])));
@@ -2463,6 +2485,7 @@ export const exerciseMaterial = tool({
         ...(only ? onlyBlock(only, inScope.length, !!targets, verbs) : {}),
       },
       total: inScope.length,
+      ...(tenses ? { tenses } : {}),
       level: levelBlock(args.levels ?? [], inScope),
       ...(only ? {} : { focus: focusBlock(focus, args.focus ? "request" : "settings", ranked.filter((r) => r.focus).length) }),
       words: ranked.slice(0, args.limit).map(({ w, s, focus: on }) => ({
@@ -2477,7 +2500,7 @@ export const exerciseMaterial = tool({
         .slice(0, RECENT_SETS)
         .map((s) => ({ id: s.id, title: s.title, topic: s.topic, created_at: s.created_at, count: s.items.length, words: setWords(s) })),
       note: verbs
-        ? `A verb set is a short test: ${VERB_SET_SIZE} items (6–10, at most ${CONJUGATE_MAX} conjugate), mostly conjugate items (word_id, tense, person; the server writes the form and the options) mixing the 4 tenses and the persons, plus 2–3 cloze items with a time marker for passé composé vs imparfait; the same verb at most twice and never back to back. Send it in one create_exercise_set call (in the chat: play_exercises)${only ? ` with scope: "${only}" (scope.note)` : ""}.`
+        ? `A verb set is a short test: ${VERB_SET_SIZE} items (6–10, at most ${CONJUGATE_MAX} conjugate), mostly conjugate items (word_id, tense, person; the server writes the form and the options) ${verbTenseRecipe(tenses)}; the same verb at most twice and never back to back. Send it in one create_exercise_set call (in the chat: play_exercises)${tenses ? ` with tenses: ${JSON.stringify(tenses)}` : ""}${only ? ` with scope: "${only}" (scope.note)` : ""}.`
         : only
           ? "Follow scope.note: only these words, each in 2–3 types, the weakest late; send them in one create_exercise_set call with scope (in the chat: play_exercises)."
           : "Build 10–15 items of at least 3 types, put the weakest words late and twice, and send them in one create_exercise_set call (in the chat: play_exercises).",
@@ -2592,6 +2615,61 @@ async function focusShareWarning(deps: ToolDeps, set: ExerciseSet, focus: Exerci
   };
 }
 
+export const setupExercise = tool({
+  name: "setup_exercise",
+  title: "Set up an exercise in the chat",
+  description: `Show «Настроить упражнение» in the chat: a card where the user picks the themes (with their word and verb counts), «Спряжение глаголов» and its «Времена» (présent, passé composé, imparfait, futur: one, several or all), the number of questions and the level, then taps «Начать ›», which sends the request to you as their message («Сделай упражнение на спряжение глаголов здесь в чате по теме «…», 8 вопросов, только imparfait.»); then exercise_material and play_exercises as usual. Use it when the user wants to choose or set up a round in the chat («настрой упражнение», «хочу выбрать времена», «какие времена потренировать?»), or asks for a verb drill in the chat naming neither themes nor tenses. When the request already says what to play, play it directly. Preselect what the request did say (verbs, folders, tenses, size, levels). Writes nothing; don't ask the same questions in text. If the user says they see no card, ask in one line which themes and tenses they want.`,
+  input: z.object({
+    verbs: z.boolean().nullable().optional().describe("Preselect «Спряжение глаголов» (a verb test)."),
+    folders: jsonArray(z.array(folderSelector).max(10)).nullable().optional().describe(`Themes to preselect (id, slug, name or "${INBOX_SELECTOR}"); none = every theme.`),
+    tenses: jsonArray(z.array(z.enum(TENSES)).max(TENSES.length)).nullable().optional().describe("Tenses to preselect for a verb test; none = all four."),
+    size: z.number().int().min(ITEMS_MIN).max(ITEMS_MAX).nullable().optional().describe("Questions to preselect (rounded to the card's nearest choice)."),
+    levels: jsonArray(z.array(z.enum(EXERCISE_LEVELS)).max(EXERCISE_LEVELS.length)).nullable().optional().describe("Levels to preselect; none = «Авто»."),
+  }),
+  write: false,
+  meta: REVIEW_META,
+  annotations: READ,
+  async run(deps, args) {
+    const [folders, words, states] = await Promise.all([deps.repo.folders(), deps.repo.words(), deps.repo.states()]);
+    const ctx = viewContext(folders, states, [], deps);
+    // As exercise_material without `folders`: live, unpaused words of themes not «на паузе».
+    const counts = new Map<string | null, { count: number; verbs: number }>();
+    for (const w of exerciseScope(words, ctx, null)) {
+      const key = placeOf(w, ctx.live)?.id ?? null;
+      const c = counts.get(key) ?? { count: 0, verbs: 0 };
+      c.count += 1;
+      if (isConjugable(w)) c.verbs += 1;
+      counts.set(key, c);
+    }
+    const themes: SetupTheme[] = [
+      { id: null, name: INBOX_NAME },
+      ...liveFolders(folders).map((f) => ({ id: f.id as string | null, name: f.name })),
+    ].flatMap((t) => {
+      const c = counts.get(t.id);
+      return c ? [{ ...t, ...c }] : [];
+    });
+    const shown = new Set(themes.map((t) => t.id));
+    const picked = [...new Set((args.folders ?? []).map((sel) => resolveFolder(sel, folders)?.id ?? null))].filter((id) => shown.has(id));
+    const verbs = args.verbs === true || (args.tenses?.length ?? 0) > 0;
+    const sizes: readonly number[] = verbs ? CONJ_REQUEST_SIZES : REQUEST_SIZES;
+    const size = args.size ? sizes.reduce((best, n) => (Math.abs(n - args.size!) < Math.abs(best - args.size!) ? n : best)) : null;
+    const setup: ExerciseSetup = {
+      kind: "kartochki-setup",
+      version: 1,
+      themes,
+      preset: { verbs, folders: picked, tenses: pickedTenses(args.tenses) ?? [], size, levels: [...new Set(args.levels ?? [])] },
+      sizes: [...REQUEST_SIZES],
+      verb_sizes: [...CONJ_REQUEST_SIZES],
+    };
+    const message =
+      themes.length === 0
+        ? "В библиотеке нет слов для упражнения (или все темы на паузе): скажи об этом пользователю."
+        : "Показал карточку «Настроить упражнение». Не задавай вопросы о темах и временах текстом: пользователь выберет в карточке, и её «Начать ›» пришлёт запрос сообщением («Сделай упражнение … здесь в чате …»); тогда exercise_material и play_exercises. Если пользователь скажет, что карточки не видно, спроси одной строкой, какие темы и времена выбрать.";
+    return { setup, message };
+  },
+  reply: (out) => ({ content: [{ type: "text", text: out.message }], structuredContent: out.setup as unknown as Record<string, unknown> }),
+});
+
 /** A set as Claude sends it: create_exercise_set's input, shared with the chat tools below. */
 const setInput = z.object({
   client_ref: z
@@ -2625,6 +2703,10 @@ const setInput = z.object({
     .nullable()
     .optional()
     .describe("true when they came from the words (exercise_material's `level.from` \"auto\"): the app shows «≈B1»."),
+  tenses: jsonArray(z.array(z.enum(TENSES)).min(1).max(TENSES.length))
+    .nullable()
+    .optional()
+    .describe("A verb set on some tenses only (exercise_material `tenses`): every conjugate item must use one of them. Leave it out for all four."),
 });
 
 type SetArgs = z.output<typeof setInput>;
@@ -2659,7 +2741,17 @@ async function buildSet(deps: ToolDeps, args: SetArgs, folders: readonly Folder[
   );
   const check = validateSet(content, ctx);
   // A scoped set is made only of the user's own words: no new words from the web.
+  // A verb set on some tenses: every conjugate item in one of them.
+  const tenses = pickedTenses(args.tenses);
+  const offTense = tenses
+    ? content.items.flatMap((item, i) =>
+        item.type === "conjugate" && item.tense && !tenses.includes(item.tense)
+          ? [{ path: `items[${i}].tense`, message: `must be one of ${tenses.join(", ")} (the tenses asked for)` }]
+          : [],
+      )
+    : [];
   const errors = [
+    ...offTense,
     ...(content.scope && content.new_words.length > 0
       ? [{ path: "new_words", message: `must be empty in a set with scope "${content.scope}" (only the user's ${FOCUS_WORDS_EN[content.scope]} words); drop the new words and their items` }]
       : []),
@@ -3303,6 +3395,7 @@ export const TOOL_NAMES = [
   updateWords.name,
   setWordLevels.name,
   proposeLevels.name,
+  setupExercise.name,
   moveWords.name,
   restoreMoves.name,
   deleteWords.name,
@@ -3358,6 +3451,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   register(server, deps, updateWords);
   register(server, deps, setWordLevels);
   register(server, deps, proposeLevels);
+  register(server, deps, setupExercise);
   register(server, deps, moveWords);
   register(server, deps, restoreMoves);
   register(server, deps, deleteWords);
@@ -3378,6 +3472,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
 }
 
 export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard app for colloquial French; the user is a Russian speaker. A card is a French word or phrase (fr) with its Russian translation (ru). Words are grouped into themes («темы»); «${INBOX_NAME}» (inbox) holds words without a theme.
+- «Настроить упражнение»: when the user wants to choose or set up a round in the chat («настрой упражнение», «хочу выбрать времена»), or asks for a verb drill in the chat naming neither themes nor tenses, call setup_exercise (a card with themes, «Спряжение глаголов» and its tenses, size, level) and wait: its «Начать ›» sends the request as the user's message; then play it as below. A request that already says what to play is played directly.
 - Exercises in the conversation: always call play_exercises (after exercise_material). This includes «в чате», «здесь», «прямо тут», «в диалоге», «на отдельной вкладке», «тест», «квиз», «погоняй меня». Do not build an HTML page and do not open or reuse an existing exercise artifact instead, even if one exists from an earlier chat. A request larger than one round (more than 20 questions or 8 new words) is a series: say how many rounds, play round 1 now with play_exercises \`series\`, and the next round only when the user asks («Следующий раунд»); never several rounds in one reply. exercise_artifact only for hosts that show no apps, or when the user explicitly asks for a page.
 - Before adding, search_words for the word; add_words also skips French forms that are already saved.
 - For each new word give the dictionary form, one to three Russian equivalents in the same register, slang_level (0 neutral, 1 familier, 2 argot, 3 vulgaire), verlan (true for verlan forms such as meuf, relou, chelou), pos, gender for nouns, and a short everyday example_fr with its example_ru. Vulgar words are legitimate vocabulary: translate them with the same strength and mark them 3.
@@ -3404,7 +3499,7 @@ export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard
 - «Уровень набора» («уровня B1», «уровня B1–B2», «уровень B2» in the request; one or several): pass them as exercise_material \`levels\`; without them, exercise_material's \`level\` takes the words' level. Write the questions at \`level.targets\` following each one's guide (sentence length and tenses, how close the distractors are, recognition vs production, the level of new words), several levels spread about evenly, easier first; never by swapping the library words; send the set with \`levels\` (plus \`level_auto: true\` when they came from the words).
 - «Мини-TCF» («мини-TCF», «как на экзамене», «пробный TCF»): exercise_material with \`levels\` as the user asked, else ["A2", "B1", "B2"], then play_exercises mode "exam" with about 12 items from A2 to B2, easier first, each with its \`level\`: about half reading items (a short realistic French text on the user's themes, 300–700 characters, a French question, 4 French options, one clearly right by the text), the rest meaning / cloze about their words; no pairs, no new_words. Never reveal or hint at the answers before the exam ends; afterwards go through the mistakes only when asked («Разобрать ошибки»), and say that the result is an estimate, not a TCF score.
 - A reading item («текст», TCF «compréhension écrite») can be in any set: passage, passage_label (ANNONCE, MESSAGE, ARTICLE, AVIS…), prompt (the French question), answer and 3 distractors, all in French; word_id optional.
-- «Спряжение глаголов» («упражнение на спряжение глаголов»): exercise_material \`verbs: true\`, then a short set of ${VERB_SET_SIZE} items (6–10): mostly conjugate items (word_id, tense, person; the server writes the form and the options) mixing the 4 tenses and the persons, with 30–40% of the passé composé on être or pronominal verbs; plus 2–3 cloze items with a verb gap and a time marker (hier / tous les jours / demain) for passé composé vs imparfait; the same verb at most twice, never back to back; never elle / elles (the forms have no feminine agreement).
+- «Спряжение глаголов» («упражнение на спряжение глаголов»): exercise_material \`verbs: true\`, then a short set of ${VERB_SET_SIZE} items (6–10): mostly conjugate items (word_id, tense, person; the server writes the form and the options) mixing the 4 tenses and the persons (tenses named in the request, «только imparfait», «passé composé и imparfait»: exercise_material and the set get \`tenses\`, and every conjugate item uses one of them; follow exercise_material's note), with 30–40% of the passé composé on être or pronominal verbs; plus 2–3 cloze items with a verb gap and a time marker (hier / tous les jours / demain) for passé composé vs imparfait; the same verb at most twice, never back to back; never elle / elles (the forms have no feminine agreement).
 - «Работа над ошибками»: list_exercise_sets' last_run.missed and exercise_material's signals (ex_misses, confusions) say what to drill; reuse a confused option as a distractor only where it is in the item's options' language (a Russian one for meaning fr→ru, a French one for cloze and ru→fr).
 - After create_exercise_set or save_exercise_result, give the set's title and number of questions and how to undo it; it shows in «Упражнения» after the app's next sync.
 - Make write calls one at a time, never in parallel: each reads the current rows first, and parallel writes to the same words conflict or slip past the duplicate check.

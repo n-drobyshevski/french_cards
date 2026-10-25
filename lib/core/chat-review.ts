@@ -3,9 +3,12 @@
 // (propose_levels → set_word_levels, mockup Chat-Levels-A) and new words before add_words
 // (propose_words → add_words, mockup Chat-Words-A). The page calls those write tools itself
 // (MCP App tools/call) only on the user's tap, then offers «Отменить» with the tool's own undo.
+// The same page shows «Настроить упражнение» (setup_exercise): themes, «Спряжение глаголов» with its
+// «Времена», the size and the level; «Начать ›» sends the request to Claude in the chat.
 // Pure types and helpers, shared by the server (lib/mcp/tools.ts) and the page (chat-player/).
 import type { Cefr } from "./level";
-import type { Gender, PartOfSpeech, SlangLevel } from "../types";
+import type { ExerciseLevel } from "./exercises";
+import type { ExerciseTense, Gender, PartOfSpeech, SlangLevel } from "../types";
 
 /** The review page's UI resource; propose_levels and propose_words point at it. */
 export const CHAT_REVIEW_URI = "ui://kartochki/review.html";
@@ -90,12 +93,43 @@ export interface WordsReview {
   app_url?: string | null;
 }
 
-export type ChatReview = LevelsReview | WordsReview;
+/** A theme in «Настроить упражнение»: id null = «Входящие»; its live words, and the verbs a verb test can use. */
+export interface SetupTheme {
+  id: string | null;
+  name: string;
+  count: number;
+  verbs: number;
+}
+
+/** «Настроить упражнение» (setup_exercise): what the card offers, and what Claude preselected from the request. */
+export interface ExerciseSetup {
+  kind: "kartochki-setup";
+  version: 1;
+  /** Themes with words, «Входящие» first; themes «на паузе» left out. */
+  themes: SetupTheme[];
+  preset: {
+    verbs: boolean;
+    /** Theme ids (null = «Входящие»); none = every theme. */
+    folders: (string | null)[];
+    /** none = all four. */
+    tenses: ExerciseTense[];
+    /** null = the default size. */
+    size: number | null;
+    /** none = «Авто». */
+    levels: ExerciseLevel[];
+  };
+  /** The «Вопросов» choices of an ordinary set and of a verb test. */
+  sizes: number[];
+  verb_sizes: number[];
+}
+
+export type ChatReview = LevelsReview | WordsReview | ExerciseSetup;
 
 /** A review from a tool result's structuredContent; null when it isn't one. */
 export function asChatReview(value: unknown): ChatReview | null {
   if (!value || typeof value !== "object") return null;
-  const v = value as Partial<ChatReview>;
+  const v = value as Partial<LevelsReview | WordsReview> & Partial<ExerciseSetup>;
+  if (v.kind === "kartochki-setup") return Array.isArray(v.themes) && v.preset && Array.isArray(v.sizes) ? (v as ExerciseSetup) : null;
   if (v.kind !== "kartochki-levels" && v.kind !== "kartochki-words") return null;
   if (!Array.isArray(v.rows)) return null;
   return v as ChatReview;

@@ -620,3 +620,106 @@ html[data-display="fullscreen"] #app {
 .skipped > .sl {
   padding: 0 12px 4px;
 }
+
+/* «Настроить упражнение» (setup_exercise): blocks of toggle chips, the size strip, the request preview */
+.sform {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.sblock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--rule);
+}
+.sblock.row {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+.sblock .col {
+  display: flex;
+  flex-direction: column;
+}
+.stitle {
+  font-size: 15px;
+  line-height: 20px;
+}
+.scap {
+  margin: 0;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+.opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.opt {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid var(--rule);
+  border-radius: 18px;
+  background: var(--surface);
+  font-size: 14px;
+  line-height: 18px;
+  color: var(--ink);
+}
+.opt:not(:disabled):hover {
+  background: var(--hover-surface);
+}
+.opt.on {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--on-ink);
+  font-weight: 500;
+}
+.opt.on:not(:disabled):hover {
+  background: var(--ink-press);
+}
+.opt .n {
+  font: 400 12px/16px var(--mono);
+  opacity: 0.7;
+}
+.opt.more-opt {
+  border-style: dashed;
+  color: var(--muted);
+}
+.seg.wide {
+  align-self: flex-start;
+  height: 36px;
+  grid-template-columns: repeat(3, 52px);
+}
+.seg.wide button {
+  font-size: 14px;
+}
+.sform:disabled .opt,
+.sform:disabled .seg button {
+  cursor: default;
+}
+.sform:disabled .opt.on {
+  border-color: var(--boundary);
+  background: var(--boundary);
+}
+.sreq {
+  margin: 10px 12px 0;
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--paper);
+  font: 400 12px/18px var(--mono);
+  color: var(--ink);
+  user-select: all;
+}
+.sform:disabled .seg button.on {
+  background: var(--boundary);
+}

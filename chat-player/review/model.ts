@@ -1,9 +1,12 @@
 // The review page's rules (lib/core/chat-review.ts has the contract): the rows as the user edits
 // them, what the page sends to the connector's write tools (set_word_levels, add_words, and their
 // undos set_word_levels / delete_words, in the shapes lib/mcp/tools.ts takes), how it reads their
-// results back, and the lines it shows and tells Claude. Pure: views.ts draws it, review-main.ts runs it.
-import type { LevelReviewRow, LevelsReview, ReviewFolder, WordReviewRow, WordsReview } from "@/lib/core/chat-review";
+// results back, and the lines it shows and tells Claude; «Настроить упражнение»'s picks and the request
+// it sends. Pure: views.ts draws it, review-main.ts runs it.
+import type { ExerciseSetup, LevelReviewRow, LevelsReview, ReviewFolder, SetupTheme, WordReviewRow, WordsReview } from "@/lib/core/chat-review";
+import { buildChatRequestText, EXERCISE_LEVELS, EXERCISE_TENSES, type ExerciseLevel } from "@/lib/core/exercises";
 import { isCefr, type Cefr } from "@/lib/core/level";
+import type { ExerciseTense } from "@/lib/types";
 import { plural } from "../texts";
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -198,4 +201,64 @@ export function wordsContext(result: WordsAdded, skipped: readonly string[]): st
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+// --- «Настроить упражнение» ----------------------------------------------------------------------
+
+export interface SetupState {
+  /** Picked theme ids (null = «Входящие»); none = every theme. */
+  folders: (string | null)[];
+  verbs: boolean;
+  /** none = all four. */
+  tenses: ExerciseTense[];
+  /** The ordinary set's size and the verb test's, kept apart as in the app. */
+  size: number;
+  verbSize: number;
+  /** none = «Авто». */
+  levels: ExerciseLevel[];
+  /** «Начать ›» was sent to the chat. */
+  sent: boolean;
+}
+
+const nearest = (sizes: readonly number[], want: number | null, fallback: number) =>
+  sizes.length === 0 ? fallback : want === null ? (sizes.includes(fallback) ? fallback : sizes[Math.floor(sizes.length / 2)]) : sizes.reduce((a, b) => (Math.abs(b - want) < Math.abs(a - want) ? b : a));
+
+export function setupState(setup: ExerciseSetup): SetupState {
+  const p = setup.preset;
+  return {
+    folders: p.folders.filter((id) => setup.themes.some((t) => t.id === id)),
+    verbs: p.verbs,
+    tenses: EXERCISE_TENSES.filter((t) => p.tenses.includes(t)),
+    size: nearest(setup.sizes, p.verbs ? null : p.size, 12),
+    verbSize: nearest(setup.verb_sizes, p.verbs ? p.size : null, 8),
+    levels: EXERCISE_LEVELS.filter((l) => p.levels.includes(l)),
+    sent: false,
+  };
+}
+
+/** A theme, tense or level tapped on or off, kept in the card's order. */
+export function toggled<T>(order: readonly T[], picked: readonly T[], value: T): T[] {
+  return order.filter((x) => (x === value ? !picked.includes(x) : picked.includes(x)));
+}
+
+/** The themes the request names (none = every theme), in the card's order. */
+export const setupThemes = (setup: ExerciseSetup, state: SetupState): SetupTheme[] => setup.themes.filter((t) => state.folders.includes(t.id));
+
+/** The words (a verb test: the verbs) the request can use: of the picked themes, else of all. */
+export function setupAvailable(setup: ExerciseSetup, state: SetupState): number {
+  const themes = state.folders.length ? setupThemes(setup, state) : setup.themes;
+  return themes.reduce((n, t) => n + (state.verbs ? t.verbs : t.count), 0);
+}
+
+/** «Начать ›»'s message: the app's request sentence, played here in the chat. */
+export function setupRequest(setup: ExerciseSetup, state: SetupState): string {
+  return buildChatRequestText({
+    folders: setupThemes(setup, state).map((t) => t.name),
+    topic: null,
+    size: state.verbs ? state.verbSize : state.size,
+    allowNew: false,
+    conjugation: state.verbs,
+    levels: state.levels,
+    tenses: state.verbs ? state.tenses : null,
+  });
 }

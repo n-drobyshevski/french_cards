@@ -379,6 +379,14 @@ test("the empty state builds the request and copies it", async ({ page, context 
   await said("Сделай в Карточках 8 вопросов на спряжение глаголов по теме «Полиция».");
   await expect(card.getByRole("button", { name: /^Новые слова/ })).toHaveCount(0);
   await expect(card.getByRole("radio", { name: "10", exact: true })).toBeVisible();
+  // «Времена»: the tenses slot opens the chips; picked tenses go into the sentence, «Все» copies nothing.
+  await card.getByRole("button", { name: "Времена: во всех временах, изменить" }).click();
+  await card.getByRole("button", { name: "Imparfait" }).click();
+  await card.getByRole("button", { name: "Passé composé" }).click();
+  await said("Сделай в Карточках 8 вопросов на спряжение глаголов в passé composé и imparfait по теме «Полиция».");
+  await expect(card.locator("[data-tenses]")).toContainText("Imparfait — фон, привычка в прошлом");
+  await card.getByRole("button", { name: "Все", exact: true }).click();
+  await said("Сделай в Карточках 8 вопросов на спряжение глаголов по теме «Полиция».");
   await card.getByRole("radio", { name: "Слова по темам" }).click();
   await said("Сделай в Карточках 8 вопросов по теме «Полиция» — без новых слов.");
 

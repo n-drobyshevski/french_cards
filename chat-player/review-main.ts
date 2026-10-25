@@ -4,8 +4,10 @@
 // Only the user's tap writes: «Сохранить N» calls set_word_levels, «Добавить N» add_words (MCP App
 // tools/call), then «Отменить» calls the tool's own undo (set_word_levels with the returned undo,
 // delete_words with the returned ids). What was written is told to Claude (ui/update-model-context).
-// An MCP App only: no artifact mode.
-import { asChatReview, reviewFolderUrl, type ChatReview, type LevelsReview, type ReviewFolder } from "@/lib/core/chat-review";
+// «Настроить упражнение» (setup_exercise) writes nothing: its «Начать ›» sends the request to Claude
+// as the user's message (ui/message). An MCP App only: no artifact mode.
+import { asChatReview, reviewFolderUrl, type ChatReview, type ExerciseSetup, type LevelsReview, type ReviewFolder } from "@/lib/core/chat-review";
+import { EXERCISE_LEVELS, EXERCISE_TENSES } from "@/lib/core/exercises";
 import { isCefr } from "@/lib/core/level";
 import { applyHostContext, callTool, connectHost, reportSize, resultText, type Bridge, type HostContext } from "./bridge";
 import { h } from "./dom";
@@ -17,12 +19,16 @@ import {
   readLevelsResult,
   readWordsResult,
   setLevelsArguments,
+  setupRequest,
+  setupState,
+  toggled,
   wordRows,
   wordsContext,
   type LevelRow,
+  type SetupState,
   type WordRow,
 } from "./review/model";
-import { levelsView, waitView, wordsView, type LevelsPhase, type WordsPhase } from "./review/views";
+import { levelsView, setupView, waitView, wordsView, type LevelsPhase, type WordsPhase } from "./review/views";
 
 const root = document.getElementById("app") ?? document.body.appendChild(h("div", { id: "app" }));
 
@@ -31,6 +37,7 @@ let review: ChatReview | null = null;
 let wait: { text: string; busy: boolean } = { text: "Готовим список…", busy: true };
 let levels: { rows: LevelRow[]; phase: LevelsPhase; asked: boolean } | null = null;
 let words: { rows: WordRow[]; phase: WordsPhase; picker: string | null } | null = null;
+let setup: { state: SetupState; allThemes: boolean } | null = null;
 let error: string | null = null;
 let notice: string | null = null;
 let expanded = false;
@@ -59,6 +66,8 @@ function render() {
       }),
     );
     placePicker();
+  } else if (review?.kind === "kartochki-setup" && setup) {
+    root.replaceChildren(setupView({ setup: review, state: setup.state, allThemes: setup.allThemes, error, on: setupOn }));
   } else {
     root.replaceChildren(waitView(wait.text, wait.busy));
   }
@@ -75,6 +84,7 @@ function show(next: ChatReview) {
   expanded = false;
   levels = next.kind === "kartochki-levels" ? { rows: levelRows(next), phase: { kind: "edit" }, asked: false } : null;
   words = next.kind === "kartochki-words" ? { rows: wordRows(next), phase: { kind: "edit" }, picker: null } : null;
+  setup = next.kind === "kartochki-setup" ? { state: setupState(next), allThemes: false } : null;
   render();
 }
 
@@ -274,6 +284,76 @@ const wordsOn = {
   },
   expand: () => void display.expand(),
   collapse: () => void display.collapse(),
+};
+
+// --- «Настроить упражнение» ---------------------------------------------------------------------
+
+/** Changes a pick while the request is not sent yet, and keeps focus on the control tapped. */
+function editSetup(focus: string | null, change: (state: SetupState, review: ExerciseSetup) => void) {
+  if (!setup || setup.state.sent || review?.kind !== "kartochki-setup") return;
+  change(setup.state, review);
+  error = null;
+  refocus = focus;
+  render();
+}
+
+const setupOn = {
+  theme: (id: string | null) =>
+    editSetup(`[data-theme="${CSS.escape(id ?? "inbox")}"]`, (s, r) => {
+      s.folders = toggled(r.themes.map((t) => t.id), s.folders, id);
+    }),
+  allThemes() {
+    if (!setup) return;
+    setup.allThemes = true;
+    render();
+  },
+  clearThemes: () =>
+    editSetup('[data-theme="all"]', (s) => {
+      s.folders = [];
+    }),
+  verbs: () =>
+    editSetup(".setup .cb", (s) => {
+      s.verbs = !s.verbs;
+    }),
+  tense: (tense: string) =>
+    editSetup(`[data-tense="${CSS.escape(tense)}"]`, (s) => {
+      const t = EXERCISE_TENSES.find((x) => x === tense);
+      if (!t) return;
+      // From «Все», a tap picks that one tense; all four on is «Все» again.
+      const from = s.tenses.length === EXERCISE_TENSES.length ? [] : s.tenses;
+      const next = toggled(EXERCISE_TENSES, from, t);
+      s.tenses = next.length === EXERCISE_TENSES.length ? [] : next;
+    }),
+  allTenses: () =>
+    editSetup('[data-tense="all"]', (s) => {
+      s.tenses = [];
+    }),
+  size: (n: number) =>
+    editSetup(`[data-size="${n}"]`, (s) => {
+      if (s.verbs) s.verbSize = n;
+      else s.size = n;
+    }),
+  level: (level: string) =>
+    editSetup(`[data-level="${CSS.escape(level)}"]`, (s) => {
+      const l = EXERCISE_LEVELS.find((x) => x === level);
+      if (l) s.levels = toggled(EXERCISE_LEVELS, s.levels, l);
+    }),
+  autoLevel: () =>
+    editSetup('[data-level="auto"]', (s) => {
+      s.levels = [];
+    }),
+  start() {
+    if (!bridge || !setup || setup.state.sent || review?.kind !== "kartochki-setup") return;
+    const text = setupRequest(review, setup.state);
+    setup.state.sent = true;
+    error = null;
+    render();
+    bridge.request("ui/message", { role: "user", content: [{ type: "text", text }] }).catch(() => {
+      if (setup) setup.state.sent = false;
+      error = "Не отправилось в чат — попробуйте ещё раз или напишите запрос сами.";
+      render();
+    });
+  },
 };
 
 /** The picker sits under its chip (over the rows), or above it when the sheet ends first. */
