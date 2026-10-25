@@ -130,7 +130,8 @@ test("import an Anki deck: known words stay out, missing data is filled, progres
   });
 
   await expect(page.getByText(/^Français · 3 карточки$/)).toBeVisible();
-  await expect(page.getByText(/К дополнению 2 · уже есть 1/)).toBeVisible();
+  // The visible line, not its screen-reader twin (role=status), which catches up within 2 s.
+  await expect(page.getByText(/К дополнению 2 · уже есть 1/).and(page.locator(":not([role=status])"))).toBeVisible();
   const carry = page.getByRole("switch", { name: "Перенести прогресс из Anki" });
   await expect(carry).toHaveAttribute("aria-checked", "true");
 
