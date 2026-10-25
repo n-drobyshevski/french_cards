@@ -2034,6 +2034,19 @@ describe("exercises («Упражнения»)", () => {
       expect(fake.writes).toEqual([]);
     });
 
+    it("play_exercises plays a big request as a series, one round at a time", async () => {
+      const fake = fakeLib();
+      const series = { id: "verbes-01-02", round: 2, of: 9, covered: 40, total: 175, unit: "глаголов" };
+      const { set: shown, text } = await shownSet(fake, set({ series }));
+      expect(shown.series).toEqual(series);
+      expect(text).toMatch(/round 2 of 9: don't show the next one now[\s\S]*series\.round 3/);
+      const last = await shownSet(fake, set({ series: { ...series, round: 9 } }));
+      expect(last.text).toMatch(/last round \(9 of 9\)/);
+      // No series: a single round says nothing about rounds.
+      expect((await shownSet(fake, set())).text).not.toMatch(/round \d of/);
+      expect(fake.writes).toEqual([]);
+    });
+
     it("refuses register items everywhere a set is sent", async () => {
       const fake = fakeLib();
       const items = [...ITEMS.slice(0, 6), { type: "register", word_id: "w-relou" }];
@@ -2069,8 +2082,13 @@ describe("exercises («Упражнения»)", () => {
       expect(note.text).toMatch(/verbatim as an HTML artifact titled «Вечеринка · сленг»/);
       expect(note.text).toMatch(/save_exercise_result/);
       expect(page.text).not.toContain(ARTIFACT_SET_SLOT);
+      // The page's set is the player's, without the in-chat round's settings (mode, time, series).
       const { set: shown } = await shownSet(fake, set());
-      expect(page.text).toContain(JSON.stringify(shown).replace(/</g, "\\u003c"));
+      const embedded = /window\.KARTOCHKI_SET = (\{[\s\S]*?\});<\/script>/.exec(page.text);
+      expect(embedded).not.toBeNull();
+      const pageSet = JSON.parse(embedded![1]) as Record<string, unknown>;
+      for (const key of ["mode", "time_limit_s", "series"] as const) delete (shown as Partial<typeof shown>)[key];
+      expect(pageSet).toMatchObject(shown);
       expect(fake.writes).toEqual([]);
     });
 

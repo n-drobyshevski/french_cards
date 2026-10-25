@@ -4,6 +4,8 @@ import {
   ARTIFACT_SET_SLOT,
   ARTIFACT_TITLE,
   asChatPlayerSet,
+  nextRoundMessage,
+  seriesLine,
   fillArtifact,
   parseRunLine,
   playableItems,
@@ -89,5 +91,15 @@ describe("chat player contract", () => {
     expect(page).toContain("<title>Argot &lt;/script&gt; &amp; co</title>");
     expect(fillArtifact(CHAT_PLAYER_ARTIFACT, { ...set, title: "" })).toContain(`<title>${ARTIFACT_TITLE}</title>`);
     expect(() => fillArtifact("<html></html>", set)).toThrow(/slot/);
+  });
+});
+
+describe("series («Следующий раунд ›»)", () => {
+  it("says the round and the words so far, and asks Claude for the next round", () => {
+    const series = { id: "verbes", round: 2, of: 9, covered: 40, total: 175, unit: "глаголов" };
+    expect(seriesLine(series)).toBe("Раунд 2 из 9 · 40 из 175 глаголов");
+    expect(seriesLine({ id: "x", round: 1, of: 3 })).toBe("Раунд 1 из 3");
+    expect(seriesLine({ id: "x", round: 1, of: 3, covered: 20, total: 60 })).toBe("Раунд 1 из 3 · 20 из 60 слов");
+    expect(nextRoundMessage("Глаголы 01–02", series)).toBe("Следующий раунд: 3 из 9 (серия «Глаголы 01–02», verbes). Возьми слова, которых ещё не было.");
   });
 });

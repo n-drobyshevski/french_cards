@@ -1,6 +1,6 @@
 ---
 name: kartochki
-description: Conventions for the user's «Карточки» flashcard app for colloquial French (the user is a Russian speaker). Use whenever the user wants to add, find, fix, sort, pause or delete French words, slang or themes, set word levels («проставь уровни»), asks what to review today, about their progress or the review plan, sends a French text, chat, song or screenshot to turn into cards, asks for an exercise («упражнение», тест, квиз, по трудным словам) for the app or in the chat («в чате», «здесь») or a «мини-TCF», pastes a KARTOCHKI_RUN line, or mentions карточки, темы or «Входящие». Covers card format, the slang rubric 0–3 with verlan, themes, when to ask first, the review cards in the chat (propose_words, propose_levels), exercises (reading texts, the timed mini-TCF), and recipes for every Kartochki connector tool (words, levels, themes, fields, study plan, exercise sets, play_exercises, exercise_artifact, save_exercise_result). Needs the Kartochki connector (else: say to add it).
+description: Conventions for the user's «Карточки» flashcard app for colloquial French (user: Russian speaker). Use whenever the user wants to add, find, fix, sort, pause or delete French words, slang or themes, set word levels («проставь уровни»), asks what to review today, about their progress or the review plan, sends a French text, chat, song or screenshot to turn into cards, asks for an exercise («упражнение», тест, квиз, по трудным словам) for the app or in the chat («в чате», «здесь», «в диалоге», «на отдельной вкладке», «погоняй меня») or a «мини-TCF», pastes a KARTOCHKI_RUN line, or mentions карточки, темы or «Входящие». Covers card format, slang rubric 0–3 with verlan, themes, when to ask first, the review cards in the chat (propose_words, propose_levels), exercises (reading texts, timed mini-TCF), and recipes for every Kartochki connector tool (words, levels, themes, fields, study plan, exercise sets, play_exercises, exercise_artifact, save_exercise_result). Needs the Kartochki connector (else: say to add it).
 ---
 
 # Карточки: working with the user's French cards
@@ -208,9 +208,13 @@ The app's request reads «Сделай упражнение в Карточка�
 2. Build the set around the missed words: each one twice, in two different types (e.g. choice and cloze), and use the confused options as distractors where they are in the options' language («keuf» for «meuf» in a cloze). Fill up with a few words the user got right.
 3. Save; mention which words the set drills.
 
-### Упражнения в чате («давай здесь», «в чате», «прямо тут»)
+### Упражнения в чате («давай здесь», «в чате», «прямо тут», «в диалоге», «на отдельной вкладке», «тест», «квиз», «погоняй меня»)
 
 Only with `play_exercises` in your tools; without it, see the line above the tool list (reconnect, no text quiz).
+
+- **Every exercise, test or quiz played in the conversation goes to `play_exercises`.** «На отдельной вкладке» and «в диалоге» mean the chat player too: it is the player's own card, not an artifact.
+- **Big requests are split into rounds, never moved to an artifact.** «Все глаголы из тем 01, 02 и 35», «по всем словам темы»: more than 20 questions or 8 new words is a series. Say in one line how many rounds it takes («это 9 раундов по 20»), play round 1 now with `series` ({id, round: 1, of, covered, total, unit: «глаголов»}), and stop. The player's «Следующий раунд ›» sends «Следующий раунд: 2 из 9 …»: then build round 2 from words not played yet in this series (keep a short list in mind of which words each round used) and call `play_exercises` with `series.round` 2. Never show several rounds in one reply.
+- **An existing exercise artifact never replaces the player**, even one from an earlier chat. It may be mentioned in one line after the player, never instead of it. Don't build a hand-made HTML trainer for exercises unless the user explicitly asks for a page.
 
 1. `exercise_material` as for any set (themes, `topic`, `only`, `verbs`, `levels`: the recipes above apply unchanged).
 2. Write the set by the same rubric and send it once to `play_exercises`, with the fields `create_exercise_set` takes (`client_ref`, `title`, `topic`, `folders`, `items`, `new_words`, `levels`, `level_auto`, `scope`). A refusal lists every problem by path: fix them all and call again with the same `client_ref`. Nothing is written.

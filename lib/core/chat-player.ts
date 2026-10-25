@@ -46,6 +46,38 @@ export interface ChatPlayerSet {
   mode?: ChatPlayMode;
   /** exam: the overall time in seconds (≈90 per question, like the TCF); null / missing in practice. */
   time_limit_s?: number | null;
+  /** One round of a bigger request («все глаголы из тем 01, 02»), played one round at a time. */
+  series?: ChatSeries | null;
+}
+
+/**
+ * A request bigger than one round, split by Claude: each round is its own play_exercises call, and
+ * the player's «Следующий раунд ›» asks Claude in the chat for the next one.
+ */
+export interface ChatSeries {
+  /** Claude's handle for the whole series (the same in every round). */
+  id: string;
+  /** This round, from 1. */
+  round: number;
+  /** How many rounds the series has. */
+  of: number;
+  /** Words practised so far, this round included («40 из 175 глаголов»); null when not counted. */
+  covered?: number | null;
+  /** Words in the whole request. */
+  total?: number | null;
+  /** What the words are, in the genitive plural («глаголов», «слов»); default «слов». */
+  unit?: string | null;
+}
+
+/** «Раунд 2 из 9 · 40 из 175 глаголов». */
+export function seriesLine(series: ChatSeries): string {
+  const words = series.covered != null && series.total ? ` · ${series.covered} из ${series.total} ${series.unit || "слов"}` : "";
+  return `Раунд ${series.round} из ${series.of}${words}`;
+}
+
+/** The message «Следующий раунд ›» sends to Claude. */
+export function nextRoundMessage(title: string, series: ChatSeries): string {
+  return `Следующий раунд: ${series.round + 1} из ${series.of} (серия «${title}», ${series.id}). Возьми слова, которых ещё не было.`;
 }
 
 export type ChatPlayMode = "practice" | "exam";

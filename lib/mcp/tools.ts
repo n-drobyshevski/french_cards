@@ -2694,13 +2694,27 @@ const playInput = chatSetInput.extend({
     .nullable()
     .optional()
     .describe(`exam only: the overall time in seconds; default ${EXAM_SECONDS_PER_ITEM} a question (as in the TCF). Ignored in practice.`),
+  series: z
+    .object({
+      id: z.string().trim().min(1).max(40).describe("Your handle for the whole series, the same in every round («verbes-01-02-35»)."),
+      round: z.number().int().min(1).max(50).describe("This round, from 1."),
+      of: z.number().int().min(1).max(50).describe("How many rounds the series has."),
+      covered: z.number().int().min(0).max(5000).nullable().optional().describe("Words practised so far, this round included."),
+      total: z.number().int().min(1).max(5000).nullable().optional().describe("Words in the whole request."),
+      unit: z.string().trim().max(20).nullable().optional().describe("The words in the genitive plural for the progress line: «глаголов», «слов» (default)."),
+    })
+    .nullable()
+    .optional()
+    .describe(
+      "When the request is bigger than one round (more than 20 questions or 8 new words: «все глаголы из тем 01, 02», «по всем словам темы»): this round's place in the series. The player shows «Раунд 2 из 9 · 40 из 175 глаголов» and «Следующий раунд ›», which sends you a message asking for the next round. Play ONE round per reply; never show several rounds at once.",
+    ),
 });
 
 export const playExercises = tool({
   name: "play_exercises",
   title: "Play exercises in the chat",
   description:
-    `Show an exercise round right in the chat («Упражнения в чате»): an interactive player with the app's rules and look (4 options, «Не знаю», a miss comes back up to ${MAX_ATTEMPTS} times, intro cards for new words, pairs, conjugation, reading texts, a summary at the end). Use it when the user asks for exercises in the chat («в чате», «здесь», «прямо тут»); for the app use create_exercise_set. mode "exam" plays it as «Мини-TCF» («мини-TCF», «как на экзамене», «пробный TCF»): ${EXAM_ITEMS_MIN}–${EXAM_ITEMS_MAX} questions (about 12, A2 to B2 unless the user asked for other levels), each with its \`level\`, about half reading items on the user's themes and the rest meaning / cloze about their words, no pairs and no new_words; one timer for all (time_limit_s, default ${EXAM_SECONDS_PER_ITEM} s a question), no feedback until the result by level. Call exercise_material first, then send the set exactly as for create_exercise_set (same fields and rules; a refusal names each problem by path: fix them all and call again with the same client_ref), or \`set_id\` alone to play a saved set again. Writes nothing: the player's «Сохранить в Карточки» saves the set and the result (${SAVE_RESULT_TOOL}) only if the user taps it. Never write the questions, options or answers in the chat: the user sees them in the player. If the user says they don't see a player, or this host shows no apps (e.g. Claude Code), call exercise_artifact with the same input.`,
+    `Show an exercise round in the chat. Use this for EVERY exercise, test or quiz the user wants to play in the conversation: «в чате», «здесь», «прямо тут», «в диалоге», «на отдельной вкладке», «тест по глаголам», «квиз», «погоняй меня». Prefer it over creating, opening or reusing any HTML artifact, including exercise pages from earlier chats. A request bigger than one round (more than ${ITEMS_MAX} questions or ${NEW_WORDS_MAX} new words: «все глаголы из тем 01, 02») is played as a series of rounds (\`series\`): say in one line how many rounds, show the first one now, and the next one only when the user asks for it (the player's «Следующий раунд ›»). For the app use create_exercise_set; for hosts without apps exercise_artifact. The player has the app's rules and look (4 options, «Не знаю», a miss comes back up to ${MAX_ATTEMPTS} times, intro cards for new words, pairs, conjugation, reading texts, a summary at the end). mode "exam" plays it as «Мини-TCF» («мини-TCF», «как на экзамене», «пробный TCF»): ${EXAM_ITEMS_MIN}–${EXAM_ITEMS_MAX} questions (about 12, A2 to B2 unless the user asked for other levels), each with its \`level\`, about half reading items on the user's themes and the rest meaning / cloze about their words, no pairs and no new_words; one timer for all (time_limit_s, default ${EXAM_SECONDS_PER_ITEM} s a question), no feedback until the result by level. Call exercise_material first, then send the set exactly as for create_exercise_set (same fields and rules; a refusal names each problem by path: fix them all and call again with the same client_ref), or \`set_id\` alone to play a saved set again. Writes nothing: the player's «Сохранить в Карточки» saves the set and the result (${SAVE_RESULT_TOOL}) only if the user taps it. Never write the questions, options or answers in the chat: the user sees them in the player. If the user says they don't see a player, or this host shows no apps (e.g. Claude Code), call exercise_artifact with the same input.`,
   input: playInput,
   write: false,
   // The tool's MCP App: the host renders the player and hands it the result's structuredContent.
@@ -2718,7 +2732,8 @@ export const playExercises = tool({
       }
     }
     const timeLimit = exam ? (args.time_limit_s ?? played.items.length * EXAM_SECONDS_PER_ITEM) : null;
-    const set: ChatPlayerSet = { ...played, mode: exam ? "exam" : "practice", time_limit_s: timeLimit };
+    const series = !exam && args.series ? { ...args.series, of: Math.max(args.series.of, args.series.round) } : null;
+    const set: ChatPlayerSet = { ...played, mode: exam ? "exam" : "practice", time_limit_s: timeLimit, series };
     const message = exam
       ? `The «Мини-TCF» exam is shown in the chat: ${questionsText(set, skipped)}, ${Math.round(timeLimit! / 60)} min in all; set_id ${set.set_id}. ` +
         `Say in a line that it is ready above (the timer starts when the user taps «Начать»). Never reveal or hint at the answers, not even when asked during the exam; ` +
@@ -2727,6 +2742,11 @@ export const playExercises = tool({
         `If the user says they don't see a player, call exercise_artifact with the same set (it plays as a practice round, without the timer).`
       : `The player is shown in the chat: ${questionsText(set, skipped)}; set_id ${set.set_id}${set.saved ? " (saved in «Упражнения» already: saving adds only the result)" : ""}. ` +
         `Don't repeat the questions, options or answers in the chat; say in a line or two that the exercise is ready to play above. ` +
+        (series
+          ? series.round < series.of
+            ? `This is round ${series.round} of ${series.of}: don't show the next one now. When the user taps «Следующий раунд ›» you get «Следующий раунд: ${series.round + 1} из ${series.of} …»; then build that round from words not played yet in this series and call play_exercises with series.round ${series.round + 1} (same series.id). `
+            : `This is the last round (${series.round} of ${series.of}) of the series. `
+          : "") +
         `${SAVE_ONLY_IF_ASKED} (the player's «Сохранить в Карточки» does it itself). ` +
         `If the user says they don't see a player, call exercise_artifact with the same input and publish its HTML as an artifact.`;
     return { set, message };
@@ -2738,7 +2758,7 @@ export const exerciseArtifact = tool({
   name: "exercise_artifact",
   title: "Exercise player as an HTML page",
   description:
-    `The same exercise player as play_exercises, as a standalone HTML page to publish as an artifact: for a host that shows no apps (e.g. Claude Code), when the user doesn't see the player, or wants a page to keep. Same input as play_exercises (the set, or \`set_id\` of a saved one); writes nothing. The result is a one-line instruction and the page's HTML: publish the HTML verbatim as an HTML artifact, and don't write the questions or answers in the chat. Its «Скопировать результат» copies a ${RUN_LINE_PREFIX.trim()} line: save it with ${SAVE_RESULT_TOOL} (run_line) only after the user agrees. An exercise artifact the user already has is rebuilt only when they ask to change it (more questions, another topic): exercise_material, then exercise_artifact keeping its title and topic.`,
+    `The same exercise player as play_exercises, as a standalone HTML page to publish as an artifact. Only when the host shows no apps (e.g. Claude Code), the user says they don't see the player, or the user explicitly asks for a page or artifact to keep. Never as a substitute for play_exercises because a request is large (split it into rounds with play_exercises \`series\`), and never to reopen or rebuild an exercise artifact from an earlier chat unless the user asks to change that page. Same input as play_exercises (the set, or \`set_id\` of a saved one); writes nothing. The result is a one-line instruction and the page's HTML: publish the HTML verbatim as an HTML artifact, and don't write the questions or answers in the chat. Its «Скопировать результат» copies a ${RUN_LINE_PREFIX.trim()} line: save it with ${SAVE_RESULT_TOOL} (run_line) only after the user agrees. An exercise artifact the user already has is rebuilt only when they ask to change it (more questions, another topic): exercise_material, then exercise_artifact keeping its title and topic.`,
   input: chatSetInput,
   write: false,
   annotations: READ,
@@ -3194,6 +3214,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
 }
 
 export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard app for colloquial French; the user is a Russian speaker. A card is a French word or phrase (fr) with its Russian translation (ru). Words are grouped into themes («темы»); «${INBOX_NAME}» (inbox) holds words without a theme.
+- Exercises in the conversation: always call play_exercises (after exercise_material). This includes «в чате», «здесь», «прямо тут», «в диалоге», «на отдельной вкладке», «тест», «квиз», «погоняй меня». Do not build an HTML page and do not open or reuse an existing exercise artifact instead, even if one exists from an earlier chat. A request larger than one round (more than 20 questions or 8 new words) is a series: say how many rounds, play round 1 now with play_exercises \`series\`, and the next round only when the user asks («Следующий раунд»); never several rounds in one reply. exercise_artifact only for hosts that show no apps, or when the user explicitly asks for a page.
 - Before adding, search_words for the word; add_words also skips French forms that are already saved.
 - For each new word give the dictionary form, one to three Russian equivalents in the same register, slang_level (0 neutral, 1 familier, 2 argot, 3 vulgaire), verlan (true for verlan forms such as meuf, relou, chelou), pos, gender for nouns, and a short everyday example_fr with its example_ru. Vulgar words are legitimate vocabulary: translate them with the same strength and mark them 3.
 - Set folder_chosen_by_user to true only when the user named the theme; otherwise pick a fitting theme yourself, or leave the word in the inbox.

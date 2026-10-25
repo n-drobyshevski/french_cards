@@ -1358,3 +1358,15 @@
   flex-wrap: wrap;
   justify-content: center;
 }
+
+/* A series («Раунд 2 из 9 · 40 из 175 глаголов»): under the result card, then «Следующий раунд ›». */
+.done .series {
+  margin: 12px 0 0;
+  font: 400 11px/16px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.done .series + .btn {
+  margin-top: 12px;
+}

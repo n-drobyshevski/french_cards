@@ -8,7 +8,7 @@
 // questions without feedback, the result by level; it is saved the same way.
 // Nothing is saved without the user's tap: a round lives in the page until then.
 import { resultAnnouncement, resultTone } from "@/components/exercises/player-state";
-import { SAVE_RESULT_TOOL, asChatPlayerSet, playableItems, runLine, saveArguments, type ChatPlayerSet, type ChatRunResult } from "@/lib/core/chat-player";
+import { SAVE_RESULT_TOOL, asChatPlayerSet, nextRoundMessage, playableItems, runLine, saveArguments, type ChatPlayerSet, type ChatRunResult } from "@/lib/core/chat-player";
 import { clozeParts } from "@/lib/core/exercises";
 import { applyHostContext, callTool, connectHost, reportSize, resultText, type Bridge, type HostContext } from "./bridge";
 import { h } from "./dom";
@@ -40,6 +40,8 @@ let screen: { kind: "wait"; title: string | null } | { kind: "error"; text: stri
 let full: { result: ChatRunResult; first_try: number; total: number } | null = null;
 let keep: KeepState = { kind: "idle" };
 let discussed = false;
+/** «Следующий раунд ›» was sent for the round on screen. */
+let nextAsked = false;
 let bridge: Bridge | null = null;
 let animatedStep = -1;
 /** The done screen has been drawn once (its write-in plays once, not on every save or copy). */
@@ -66,7 +68,7 @@ function render() {
     animatedStep = round.state.step;
     root.replaceChildren(playView(round, play, animate));
   } else if (screen.kind === "done" && round) {
-    root.replaceChildren(doneView({ round, mode, full, keep, discussed, animate: !doneDrawn, on: done }));
+    root.replaceChildren(doneView({ round, mode, full, keep, discussed, nextAsked, animate: !doneDrawn, on: done }));
     doneDrawn = true;
   } else if (screen.kind === "error") {
     root.replaceChildren(waitView(source?.title ?? null, screen.text, false));
@@ -246,6 +248,17 @@ const done = {
   discuss() {
     if (!round || !source) return;
     sendMessage(mistakesMessage(source.title, round.missedWords(), round.missedQuestions()));
+  },
+  // A series («все глаголы из тем 01, 02»): Claude writes the next round when asked in the chat.
+  next() {
+    const series = source?.series;
+    if (!bridge || !source || !series || nextAsked) return;
+    nextAsked = true;
+    render();
+    bridge.request("ui/message", { role: "user", content: [{ type: "text", text: nextRoundMessage(source.title, series) }] }).catch(() => {
+      nextAsked = false;
+      render();
+    });
   },
 };
 

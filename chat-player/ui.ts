@@ -9,6 +9,7 @@
 import { counterLabel, formatCounter, isRussian, resultTone, tileVerdict, type PairsState, type PlayerResult } from "@/components/exercises/player-state";
 import type { StripMark } from "@/components/ui/SessionStrip";
 import { CLOZE_PROMPT, CONJ_PROMPT, PAIRS_PROMPT, clozeParts, passageLines, type ExerciseOptions } from "@/lib/core/exercises";
+import { seriesLine } from "@/lib/core/chat-player";
 import { SLANG_LABELS, type ExerciseItem, type ExerciseNewWord, type ExercisePairTile, type SlangLevel } from "@/lib/types";
 import { cardLabel, conjSize, deckEdges, explainParts, frSize, isParagraph, optionRows, posAbbr, selfEvident, showsMeter, skillQuestion, sourceDomain, stampPlace } from "./card";
 import { h, icon, type Child } from "./dom";
@@ -442,7 +443,9 @@ export interface DoneProps {
   discussed: boolean;
   /** The screen's first render: the heading and the strip write in (later renders keep them still). */
   animate: boolean;
-  on: { keep(): void; again(): void; repeat(): void; discuss(): void };
+  /** «Следующий раунд ›» was sent (the button stays off). */
+  nextAsked: boolean;
+  on: { keep(): void; again(): void; repeat(): void; discuss(): void; next(): void };
 }
 
 function keepBlock({ round, mode, full, keep, on }: DoneProps): Child[] {
@@ -479,11 +482,20 @@ export function doneView(props: DoneProps): HTMLElement {
   const questions = round.missedQuestions();
   const missedItems = round.missedItemIds();
   const repeat = missedItems.length > 0 ? missed.length || missedItems.length : 0;
+  const series = round.set.series ?? null;
+  const more = mode === "app" && series !== null && series.round < series.of;
   return h(
     "div",
     { class: cls("done", animate && "anim") },
     h("h1", { tabindex: "-1", "data-focus": "" }, "Готово"),
     tally(round.set.title, round.marks(), score.total, round.kind === "mistakes" ? "повтор ошибок" : null),
+    series && h("p", { class: "series" }, seriesLine(series)),
+    more &&
+      h(
+        "button",
+        { type: "button", class: "btn", disabled: props.nextAsked, onclick: () => on.next() },
+        props.nextAsked ? "Следующий раунд запрошен" : "Следующий раунд ›",
+      ),
     missed.length > 0 &&
       h(
         "section",
