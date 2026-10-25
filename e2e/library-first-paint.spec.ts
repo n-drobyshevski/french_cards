@@ -65,7 +65,7 @@ test("settings show the stored values from the first painted frame after a reloa
   await expect(stepper.locator("output")).toHaveText("20");
   await stepper.getByRole("button", { name: "Больше" }).click();
   await expect(stepper.locator("output")).toHaveText("21");
-  await page.goto("/settings");
+  await page.goto("/settings/review");
   await page.getByRole("radiogroup", { name: "Кнопки оценки" }).getByRole("radio", { name: /^Две кнопки/ }).click();
 
   // Every painted frame: the stepper number as it is visible (transparent = valueless, allowed).

@@ -1,10 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { ImportResult } from "@/lib/backup";
+import { DEFAULT_SETTINGS } from "@/lib/types";
 import {
+  aiCaption,
   describeBackupImport,
   describeBackupPreview,
   describeLegacyImport,
+  exercisesCaption,
+  fieldsCaption,
+  planCaption,
   relativeTime,
+  reviewCaption,
+  settingsPageForAnchor,
   shortEmail,
   stepNewPerDay,
   syncLine,
@@ -144,5 +151,35 @@ describe("import summaries", () => {
     expect(describeLegacyImport(3, 8)).toBe("Добавлено 3 слова");
     expect(describeLegacyImport(0, 11)).toBe("Новых слов нет — все уже в библиотеке");
     expect(describeLegacyImport(0, 0)).toBe("В файле не найдено слов");
+  });
+});
+
+describe("phone index captions", () => {
+  it("say the plan, review and exercise values", () => {
+    expect(planCaption({ new_words: 8, review_cap: 200, ru_fr: "after" })).toBe("8 новых · до 200 в день");
+    expect(planCaption({ new_words: 8, review_cap: null, ru_fr: "after" })).toBe("8 новых в день · без лимита");
+    expect(planCaption({ new_words: 21, review_cap: 225, ru_fr: "together" })).toBe("21 новая карточка · до 225 в день");
+    expect(planCaption({ new_words: 9, review_cap: 225, ru_fr: "together" })).toBe("9 новых карточек · до 225 в день");
+    expect(reviewCaption(DEFAULT_SETTINGS)).toBe("FR → RU · 3 кнопки · свайпы");
+    expect(reviewCaption({ default_direction: "ru_fr", grade_buttons: 2, swipe_grading: false })).toBe("RU → FR · 2 кнопки · без свайпов");
+    expect(exercisesCaption({ target: "normal", share: "half" })).toBe("Обычно");
+    expect(exercisesCaption({ target: "difficult", share: "half" })).toBe("Трудные · половина набора");
+  });
+
+  it("say what is off in «ИИ», and both models when they differ", () => {
+    expect(aiCaption(DEFAULT_SETTINGS)).toBe("Всё включено · быстрее");
+    expect(aiCaption({ ...DEFAULT_SETTINGS, examples_enabled: false, notes_enabled: false, ai_model: "accurate", ai_model_extract: "accurate" })).toBe(
+      "Выключено: примеры, заметки · точнее",
+    );
+    const allOff = { suggestions_enabled: false, slang_detect_enabled: false, examples_enabled: false, auto_sort_enabled: false, notes_enabled: false };
+    expect(aiCaption({ ...DEFAULT_SETTINGS, ...allOff, ai_model_extract: "accurate" })).toBe("Всё выключено · подсказки быстрее, скриншоты точнее");
+  });
+
+  it("list the fields and map old section links to the sub-screens", () => {
+    expect(fieldsCaption([])).toBe("Нет полей");
+    expect(fieldsCaption(["Синонимы", "Произношение"])).toBe("Синонимы, Произношение");
+    expect(settingsPageForAnchor("#set-data")).toBe("/settings/data");
+    expect(settingsPageForAnchor("set-exercises")).toBe("/settings/exercises");
+    expect(settingsPageForAnchor("#set-keys")).toBeNull();
   });
 });

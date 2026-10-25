@@ -18,7 +18,7 @@ async function holdThemeRoute(page: Page) {
 }
 
 test("the segmented slab glides to a tapped segment with a transform", async ({ page }) => {
-  await page.goto("/settings");
+  await page.goto("/settings/review");
   const group = page.getByRole("radiogroup", { name: "Кнопки оценки" });
   const slab = group.locator("[data-seg-slab]");
   await expect(slab).toHaveCSS("opacity", "1");

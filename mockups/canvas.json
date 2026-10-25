@@ -1396,6 +1396,78 @@
    "title": "Кит — тёмная",
    "is_interactive": true,
    "radius": 28
+  },
+  "L-Settings-A.dc.html": {
+   "x": 0,
+   "y": 39088,
+   "w": 390,
+   "h": 844,
+   "title": "A — подрезать ленту",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Settings-B.dc.html": {
+   "x": 470,
+   "y": 39088,
+   "w": 390,
+   "h": 844,
+   "title": "B — индекс из семи строк",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Settings-C.dc.html": {
+   "x": 940,
+   "y": 39088,
+   "w": 390,
+   "h": 844,
+   "title": "C — карточка плана и образцы темы",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Settings-B-Review.dc.html": {
+   "x": 1410,
+   "y": 39088,
+   "w": 390,
+   "h": 844,
+   "title": "B · Повторение",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Settings-B-Exercises.dc.html": {
+   "x": 1880,
+   "y": 39088,
+   "w": 390,
+   "h": 844,
+   "title": "B · Упражнения",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Settings-B-AI.dc.html": {
+   "x": 2350,
+   "y": 39088,
+   "w": 390,
+   "h": 844,
+   "title": "B · ИИ",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Settings-B-Data.dc.html": {
+   "x": 2820,
+   "y": 39088,
+   "w": 390,
+   "h": 844,
+   "title": "B · Данные",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Settings-B-Fields.dc.html": {
+   "x": 3290,
+   "y": 39088,
+   "w": 390,
+   "h": 844,
+   "title": "B · Свои поля",
+   "is_interactive": true,
+   "radius": 28
   }
  },
  "order": [
@@ -1558,7 +1630,15 @@
   "M-L-Calm.dc.html",
   "M-L-Bold.dc.html",
   "L-Kit.dc.html",
-  "L-Kit-Dark.dc.html"
+  "L-Kit-Dark.dc.html",
+  "L-Settings-A.dc.html",
+  "L-Settings-B.dc.html",
+  "L-Settings-C.dc.html",
+  "L-Settings-B-Review.dc.html",
+  "L-Settings-B-Exercises.dc.html",
+  "L-Settings-B-AI.dc.html",
+  "L-Settings-B-Data.dc.html",
+  "L-Settings-B-Fields.dc.html"
  ],
  "notes": {
   "row1": {
@@ -1768,6 +1848,13 @@
    "x": 0,
    "y": 37924,
    "text": "30 · Мобильный минимализм · D4 Движение и кит",
+   "kind": "title1",
+   "maxW": 1800
+  },
+  "row31": {
+   "x": 0,
+   "y": 38968,
+   "text": "31 · Мобильный минимализм · S1 Настройки",
    "kind": "title1",
    "maxW": 1800
   }

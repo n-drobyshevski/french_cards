@@ -9,7 +9,7 @@ const fieldsSection = (page: Page) => page.getByRole("region", { name: "Свои
 const wordSheet = (page: Page) => page.getByRole("dialog", { name: "Карточка слова" });
 
 async function addSharedField(page: Page, name: string, hint: string) {
-  await page.goto("/settings");
+  await page.goto("/settings/fields");
   await fieldsSection(page).getByRole("button", { name: "Добавить поле" }).click();
   const sheet = page.getByRole("dialog", { name: "Новое поле" });
   await sheet.getByLabel("Название").fill(name);
@@ -66,8 +66,13 @@ test("a shared field is filled on the word, shown on the card back and outlives 
   await expect(back.getByText("Произношение", { exact: true })).toBeVisible();
   await expect(back.getByText("[yn blag]")).toBeVisible();
 
-  // Deleting the definition can be undone…
+  // Settings shows a real card back with the field: this word, its value.
   await page.goto("/settings");
+  await expect(page.getByRole("link", { name: "Свои поля: Синонимы" })).toBeVisible();
+  await page.getByRole("link", { name: /^Свои поля:/ }).click();
+  await expect(page.getByRole("figure", { name: "Так поля выглядят на карточке: une blague — шутка; Синонимы: une vanne, une connerie" })).toBeVisible();
+
+  // Deleting the definition can be undone…
   await fieldsSection(page)
     .getByRole("button", { name: /^Синонимы/ })
     .click();

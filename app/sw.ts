@@ -22,7 +22,22 @@ const DEV = process.env.NODE_ENV !== "production";
 
 const PAGES_CACHE = "pages";
 /** App routes whose HTML is fetched on install, so the app opens offline right after it's installed. */
-const SHELL_ROUTES = ["/", "/exercises", "/exercises/play", "/library", "/context", "/settings", "/settings/plan", "/import", "/login"];
+const SHELL_ROUTES = [
+  "/",
+  "/exercises",
+  "/exercises/play",
+  "/library",
+  "/context",
+  "/settings",
+  "/settings/plan",
+  "/settings/review",
+  "/settings/exercises",
+  "/settings/ai",
+  "/settings/fields",
+  "/settings/data",
+  "/import",
+  "/login",
+];
 
 const DAY = 24 * 60 * 60;
 

@@ -2,6 +2,7 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
+import { SETTINGS_PAGES } from "@/components/settings/format";
 import { useSyncLine } from "@/components/settings/useSyncLine";
 import { db } from "@/lib/db";
 import { useSyncStatus } from "@/lib/sync";
@@ -24,7 +25,7 @@ export function SyncMark() {
   if (line.tone === "again") {
     return (
       <Link
-        href="/settings#set-data"
+        href={SETTINGS_PAGES.data.href}
         data-sync-mark="error"
         aria-label="Не синхронизировано. Открыть «Данные» в настройках"
         className={`meta min-w-0 truncate leading-9 text-again underline-offset-4 active:underline ${MARK_IN}`}

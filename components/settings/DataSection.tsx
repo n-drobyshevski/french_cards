@@ -8,6 +8,7 @@ import { GLOBAL_IMPORT_URL } from "@/components/import/GlobalImportDrop";
 import { signOut, useAuthUser } from "@/components/auth/session";
 import { isIos } from "@/components/pwa/platform";
 import { cx } from "@/components/ui/cx";
+import { FoldRow } from "@/components/ui/FoldRow";
 import { Icon } from "@/components/ui/Icons";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { BackupError, backupFileName, exportBackupBlob, importBackup, previewBackupImport, undoBackupImport } from "@/lib/backup";
@@ -17,35 +18,31 @@ import { useDelayedFlag } from "@/lib/use-delayed-flag";
 import { softDeleteWords } from "@/lib/words";
 import { BackupImportSheet, type BackupPreview } from "./BackupImportSheet";
 import { DeskButtonRow, DeskRow, DeskSection } from "./DesktopControls";
-import { describeBackupImport, describeLegacyImport, shortEmail, SYNC_LINE_TEXTS, type SyncLine } from "./format";
-import { SettingsButtonRow, SettingsRow, SettingsSection } from "./SettingsList";
+import { describeBackupImport, describeLegacyImport, shortEmail, type SyncLine } from "./format";
+import { SettingsButtonRow } from "./SettingsList";
 import { useSyncLine } from "./useSyncLine";
 
 /** Said once on phones, here, instead of under «План повторения» and «Чаще в упражнениях». */
 const SHARED_NOTE = "План повторения и упражнения общие для всех устройств — Claude их тоже видит.";
 
-const DOT: Record<SyncLine["tone"], string> = { good: "bg-good", ink: "bg-ink", again: "bg-again", muted: "bg-boundary" };
+/** The sync dot's colour per tone (here and on the Settings index row «Данные»). */
+export const SYNC_DOT: Record<SyncLine["tone"], string> = { good: "bg-good", ink: "bg-ink", again: "bg-again", muted: "bg-boundary" };
 
 /**
- * The phone sync status (T5, board M-Settings-Sync F3): dot + mono text, and for a failure the
- * reason on a second muted line. The slot is as wide as the widest state, so the row never jitters
- * when the text changes; the dot colour crossfades.
+ * The phone sync status (T5), the first line of «Данные»: dot + mono caps text, and for a failure
+ * the reason on a second muted line. The dot colour crossfades; an empty text (not known yet) keeps
+ * the line's height.
  */
 function SyncStatus({ line }: { line: SyncLine }) {
-  const mono = "font-mono text-[11px] leading-4 tracking-[.02em] whitespace-nowrap";
+  const mono = "font-mono text-[11px] leading-4 tracking-[.06em] whitespace-nowrap uppercase";
   return (
-    <span className="grid max-w-[70%] min-w-0 shrink-0 justify-items-start text-left">
-      {SYNC_LINE_TEXTS.map((text) => (
-        <span key={text} aria-hidden="true" className={cx("invisible col-start-1 row-start-1 pl-3.5", mono)}>
-          {text}
-        </span>
-      ))}
-      <span className="col-start-1 row-start-1 flex max-w-full min-w-0 items-center gap-2">
+    <span className="flex min-h-4 min-w-0 flex-col items-start text-left">
+      <span className="flex max-w-full min-w-0 items-center gap-2">
         <span
           aria-hidden="true"
           className={cx(
             "size-1.5 shrink-0 rounded-[1px] transition-colors duration-(--dur-quick) ease-standard",
-            DOT[line.tone],
+            SYNC_DOT[line.tone],
             !line.text && "invisible",
           )}
         />
@@ -59,7 +56,7 @@ function SyncStatus({ line }: { line: SyncLine }) {
           )}
         </span>
       </span>
-      {line.detail && <span className={cx("col-start-1 row-start-2 max-w-full truncate pl-3.5 text-muted", mono)}>{line.detail}</span>}
+      {line.detail && <span className={cx("max-w-full truncate pl-3.5 text-muted", mono)}>{line.detail}</span>}
     </span>
   );
 }
@@ -97,8 +94,11 @@ const message = (error: unknown, fallback: string) =>
   error instanceof BackupError || (error instanceof Error && /[а-яё]/i.test(error.message)) ? (error as Error).message : fallback;
 
 /**
- * «Данные»: sync status, JSON export/import, the old-version import and sign-out. `desktop`: the
- * rows of D-Settings (text rows, a dot only for «нет сети» / «ошибка»).
+ * «Данные»: sync status, JSON export/import, the old-version and Anki imports, sign-out. Phones: the
+ * body of the sub-screen /settings/data (board L-Settings-B-Data) — the sync line first (a tap
+ * syncs now), the rows, the HTML and Anki imports folded under «Другие форматы ⌄», and the one line
+ * saying the plan and exercises are shared. `desktop`: the rows of D-Settings (text rows, a dot only
+ * for «нет сети» / «ошибка»).
  */
 export function DataSection({ desktop = false }: { desktop?: boolean }) {
   const toast = useSnackbar();
@@ -232,7 +232,7 @@ export function DataSection({ desktop = false }: { desktop?: boolean }) {
   const deskStatus = (
     <span className="flex min-w-0 shrink flex-col items-end">
       <span className="flex max-w-full min-w-0 items-center gap-2">
-        {deskDot && <span aria-hidden="true" className={cx("size-1.5 shrink-0 rounded-full", DOT[deskDot])} />}
+        {deskDot && <span aria-hidden="true" className={cx("size-1.5 shrink-0 rounded-full", SYNC_DOT[deskDot])} />}
         <span className={cx("truncate text-[13px] leading-4 tabular-nums", deskDot === "again" ? "text-again" : "text-muted")}>{syncText}</span>
       </span>
       {line.detail && <span className="max-w-full truncate text-[12px] leading-4 text-muted tabular-nums">{line.detail}</span>}
@@ -284,73 +284,79 @@ export function DataSection({ desktop = false }: { desktop?: boolean }) {
   return (
     <>
       {rows ?? (
-        <SettingsSection
-          title="Данные"
-          anchor="set-data"
-          footer={<p className="m-0 border-t border-rule pt-2 text-[12px] leading-4 text-muted">{SHARED_NOTE}</p>}
-        >
+        <>
           {line.canSync || syncBusy ? (
-            <SettingsButtonRow
-              label="Синхронизация"
+            <button
+              type="button"
               aria-label={syncLabel}
-              pending={syncBusy}
+              aria-busy={syncBusy || undefined}
               onClick={sync}
-              trailing={<SyncStatus line={line} />}
-              className="min-h-14"
-            />
-          ) : (
-            <SettingsRow label="Синхронизация" className="min-h-14">
+              className="press-tint -mt-2 flex min-h-11 w-full shrink-0 items-center bg-transparent py-1.5 text-left"
+            >
               <SyncStatus line={line} />
-            </SettingsRow>
+            </button>
+          ) : (
+            <div className="-mt-2 flex min-h-11 shrink-0 items-center py-1.5">
+              <SyncStatus line={line} />
+            </div>
           )}
 
-          <SettingsButtonRow
-            label="Экспорт JSON"
-            pendingLabel="Сохраняем…"
-            pending={busy === "export"}
-            swapped={exporting}
-            blocked={busy !== null}
-            onClick={() => void onExport()}
-            trailing={<Icon name="download" size={16} className="text-muted" />}
-          />
-
-          <SettingsButtonRow
-            label="Импорт JSON"
-            pendingLabel="Читаем файл…"
-            pending={busy === "json"}
-            swapped={readingJson}
-            blocked={busy !== null}
-            onClick={() => jsonInput.current?.click()}
-            trailing={<Icon name="chevron-right" size={14} strokeWidth={2} className="text-muted" />}
-          />
-          <SettingsButtonRow
-            label="Импорт из старой версии (HTML)"
-            pendingLabel="Читаем файл…"
-            pending={busy === "html"}
-            swapped={readingHtml}
-            blocked={busy !== null}
-            onClick={() => htmlInput.current?.click()}
-            trailing={<Icon name="chevron-right" size={14} strokeWidth={2} className="text-muted" />}
-          />
-          <SettingsButtonRow
-            label="Импорт из Anki"
-            blocked={busy !== null}
-            onClick={() => ankiInput.current?.click()}
-            trailing={<Icon name="chevron-right" size={14} strokeWidth={2} className="text-muted" />}
-          />
-          {signedIn && (
+          <div className="mt-1 flex shrink-0 flex-col divide-y divide-rule border-y border-rule">
             <SettingsButtonRow
-              label="Выйти"
-              tone="again"
-              pendingLabel="Выходим…"
-              pending={busy === "signout"}
-              swapped={signingOut}
+              label="Экспорт JSON"
+              pendingLabel="Сохраняем…"
+              pending={busy === "export"}
+              swapped={exporting}
               blocked={busy !== null}
-              onClick={() => void onSignOut()}
-              trailing={account}
+              onClick={() => void onExport()}
+              trailing={<Icon name="download" size={16} className="text-muted" />}
             />
-          )}
-        </SettingsSection>
+            <SettingsButtonRow
+              label="Импорт JSON"
+              pendingLabel="Читаем файл…"
+              pending={busy === "json"}
+              swapped={readingJson}
+              blocked={busy !== null}
+              onClick={() => jsonInput.current?.click()}
+              trailing={<Icon name="chevron-right" size={14} strokeWidth={2} className="text-muted" />}
+            />
+            {/* Rare imports: ⌄ opens them in place. */}
+            <FoldRow label={<span className="font-normal">Другие форматы</span>} summary="HTML, Anki" rule="none" buttonClassName="text-[15px]">
+              <div className="flex flex-col divide-y divide-rule border-t border-rule">
+                <SettingsButtonRow
+                  label="Импорт из старой версии (HTML)"
+                  pendingLabel="Читаем файл…"
+                  pending={busy === "html"}
+                  swapped={readingHtml}
+                  blocked={busy !== null}
+                  onClick={() => htmlInput.current?.click()}
+                  trailing={<Icon name="chevron-right" size={14} strokeWidth={2} className="text-muted" />}
+                  className="pl-3"
+                />
+                <SettingsButtonRow
+                  label="Импорт из Anki"
+                  blocked={busy !== null}
+                  onClick={() => ankiInput.current?.click()}
+                  trailing={<Icon name="chevron-right" size={14} strokeWidth={2} className="text-muted" />}
+                  className="pl-3"
+                />
+              </div>
+            </FoldRow>
+            {signedIn && (
+              <SettingsButtonRow
+                label="Выйти"
+                tone="again"
+                pendingLabel="Выходим…"
+                pending={busy === "signout"}
+                swapped={signingOut}
+                blocked={busy !== null}
+                onClick={() => void onSignOut()}
+                trailing={account}
+              />
+            )}
+          </div>
+          <p className="m-0 mt-3 shrink-0 text-[12px] leading-4 text-muted">{SHARED_NOTE}</p>
+        </>
       )}
       <input
         ref={jsonInput}

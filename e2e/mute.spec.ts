@@ -94,8 +94,9 @@ test("a theme «на паузе» leaves review until «Вернуть в пов
 
   await page.goto("/library");
   await page.getByRole("link", { name: /^Эмоции:/ }).click();
-  // The theme page's own mark (the library's drawer row also prints «на паузе»).
-  await expect(page.getByRole("main").getByText("на паузе", { exact: true })).toBeVisible();
+  // The theme page's own mark in its header (the library's drawer row also prints «на паузе», and
+  // the word rows below say it in their schedule column once they load).
+  await expect(page.getByRole("main").getByText("на паузе", { exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "Вернуть в повторения" }).click();
   await expect(page.getByRole("link", { name: /Повторить тему/ })).toBeVisible();
 

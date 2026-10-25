@@ -49,7 +49,8 @@ export function matchesFocus(target: ExerciseFocusTarget, word: { difficult: boo
   return false;
 }
 
-const SHARE_RU: Record<ExerciseFocusShare, string> = { some: "немного", half: "половина набора", most: "почти весь набор" };
+/** «половина набора»: the share as the summaries say it (the request builder line, the Settings index). */
+export const FOCUS_SHARE_PHRASES: Record<ExerciseFocusShare, string> = { some: "немного", half: "половина набора", most: "почти весь набор" };
 const TARGET_RU: Record<Exclude<ExerciseFocusTarget, "normal">, string> = {
   difficult: "трудные",
   due: "к повторению",
@@ -59,5 +60,5 @@ const TARGET_RU: Record<Exclude<ExerciseFocusTarget, "normal">, string> = {
 /** The one-line summary («Чаще трудные · половина набора»), null when the focus is off. */
 export function focusSummary(focus: ExerciseFocus): string | null {
   if (focus.target === "normal") return null;
-  return `Чаще ${TARGET_RU[focus.target]} · ${SHARE_RU[focus.share]}`;
+  return `Чаще ${TARGET_RU[focus.target]} · ${FOCUS_SHARE_PHRASES[focus.share]}`;
 }

@@ -110,7 +110,7 @@ test("the filled form: Return moves from French to Russian, then saves; fields a
 
 test("with automatic sorting off, a picked suggestion starts in «Входящие»", async ({ page }) => {
   await mockSuggest(page, [LA_THUNE]);
-  await page.goto("/settings");
+  await page.goto("/settings/ai");
   const toggle = page.getByRole("switch", { name: "Раскладывать по темам автоматически" });
   await expect(toggle).toBeChecked();
   await toggle.click();
