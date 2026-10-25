@@ -44,7 +44,9 @@ export function Collapse({ open, appear = false, onClosed, className, innerClass
         className,
       )}
     >
-      <div className={cx("min-h-0 overflow-clip", innerClassName)}>{children}</div>
+      {/* `clip` is not a scroll container, so the grid item would size to its content's width:
+          min-w-0 keeps long rows truncating inside the column. */}
+      <div className={cx("min-h-0 min-w-0 overflow-clip", innerClassName)}>{children}</div>
     </div>
   );
 }
