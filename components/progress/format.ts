@@ -181,6 +181,30 @@ export function changeSince<T extends { day: string }>(series: readonly T[], fro
 export const mean = (values: readonly number[]) => (values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0);
 
 // ---------------------------------------------------------------------------------------------
+// «Новых слов в день» against the plan (pick D1 A): plan units, the plan's ceiling as the dashed line
+
+/**
+ * The usual new words a day (plan units, `new_words`): the median over the study days shown (a day
+ * with at least one answer; days off are not data, N3). Today counts once it took the whole
+ * ceiling, so a half-done morning never lowers it. Null without a study day.
+ */
+export function usualNewWords(series: readonly Pick<DayPoint, "day" | "reviews" | "new_words">[], today: string, ceiling: number | null): number | null {
+  const values = series
+    .filter((p) => p.reviews > 0 && (p.day < today || (ceiling !== null && p.new_words >= ceiling)))
+    .map((p) => p.new_words)
+    .sort((a, b) => a - b);
+  if (values.length === 0) return null;
+  const mid = values.length >> 1;
+  return Math.round(values.length % 2 ? values[mid] : (values[mid - 1] + values[mid]) / 2);
+}
+
+/** «обычно 6 · до 10 по плану» (N1: the plan is «до N»; N2: never «6/10»); «обычно 6» without a plan. */
+export function planSubline(usual: number | null, ceiling: number | null): string | null {
+  if (usual === null) return null;
+  return ceiling === null ? `обычно ${formatCount(usual)}` : `обычно ${formatCount(usual)} · до ${formatCount(ceiling)} по плану`;
+}
+
+// ---------------------------------------------------------------------------------------------
 // Sparkline geometry (120×24, 1px ink, baseline at 23.5, today's point red)
 
 export interface SparkPoint {
@@ -377,11 +401,23 @@ export function monthAria(monthKey: string, s: MonthSummary, weekCount: number):
   return out.join("; ");
 }
 
-/** The opened day's mono line: «Повторено 104 · Новых 12 · Верно 92 % · Знаю 398» (zeros left out). */
-export function dayStatParts(p: Pick<DayPoint, "reviews" | "new_introduced" | "correct" | "known">): { label: string; value: string }[] {
+/**
+ * The opened day's mono line: «Повторено 104 · Новых слов 10 · Новых карточек 14 · Верно 92 % · Знаю
+ * 398» (zeros left out). New words are the plan's units; the cards (both directions) follow when they
+ * differ. `together`: the plan counts cards («Новых карточек» only).
+ */
+export function dayStatParts(
+  p: Pick<DayPoint, "reviews" | "new_introduced" | "new_words" | "correct" | "known">,
+  together = false,
+): { label: string; value: string }[] {
   const out: { label: string; value: string }[] = [];
   if (p.reviews > 0) out.push({ label: "Повторено", value: formatCount(p.reviews) });
-  if (p.new_introduced > 0) out.push({ label: "Новых", value: formatCount(p.new_introduced) });
+  if (together) {
+    if (p.new_introduced > 0) out.push({ label: "Новых карточек", value: formatCount(p.new_introduced) });
+  } else {
+    if (p.new_words > 0) out.push({ label: "Новых слов", value: formatCount(p.new_words) });
+    if (p.new_introduced > 0 && p.new_introduced !== p.new_words) out.push({ label: "Новых карточек", value: formatCount(p.new_introduced) });
+  }
   if (p.correct !== null) out.push({ label: "Верно", value: percent(p.correct) });
   out.push({ label: "Знаю", value: formatCount(p.known) });
   return out;

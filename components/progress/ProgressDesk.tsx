@@ -11,6 +11,7 @@ import { Icon } from "@/components/ui/Icons";
 import { db } from "@/lib/db";
 import { useProgress, useProgressDay, type DayPoint, type Progress, type ProgressMistake, type ProgressRange } from "@/lib/progress";
 import { useFinePointer, useMediaQuery } from "@/lib/use-media";
+import { useStudyPlan, type StudyPlan } from "@/lib/user-prefs";
 import {
   DESK_SQUARES,
   calendarMonths,
@@ -47,6 +48,7 @@ import {
   percent,
   streakAria,
   streakLine,
+  usualNewWords,
   weekDelta,
   type CalendarDayKind,
   type SparkPoint,
@@ -233,18 +235,21 @@ interface LedgerRow {
   points: SparkPoint[];
   value: string;
   change: string | null;
+  /** A second line under `change` (the plan, «до 10 по плану»: the column is too narrow for one). */
+  change2?: string | null;
   label: string;
   floor?: number;
   ceil?: number;
   reference?: number | null;
+  /** The plan's ceiling is dashed ink; an average or the target muted. */
+  referenceTone?: "muted" | "ink";
 }
 
-function ledgerRows(progress: Progress): LedgerRow[] {
+function ledgerRows(progress: Progress, plan: StudyPlan | undefined): LedgerRow[] {
   const { today, weekAgo, series, retention } = progress;
   const { from, to } = progressAxis(progress);
   const when = span(from, to);
   const studied = series.filter((p) => p.active || p.day === to);
-  const activeDays = series.filter((p) => p.active);
 
   const known = series.map((p) => ({ day: p.day, value: p.known }));
   const delta = weekDelta(today, weekAgo);
@@ -254,8 +259,15 @@ function ledgerRows(progress: Progress): LedgerRow[] {
   const reviewValues = reviewDays.map((p) => p.reviews);
   const reviewTotal = series.reduce((sum, p) => sum + p.reviews, 0);
 
-  const freshAvg = Math.round(mean(activeDays.map((p) => p.new_introduced)));
-  const freshValues = activeDays.map((p) => p.new_introduced);
+  // «Новых слов в день» in plan units over the study days; the dashed line is the plan's ceiling.
+  const ceiling = plan?.new_words ?? null;
+  const cards = plan?.ru_fr === "together";
+  const usual = usualNewWords(series, to, ceiling);
+  const freshValues = series.filter((p) => p.reviews > 0).map((p) => p.new_words);
+  // «обычно 10» over «до 10 по плану»: one line would truncate the plan away in the narrow column.
+  const freshSub = usual !== null ? `обычно ${formatCount(usual)}` : null;
+  const freshPlan = usual !== null && ceiling !== null ? `до ${formatCount(ceiling)} по плану` : null;
+  const cardsToday = !cards && today.new_introduced !== today.new_words ? today.new_introduced : null;
 
   const correct = series.filter((p) => p.correct !== null).map((p) => ({ day: p.day, value: p.correct as number }));
   const months = retention.month.filter((m) => m.rate !== null).map((m) => `${monthName(`${m.month}-01`)} ${percent(m.rate)}`);
@@ -286,16 +298,18 @@ function ledgerRows(progress: Progress): LedgerRow[] {
       ),
     },
     {
-      title: "Новых в день",
-      points: studied.map((p) => ({ day: p.day, value: p.new_introduced })),
+      title: cards ? "Новых карточек в день" : "Новых слов в день",
+      points: series.filter((p) => p.reviews > 0).map((p) => ({ day: p.day, value: p.new_words })),
       floor: 0,
-      reference: freshAvg > 0 ? freshAvg : null,
-      value: formatCount(today.new_introduced),
-      change: freshAvg > 0 ? `в среднем ${formatCount(freshAvg)}` : null,
+      reference: ceiling,
+      referenceTone: "ink",
+      value: formatCount(today.new_words),
+      change: freshSub,
+      change2: freshPlan,
       label: join(
-        `Новых карточек в день, ${when}: ${[spread(freshValues), freshAvg > 0 && `в среднем ${formatCount(freshAvg)}`].filter(Boolean).join(", ")}`,
-        freshAvg > 0 && "пунктир — среднее",
-        `сегодня ${formatCount(today.new_introduced)}`,
+        `${cards ? "Новых карточек" : "Новых слов"} в день, ${when}: ${[spread(freshValues), usual !== null && `обычно ${formatCount(usual)}`].filter(Boolean).join(", ")}`,
+        ceiling !== null && `пунктир — план, до ${formatCount(ceiling)} в день`,
+        today.reviews > 0 && `сегодня ${formatCount(today.new_words)}${cardsToday !== null ? `, новых карточек ${formatCount(cardsToday)}` : ""}`,
       ),
     },
     {
@@ -342,6 +356,7 @@ function Ledger({ progress, range, marker }: { progress: Progress; range: Progre
   const { from, to } = progressAxis(progress);
   const [sparkRef, sparkWidth] = useWidth<HTMLSpanElement>(320);
   const rangeName = RANGE_OPTIONS.find((o) => o.value === range)?.long ?? "";
+  const plan = useStudyPlan();
   return (
     <div role="table" aria-label={`Ведомость за ${rangeName}`} className="mt-2 shrink-0 border-b border-ink">
       <div role="row" className="flex h-8 items-center gap-4 border-b border-ink">
@@ -365,7 +380,7 @@ function Ledger({ progress, range, marker }: { progress: Progress; range: Progre
           Изменение
         </span>
       </div>
-      {ledgerRows(progress).map((row, i) => (
+      {ledgerRows(progress, plan).map((row, i) => (
         <div key={row.title} role="row" className={cx("flex h-12 items-center gap-4", i > 0 && "border-t border-rule")}>
           <span role="rowheader" className={cx(COL_NAME, "truncate text-[14px] leading-5 text-ink")}>
             {row.title}
@@ -378,6 +393,7 @@ function Ledger({ progress, range, marker }: { progress: Progress; range: Progre
               floor={row.floor}
               ceil={row.ceil}
               reference={row.reference}
+              referenceTone={row.referenceTone}
               marker={marker}
               width={sparkWidth}
               height={SPARK_H}
@@ -389,7 +405,14 @@ function Ledger({ progress, range, marker }: { progress: Progress; range: Progre
             {row.value}
           </span>
           <span role="cell" className={cx(COL_CHANGE, "truncate text-[13px] leading-5 whitespace-nowrap text-muted tabular-nums")}>
-            {row.change}
+            {row.change2 ? (
+              <>
+                <span className="block truncate">{row.change}</span>
+                <span className="block truncate">{row.change2}</span>
+              </>
+            ) : (
+              row.change
+            )}
           </span>
         </div>
       ))}
@@ -591,7 +614,8 @@ function DayPane({ progress, day, prev, next, onStep, docked }: DayPaneProps) {
   const titleId = useId();
   const missesId = useId();
   const point: DayPoint | undefined = detail?.point;
-  const stats = point ? dayStatParts(point) : [];
+  const together = useStudyPlan()?.ru_fr === "together";
+  const stats = point ? dayStatParts(point, together) : [];
   if (point && point.exercises > 0) stats.splice(stats.length - 1, 0, { label: "Упражнений", value: formatCount(point.exercises) });
   const mistakes = detail?.mistakes ?? [];
 

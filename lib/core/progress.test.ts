@@ -280,7 +280,9 @@ describe("activityByDay", () => {
       { finished_at: at(2026, 10, 23).toISOString(), deleted_at: null },
     ] as ExerciseRun[];
     const byDay = activityByDay({ logs, words, runs });
-    expect(byDay.get("2026-10-21")).toEqual({ reviews: 5, again: 3, new_introduced: 2, added: 2, exercises: 1, mistakes: ["c", "b", "a"] });
+    expect(byDay.get("2026-10-21")).toEqual({ reviews: 5, again: 3, new_introduced: 2, new_words: 1, added: 2, exercises: 1, mistakes: ["c", "b", "a"] });
+    // In plan units: one FR→RU word; the plan's "together" mode counts both new cards.
+    expect(activityByDay({ logs, together: true }).get("2026-10-21")).toMatchObject({ new_introduced: 2, new_words: 2 });
     expect(byDay.get("2026-10-20")).toMatchObject({ added: 1, reviews: 0 });
     expect(byDay.get("2026-10-23")).toMatchObject({ reviews: 0, exercises: 1 });
     expect(isActive(byDay.get("2026-10-23")!)).toBe(true);
@@ -289,9 +291,9 @@ describe("activityByDay", () => {
 
   it("builds a screen point with the share of right answers", () => {
     const counts = { known: 1, learning: 2, fresh: 3, difficult: 1, paused: 0, total: 6, memorized: 2.5 };
-    const p = dayPoint("2026-10-21", counts, { reviews: 10, again: 2, new_introduced: 1, added: 0, exercises: 0 }, "today");
+    const p = dayPoint("2026-10-21", counts, { reviews: 10, again: 2, new_introduced: 1, new_words: 1, added: 0, exercises: 0 }, "today");
     expect(p).toMatchObject({ day: "2026-10-21", known: 1, correct: 0.8, active: true, source: "today" });
-    expect(dayPoint("2026-10-21", counts, { reviews: 0, again: 0, new_introduced: 0, added: 0, exercises: 1 }, "live")).toMatchObject({ correct: null, active: true });
+    expect(dayPoint("2026-10-21", counts, { reviews: 0, again: 0, new_introduced: 0, new_words: 0, added: 0, exercises: 1 }, "live")).toMatchObject({ correct: null, active: true });
   });
 });
 

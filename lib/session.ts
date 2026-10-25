@@ -1,13 +1,14 @@
 // Daily review sessions: today's queue and header counts («План дня», planned by the pure
 // lib/core/plan.ts `planDay` from the synced «План повторения»), the end-of-session summary and
 // practice rounds that never touch scheduling.
-import { folderOrderOf, planDay, type DayPlan, type PlanCounts, type PlanItem } from "./core/plan";
+import { daySnapshot, folderOrderOf, planDay, type DayPlan, type DayPlanSnapshot, type PlanCounts, type PlanItem } from "./core/plan";
+import { dayKey } from "./core/progress";
 import { isPaused, pausedFolderIds } from "./core/words";
 import { db, liveRows } from "./db";
 import { loadLevelData } from "./lexique";
 import { retrievability, reviewStateId, wordStatus } from "./scheduler";
 import type { Direction, ReviewLog, ReviewSetStatus, ReviewState, SlangLevel, Word } from "./types";
-import { getStudyPlan, isNewOverrideOn, type StudyPlan } from "./user-prefs";
+import { getStudyPlan, isNewOverrideOn, recordPlanDayAfterPull, type StudyPlan } from "./user-prefs";
 
 /** A study day starts at 04:00 local time, so late-night reviews count for the previous day. */
 export const DAY_START_HOUR = 4;
@@ -252,7 +253,34 @@ export async function loadSession(
     folderOrder: lib.folderOrder,
     spreadThemes: !isOneTheme(filter),
   });
+  keepPlanDay(dayKey(dayStart), daySnapshot(result.day));
   return { queue: result.queue, counts: result.counts, day: result.day, waiting: result.waiting, nextDue: result.nextDue, plan };
+}
+
+/** The last snapshot handed to `recordPlanDay` by this page, so a re-run of the same plan costs nothing. */
+let keptPlanDay = "";
+/** Writes of `plan_day` one after the other, so a later snapshot never lands before an earlier one. */
+let planDayWrites: Promise<unknown> = Promise.resolve();
+
+/**
+ * Keeps the day's plan in the synced `plan_day` pref («План и прогресс»: the first plan of a study
+ * day, and again when the plan or the override changes it). `loadSession` runs inside live queries,
+ * where Dexie refuses writes, so the write runs on its own a moment later; in the browser only
+ * (tests call `recordPlanDay` themselves). A new day's first write waits for a sync pull
+ * (`recordPlanDayAfterPull`), so another device's yesterday is not overwritten unseen.
+ */
+function keepPlanDay(day: string, snap: DayPlanSnapshot): void {
+  const key = `${day}|${JSON.stringify(snap)}`;
+  if (key === keptPlanDay || typeof window === "undefined") return;
+  keptPlanDay = key;
+  const pull = () => import("./sync").then((sync) => sync.syncNow());
+  planDayWrites = planDayWrites
+    .then(() => new Promise((resolve) => setTimeout(resolve, 0)))
+    .then(() => recordPlanDayAfterPull(day, snap, pull))
+    .catch((error: unknown) => {
+      if (keptPlanDay === key) keptPlanDay = "";
+      console.warn("«План дня» was not kept", error);
+    });
 }
 
 export async function buildQueue(filter: SessionFilter = {}, now: Date = new Date()): Promise<QueueItem[]> {

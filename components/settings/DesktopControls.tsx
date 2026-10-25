@@ -292,6 +292,7 @@ export function DeskStepper({
   disabled,
   display,
   valueText,
+  describedBy,
 }: {
   value: number;
   onStep: (delta: 1 | -1) => void;
@@ -303,6 +304,8 @@ export function DeskStepper({
   display?: ReactNode;
   /** aria-valuetext, for a value that is not a number («без лимита»). */
   valueText?: string;
+  /** id of a line that explains the value (the plan's fit line). */
+  describedBy?: string;
 }) {
   const onKeyDown = (event: KeyboardEvent<HTMLSpanElement>) => {
     if (disabled) return;
@@ -320,6 +323,7 @@ export function DeskStepper({
         role="spinbutton"
         tabIndex={0}
         aria-labelledby={labelledBy}
+        aria-describedby={describedBy}
         aria-valuenow={Number.isFinite(value) ? value : undefined}
         aria-valuetext={valueText}
         aria-valuemin={min}

@@ -11,16 +11,29 @@ export interface SparklineProps extends SparkOptions {
   label: string;
   /** Today's point: brand red (phones) or ink (desktop, where red marks are counted). */
   todayTone?: "red" | "ink";
+  /** The dashed reference: muted (an average, a target) or ink (the plan's ceiling, rule 11). */
+  referenceTone?: "muted" | "ink";
   className?: string;
 }
 
 /**
  * The ledger's sparkline (Progress-Screen-A): inline SVG 120×24, a 1px rule baseline, the values as
- * a 1px ink line (vector-effect non-scaling-stroke), an optional dashed reference (average, plan,
- * target) and today's point in brand red (ink on desktop, `todayTone`). Desktop also marks the day
+ * a 1px ink line (vector-effect non-scaling-stroke), an optional dashed reference (average or
+ * target muted; the plan's ceiling ink, `referenceTone`) and today's point in brand red (ink on desktop, `todayTone`). Desktop also marks the day
  * open in its pane (`marker`): a rule hairline and a hollow point. role=img; the numbers are in its name.
  */
-export function Sparkline({ points, from, to, label, todayTone = "red", className, width = 120, height = 24, ...opts }: SparklineProps) {
+export function Sparkline({
+  points,
+  from,
+  to,
+  label,
+  todayTone = "red",
+  referenceTone = "muted",
+  className,
+  width = 120,
+  height = 24,
+  ...opts
+}: SparklineProps) {
   const g = sparkGeometry(points, from, to, { width, height, ...opts });
   return (
     <svg
@@ -36,7 +49,16 @@ export function Sparkline({ points, from, to, label, todayTone = "red", classNam
         <line x1={g.marker.x} y1={0} x2={g.marker.x} y2={height} className="stroke-rule" strokeWidth={1} vectorEffect="non-scaling-stroke" />
       )}
       {g.refY !== null && (
-        <line x1={0} y1={g.refY} x2={width} y2={g.refY} className="stroke-muted" strokeWidth={1} strokeDasharray="2 2" vectorEffect="non-scaling-stroke" />
+        <line
+          x1={0}
+          y1={g.refY}
+          x2={width}
+          y2={g.refY}
+          className={referenceTone === "ink" ? "stroke-ink" : "stroke-muted"}
+          strokeWidth={1}
+          strokeDasharray="2 2"
+          vectorEffect="non-scaling-stroke"
+        />
       )}
       {g.lines.map((pts, i) => (
         <polyline

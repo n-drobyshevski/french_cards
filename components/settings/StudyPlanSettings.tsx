@@ -18,6 +18,7 @@ import { Segmented } from "@/components/ui/Segmented";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { cx } from "@/components/ui/cx";
 import { listFolders } from "@/lib/folders";
+import { usePlanFit } from "@/lib/plan-fit";
 import {
   clampNewWords,
   NEW_ORDERS,
@@ -32,6 +33,8 @@ import {
 } from "@/lib/core/study-plan";
 import { setStudyPlan, useStudyPlan } from "@/lib/user-prefs";
 import { DeskStepper, RadioRow, TextOptions } from "./DesktopControls";
+import { fitLine, visibleSuggestion } from "./plan-fit-format";
+import { DeskFitCaption, DeskSuggestion, PhoneFitLine, PhoneSuggestion } from "./PlanFitRows";
 import { deskCaption, MIX_LABELS, NEW_ORDER_COPY, RU_FR_COPY, stepReviewCap, themesCaption } from "./plan-settings";
 import { Stepper } from "./Stepper";
 import { Valued } from "./Valued";
@@ -164,10 +167,14 @@ function PhoneRadioList<T extends string>({
  * The phone screen «План повторения» (Review-Settings-C, trimmed): a large title, the two steppers
  * with nothing above them, «Порядок новых» and «Обратная сторона» with only the picked option
  * captioned. The summary line, the stepper captions and the shared-settings footnote are gone (the
- * Settings row carries the summary, «Данные» the footnote).
+ * Settings row carries the summary, «Данные» the footnote). «План и прогресс» (D2 A): at most one
+ * italic fit line under «Новых слов в день», and the quiet suggestion row under it (PlanFitRows).
  */
 export function PhoneStudyPlan() {
   const { plan, save } = usePlanSetting();
+  const fit = usePlanFit();
+  const line = fitLine(fit);
+  const suggestion = visibleSuggestion(fit);
   const ids = useId();
   const themes = useThemesCaption();
   const known = plan !== undefined;
@@ -182,16 +189,21 @@ export function PhoneStudyPlan() {
       <main className="flex flex-1 flex-col px-4 pb-6">
         <Valued known={known}>
           <section aria-label="Темп" className="mt-2 flex shrink-0 flex-col border-t border-rule">
-            <div className="flex h-14 shrink-0 items-center gap-2 border-b border-rule">
-              <span className="min-w-0 flex-1 text-[15px] leading-5">{newLabel(plan)}</span>
-              <Stepper
-                label={newLabel(plan)}
-                value={plan?.new_words ?? 0}
-                min={NEW_WORDS_MIN}
-                max={NEW_WORDS_MAX}
-                onStep={(delta) => plan && save({ new_words: clampNewWords(plan.new_words + delta) })}
-              />
+            <div className="flex shrink-0 flex-col border-b border-rule">
+              <div className="flex h-14 shrink-0 items-center gap-2">
+                <span className="min-w-0 flex-1 text-[15px] leading-5">{newLabel(plan)}</span>
+                <Stepper
+                  label={newLabel(plan)}
+                  value={plan?.new_words ?? 0}
+                  min={NEW_WORDS_MIN}
+                  max={NEW_WORDS_MAX}
+                  describedBy={line ? `${ids}-fit` : undefined}
+                  onStep={(delta) => plan && save({ new_words: clampNewWords(plan.new_words + delta) })}
+                />
+              </div>
+              {line && <PhoneFitLine id={`${ids}-fit`} line={line} />}
             </div>
+            {fit && suggestion && <PhoneSuggestion fit={fit} suggestion={suggestion} />}
             <div className="flex h-14 shrink-0 items-center gap-2 border-b border-rule">
               <span className="min-w-0 flex-1 text-[15px] leading-5">Повторений в день</span>
               {cap !== null && (
@@ -277,9 +289,16 @@ function DeskOptionsRow({ labelId, label, children }: { labelId: string; label: 
   );
 }
 
-/** The desktop page «План повторения» in the settings form column (D-Review-Settings). */
+/**
+ * The desktop page «План повторения» in the settings form column (D-Review-Settings). «План и
+ * прогресс» (D-Plan-Fit-A): the stepper's caption gains a sparkline and the fit line, and the
+ * suggestion row follows it.
+ */
 export function DeskStudyPlan() {
   const { plan, save } = usePlanSetting();
+  const fit = usePlanFit();
+  const line = fitLine(fit);
+  const suggestion = visibleSuggestion(fit);
   const ids = useId();
   const themes = useThemesCaption();
   const known = plan !== undefined;
@@ -302,21 +321,27 @@ export function DeskStudyPlan() {
       </div>
 
       <DeskSubSection id={`${ids}-tempo`} title="Темп" first>
-        <div className="flex min-h-[60px] items-center gap-4 border-b border-rule py-2.5">
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span id={`${ids}-new-l`} className="text-[15px] leading-5 text-ink">
-              {newLabel(plan)}
+        <div className="flex min-h-[60px] flex-col justify-center border-b border-rule py-2.5">
+          <div className="flex items-center gap-4">
+            <span className="flex min-w-0 flex-1 flex-col">
+              <span id={`${ids}-new-l`} className="text-[15px] leading-5 text-ink">
+                {newLabel(plan)}
+              </span>
+              <span className="text-[12px] leading-4 text-muted">{NEW_CAPTION}</span>
             </span>
-            <span className="text-[12px] leading-4 text-muted">{NEW_CAPTION}</span>
-          </span>
-          <DeskStepper
-            labelledBy={`${ids}-new-l`}
-            value={plan?.new_words ?? 0}
-            min={NEW_WORDS_MIN}
-            max={NEW_WORDS_MAX}
-            onStep={(delta) => plan && save({ new_words: clampNewWords(plan.new_words + delta) })}
-          />
+            <DeskStepper
+              describedBy={line ? `${ids}-fit` : undefined}
+              labelledBy={`${ids}-new-l`}
+              value={plan?.new_words ?? 0}
+              min={NEW_WORDS_MIN}
+              max={NEW_WORDS_MAX}
+              onStep={(delta) => plan && save({ new_words: clampNewWords(plan.new_words + delta) })}
+            />
+          </div>
+          {/* The sparkline and the fit line span the row, under the caption and the stepper (D-Plan-Fit-A). */}
+          {fit && line && <DeskFitCaption id={`${ids}-fit`} fit={fit} line={line} />}
         </div>
+        {fit && suggestion && <DeskSuggestion fit={fit} suggestion={suggestion} />}
         <div className="flex min-h-[60px] items-center gap-4 border-b border-rule py-2.5">
           <span className="flex min-w-0 flex-1 flex-col">
             <span id={`${ids}-cap-l`} className="text-[15px] leading-5 text-ink">
