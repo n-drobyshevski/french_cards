@@ -2,15 +2,20 @@ import { describe, expect, it } from "vitest";
 import type { ExerciseAnswer, ExerciseItem, ExerciseRun, ExerciseSet } from "@/lib/types";
 import { setPendingExercise, takePendingExercise } from "./exercise-request";
 import {
+  firstTryMarks,
   isWaiting,
   nNew,
   nQuestions,
   nSets,
+  nWebWords,
+  repeatsTitle,
   requestSummary,
   resumeProgress,
+  setKind,
   setThemesLine,
   shortDate,
   similarRequest,
+  tileLines,
   tileState,
   WAITING_MAX_MS,
   type LastRequest,
@@ -139,29 +144,120 @@ describe("setThemesLine", () => {
 
 describe("tileState", () => {
   it("a set never played is new, with the red band and no progress", () => {
-    expect(tileState(set(), undefined)).toEqual({ label: "Новый", short: null, tone: "new", progress: 0, fresh: true, resumeRunId: null });
+    expect(tileState(set(), undefined)).toEqual({
+      label: "Новый",
+      short: null,
+      tone: "new",
+      progress: 0,
+      fresh: true,
+      resumeRunId: null,
+      marks: [],
+      said: "Ещё не играли",
+    });
   });
 
   it("an unfinished run is «Прервано answered/total» and resumable", () => {
     const r = run([answer("q1", "correct"), answer("q2", "wrong"), answer("q3", "correct"), answer("q4", "dont_know"), answer("q5", "correct")], false);
-    expect(tileState(set(), r)).toEqual({ label: "Прервано 5/8", short: "5/8", tone: "ink", progress: 5 / 8, fresh: false, resumeRunId: "r-1" });
+    expect(tileState(set(), r)).toEqual({
+      label: "Прервано 5/8",
+      short: "5/8",
+      tone: "ink",
+      progress: 5 / 8,
+      fresh: false,
+      resumeRunId: "r-1",
+      marks: ["first", "miss", "first", "miss", "first", "future", "future", "future"],
+      said: "Прервано, отвечено 5 из 8",
+    });
     expect(resumeProgress(r, set())).toEqual({ answered: 5, total: 8, progress: 5 / 8 });
   });
 
   it("a finished run shows first-try / total with a full line", () => {
     const answers = ["q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8"].map((id, i) => answer(id, i === 0 ? "wrong" : "correct"));
-    expect(tileState(set(), run([...answers, answer("q1", "correct", 2)], true))).toMatchObject({ label: "7/8", progress: 1, resumeRunId: null });
+    expect(tileState(set(), run([...answers, answer("q1", "correct", 2)], true))).toMatchObject({
+      label: "7/8",
+      progress: 1,
+      resumeRunId: null,
+      marks: ["miss", "first", "first", "first", "first", "first", "first", "first"],
+      said: "В прошлый раз 7 из 8 с первого раза, ошибка 1",
+    });
   });
 
   it("a run left on its last, answered card reads as finished", () => {
     const answers = ["q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8"].map((id) => answer(id, "correct"));
-    expect(tileState(set(), run(answers, false))).toMatchObject({ label: "8/8", progress: 1, resumeRunId: null });
+    expect(tileState(set(), run(answers, false))).toMatchObject({ label: "8/8", progress: 1, resumeRunId: null, said: "В прошлый раз 8 из 8 с первого раза" });
   });
 
   it("another device's interrupted run is shown but not resumed here", () => {
     const r = run([answer("q1", "correct")], false);
     expect(tileState(set(), r, new Set())).toMatchObject({ label: "Прервано 1/8", resumeRunId: null });
     expect(tileState(set(), r, new Set(["r-1"]))).toMatchObject({ resumeRunId: "r-1" });
+  });
+});
+
+describe("phone tiles (E1 A)", () => {
+  const names = new Map([
+    ["f-people", "Люди"],
+    ["f-emo", "Эмоции"],
+    ["f-police", "Полиция"],
+    ["f-daily", "Повседневное"],
+  ]);
+  const typed = (types: ExerciseItem["type"][]) => types.map((type, i) => ({ ...item(`q${i}`), type }));
+  const web = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      ref: `n${i}`,
+      fr: `mot${i}`,
+      ru: "слово",
+      note: null,
+      example_fr: null,
+      example_ru: null,
+      pos: "noun" as const,
+      gender: "m" as const,
+      slang_level: 1 as const,
+      verlan: false,
+      origin: null,
+      source_url: null,
+    }));
+
+  it("names the kind when one kind makes up the set", () => {
+    expect(setKind(typed(["conjugate", "conjugate", "conjugate", "choice"]))).toBe("спряжение");
+    expect(setKind(typed(["cloze", "cloze", "cloze", "choice", "pairs"]))).toBe("пропуски");
+    expect(setKind(typed(["pairs", "pairs", "choice"]))).toBe("пары");
+    expect(setKind(typed(["register", "register", "register", "choice"]))).toBe("регистр");
+    expect(setKind(typed(["choice", "cloze", "register", "pairs"]))).toBeNull();
+    expect(setKind(typed(["choice", "choice", "cloze"]))).toBeNull();
+    expect(setKind([])).toBeNull();
+  });
+
+  it("knows when a theme repeats the title", () => {
+    expect(repeatsTitle("Полиция", "Полиция")).toBe(true);
+    expect(repeatsTitle("Еда и кафе", "еда и кафе")).toBe(true);
+    expect(repeatsTitle("Сленг: люди", "Люди")).toBe(true);
+    expect(repeatsTitle("Глаголы: passé composé", "Повседневное")).toBe(false);
+  });
+
+  it("says the kind and the themes, leaving out what the title says", () => {
+    const verbs = set({ title: "Глаголы: passé composé", folders: ["f-daily"], items: typed(Array(8).fill("conjugate")) });
+    expect(tileLines(verbs, names)).toEqual({ text: "спряжение, Повседневное", spoken: "спряжение, Повседневное, 8 вопросов" });
+    expect(tileLines(set({ title: "Полиция", folders: ["f-police"] }), names)).toEqual({ text: "", spoken: "8 вопросов" });
+    expect(tileLines(set({ title: "Сленг на каждый день", folders: ["f-people", "f-emo"] }), names).text).toBe("Люди, Эмоции");
+    expect(tileLines(set({ title: "Вечеринка" }), names).text).toBe("все темы");
+  });
+
+  it("counts the web words and keeps an own topic only when the title does not say it", () => {
+    const food = set({ title: "Еда и кафе", topic: "еда и кафе", items: Array.from({ length: 12 }, (_, i) => item(`q${i}`)), new_words: web(3) });
+    expect(tileLines(food, names)).toEqual({ text: "+ 3 новых слова из веба", spoken: "12 вопросов, 3 новых слова из веба" });
+    expect(tileLines(set({ title: "Вечер пятницы", topic: "вечеринка" }), names).text).toBe("вечеринка");
+    expect(nWebWords(1)).toBe("1 новое слово из веба");
+    expect(nWebWords(5)).toBe("5 новых слов из веба");
+  });
+
+  it("names a scoped set by its words", () => {
+    expect(tileLines(set({ title: "Трудные слова", scope: "difficult" }), names).text).toBe("Трудные · все темы");
+  });
+
+  it("marks each question's first answer, then the ones still ahead", () => {
+    const r = run([answer("q1", "correct"), answer("q2", "wrong"), answer("q2", "correct", 2), answer("zz", "correct")], false);
+    expect(firstTryMarks(r, set(), 4)).toEqual(["first", "miss", "future", "future"]);
   });
 });
 
