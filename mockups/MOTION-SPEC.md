@@ -1,10 +1,14 @@
-# «Карточки для Лизи» — MOTION & LOADING spec (rev. 1, 2026-10-22)
+# «Карточки для Лизи» — MOTION & LOADING spec (rev. 1, 2026-10-22; phone additions 2026-10-25)
 
 Extends `mockups/SPEC.md` (v3) and `mockups/DESKTOP-SPEC.md` (rev. 2). Everything there still applies; this file
 adds how things **move, wait and acknowledge**. Where this file and an older board disagree about motion or a
 loading state, this file wins. Research behind every number: `docs/motion-research/` (audit-loading,
 audit-motion, web-loading, web-motion, web-references). File:line references point at the tree as of this
 revision.
+
+Rev. 1 + phone additions (2026-10-25, pick D4 Bold; boards `M-L-Bold.dc.html`, shared parts also on
+`M-L-Calm.dc.html`; SPEC.md «Мобильный минимализм»): §5.17–§5.25 add the phone motions of the declutter, and the
+lines they change are marked «changed 2026-10-25». Desktop motion is unchanged.
 
 Brand rules restated because motion is where they are easiest to break: **no gradients, no shimmer, no
 box-shadow, no glow, no blur, no sparkles or «AI magic», no emoji, no pastel pills, no confetti, no streaks, no
@@ -175,6 +179,15 @@ change under reduce. Keyframes live in `globals.css` (move `snackbar-in` out of 
 | Rule draw (done) | 400 ms | drawn at once |
 | Toggle thumb | slides 200 | jumps; colour fades 110 |
 | Exercise answer (§5.15) | fill 70, stamp 1.15→1 160, card exit / settle on «Дальше» | fill, stamp and card swap fade 110 in place |
+| Ink underline (§5.17) | scaleX 0→1 200 ms linear, once | drawn at once |
+| Drag edge marks (§5.18) | opacity tracks the drag | kept (opacity only) |
+| Deck edge fade (§5.19) | deepest edge fades 110 | kept (opacity only) |
+| Slang meter fill (§5.20) | segments grow from the left, 40 ms apart | filled at once |
+| Session strip / word stamps write-in (§5.21) | 4 px rise + fade, 4 groups 40 ms apart | fade 110, no rise |
+| Large title collapse (§5.22) | hairline draws 400 ms; compact title rises 4 px 110 | both swap at once |
+| Drawer → theme morph (§5.23) | name and line travel 320 ms | swap at once; the page slide fades |
+| Return timeline tick (§5.24) | steps once a minute, translate 200 | steps, 110 |
+| Day strip fill (§5.25) | empty slots fill 40 ms apart over 240 | fill together, 110 |
 
 JS motion (swipe, fly-out duration, view transitions) reads `matchMedia('(prefers-reduced-motion: reduce)')`
 as `useSwipe.ts` does. Because durations shrink instead of becoming 0, `transitionend` still fires.
@@ -354,12 +367,12 @@ others need; **P1** = the motion system on the main paths; **P2** = polish. IDs 
 |---|---|---|---|---|
 | R1 | Loading placeholder is 46 px higher and 104 px taller than the real card; progress row, hint row and grade slot pop in (CLS) | Placeholder has the **final geometry**: progress row reserved (counts blank, 1 px track visible), card at its final y with the red header rule, hint row and grade-bar slot reserved. For 0–300 ms the card is blank; after 300 ms two static skeleton bars (headword 8 px × 40 %, pos 6 px × 24 %) appear. Real card: word fades in `--dur-quick`, no geometry change | P0 | `ReviewScreen.tsx:488-494`, `ReviewCard.tsx:388-400` |
 | R2 | Blank placeholder card for 1–3 frames after every grade | The outgoing card stays in its exit pose until the next card is ready; the next card is pre-rendered as the stack card (R5), so there is no placeholder between cards. Placeholder only if the next read takes > 300 ms | P0 | `ReviewScreen.tsx:165-167, 533-535` |
-| R3 | Half flip: new face tilts in over 220 ms, old face vanishes; grade bar pops | **Reveal = rewrite, not 3D turn.** Tap: card presses (.98, 70 ms). The headword glides from its centred question position to its answer position (FLIP translateY, `--dur-move`, `--ease-standard`); the slang meter, translation, note, example and footer write in (opacity 0→1 + 4 px rise, `--dur-enter`, `--ease-enter`, 120 ms after the glide starts — the headword has then covered ~80 % of its travel; at +40 ms the translation overlapped the still-moving POS line). Grade bar labels fade in `--dur-quick` (the bar's slot is always reserved). «тап — вопрос»: answer block fades out `--dur-exit`, headword glides back. Reduced: answer crossfade 110 ms. Retire `card-turn-up/down` | P1 | `ReviewCard.tsx:216,270`, `globals.css:190-212`, `ReviewScreen.tsx:544-557` |
-| R4 | Swipe: stamp only on the answer side, no lock moment, fixed 180 ms fly-out, static header-only peek, stuck `settling` mode | Stamp on **both** sides; opacity ramps 0 at 16 px → .6 just before the threshold; at the threshold it **locks**: opacity 1 in `--dur-instant` and lands `scale 1.04→1` `--spring-stamp` 300 ms (visual twin of the haptic). Back under the threshold: falls back to ≤ .6 in `--dur-quick`. Rotation keeps today's slope (30°/width) but caps at **8°** (was 15°). Release past threshold or flick ≥ 0.5 px/ms: fly-out to 1.2 × width at release velocity, duration = remaining / v clamped 120–220 ms, `--ease-exit`. Below: snap back `--spring-settle` 350 ms. Fix: `mode` returns to `idle` after settle | P1 | `useSwipe.ts`, `swipe.ts:8-19,131-136`, `ReviewCard.tsx:168-198,336-350` |
-| R5 | Next-card peek: empty header-only shell at fixed .96; real card then jumps to 1 | The next card is rendered **with its real question face** behind (aria-hidden, inert) at `scale .96`, `translateY 8px`. While dragging it grows with progress to `.99 / 2px` at the threshold; on commit it settles to `1 / 0` with `--spring-settle` 350 ms, starting with the fly-out (overlap). It is interactive the moment the old card starts leaving | P1 | `ReviewCard.tsx:194-198`, `ReviewScreen.tsx` |
+| R3 | Half flip: new face tilts in over 220 ms, old face vanishes; grade bar pops | **Reveal = rewrite, not 3D turn.** Tap: card presses (.98, 70 ms). The headword glides from its centred question position to its answer position (FLIP translateY, `--dur-move`, `--ease-standard`); the slang meter, translation, note, example and footer write in (opacity 0→1 + 4 px rise, `--dur-enter`, `--ease-enter`, 120 ms after the glide starts — the headword has then covered ~80 % of its travel; at +40 ms the translation overlapped the still-moving POS line). Grade bar labels fade in `--dur-quick` (the bar's slot is always reserved). «тап — вопрос»: answer block fades out `--dur-exit`, headword glides back. Reduced: answer crossfade 110 ms. Retire `card-turn-up/down`. Phones (changed 2026-10-25, D4 Bold): the answer side's two extras ride on this beat — the slang meter's segments fill from 120 ms (§5.20) and, once the write-in ends (360 ms), the ink underline draws under the headword in the example (§5.17). D4 Bold allows both; nothing else moves on reveal (the «Ещё ⌄» fold stays closed) | P1 | `ReviewCard.tsx:216,270`, `globals.css:190-212`, `ReviewScreen.tsx:544-557` |
+| R4 | Swipe: stamp only on the answer side, no lock moment, fixed 180 ms fly-out, static header-only peek, stuck `settling` mode | Stamp on **both** sides; opacity ramps 0 at 16 px → .6 just before the threshold; at the threshold it **locks**: opacity 1 in `--dur-instant` and lands `scale 1.04→1` `--spring-stamp` 300 ms (visual twin of the haptic). Back under the threshold: falls back to ≤ .6 in `--dur-quick`. Rotation keeps today's slope (30°/width) but caps at **8°** (was 15°). Release past threshold or flick ≥ 0.5 px/ms: fly-out to 1.2 × width at release velocity, duration = remaining / v clamped 120–220 ms, `--ease-exit`. Below: snap back `--spring-settle` 350 ms. Fix: `mode` returns to `idle` after settle. Phones (added 2026-10-25): the drag edge marks of §5.18 track the same progress | P1 | `useSwipe.ts`, `swipe.ts:8-19,131-136`, `ReviewCard.tsx:168-198,336-350` |
+| R5 | Next-card peek: empty header-only shell at fixed .96; real card then jumps to 1 | The next card is rendered **with its real question face** behind (aria-hidden, inert) at `scale .96`, `translateY 8px` (phones, changed 2026-10-25: it rests exactly on the first deck edge, `.97 / 4px`, so the settle reads as the next card sliding up from the pile; §5.19). While dragging it grows with progress to `.99 / 2px` at the threshold; on commit it settles to `1 / 0` with `--spring-settle` 350 ms, starting with the fly-out (overlap). It is interactive the moment the old card starts leaving | P1 | `ReviewCard.tsx:194-198`, `ReviewScreen.tsx` |
 | R6 | Button grade swaps the card with no motion; phone press is a faint grey tint, no haptic | Button press: ink-fill (bg = tone colour, text on-ink) in `--dur-instant`, held `--dur-flash` 120 ms. Then the card exits in the grade's direction: Не знаю ← / Знаю → `--dist-exit-card` 56 px + rotate ±3° + opacity → 0, `--dur-exit` `--ease-exit`; Сложно sinks 24 px + fade. Next card settles from the stack (R5) at the same moment. Haptic on commit (`good` / `again`; `hard` = tick). Total ≤ 350 ms, input open after 120 ms | P1 | `GradeBar.tsx:75-78`, `ReviewScreen.tsx:263-292,321-334` |
 | R7 | Undo just swaps | Undo (header button): the previous card **returns from the side it left** (translateX from ±56 px, opacity 0→1, `--dur-enter`, `--ease-enter`), question side up; the current card drops back into the stack (scale 1→.96, `--dur-move`). Progress line steps back. Haptic tick. Z on desktop: no travel | P1 | `ReviewScreen.tsx:223-260` |
-| R8 | Progress fill animates `width`/`left` 200 ms default curve; line unmounts at the end | `transform: scaleX(p)`, origin left, `--dur-move` `--ease-standard`; phone tick moves with `translateX`. On the last grade it fills to 100 % and holds `--dur-done-hold` before the done screen. Counter `07 / 30` is a plain `tabular-nums` swap | P1 | `ReviewTopBar.tsx:108-118`, `ReviewScreen.tsx:449` |
+| R8 | Progress fill animates `width`/`left` 200 ms default curve; line unmounts at the end | `transform: scaleX(p)`, origin left, `--dur-move` `--ease-standard`; phone tick moves with `translateX`. On the last grade it fills to 100 % and holds `--dur-done-hold` before the done screen. Counter `07 / 30` is a plain `tabular-nums` swap. Phones (2026-10-25): the line + counter row is also the plan button; it has the press tint only. The new-card ticks under it are static | P1 | `ReviewTopBar.tsx:108-118`, `ReviewScreen.tsx:449` |
 | R9 | Inline review snackbar sits in flow and shrinks the card by ~64 px | The snackbar overlays (absolute, above the grade bar, over the card's footer zone, `top layer`); the card never resizes | P0 | `useInlineSnackbar.tsx`, `ReviewScreen.tsx:548` |
 | R10 | Done screen pops in after a blank `flex-1` frame | «Готово на сегодня» moment (§5.12). No blank frame: data is loaded during the progress hold (R8) | P1 | `SessionDone.tsx:69,93`, `ReviewScreen.tsx:500-512` |
 | R11 | «Повторить ошибки» / «Ещё практика» grey out while the queue builds | `Button pending`, delay 150 ms (usually never shows) | P2 | `SessionDone.tsx:168-184` |
@@ -413,16 +426,16 @@ others need; **P1** = the motion system on the main paths; **P2** = polish. IDs 
 
 | ID | Now | Proposed | P | Files |
 |---|---|---|---|---|
-| L1 | Three liveQueries insert «Дополнить карточки», «Разложить по темам», «Последняя раскладка» above the tiles (CLS .088 / .30 first run) | One combined query returns all action rows together. Until it resolves, the action block reserves the **last known height** (cached per device in `localStorage`, default one 56 px row + its 16 px top margin). Rows fade in `--dur-quick`; if the count differs from the cache, the block resizes once with Collapse `--dur-move` | P0 | `LibraryScreen.tsx:262,277,292` |
+| L1 | Three liveQueries insert «Дополнить карточки», «Разложить по темам», «Последняя раскладка» above the tiles (CLS .088 / .30 first run) | (Phones, changed 2026-10-25, D2 B: the upkeep is one fold row «Уход за карточками ⌄» after the drawers, reserved at 44 px while the overview is read if it was there last time.) One combined query returns all action rows together. Until it resolves, the action block reserves the **last known height** (cached per device in `localStorage`, default one 56 px row + its 16 px top margin). Rows fade in `--dur-quick`; if the count differs from the cache, the block resizes once with Collapse `--dur-move` | P0 | `LibraryScreen.tsx:262,277,292` |
 | L2 | Defaults flash: «Темы» view then «Все слова»; settings defaults then stored values | First frame reads `library_view` (and the settings screen's values) from a `localStorage` mirror written on every change; Dexie stays the source of truth and silently corrects the rare mismatch | P0 | `LibraryScreen.tsx:69`, `SettingsScreen.tsx:62`, `lib/settings` |
-| L3 | Six `TileSkeleton`s on every visit; counts pop | Tiles region reserved (grid of N blank cells at tile height, N cached); skeleton tiles only after 300 ms (cold). Chip counts reserve width with `tabular-nums` + `min-width: 2ch`. Library and chip counts are gated by `ready` (no «0 слов» flash during seed) | P0 | `LibraryScreen.tsx:103,123-135,313`, `FolderTile.tsx:64` |
+| L3 | Six `TileSkeleton`s on every visit; counts pop | (Phones, changed 2026-10-25, D2 B: the reserved shape is the last known number of drawer rows × 52 px, «Входящие» included; skeleton rows — a 3×14 `--surface-2` tick, a number stub and a name bar on the row hairline — only after 300 ms. On the first view of a visit each mastery line draws to its value once, left → right, `--dur-rule-draw` linear, 120 ms after the rows appear; reduced motion: drawn at once.) Tiles region reserved (grid of N blank cells at tile height, N cached); skeleton tiles only after 300 ms (cold). Chip counts reserve width with `tabular-nums` + `min-width: 2ch`. Library and chip counts are gated by `ready` (no «0 слов» flash during seed) | P0 | `LibraryScreen.tsx:103,123-135,313`, `FolderTile.tsx:64` |
 | L4 | «Все слова»: «ЗАГРУЖАЕМ…» with no rows | Reserved list; after 300 ms 8 skeleton rows of 64 px; no «Загружаем…» text | P1 | `LibraryScreen.tsx:196-231` |
 | L5 | Search: «Ищем…» | Stale results dim to .5 (`--dur-quick`) when the deferred query lags > 150 ms; new results replace in place. Keep «Ищем…» only for a wait > 300 ms | P2 | `LibraryScreen.tsx:200-208`, `LibraryDesk.tsx:572` |
-| L6 | Theme page opens blank, then title, progress, «⋯», rows in separate steps (28 px shift) | Header (back, title, «⋯»), progress row and «Повторить тему» footer render in the first frame with reserved heights; the title comes from the tile that was tapped (passed via the URL/state cache) so it is never empty. Tapped tile keeps its pressed tint until the route commits; after 100 ms its 2 px progress line is replaced by the ink run. P2: `nav-forward` view transition (24 px slide, old out `--dur-exit`, new in `--dur-enter`) | P0 (P2 slide) | `app/(app)/library/[id]/page.tsx:11`, `FolderScreen.tsx:54-187`, `FolderTile.tsx` |
+| L6 | Theme page opens blank, then title, progress, «⋯», rows in separate steps (28 px shift) | Header (back, title, «⋯»), progress row and «Повторить тему» footer render in the first frame with reserved heights; the title comes from the tile that was tapped (passed via the URL/state cache) so it is never empty. Tapped tile keeps its pressed tint until the route commits; after 100 ms its 2 px progress line is replaced by the ink run. P2: `nav-forward` view transition (24 px slide, old out `--dur-exit`, new in `--dur-enter`). Phones (2026-10-25): the drawer → theme morph rides on this slide (§5.23); the tapped drawer's hairline carries the pending ink run | P0 (P2 slide) | `app/(app)/library/[id]/page.tsx:11`, `FolderScreen.tsx:54-187`, `FolderTile.tsx` |
 | L7 | Row: no press; long-press has no charge; delete removes instantly; undo pops back | Press: `--surface-2` tint `--dur-instant` (no scale on full-width rows). Long-press: tint deepens to `--selected` over `--dur-long-press` as a visible charge; on fire the row **lifts** (`--lift-y` −2 px, hairline → ink, `--dur-quick`) + haptic tick, then the menu sheet opens. Delete: a 1 px ink strike-out line draws across the word (`scaleX`, `--dur-exit`, linear), then the row collapses (`--dur-move`, `--ease-exit`, opacity out `--dur-quick`); snackbar «Удалено · la thune · Отменить». Undo: row re-opens (Collapse) + spotlight | P1 | `SwipeRow.tsx:82-85,103-164`, `WordList.tsx:118-180` |
 | L8 | Swipe actions snap on distance only, no lock | Actions follow the finger 1:1; release with velocity > 0.5 px/ms opens/closes regardless of distance; snap `--spring-settle`. Full swipe past 60 % locks «Удалить»: the button widens to fill the row (`--dur-move`) + haptic tick; release deletes (L7) | P2 | `SwipeRow.tsx` |
 | L9 | Word sheet: content already there; `min-h-40` empty fallback | Keep. Fallback = reserved blank, never a skeleton under 300 ms. Field edits saved: spotlight on the field | P2 | `WordDetailSheet.tsx`, `WordDetailBody.tsx:307` |
-| L10 | Moving a word (sheet / menu) | Source row collapses; target theme tile (if visible) gets the spotlight; snackbar «Перемещено в «Деньги» · Отменить» | P1 | `MoveMenu.tsx`, `TargetPickerSheet.tsx`, `WordList.tsx` |
+| L10 | Moving a word (sheet / menu) | Source row collapses; target theme tile (phones: drawer row, 2026-10-25) (if visible) gets the spotlight; snackbar «Перемещено в «Деньги» · Отменить» | P1 | `MoveMenu.tsx`, `TargetPickerSheet.tsx`, `WordList.tsx` |
 
 ### 4.7 Settings, sync, export
 
@@ -497,6 +510,7 @@ others need; **P1** = the motion system on the main paths; **P2** = polish. IDs 
 ### 5.2 Reveal (was "flip") — see R3
 Question → answer: card press → headword glide `--dur-move` → answer block writes in `--dur-enter` (+120 ms, once the headword has cleared the answer's first line).
 Answer → question: answer out `--dur-exit` → headword glides back `--dur-move`. Desktop: opacity-only, 110 ms.
+Phones (changed 2026-10-25, D4 Bold; `M-L-Bold` frame 1): the meter fills with the write-in (§5.20) and the ink underline draws after it (§5.17); the answer side has only headword, POS, meter, translation and one example, so the write-in is one block. The «Ещё ⌄» fold opens later, on a tap, with Collapse (`--dur-move`, `--ease-standard`).
 
 ### 5.3 Swipe — see R4, R5
 | Phase | Visual | Timing |
@@ -507,6 +521,7 @@ Answer → question: answer out `--dur-exit` → headword glides back `--dur-mov
 | Back under threshold | stamp falls to ≤ .6 | `--dur-quick` |
 | Release committed | fly-out to 1.2 × width at release velocity; next card settles; grade haptic | 120–220 ms `--ease-exit`; settle `--spring-settle` 350 |
 | Release cancelled | snap back to 0 / 0° | `--spring-settle` 350 |
+Drag edge marks (phones, 2026-10-25): §5.18, live with the drag; they leave in `--dur-quick` on release.
 Stamp: «ЗНАЮ» good green, −8°, top-left; «НЕ ЗНАЮ» again red, +8°, top-right; 2 px border, mono 20 px, radius 4, no fill (ink over the card, as built);
 present on both card sides.
 
@@ -517,6 +532,10 @@ Progress line steps (R8). Optional echo (R12). Desktop keys: flash only (D1).
 ### 5.5 Progress line + counter
 `scaleX`, origin left, `--dur-move` `--ease-standard`; never animates width/left. Counters are `tabular-nums`
 plain swaps everywhere (no rolling digits, no count-ups). Determinate job bars move only on real events.
+Tick-row variant (added 2026-10-25, the exercise player on phones, `L-ExPlayer-B`; SessionStrip `ticks`): each
+«Дальше» is a plain swap — the answered tick takes its mark, the next one becomes the 10 px current tick; a
+requeue appends a hollow tick at the end. No sequence, no travel. Review keeps the line + counter (ticks don't
+scale to 200 cards), with the deck edges of §5.19 as its at-a-glance quantity.
 
 ### 5.6 Snackbar — see N2
 Ink bg, white 14 px text, «Отменить» underlined. In `--dur-enter` (8 px rise), out `--dur-exit` (8 px down),
@@ -554,7 +573,9 @@ Sequence (≈ 1 s, the only expressive moment): progress line reaches 100 % and 
 (`--dur-exit`) and the card area clears → «Готово на сегодня» (Newsreader 34) fades in over `--dur-turn` 320
 while it rises 6 px on `--spring-lift` over its 480 ms → the 2 px red rule under it draws left→right (`scaleX`, `--dur-rule-draw` 400,
 linear) → the receipt rows (Повторено 30 / Новых 4 / Верно 92 %) rule in top-down, 40 ms apart, each
-opacity + 4 px `--dur-enter`, **numbers static** → the mono date stamp «22.10» (1.5 px ink border, −4°,
+opacity + 4 px `--dur-enter`, **numbers static** (phones, changed 2026-10-25, spec change §5: in this slot, at 720 ms,
+the session strip writes in instead, §5.21, and its mono line «30 КАРТОЧЕК · 80 % · 4 НОВЫХ» fades in with the
+last group) → the mono date stamp «22.10» (1.5 px ink border, −4°,
 radius 2) lands at the right of the headline (`scale 1.04→1`, `--spring-stamp`) → one haptic (`done`) →
 buttons fade in `--dur-quick`. Reduced: everything fades in together over 110 ms, rule drawn at once.
 Never: confetti, count-up, streak, sound.
@@ -593,7 +614,7 @@ A tap on an option is the answer (no «Проверить»). Sequence on phones
 | Result | the fill turns into the verdict border (2px good on the right tile + check; 1px again + cross on a wrong pick), the other tiles dim to `#d6d6d1`; «Не знаю» fades out and the result line fades in, in the same reserved 200 px zone | `--dur-quick` 110 `--ease-standard` |
 | Stamp | «ВЕРНО» / «НЕВЕРНО» lands on the card: `scale 1.15→1` + opacity 0→1, rotation fixed at −4°. No spring, no overshoot — it settles from above the paper. Its background is the `surface` token, so nothing shows through | 160 ms `--ease-enter`, starts at 70 |
 | Waits | right: the line shows `explain_ru` + «Слово ›»; wrong / «Не знаю»: the right answer too. Either way the black «Дальше» waits; nothing moves on by itself (the 1 s auto-advance on a right answer was dropped on 2026-10-23) | — |
-| Next | card, grid and stamp leave together: translateX 0→−24 px + opacity→0; the result line fades. The next card enters from the right (24 px + fade) after the exit (§2.6); the progress line steps (§5.5), the counter swaps | exit `--dur-exit` 140 `--ease-exit`; enter `--dur-enter` 240 `--ease-enter` |
+| Next | card, grid and stamp leave together: translateX 0→−24 px + opacity→0; the result line fades. The next card enters from the right (24 px + fade) after the exit (§2.6); the progress line steps (§5.5), the counter swaps (phones from 2026-10-25: the tick row steps, §5.5) | exit `--dur-exit` 140 `--ease-exit`; enter `--dur-enter` 240 `--ease-enter` |
 
 - Totals: an answer costs 70 + 160 until «Дальше» is live; «Дальше» then costs 140 + 240. Input during the
   230 ms before the line is in is ignored, never queued.
@@ -604,16 +625,87 @@ A tap on an option is the answer (no «Проверить»). Sequence on phones
 - Never: confetti, combo counters, streak flames, sound, a shake on a wrong answer.
 
 ### 5.16 «План дня» and «Уровень языка» (added 2026-10-24; SPEC.md «План дня и уровень языка»; no motion board)
-Nothing new moves; these reuse the catalogue.
+Nothing new moves; these reuse the catalogue (phones, changed 2026-10-25, D4 Bold: the day strip fill §5.25 and the
+return timeline §5.24 replace the two «no motion» lines below).
 - «План на сегодня»: the phone sheet is §5.7 (A1); the desktop popover is a menu (D6: fade + 4 px from the
   summary `--dur-quick`, out `--dur-exit`).
 - The reason subline under the progress line, the summary and the receipt numbers are plain text swaps (§5.5):
   no slide, no count-up. «Всё равно добавить новые» closes nothing: the button and its caption leave with the
-  row collapse of §5.10, the numbers swap, and the new cards join the queue unseen (no insert animation).
-- Wait screen: the minutes swap once a minute; no seconds, ring or progress bar. When the first card comes due,
+  row collapse of §5.10, the numbers swap, and the new cards join the queue unseen (no insert animation; on phones
+  the day strip's empty slots fill, §5.25).
+- Wait screen: the minutes swap once a minute; no seconds, ring or progress bar (phones: the return timeline's «now»
+  tick steps with them, §5.24 — a minute swap drawn as position). When the first card comes due,
   the card enters as after a grade (R5 settle). Reduced motion: a 110 ms fade in place.
 - «НОВОЕ» tag, new-card ticks and the level badge: static, part of the card or row. A level saved from the word
   card swaps in place, with the field spotlight (§5.14).
+
+### 5.17 Ink underline (added 2026-10-25, spec change §3; `InkUnderline`, `L-Kit` cell 04)
+A 1.5 px brand-red line 1 px under «the word» draws once, left → right: `scaleX` 0 → 1, origin left, 200 ms
+(`--dur-move`) `--ease-linear`. Where: the headword inside the review answer's example (starts at 360 ms, when the
+answer write-in has ended), the word sheet's example (no draw, shown at once), a search match if it ever uses the line (shown at once; not built yet).
+Never again on the same card until the side turns again. Reduced motion: drawn at once. It is the only red that
+moves on the answer side.
+
+### 5.18 Drag edge marks (added 2026-10-25, D4 Bold; `M-L-Bold` frame 2)
+Phones, while the review card is dragged: a 2 × 24 px rule just inside each side of the card, vertically centred —
+`--again` left, `--good` right. Both appear at opacity .3 as the drag starts (after the 10 px slop). The side the
+card heads for darkens to 1 on the stamp's curve (opacity = .3 + .7 × the stamp's opacity, so it locks with the
+stamp at the threshold); the other side fades with the drag (.3 × (1 − progress)). They follow the finger with no
+transition, and leave in `--dur-quick` `--ease-standard` on release or snap-back. Invisible at rest, never
+pulsing. Opacity only, so reduced motion keeps them. The side, not the colour, carries the grade.
+
+### 5.19 Deck edges (added 2026-10-25, spec change §2; `L-Kit` cell 01, `M-L-Bold` / `M-L-Calm` frame 3)
+Phones: 1–3 hairline edges under the review card (3 while ≥ 10 cards remain, 2 for 2–9, 1 for the last; 4 px
+offsets). They do not move with a grade. When a grade crosses a threshold (10 → 9, 2 → 1) the deepest edge fades
+out over `--dur-quick` 110 `--ease-standard` while the progress line steps (§5.5) — «кромка тает 110 мс · линия +1».
+An undo that crosses back fades it in the same way. The next card rests on the first edge (R5). Reduced motion:
+kept (opacity only). Desktop: its 2 outlines, as D1.
+
+### 5.20 Slang meter fill on reveal (added 2026-10-25, D4 Bold; `M-L-Bold` frame 1)
+On the review answer side only, when the side has just turned: each filled segment grows from its left edge
+(`scaleX` 0 → 1 + opacity) over `--dur-quick` 110 `--ease-enter`, starting at 120 ms (with the answer write-in),
+the next one 40 ms later («сегменты шаг 40 мс»). Unfilled segments are there from the start; a neutral word shows
+no meter, so nothing moves. Once per turn; never in lists, sheets or the question side. Reduced motion: filled at
+once.
+
+### 5.21 Session strip write-in (added 2026-10-25, spec change §5; `M-L-Calm` frame 5)
+Both Done screens: the cells arrive in 4 groups of equal size (left → right), 40 ms apart, each cell a
+`--dist-row` 4 px rise + fade over `--dur-enter` 240 `--ease-enter` («4 группы · шаг 40 мс»). Review Done starts
+at 720 ms, in the slot the receipt rows had (§5.12), so the date stamp still lands at 1100; Exercise Done starts
+when its heading has landed (240 ms). The mono line under the strip is static text that appears with the last
+group; numbers never count. The word sheet's history stamps (`L-Word-B`) use the same write-in, one stamp per
+group (40 ms apart), once the sheet has settled (320 ms); the dashed next-show slot is there from the start.
+Reduced motion: a 110 ms fade, no rise.
+
+### 5.22 Large title collapse (added 2026-10-25, D4 Bold; `Header large`, `M-L-Bold` frame 5)
+Sub-screens (the theme page first): the 44 px sticky row has no hairline while the large title (Newsreader 32/40)
+is fully in view. As soon as the title is partly under the row, the hairline under the row draws left → right
+over `--dur-rule-draw` 400 `--ease-linear` («волосяная линия 400 мс»); back at the top it fades out over
+`--dur-exit` 140. Once the title is fully under the row, the centred 17 px compact title (aria-hidden) fades in
+with a 4 px rise over `--dur-quick` 110, and leaves the same way. Driven by one IntersectionObserver on the title,
+never by scroll events. Reduced motion: both swap at once. From 768 the standard title row, unchanged.
+
+### 5.23 Drawer → theme morph (added 2026-10-25, D4 Bold; `M-L-Bold` frame 4; `components/library/NavSlide.tsx`)
+A tap on a Library drawer: the drawer's name moves into the theme page's large title and its mastery line into the
+page's line as one object (`ViewTransition` share `theme-morph`, React's view transitions as already used by the
+route slide), over `--dur-turn` 320 `--ease-standard`, above the 24 px `nav-forward` / `nav-back` slide of the
+pages («строка становится шапкой · 320 мс»); «Назад» plays it in reverse. Only on these tagged slides: tabs,
+refreshes and deep links never morph. Travel is the real distance between the two places, no scale > 1.02 on the
+text, no shadow. Reduced motion: the name and the line swap at once and the slide fades (§2.5 view-transition
+rule). If view transitions are missing the slide alone plays.
+
+### 5.24 Return timeline (added 2026-10-25, D4 Bold; wait screen on phones)
+The «now» tick (2 px brand red) sits at the left of the axis when the screen opens and steps once a minute with the
+clock: `translateX` to its new place over `--dur-move` 200 `--ease-standard`. A minute swap drawn as position:
+no seconds, no continuous travel, no progress fill behind it. The card glyphs and labels are static; when the
+axis has to widen (a later card), it re-lays out in one frame. When the tick reaches the first glyph the screen
+returns to that card by itself (R5 settle). Reduced motion: the tick steps over `--dur-quick`.
+
+### 5.25 Day strip fill (added 2026-10-25, D4 Bold; «План на сегодня» on phones)
+«Всё равно добавить новые»: the day strip's empty new-word slots fill left → right, 40 ms apart, each its border
+turning ink and its hatch fading in over `--dur-enter` 240 `--ease-enter`; the mono label line swaps its numbers
+(plain swap) and the button with its caption leaves with the row collapse of §5.10. Only on that tap; opening the
+sheet never animates the strip. Reduced motion: the slots fill together over `--dur-quick`.
 
 ---
 
@@ -647,6 +739,9 @@ Nothing new moves; these reuse the catalogue.
   as 3–4 columns) for the timeline.
 - Timing annotations **inside** a frame are allowed only as quiet callouts: mono 10 px red `#c8331f` text
   with a 1 px red leader line, at most 3 per frame.
+- Since 2026-10-25 the phone review header is the split chip «FR → RU ┊ Все темы ▾» + undo (no gear), the progress
+  row is the line + new-card ticks + «07 / 30» with no summary, the card is plain white with the 1–3 deck edges
+  under it and no hint row (SPEC «Мобильный минимализм»); the older boards below keep what they drew.
 - Use SPEC sample data and the built-app facts: phone review header = chips «FR → RU» and «Все темы ▾» left,
   undo + gear right, progress row «23 к повторению · 4 новых … 07 / 30» with the 1 px line; the card is a white
   index card radius 6 with the 2 px red rule 44 px from the top, `FR · № 042` call number above it; hint row
@@ -683,6 +778,7 @@ Nothing new moves; these reuse the catalogue.
 | Desktop & kit | M-D-Library-Pane | state + band | 1440×920 | D3, D4, D6, D7, L5 |
 | Desktop & kit | M-D-Dialogs-Drop | state + band | 1440×920 | D5, D8, N2 |
 | Упражнения (added 2026-10-23, canvas row 21) | M-Exercise-Answer | storyboard 5 | 2190×1044 | 5.15, 2.6, 2.7, 5.1 |
+| Мобильный минимализм (added 2026-10-25) | M-L-Calm («Тихо», not picked) / M-L-Bold («Смело», picked D4) | phone loop, 5 scenes | 390×844 | 5.17–5.23 |
 
 Detailed briefs for each board follow in §6.3 (frames, states, Russian copy, timings, tokens).
 
