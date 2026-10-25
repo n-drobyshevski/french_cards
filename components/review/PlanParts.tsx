@@ -4,21 +4,24 @@
 // Review-Header-A/B, Review-Plan-Sheet, D-Review-Plan): the tappable summary in the progress row,
 // the reason subline while new words are held back, and «План на сегодня» — a bottom sheet on
 // phones, a 360px popover under the summary from 768 up. Numbers from lib/core/plan.ts `planDay`.
+// Phones (mobile-research «План на сегодня» B, «Полоса дня»): the receipt rows become the day strip
+// with one mono label line, and the sheet is the one home of the day's numbers and the held-day
+// reason (the review header no longer repeats them).
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/Button";
 import { Collapse } from "@/components/ui/Collapse";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
-import { Sheet, SheetCloseButton, SheetTitle } from "@/components/ui/Sheet";
+import { Sheet, SheetHeader } from "@/components/ui/Sheet";
 import { tokenMs } from "@/lib/motion";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import type { DayPlan } from "@/lib/core/plan";
 import type { StudyPlan } from "@/lib/core/study-plan";
 import { startOfStudyDay } from "@/lib/session";
 import { setNewOverride } from "@/lib/user-prefs";
-import { countsCards, newWordsToday, PLAN_SETTINGS_HREF, overrideOffered, planShort, reasonLine, reverseToday, sublineParts } from "./plan-format";
+import { countsCards, dayStrip, newWordsToday, PLAN_SETTINGS_HREF, overrideOffered, planShort, reasonLine, reverseToday, sublineParts, type DayStrip } from "./plan-format";
 
 /**
  * The reason subline (D2 A), only while new words are held back: mono 11 muted capitals with the
@@ -94,28 +97,34 @@ export function PlanReceipt({ data, desk = false }: { data: PlanData; desk?: boo
       .finally(() => setPending(false));
   };
 
+  const overrideHint = useId();
+
   return (
     <div className="flex flex-col">
-      <div className={cx("flex flex-col", desk ? "" : "border-t border-b border-t-ink border-b-rule")}>
-        <ReceiptRow label="К повторению" desk={desk}>
-          {due}
-        </ReceiptRow>
-        <ReceiptRow label={cards ? "Новых карточек" : "Новых слов"} desk={desk}>
-          {newWordsToday(day, plan)} <span className="font-normal text-muted">из {day.ceiling}</span>
-        </ReceiptRow>
-        {plan.ru_fr === "after" && (
-          <ReceiptRow label="Обратных сторон" desk={desk}>
-            {reverseToday(day)}
+      {!desk ? (
+        <DayStripView strip={dayStrip(data)} />
+      ) : (
+        <div className="flex flex-col">
+          <ReceiptRow label="К повторению" desk={desk}>
+            {due}
           </ReceiptRow>
-        )}
-        <ReceiptRow label="Отложено" desk={desk} last>
-          {day.deferred}
-        </ReceiptRow>
-      </div>
+          <ReceiptRow label={cards ? "Новых карточек" : "Новых слов"} desk={desk}>
+            {newWordsToday(day, plan)} <span className="font-normal text-muted">из {day.ceiling}</span>
+          </ReceiptRow>
+          {plan.ru_fr === "after" && (
+            <ReceiptRow label="Обратных сторон" desk={desk}>
+              {reverseToday(day)}
+            </ReceiptRow>
+          )}
+          <ReceiptRow label="Отложено" desk={desk} last>
+            {day.deferred}
+          </ReceiptRow>
+        </div>
+      )}
       {reason && (
         <p
           data-plan-reason=""
-          className={cx("m-0 text-[13px] text-ink", desk ? "border-t border-rule pt-2.5 pb-3 leading-5" : "mt-3 leading-[18px]")}
+          className={cx("m-0 text-ink", desk ? "border-t border-rule pt-2.5 pb-3 text-[13px] leading-5" : "mt-4 text-[14px] leading-5")}
         >
           {reason}
         </p>
@@ -123,17 +132,42 @@ export function PlanReceipt({ data, desk = false }: { data: PlanData; desk?: boo
       {overrideRow && (
         <Collapse open={offered} innerClassName={desk ? "" : "px-px"}>
           <div className={cx("flex flex-col", desk ? (reason ? "" : "border-t border-rule pt-3") : "pt-4")}>
-            <Button
-              variant="secondary"
-              size="md"
-              block
-              pending={pending}
-              onClick={override}
-              className={cx(desk ? "h-10 rounded-[6px] text-[14px] hoverable:bg-hover-surface" : "rounded-[6px] border-boundary")}
-            >
-              Всё равно добавить новые
-            </Button>
-            <p className="m-0 mt-1.5 text-center text-[12px] leading-4 text-muted">Только на сегодня. Завтра план снова подстроится.</p>
+            {desk ? (
+              <>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  block
+                  pending={pending}
+                  onClick={override}
+                  className="h-10 rounded-[6px] text-[14px] hoverable:bg-hover-surface"
+                >
+                  Всё равно добавить новые
+                </Button>
+                <p className="m-0 mt-1.5 text-center text-[12px] leading-4 text-muted">Только на сегодня. Завтра план снова подстроится.</p>
+              </>
+            ) : (
+              // Phones: the caption is the button's sublabel; the full sentence is its description.
+              <>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  block
+                  pending={pending}
+                  onClick={override}
+                  aria-describedby={overrideHint}
+                  className="h-14 flex-col gap-0.5 rounded-[6px] border-boundary"
+                >
+                  <span>Всё равно добавить новые</span>
+                  <span aria-hidden="true" className="text-[12px] leading-4 font-normal text-muted">
+                    только на сегодня
+                  </span>
+                </Button>
+                <span id={overrideHint} className="sr-only">
+                  Только на сегодня. Завтра план снова подстроится.
+                </span>
+              </>
+            )}
           </div>
         </Collapse>
       )}
@@ -146,23 +180,97 @@ export function PlanReceipt({ data, desk = false }: { data: PlanData; desk?: boo
         )}
       >
         <span className={cx("min-w-0 flex-1 leading-5 font-medium", desk ? "text-[14px]" : "text-[15px]")}>Изменить план</span>
-        <span className="font-mono text-[12px] leading-4 tracking-[.06em] whitespace-nowrap text-muted">{planShort(plan)}</span>
+        {/* Phones: «из 10» is already on the strip; the settings value is not repeated. */}
+        {desk && <span className="font-mono text-[12px] leading-4 tracking-[.06em] whitespace-nowrap text-muted">{planShort(plan)}</span>}
         <Icon name="chevron-right" size={16} strokeWidth={1.75} className="shrink-0 text-ink" />
       </Link>
     </div>
   );
 }
 
-/** Phones: «План на сегодня» as a bottom sheet (§5.7). */
+/** Phones: «План на сегодня» as a bottom sheet (§5.7): the grabber, the title, ✕ for keyboards only. */
 export function PlanSheet({ open, onOpenChange, data }: { open: boolean; onOpenChange: (open: boolean) => void; data: PlanData | null }) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange} height="auto">
-      <div className="flex items-center justify-between pt-2 pr-1 pl-4">
-        <SheetTitle>План на сегодня</SheetTitle>
-        <SheetCloseButton />
-      </div>
-      <div className="px-4 pt-2 pb-7">{data && <PlanReceipt data={data} />}</div>
+      <SheetHeader title="План на сегодня" />
+      <div className="px-4 pt-3 pb-7">{data && <PlanReceipt data={data} />}</div>
     </Sheet>
+  );
+}
+
+/** The narrowest a new-word slot gets before the slots take a fixed share instead (45 %). */
+const SLOT_MIN = 7;
+
+/**
+ * Phones: the day strip (10px), left to right: the reviews as one ink bar, the day's new-word
+ * slots up to the ceiling (hatched = today's, hairline box = unused), the reverse sides as an ink
+ * outline, then a cap rule and the deferred cards dashed (only when some are). Every part takes the
+ * row in proportion to its cards; the slots never get narrower than 7px each (or 45 % of the row). Under it one mono line «ПОВТ. 27 · НОВ. 4/10 · ОБР. 6»; the exact words
+ * are the strip's accessible name. When «Всё равно добавить новые» lifts the day, the empty slots
+ * fill left → right, 40ms apart, over --dur-enter (reduced motion: --dur-quick, no stagger).
+ */
+function DayStripView({ strip }: { strip: DayStrip }) {
+  // The fill count before the latest rise: slots from there on fill with the stagger.
+  const [base, setBase] = useState(strip.fresh);
+  const [growFrom, setGrowFrom] = useState<number | null>(null);
+  if (strip.fresh !== base) {
+    setGrowFrom(strip.fresh > base ? base : null);
+    setBase(strip.fresh);
+  }
+  const bar = (count: number): CSSProperties => ({ flex: `${count} 1 0px` });
+  return (
+    <div data-plan-strip="" className="flex flex-col">
+      <div role="img" aria-label={strip.label} className="flex h-2.5 items-stretch gap-1">
+        {strip.due > 0 && <span data-strip-part="due" style={bar(strip.due)} className="min-w-4 bg-ink" />}
+        {strip.slots > 0 && (
+          <span
+            data-strip-part="new"
+            style={{ ...bar(strip.slots), minWidth: `min(${strip.slots * SLOT_MIN}px, 45%)` }}
+            className="flex items-stretch gap-0.5"
+          >
+            {Array.from({ length: strip.slots }, (_, i) => {
+              const on = i < strip.fresh;
+              const delay = on && growFrom !== null && i >= growFrom ? (i - growFrom) * 40 : 0;
+              const timing: CSSProperties = { transitionDelay: `calc(${delay}ms * var(--motion-scale))` };
+              return (
+                <span
+                  key={i}
+                  data-slot={on ? "on" : "off"}
+                  style={timing}
+                  className={cx(
+                    "relative min-w-0.5 flex-1 border transition-[border-color] duration-(--dur-enter) ease-enter",
+                    on ? "border-ink" : "border-edge",
+                  )}
+                >
+                  <span
+                    style={timing}
+                    className={cx(
+                      "absolute inset-0 bg-[repeating-linear-gradient(135deg,var(--ink)_0_1.5px,transparent_1.5px_3.5px)] transition-opacity duration-(--dur-enter) ease-enter",
+                      on ? "opacity-100" : "opacity-0",
+                    )}
+                  />
+                </span>
+              );
+            })}
+          </span>
+        )}
+        {strip.reverse > 0 && <span data-strip-part="reverse" style={bar(strip.reverse)} className="min-w-3 border border-ink" />}
+        {strip.deferred > 0 && (
+          <>
+            <span aria-hidden="true" className="-my-1 w-px shrink-0 bg-ink" />
+            <span data-strip-part="deferred" style={bar(strip.deferred)} className="min-w-4 border border-dashed border-ink" />
+          </>
+        )}
+      </div>
+      <p aria-hidden="true" className="meta m-0 mt-2.5 flex flex-wrap gap-x-1.5 leading-4 tabular-nums">
+        {strip.parts.map((part, i) => (
+          <span key={part.key} className="whitespace-nowrap">
+            {i > 0 && <span className="mr-1.5">·</span>}
+            {part.text} <span className="font-medium text-ink">{part.value}</span>
+          </span>
+        ))}
+      </p>
+    </div>
   );
 }
 

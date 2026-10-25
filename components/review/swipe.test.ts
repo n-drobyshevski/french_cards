@@ -9,6 +9,7 @@ import {
   STAMP_RAMP,
   STAMP_START,
   SWIPE_SLOP,
+  deckEdges,
   stackPose,
   swipeDecision,
   swipeReducer,
@@ -158,11 +159,17 @@ describe("swipeVisual", () => {
 });
 
 describe("stackPose", () => {
-  it("grows the card behind from .96 / 8 px to .99 / 2 px at the threshold", () => {
-    expect(stackPose(0)).toEqual({ scale: 0.96, y: 8 });
-    expect(stackPose(1).scale).toBeCloseTo(0.99);
+  it("grows the card behind from .97 / 4 px to .985 / 2 px at the threshold", () => {
+    expect(stackPose(0)).toEqual({ scale: 0.97, y: 4 });
+    expect(stackPose(1).scale).toBeCloseTo(0.985);
     expect(stackPose(1).y).toBeCloseTo(2);
     expect(stackPose(5)).toEqual(stackPose(1));
+  });
+});
+
+describe("deckEdges", () => {
+  it("draws 3 edges for 10+ cards left, 2 for 2–9, 1 for the last", () => {
+    expect([0, 1, 2, 9, 10, 200].map(deckEdges)).toEqual([0, 1, 2, 2, 3, 3]);
   });
 });
 

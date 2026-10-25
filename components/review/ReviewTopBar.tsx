@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState, type ReactNode, type Ref } from "react";
 import { useShell } from "@/components/shell/ShellContext";
 import { IconButton } from "@/components/ui/Button";
@@ -9,7 +8,7 @@ import { Icon } from "@/components/ui/Icons";
 import { WRITE_IN } from "./ReviewCard";
 
 export interface ReviewProgress {
-  /** «23 к повторению · 4 новых» / «Практика · не влияет на расписание» */
+  /** «23 к повторению · 4 новых» / «Практика · не влияет на расписание» (phones: screen readers only). */
   left: ReactNode;
   /** «07 / 30» */
   right: string;
@@ -20,7 +19,7 @@ export interface ReviewProgress {
   echo?: GradeEcho | null;
   /** Where the queue's new cards sit (0..1): 1×4 muted ticks under the line (D3 B, aria-hidden). */
   ticks?: readonly number[];
-  /** «План дня»: `left` is a button that opens «План на сегодня» (D2 B). */
+  /** «План дня»: `left` is a button that opens «План на сегодня» (D2 B); on phones it covers the whole row. */
   summary?: SummaryAction | null;
   /** The summary button (the desktop popover hangs under it). */
   summaryRef?: Ref<HTMLButtonElement>;
@@ -72,14 +71,15 @@ export interface ReviewTopBarProps {
   /** Chips on the left of the row (direction + theme, or the practice exit). */
   children?: ReactNode;
   /**
-   * Under the progress line: the «План дня» reason subline (phones 8px below the line; from 768
-   * under the running-head rule, left-aligned with the card column).
+   * Under the progress line: the «План дня» reason subline (phones: for screen readers only, the
+   * plan sheet says it; from 768 under the running-head rule, left-aligned with the card column).
    */
   subline?: ReactNode;
 }
 
 /**
- * Phones: one row (chips left; undo and settings right), then the progress row with its 1px line.
+ * Phones: one row (the split chip left, undo right; Settings is reached from the Library header),
+ * then the progress row — the 1px line and «07 / 30», the whole row the «План на сегодня» button.
  *
  * From 768 up the same elements form the running head (DESKTOP-SPEC §5 #1): 56px across the
  * content, padding 0 32 — chips, the counts in 13px, then «07 / 30», undo and the `?` button at the
@@ -111,13 +111,6 @@ export function ReviewTopBar({ canUndo, onUndo, letters = true, progress, headin
             title={canUndo ? (letters ? "Отменить последний ответ (Z)" : "Отменить последний ответ") : "Нечего отменять"}
             className="md:size-8 md:rounded-[4px] md:disabled:text-boundary md:disabled:opacity-100 hoverable:enabled:bg-hover"
           />
-          <Link
-            href="/settings"
-            aria-label="Настройки"
-            className="inline-flex size-11 items-center justify-center rounded-chip text-ink active:bg-surface-2 md:hidden"
-          >
-            <Icon name="gear" size={20} strokeWidth={1.5} />
-          </Link>
           <button
             type="button"
             aria-label="Все клавиши"
@@ -133,14 +126,16 @@ export function ReviewTopBar({ canUndo, onUndo, letters = true, progress, headin
       </header>
       {heading}
       {progress && <ProgressLine {...progress} />}
-      {subline}
+      {/* Phones keep the held-day subline for screen readers only; «План на сегодня» explains it. */}
+      {subline && <div className="max-md:sr-only md:contents">{subline}</div>}
     </div>
   );
 }
 
 /**
- * Phones: «23 К ПОВТОРЕНИЮ · 4 НОВЫХ ……… 07 / 30» with the 1px ink progress line under it.
- * From 768 up the two texts join the running head and the line becomes its bottom rule's fill.
+ * Phones: the 1px ink progress line with «07 / 30» after it, one 44px row (L-Review-Q-B).
+ * From 768 up «23 к повторению · 4 новых» and the counter join the running head and the line
+ * becomes its bottom rule's fill.
  * The fill steps as `scaleX` from the left and the phone's tick with `translateX` (never width or
  * left), --dur-move --ease-standard; the counter is a plain tabular swap (MOTION-SPEC R8, §5.5).
  */
@@ -160,46 +155,37 @@ export function ProgressLine({ left, right, ratio, pending, echo, ticks, summary
   }
 
   // While pending the spans stay (empty) so nothing shifts; the counts fade in when they arrive.
+  // Phones: one 44px row — the line, then «07 / 30»; the summary button lies over the whole row and
+  // carries the counts in its name (spec change §1). The left text stays for screen readers only.
   return (
-    <>
-      <div className="mt-4 flex h-4 shrink-0 items-baseline justify-between gap-3 font-mono text-[11px] leading-4 tracking-[.06em] uppercase md:contents">
-        {summary ? (
-          // D2 B: phones ink, underlined in --boundary (offset 3), then the 14px chevron (up while open);
-          // a 44px hit area from padding that its negative margin takes back, so the row stays 16px.
-          // From 768 a 30px text button.
-          <button
-            ref={summaryRef}
-            type="button"
-            data-plan-summary=""
-            aria-haspopup="dialog"
-            aria-expanded={summary.open}
-            aria-label={summary.label}
-            onClick={summary.onOpen}
-            className={cx(
-              LEFT,
-              "-my-3.5 flex cursor-pointer items-center gap-1 border-0 bg-transparent px-0 py-3.5 text-left text-ink uppercase",
-              "md:my-0 md:-ml-1.5 md:inline-flex md:h-[30px] md:items-center md:gap-1 md:overflow-visible md:rounded-[4px] md:px-1.5 md:py-0 hoverable:bg-hover aria-expanded:md:bg-hover",
-              !pending && WRITE_IN,
-            )}
-          >
-            <span className="min-w-0 truncate underline decoration-boundary decoration-1 underline-offset-[3px] md:decoration-ink md:decoration-dotted md:underline-offset-4">
-              {left}
-            </span>
-            <Icon name={summary.open ? "chevron-up" : "chevron"} size={14} className="shrink-0 text-muted" />
-          </button>
-        ) : (
-          <span className={cx(LEFT, "text-muted", !pending && WRITE_IN)}>{left}</span>
-        )}
-        <span
+    <div className="relative mt-1 flex h-11 shrink-0 items-center gap-4 font-mono text-[11px] leading-4 tracking-[.06em] uppercase md:contents">
+      {summary ? (
+        // From 768 a 30px text button: the counts underlined in dotted ink, then the 14px chevron
+        // (up while open).
+        <button
+          ref={summaryRef}
+          type="button"
+          data-plan-summary=""
+          aria-haspopup="dialog"
+          aria-expanded={summary.open}
+          aria-label={summary.label}
+          onClick={summary.onOpen}
           className={cx(
-            "shrink-0 font-medium text-ink tabular-nums md:order-3 md:ml-auto md:text-[13px] md:leading-5 md:tracking-normal",
+            LEFT,
+            "flex cursor-pointer items-center gap-1 border-0 bg-transparent px-0 text-left text-ink uppercase max-md:absolute max-md:inset-0 max-md:z-10 max-md:rounded-[4px]",
+            "md:-ml-1.5 md:inline-flex md:h-[30px] md:items-center md:gap-1 md:overflow-visible md:rounded-[4px] md:px-1.5 md:py-0 hoverable:bg-hover aria-expanded:md:bg-hover",
             !pending && WRITE_IN,
           )}
         >
-          {right}
-        </span>
-      </div>
-      <div aria-hidden="true" className="relative mt-2 h-[5px] shrink-0 md:absolute md:inset-x-0 md:top-14 md:mt-0 md:h-0.5">
+          <span className="min-w-0 truncate max-md:hidden md:underline md:decoration-ink md:decoration-dotted md:decoration-1 md:underline-offset-4">
+            {left}
+          </span>
+          <Icon name={summary.open ? "chevron-up" : "chevron"} size={14} className="shrink-0 text-muted max-md:hidden" />
+        </button>
+      ) : (
+        <span className={cx(LEFT, "text-muted max-md:sr-only", !pending && WRITE_IN)}>{left}</span>
+      )}
+      <div aria-hidden="true" className="relative h-[9px] min-w-0 flex-1 md:absolute md:inset-x-0 md:top-14 md:h-0.5">
         <div className="absolute inset-x-0 top-[2px] h-px bg-rule md:hidden" />
         {!pending && (
           <>
@@ -240,6 +226,14 @@ export function ProgressLine({ left, right, ratio, pending, echo, ticks, summary
           </>
         )}
       </div>
-    </>
+      <span
+        className={cx(
+          "shrink-0 text-[12px] font-medium text-ink tabular-nums md:order-3 md:ml-auto md:text-[13px] md:leading-5 md:tracking-normal",
+          !pending && WRITE_IN,
+        )}
+      >
+        {right}
+      </span>
+    </div>
   );
 }

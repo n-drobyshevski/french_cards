@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { createFolder, deleteFolder } from "@/lib/folders";
 import { endOfStudyDay } from "@/lib/session";
 import { addWord, gradeCard } from "@/lib/words";
-import { loadDoneScreen, loadReviewScreen, wordOrdinals } from "./data";
+import { loadDoneScreen, loadReviewScreen, sessionMarks, wordOrdinals } from "./data";
 
 const DAY = 86_400_000;
 /** Local noon, 21 Oct 2026. */
@@ -57,6 +57,24 @@ describe("wordOrdinals", () => {
   });
 });
 
+describe("sessionMarks", () => {
+  it("marks each answer in the order given: a miss, a card back again, else the first try", () => {
+    const log = (word_id: string, rating: 1 | 2 | 3 | 4, minute: number, direction: "fr_ru" | "ru_fr" = "fr_ru") => ({
+      word_id,
+      direction,
+      rating,
+      review: new Date(NOON.getTime() + minute * 60_000).toISOString(),
+    });
+    expect(sessionMarks([log("b", 1, 2), log("a", 3, 1), log("b", 3, 5), log("a", 2, 3, "ru_fr"), log("b", 1, 6)])).toEqual([
+      "first",
+      "miss",
+      "first",
+      "requeued",
+      "miss",
+    ]);
+  });
+});
+
 describe("loadDoneScreen", () => {
   it("reports the next due card after today", async () => {
     const w = await addWord({ fr: "kiffer", ru: "тащиться", both_directions: false }, new Date(NOON.getTime() - DAY));
@@ -65,6 +83,8 @@ describe("loadDoneScreen", () => {
     const later = new Date(NOON.getTime() + 12 * 60_000);
     const done = await loadDoneScreen({}, later);
     expect(done.summary.reviewed).toBe(2);
+    // The strip counts the same answers: the second one is the card coming back.
+    expect(done.marks).toEqual(["first", "requeued"]);
     expect(done.nextDue).not.toBeNull();
     expect(Date.parse(done.nextDue!)).toBeGreaterThan(later.getTime());
     expect(done.at).toBe(later.toISOString());

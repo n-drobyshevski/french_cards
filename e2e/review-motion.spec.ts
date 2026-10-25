@@ -89,7 +89,7 @@ test("the question side swipes with a stamp that ramps, locks at the threshold a
   await expect(next).toHaveAttribute("aria-hidden", "true");
   await expect(next).toHaveAttribute("inert", "");
   await expect(next.locator("[lang=fr]").first()).not.toHaveText("");
-  expect(await stackScale(page)).toBeCloseTo(0.96, 3);
+  expect(await stackScale(page)).toBeCloseTo(0.97, 3);
 
   const touch = await finger(page, "[data-review-reveal]");
   const threshold = touch.width / 3;
@@ -99,15 +99,15 @@ test("the question side swipes with a stamp that ramps, locks at the threshold a
   expect(ramp).toBeGreaterThan(0.1);
   expect(ramp).toBeLessThanOrEqual(0.6);
   const midway = await stackScale(page);
-  expect(midway).toBeGreaterThan(0.965);
-  expect(midway).toBeLessThan(0.99);
+  expect(midway).toBeGreaterThan(0.972);
+  expect(midway).toBeLessThan(0.985);
 
   // Past the threshold the stamp locks: full ink, landing 1.04 → 1; the haptic tick plays.
   await touch.to(threshold + 20);
   await expect(stamp(page, "good")).toHaveAttribute("data-locked", "");
   expect((await cssAnimations(page, '[data-review-card] [data-stamp="good"]')).map((a) => [a.name, a.duration])).toContainEqual(["stamp-land", 300]);
   await expect(stamp(page, "good")).toHaveCSS("opacity", "1");
-  expect(await stackScale(page)).toBeCloseTo(0.99, 3);
+  expect(await stackScale(page)).toBeCloseTo(0.985, 3);
   expect(await vibrations(page)).toEqual([20]);
 
   // Back under it: the stamp falls back to at most .6.
@@ -139,7 +139,7 @@ test("a decided swipe flies on at its own speed while the next card settles out 
   expect(to).toBeCloseTo(-touch.width * 1.2, 0);
   const [arrive] = await played(page, "card-arrive");
   expect(arrive.duration).toBe(350);
-  expect(Number(arrive.keyframes[0].scale)).toBeCloseTo(0.99, 2);
+  expect(Number(arrive.keyframes[0].scale)).toBeCloseTo(0.985, 2);
   expect(arrive.at - exit.at).toBeLessThan(50);
   // The card that settled is the one that waited behind.
   await expect(questionCard(page)).toHaveAccessibleName(`Карточка ${following}, перевернуть`);

@@ -1,6 +1,8 @@
 import Link from "next/link";
+import { BlankCard } from "@/components/ui/BlankCard";
 import { Button } from "@/components/ui/Button";
 import { buttonClasses } from "@/components/ui/button-classes";
+import { useLayoutClass } from "@/lib/use-media";
 
 /** From 768 up the empty states sit in the review column, top 64, actions in one row. */
 const DESK_COLUMN = "md:mx-auto md:w-(--col-w) md:max-w-[calc(100%-48px)] md:flex-none md:pt-16";
@@ -8,8 +10,26 @@ const DESK_PRIMARY = "md:h-11 md:w-auto md:px-4 md:text-[14px]";
 const DESK_SECONDARY =
   "md:h-11 md:w-auto md:border md:border-boundary md:bg-surface md:px-4 md:text-[14px] md:no-underline hoverable:bg-hover-surface";
 
+// Phones (mobile-research «Пока нет слов» B, «В этой теме пока нет слов»; L-Kit §07): the empty
+// state is the blank index card itself (BlankCard: dashed = not yet on record) with its one action,
+// no meta line and no paragraph. These views only exist after the library has been read, so the
+// layout class is already the real one (no phone-first flash on desktop).
+
 /** No words anywhere yet: the first-run call to action. */
 export function EmptyLibrary({ onAdd }: { onAdd: () => void }) {
+  const phone = useLayoutClass() === "compact";
+  if (phone) {
+    return (
+      <div className="flex flex-1 flex-col">
+        <div className="min-h-8 flex-1" />
+        <BlankCard as="h1" title="Пока нет слов" action={{ label: "Добавить слово", icon: "plus", onClick: onAdd }} className="min-h-40" />
+        <Link href="/import" className={buttonClasses({ variant: "tertiary", size: "md", className: "mt-3 self-center decoration-boundary" })}>
+          Импорт со скриншота
+        </Link>
+        <div className="flex-[2]" />
+      </div>
+    );
+  }
   return (
     <div className={`flex flex-1 flex-col ${DESK_COLUMN}`}>
       <span className="meta mt-8 leading-4 md:hidden">Повторение</span>
@@ -30,8 +50,29 @@ export function EmptyLibrary({ onAdd }: { onAdd: () => void }) {
   );
 }
 
-/** The chosen theme has no words. */
+/**
+ * The chosen theme has no words. Phones: the blank card adds words; «Все темы», the way out, stays
+ * the one black button (the theme chip above already names the theme).
+ */
 export function EmptyFolder({ folderName, onShowAll, onAdd }: { folderName: string; onShowAll: () => void; onAdd: () => void }) {
+  const phone = useLayoutClass() === "compact";
+  if (phone) {
+    return (
+      <div className="flex flex-1 flex-col">
+        <div className="min-h-8 flex-1" />
+        <BlankCard
+          as="h1"
+          title="В этой теме пока нет слов"
+          action={{ label: "Добавить слова", icon: "plus", onClick: onAdd }}
+          className="min-h-40"
+        />
+        <div className="min-h-6 flex-[2]" />
+        <Button block onClick={onShowAll}>
+          Все темы
+        </Button>
+      </div>
+    );
+  }
   return (
     <div className={`flex flex-1 flex-col ${DESK_COLUMN}`}>
       <span className="meta mt-8 leading-4 md:hidden">тема: {folderName}</span>

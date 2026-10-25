@@ -5,7 +5,8 @@ import { slowDatabase, watchPlaceholder } from "./review-loading";
 test.describe("review", () => {
   test("first run seeds the prototype words and default themes", async ({ page }) => {
     await openReview(page);
-    await expect(page.getByText("11 новых", { exact: true })).toBeVisible();
+    // Phones: the counts are in the progress row's name (the row opens «План на сегодня»).
+    await expect(page.getByRole("button", { name: "План на сегодня: 11 новых" })).toBeVisible();
     await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: /Карточка une blague/ })).toBeVisible();
 
@@ -111,6 +112,29 @@ test("a tap on an abbreviation on the answer explains it instead of flipping the
 
 test("the slang hint wraps its text inside the bubble", async ({ page }) => {
   await openReview(page);
+  // Phones show no meter for a neutral word (L-Review-Ans-B): make the first card «fam.».
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const open = indexedDB.open("kartochki");
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const tx = open.result.transaction(["words"], "readwrite");
+          const store = tx.objectStore("words");
+          const all = store.getAll();
+          all.onsuccess = () => {
+            for (const w of all.result as { fr: string }[]) if (w.fr === "une blague") store.put({ ...w, slang_level: 1 });
+          };
+          tx.oncomplete = () => {
+            open.result.close();
+            resolve();
+          };
+          tx.onerror = () => reject(tx.error);
+        };
+      }),
+  );
+  await page.reload();
+  await expect(page.getByRole("button", { name: /Карточка une blague/ })).toBeVisible();
   await questionCard(page).click();
   const answer = page.locator("[data-review-answer]");
   // The slang meter sits in a no-wrap row; the hint must not inherit it.
