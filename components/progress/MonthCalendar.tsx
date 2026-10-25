@@ -92,7 +92,7 @@ export function MonthCalendar({ progress, onOpenWord }: MonthCalendarProps) {
           );
         })}
       </div>
-      <Collapse open={selected !== null} onClosed={() => setShown(null)}>
+      <Collapse open={selected !== null} onClosed={() => setShown(null)} innerClassName="min-w-0">
         {shown && <DayDetail day={shown} onCollapse={collapse} onOpenWord={onOpenWord} />}
       </Collapse>
       {summaryLine && <p className="abbr m-0 mt-2 text-[15px] leading-5 tabular-nums">{summaryLine}</p>}
@@ -225,7 +225,7 @@ function MistakeRow({ word, onOpen }: { word: ProgressMistake; onOpen: () => voi
       className="press-tint flex h-12 w-full items-center gap-2.5 border-b border-rule bg-transparent p-0 text-left text-ink"
     >
       <span className="flex min-w-0 flex-1 items-baseline gap-2 overflow-hidden whitespace-nowrap">
-        <span lang="fr" className="shrink-0 font-serif text-[19px] leading-6 font-medium">
+        <span lang="fr" className="min-w-0 truncate font-serif text-[19px] leading-6 font-medium">
           {word.fr}
         </span>
         <span className="min-w-0 truncate text-[15px] leading-5 text-muted">— {word.ru}</span>

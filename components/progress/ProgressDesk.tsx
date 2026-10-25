@@ -685,7 +685,7 @@ function MistakeRow({ word }: { word: ProgressMistake }) {
       aria-label={`${word.fr} — ${word.ru}. Открыть в библиотеке`}
       className="hover-fade flex h-11 items-center gap-3 border-b border-rule px-1 text-ink no-underline hoverable:bg-hover focus-visible:outline-offset-[-2px]"
     >
-      <span lang="fr" className="shrink-0 font-serif text-[19px] leading-6 font-medium whitespace-nowrap">
+      <span lang="fr" className="min-w-0 truncate font-serif text-[19px] leading-6 font-medium">
         {word.fr}
       </span>
       <span className="min-w-0 flex-1 truncate text-[14px] text-muted">{word.ru}</span>
