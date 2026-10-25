@@ -26,6 +26,13 @@
   --boundary: #8a8a85;
   --selected: #e2e2dd;
   --scrim-desk: rgba(17, 17, 17, 0.24);
+  /* Phone kit (mockups/L-Kit.dc.html): hairlines that must stay visible on dark paper — deck edges
+     under the review card, future ticks of a SessionStrip, the sheet grabber — and dashed rules
+     («not yet on record»: empty, unsorted, practice). Both equal --rule in light. */
+  --edge: #d6d6d1;
+  --rule-dashed: #d6d6d1;
+  /* A deeper scrim for large/full phone sheets (Sheet scrim="deep"). */
+  --scrim-deep: rgba(17, 17, 17, 0.55);
   color-scheme: light;
 }
 
@@ -52,6 +59,9 @@
     --boundary: #6e6e69;
     --selected: #2c2c29;
     --scrim-desk: rgba(0, 0, 0, 0.5);
+    --edge: #4a4a45;
+    --rule-dashed: #55554f;
+    --scrim-deep: rgba(0, 0, 0, 0.7);
     color-scheme: dark;
   }
 }
@@ -78,6 +88,9 @@
   --boundary: #6e6e69;
   --selected: #2c2c29;
   --scrim-desk: rgba(0, 0, 0, 0.5);
+  --edge: #4a4a45;
+  --rule-dashed: #55554f;
+  --scrim-deep: rgba(0, 0, 0, 0.7);
   color-scheme: dark;
 }
 
@@ -115,12 +128,22 @@
   --color-boundary: var(--boundary);
   --color-selected: var(--selected);
   --color-scrim-desk: var(--scrim-desk);
+  --color-edge: var(--edge);
+  --color-rule-dashed: var(--rule-dashed);
+  --color-card-lines: var(--card-lines);
   --font-sans: var(--font-plex-sans), system-ui, sans-serif;
   --font-mono: var(--font-plex-mono), ui-monospace, monospace;
   --font-serif: var(--font-newsreader), Georgia, serif;
   --radius-card: 6px;
   --radius-btn: 6px;
   --radius-chip: 4px;
+  /* The hero headword (exercise player, word boards that ask for it): `text-prompt-fit`. The
+     review card keeps its 40px prompt. */
+  --text-prompt-fit: var(--prompt-fit);
+}
+
+:root {
+  --prompt-fit: clamp(40px, 13vw, 56px);
 }
 
 html {
@@ -324,6 +347,72 @@ body {
   from {
     scale: 0 1;
   }
+}
+
+/* The ink underline (InkUnderline, spec change §3): a 1.5px red line under «the word», drawn once
+   left → right over 200ms, linear. Reduced motion: there at once (below). */
+@keyframes ink-draw {
+  from {
+    scale: 0 1;
+  }
+}
+
+.ink-draw {
+  transform-origin: left center;
+  animation: ink-draw var(--dur-move) linear var(--ink-delay, 0ms) both;
+}
+
+/* Slang meter fill on reveal (D4 Bold): each filled segment grows from its left edge in
+   --dur-quick, 40ms after the one before (--seg = its index). Reduced motion: filled at once. */
+@keyframes seg-fill {
+  from {
+    opacity: 0;
+    scale: 0 1;
+  }
+}
+
+.seg-fill {
+  transform-origin: left center;
+  animation: seg-fill var(--dur-quick) var(--ease-enter) calc(var(--seg-delay, 0ms) + var(--seg, 0) * 40ms) both;
+}
+
+/* SessionStrip write-in (§5.12): the cells arrive in 4 groups 40ms apart (--strip-group), each a
+   4px rise + fade over --dur-enter; under reduced motion a short fade (--motion-scale 0). */
+.strip-write {
+  animation: enter-rise var(--dur-enter) var(--ease-enter) calc(var(--strip-delay, 0ms) + var(--strip-group, 0) * 40ms) both;
+}
+
+/* Header hairline (Header `large`, D4 Bold): drawn left → right over --dur-rule-draw while content
+   is under the header; fades out over --dur-exit when the page is back at the top. */
+.header-hairline {
+  transform-origin: left center;
+  scale: 0 1;
+  opacity: 0;
+  transition:
+    opacity var(--dur-exit) var(--ease-exit),
+    scale 0s linear var(--dur-exit);
+}
+
+.header-hairline[data-on] {
+  scale: 1 1;
+  opacity: 1;
+  transition:
+    opacity 0s,
+    scale var(--dur-rule-draw) linear;
+}
+
+/* The compact title of a large-title header: in with opacity + 4px over --dur-quick, out the same. */
+.header-compact-title {
+  opacity: 0;
+  translate: 0 calc(var(--dist-row) * var(--motion-scale));
+  transition:
+    opacity var(--dur-quick) var(--ease-enter),
+    translate var(--dur-quick) var(--ease-enter);
+}
+
+.header-compact-title[data-on] {
+  opacity: 1;
+  translate: 0 0;
 }
 
 /* A headline settling into place (§5.12): 6px rise, on --spring-lift over 480ms. */
@@ -582,6 +671,15 @@ body {
   --nav-slide: 24px;
 }
 
+/* Drawer → theme page (D4 Bold, components/library/NavSlide.tsx THEME_MORPH): the drawer's name and
+   mastery line move into the page's large title and line over --dur-turn, above the sliding pages.
+   Reduced motion: they swap at once (below). */
+::view-transition-group(.theme-morph) {
+  z-index: 2;
+  animation-duration: var(--dur-turn);
+  animation-timing-function: var(--ease-standard);
+}
+
 /* Reduced motion: movement becomes opacity, fades stay short, loops stop (§2.7). Durations shrink
    rather than vanish, so transitionend still fires. */
 @media (prefers-reduced-motion: reduce) {
@@ -603,6 +701,19 @@ body {
     animation: none !important;
   }
 
+  /* Drawn and filled at once; the header swaps without moving. */
+  .ink-draw,
+  .seg-fill {
+    animation: none;
+  }
+
+  .header-hairline,
+  .header-hairline[data-on],
+  .header-compact-title,
+  .header-compact-title[data-on] {
+    transition: none;
+  }
+
   /* Sheets appear and leave in place; --dur-sheet and --dur-enter are --dur-quick here. */
   [data-vaul-drawer][data-state="open"] {
     animation-name: fade-in !important;
@@ -612,7 +723,8 @@ body {
     animation-name: fade-out !important;
   }
 
-  ::view-transition-group(*) {
+  ::view-transition-group(*),
+  ::view-transition-group(.theme-morph) {
     animation-duration: 0s;
   }
 
