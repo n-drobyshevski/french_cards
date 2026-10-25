@@ -31,7 +31,7 @@ Rules:
 
 ## Only difficult / due words (`only` and `scope`)
 
-A set made **only** of the user's difficult words, the words due today, or both, from every theme. The app's request names it: «Сделай упражнение в Карточках по трудным словам из всех тем, 12 вопросов.» («по словам к повторению», «по трудным словам и словам к повторению»); a chat request like «упражнение по трудным словам» or «без тем, только то, что на повторении» means the same.
+A set made **only** of the user's difficult words, the words due today, or both, from every theme. The app's request names it: «Сделай упражнение в Карточках по трудным словам из всех тем, 12 вопросов.» («по словам к повторению», «по трудным словам и словам к повторению»), on a phone «Сделай в Карточках 12 вопросов по трудным словам из всех тем.»; a chat request like «упражнение по трудным словам» or «без тем, только то, что на повторении» means the same.
 
 - `exercise_material` with `only: "difficult" | "due" | "both"`: `words` are just those words (live, not «на паузе», from every theme; `folders` still narrows when the user named themes), weakest first. `topic` is ignored, and there is no `focus` block (every word is a focus word already). `scope` adds `{ only, available, suggested_items, note }`.
 - **Size:** `suggested_items` = available × 3, at least 6 and at most 12 (scale the 12 for another asked size). With few words make the **shorter** set: 3 difficult words → 9 questions, not 12 padded with other words.
@@ -42,7 +42,7 @@ A set made **only** of the user's difficult words, the words due today, or both,
 
 ## «Спряжение глаголов» (verb sets)
 
-A short test on the user's verbs. The app's request says «Сделай упражнение на спряжение глаголов в Карточках по теме «…», 8 вопросов.»; a chat request like «потренируй спряжение» means the same.
+A short test on the user's verbs. The app's request says «Сделай упражнение на спряжение глаголов в Карточках по теме «…», 8 вопросов.», on a phone «Сделай в Карточках 8 вопросов на спряжение глаголов по теме «…».»; a chat request like «потренируй спряжение» means the same.
 
 - `exercise_material` with `verbs: true`: `words` are only the verbs `conjugate` items can use (`conjugable: true`: the word has a saved conjugation, or the app builds one from Lexique). Without `verbs`, conjugable verbs still carry `conjugable: true`.
 - **Size:** 8 items by default (6–10, as asked); at most 10 `conjugate` items in a set (the server refuses more). New words: none.

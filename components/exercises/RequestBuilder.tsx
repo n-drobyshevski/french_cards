@@ -1102,7 +1102,7 @@ function RequestComposer({
             </Button>
           )}
         </li>
-        <li className="flex min-h-14 items-center gap-3">
+        <li className="flex min-h-14 items-center gap-3 py-2">
           <StepNo n={2} />
           <span className="flex min-w-0 flex-1 flex-col">
             <span className="text-[15px] leading-5 font-medium">
@@ -1112,6 +1112,8 @@ function RequestComposer({
               {online
                 ? "Набор сам появится в «Упражнениях»"
                 : "Когда будет сеть — набор сам появится в «Упражнениях»"}
+              {/* The phone list no longer says it (E1 A); the empty state's intro line does. */}
+              {!framed && ", на расписание не влияет"}
             </span>
           </span>
           <span
