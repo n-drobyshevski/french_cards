@@ -31,12 +31,7 @@ export interface NewWordCardProps {
  * with the meter, the headword and its POS, the translation, the note, the example, «Слова ещё нет
  * в библиотеке…», the source domain in the footer; then «Понятно» (↵ from 768).
  */
-export function NewWordCard({
-  word,
-  setTitle,
-  onNext,
-  autoFocus = false,
-}: NewWordCardProps) {
+export function NewWordCard({ word, setTitle, onNext, autoFocus = false }: NewWordCardProps) {
   const pos = posAbbr(word);
   const domain = sourceDomain(word.source_url);
   const button = useRef<HTMLButtonElement>(null);
@@ -70,47 +65,26 @@ export function NewWordCard({
             <SlangMeter level={word.slang_level} verlan={word.verlan} />
           </CardHeader>
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pt-7 max-md:pb-1 md:px-10 md:pt-8">
-            <h2
-              lang="fr"
-              className="m-0 font-serif text-[40px] leading-[1.1] font-medium tracking-[-0.015em] break-words md:text-[48px]"
-            >
+            <h2 lang="fr" className="m-0 font-serif text-[40px] leading-[1.1] font-medium tracking-[-0.015em] break-words md:text-[48px]">
               {word.fr}
             </h2>
             {pos && (
-              <span
-                lang="fr"
-                className="mt-2 font-serif text-[15px] leading-5 text-muted italic"
-              >
+              <span lang="fr" className="mt-2 font-serif text-[15px] leading-5 text-muted italic">
                 {pos}
               </span>
             )}
-            <p className="m-0 mt-6 text-[22px] leading-7 font-medium">
-              {word.ru}
-            </p>
-            {word.note && (
-              <p className="m-0 mt-2 max-w-[40ch] text-[14px] leading-5 text-muted">
-                {word.note}
-              </p>
-            )}
+            <p className="m-0 mt-6 text-[22px] leading-7 font-medium">{word.ru}</p>
+            {word.note && <p className="m-0 mt-2 max-w-[40ch] text-[14px] leading-5 text-muted">{word.note}</p>}
             {word.example_fr && (
               <div className="mt-6 flex flex-col gap-1 border-t border-rule pt-4">
-                <span
-                  lang="fr"
-                  className="font-serif text-[17px] leading-6 italic"
-                >
+                <span lang="fr" className="font-serif text-[17px] leading-6 italic">
                   {word.example_fr}
                 </span>
-                {word.example_ru && (
-                  <span className="text-[13px] leading-5 text-muted">
-                    {word.example_ru}
-                  </span>
-                )}
+                {word.example_ru && <span className="text-[13px] leading-5 text-muted">{word.example_ru}</span>}
               </div>
             )}
             <span className="min-h-4 flex-1 max-md:min-h-5" />
-            <p className="m-0 mb-4 text-[13px] leading-5 text-muted">
-              Слова ещё нет в библиотеке. Добавить его можно на экране итогов.
-            </p>
+            <p className="m-0 mb-4 text-[13px] leading-5 text-muted">Слова ещё нет в библиотеке. Добавить его можно на экране итогов.</p>
           </div>
           {domain && (
             <div className="mx-5 flex h-11 shrink-0 items-center border-t border-rule font-mono text-[11px] tracking-[.06em] text-muted uppercase md:mx-10">
@@ -121,26 +95,20 @@ export function NewWordCard({
           )}
         </article>
       </div>
-      <div className="mt-4 flex shrink-0 flex-col-reverse gap-2 pb-4 md:flex-row-reverse md:items-center md:justify-between md:pb-0">
+      <div className="mt-4 flex shrink-0 flex-col-reverse gap-2 pb-7 md:flex-row-reverse md:items-center md:justify-between md:pb-0">
         <button
           ref={button}
           type="button"
           data-advance=""
           aria-keyshortcuts="Enter"
           onClick={onNext}
-          className={buttonClasses({
-            variant: "primary",
-            size: "lg",
-            block: true,
-            className: "font-semibold md:w-auto md:min-w-[152px]",
-          })}
+          className={buttonClasses({ variant: "primary", size: "lg", block: true, className: "font-semibold md:w-auto md:min-w-[152px]" })}
         >
           Понятно
         </button>
         {/* From 768 only: phones carry no set footer during play (L-ExPlayer-B). */}
         <span className="meta text-center max-md:hidden">
-          набор: <span className="text-ink">{setTitle}</span> · вопрос —
-          следующим
+          набор: <span className="text-ink">{setTitle}</span> · вопрос — следующим
         </span>
       </div>
     </>

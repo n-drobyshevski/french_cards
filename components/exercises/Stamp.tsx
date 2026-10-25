@@ -21,13 +21,7 @@ const PHONE_PLACE: Record<StampPlace, string> = {
  * with a fade over 160 ms, --ease-enter, no overshoot (MOTION-SPEC §5.15); under reduced motion it
  * only fades. Decorative: the result line announces the verdict.
  */
-export function Stamp({
-  verdict,
-  place = "line1",
-}: {
-  verdict: "right" | "wrong";
-  place?: StampPlace;
-}) {
+export function Stamp({ verdict, place = "line1" }: { verdict: "right" | "wrong"; place?: StampPlace }) {
   return (
     <span
       aria-hidden="true"
@@ -38,9 +32,7 @@ export function Stamp({
         PHONE_PLACE[place],
         "animate-[ex-stamp_160ms_var(--ease-enter)_70ms_both]",
         "md:right-10 md:bottom-[68px] md:h-[46px] md:text-[20px]",
-        verdict === "right"
-          ? "border-good text-good"
-          : "border-again text-again",
+        verdict === "right" ? "border-good text-good" : "border-again text-again",
       )}
     >
       {verdict === "right" ? "ВЕРНО" : "НЕВЕРНО"}

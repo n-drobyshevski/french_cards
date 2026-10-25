@@ -25,42 +25,23 @@ const tile =
  * good with a check; a miss flashes both in the again tone (the player logs it as a wrong answer for
  * that word). Done when every pair is found.
  */
-export function MatchPairs({
-  board,
-  state,
-  onTap,
-  revealed = false,
-  disabled = false,
-}: MatchPairsProps) {
+export function MatchPairs({ board, state, onTap, revealed = false, disabled = false }: MatchPairsProps) {
   const matched = new Set(state.matched);
-  const ru = revealed
-    ? board.fr.map((t) => board.ru.find((r) => r.key === t.key) ?? t)
-    : board.ru;
+  const ru = revealed ? board.fr.map((t) => board.ru.find((r) => r.key === t.key) ?? t) : board.ru;
 
   const look = (key: string, side: "fr" | "ru") => {
     if (matched.has(key)) return "border-good text-muted opacity-55";
     if (revealed) return "border-again text-again";
-    if (side === "fr" && state.selected === key)
-      return "border-2 border-ink px-[14px] text-ink";
-    const flashed =
-      state.flash && (side === "fr" ? state.flash.fr : state.flash.ru) === key;
-    return cx(
-      "border-boundary text-ink hoverable:bg-hover-surface",
-      flashed && "animate-[ex-miss_600ms_var(--ease-standard)]",
-    );
+    if (side === "fr" && state.selected === key) return "border-2 border-ink px-[14px] text-ink";
+    const flashed = state.flash && (side === "fr" ? state.flash.fr : state.flash.ru) === key;
+    return cx("border-boundary text-ink hoverable:bg-hover-surface", flashed && "animate-[ex-miss_600ms_var(--ease-standard)]");
   };
 
   const column = (side: "fr" | "ru", tiles: ExercisePairTile[]) => (
-    <div
-      role="group"
-      aria-label={side === "fr" ? "Слова" : "Переводы"}
-      className="flex min-w-0 flex-col gap-2"
-    >
+    <div role="group" aria-label={side === "fr" ? "Слова" : "Переводы"} className="flex min-w-0 flex-col gap-2">
       {tiles.map((t) => {
         const done = matched.has(t.key);
-        const flashed =
-          state.flash &&
-          (side === "fr" ? state.flash.fr : state.flash.ru) === t.key;
+        const flashed = state.flash && (side === "fr" ? state.flash.fr : state.flash.ru) === t.key;
         return (
           <button
             // The flash restarts on every miss: the key changes with it.
@@ -76,20 +57,14 @@ export function MatchPairs({
               lang={side}
               className={cx(
                 "min-w-0 truncate",
-                side === "fr"
-                  ? "font-serif text-[19px] leading-6 font-medium"
-                  : "text-[15px] leading-5 font-medium",
+                side === "fr" ? "font-serif text-[19px] leading-6 font-medium" : "text-[15px] leading-5 font-medium",
               )}
             >
               {side === "fr" ? t.fr : t.ru}
             </span>
             {done && (
               <>
-                <Icon
-                  name="check"
-                  size={16}
-                  className="absolute top-1/2 right-3 -translate-y-1/2 text-good"
-                />
+                <Icon name="check" size={16} className="absolute top-1/2 right-3 -translate-y-1/2 text-good" />
                 <span className="sr-only">найдено</span>
               </>
             )}
@@ -113,12 +88,8 @@ export function MatchPairs({
  * The row a Russian slip writes into on phones: the French row picked, else the first open one in
  * the board's order («Ответы вписываются в строки по порядку»). Null once every row is done.
  */
-export function activePairRow(
-  board: { fr: readonly ExercisePairTile[] },
-  state: Pick<PairsState, "selected" | "matched">,
-): string | null {
-  if (state.selected !== null && !state.matched.includes(state.selected))
-    return state.selected;
+export function activePairRow(board: { fr: readonly ExercisePairTile[] }, state: Pick<PairsState, "selected" | "matched">): string | null {
+  if (state.selected !== null && !state.matched.includes(state.selected)) return state.selected;
   return board.fr.find((t) => !state.matched.includes(t.key))?.key ?? null;
 }
 
@@ -136,13 +107,7 @@ export interface PairsRowsProps {
  * it the active one. A match writes the translation into its row in the good tone with ✓ on a solid
  * rule; «Не знаю» writes the pairs not found in the again tone with ✕. A miss flashes the row.
  */
-export function PairsRows({
-  board,
-  state,
-  onTap,
-  revealed = false,
-  disabled = false,
-}: PairsRowsProps) {
+export function PairsRows({ board, state, onTap, revealed = false, disabled = false }: PairsRowsProps) {
   const matched = new Set(state.matched);
   const active = revealed ? null : activePairRow(board, state);
   return (
@@ -153,24 +118,16 @@ export function PairsRows({
         const flashed = state.flash?.fr === t.key;
         return (
           <button
+            // The flash restarts on every miss: the key changes with it.
             key={flashed ? `${t.key}:${state.flash!.seq}` : t.key}
             type="button"
             data-pair="fr"
             aria-pressed={done || revealed ? undefined : current}
             disabled={disabled || done || revealed}
             onClick={() => onTap("fr", t.key)}
-            className={cx(
-              "press-sm flex h-11 min-w-0 items-end gap-3 text-left disabled:cursor-default",
-              flashed && "animate-[ex-miss_600ms_var(--ease-standard)]",
-            )}
+            className={cx("press-sm flex h-11 min-w-0 items-end gap-3 text-left disabled:cursor-default", flashed && "animate-[ex-miss_600ms_var(--ease-standard)]")}
           >
-            <span
-              lang="fr"
-              className={cx(
-                "w-[46%] shrink-0 truncate pb-1 font-serif text-[19px] leading-6",
-                done || current || revealed ? "text-ink" : "text-muted",
-              )}
-            >
+            <span lang="fr" className={cx("w-[46%] shrink-0 truncate pb-1 font-serif text-[19px] leading-6", done || current || revealed ? "text-ink" : "text-muted")}>
               {t.fr}
             </span>
             {done || revealed ? (
@@ -183,24 +140,11 @@ export function PairsRows({
                 <span lang="ru" className="min-w-0 truncate">
                   {t.ru}
                 </span>
-                <Icon
-                  name={done ? "check" : "close"}
-                  size={16}
-                  strokeWidth={2}
-                  className="shrink-0"
-                />
-                <span className="sr-only">
-                  {done ? "найдено" : "не найдено"}
-                </span>
+                <Icon name={done ? "check" : "close"} size={16} strokeWidth={2} className="shrink-0" />
+                <span className="sr-only">{done ? "найдено" : "не найдено"}</span>
               </span>
             ) : (
-              <span
-                aria-hidden="true"
-                className={cx(
-                  "mb-2 h-0 min-w-0 flex-1 border-b-[1.5px] border-dashed",
-                  current ? "border-ink" : "border-rule",
-                )}
-              />
+              <span aria-hidden="true" className={cx("mb-2 h-0 min-w-0 flex-1 border-b-[1.5px] border-dashed", current ? "border-ink" : "border-rule")} />
             )}
           </button>
         );
@@ -223,30 +167,13 @@ export interface PairsSlipsProps {
  * ruled line; a slip that found its row leaves an empty dashed place behind. A miss flashes the
  * slip in the again tone (the row flashes with it).
  */
-export function PairsSlips({
-  board,
-  state,
-  onTap,
-  revealed = false,
-  disabled = false,
-}: PairsSlipsProps) {
+export function PairsSlips({ board, state, onTap, revealed = false, disabled = false }: PairsSlipsProps) {
   const matched = new Set(state.matched);
   const row = activePairRow(board, state);
   return (
-    <div
-      role="group"
-      aria-label="Переводы"
-      className="mt-4 grid shrink-0 grid-cols-2 gap-2"
-    >
+    <div role="group" aria-label="Переводы" className="mt-4 grid shrink-0 grid-cols-2 gap-2">
       {board.ru.map((t) => {
-        if (matched.has(t.key))
-          return (
-            <span
-              key={t.key}
-              aria-hidden="true"
-              className="h-[60px] rounded-chip border border-dashed border-rule"
-            />
-          );
+        if (matched.has(t.key)) return <span key={t.key} aria-hidden="true" className="h-[60px] rounded-chip border border-dashed border-rule" />;
         const flashed = state.flash?.ru === t.key;
         return (
           <button
@@ -257,19 +184,11 @@ export function PairsSlips({
             onClick={() => onTap("ru", t.key, row)}
             className={cx(
               "press flex h-[60px] min-w-0 flex-col justify-end rounded-chip border bg-surface px-4 pb-3 text-left disabled:cursor-default",
-              revealed
-                ? "border-rule text-muted"
-                : "border-boundary text-ink hoverable:bg-hover-surface",
+              revealed ? "border-rule text-muted" : "border-boundary text-ink hoverable:bg-hover-surface",
               flashed && "animate-[ex-miss_600ms_var(--ease-standard)]",
             )}
           >
-            <span
-              lang="ru"
-              className={cx(
-                "block truncate border-b pb-1 text-[16px] leading-[22px]",
-                revealed ? "border-hover" : "border-rule",
-              )}
-            >
+            <span lang="ru" className={cx("block truncate border-b pb-1 text-[16px] leading-[22px]", revealed ? "border-hover" : "border-rule")}>
               {t.ru}
             </span>
           </button>

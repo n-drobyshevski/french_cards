@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import { clozeParts } from "@/lib/core/exercises";
 
 export interface ClozeLineProps {
@@ -22,13 +21,7 @@ export interface ClozeLineProps {
  * card is answered the right word writes into the gap in the good tone. A sentence without one
  * clean span (it never passes validateSet) shows as it is.
  */
-export function ClozeLine({
-  sentence,
-  answered,
-  phone = false,
-  wrong = null,
-  onWord = null,
-}: ClozeLineProps) {
+export function ClozeLine({ sentence, answered, phone = false, wrong = null, onWord = null }: ClozeLineProps) {
   const parts = clozeParts(sentence);
   const text = phone
     ? "m-0 font-serif text-[32px] leading-[42px] font-medium tracking-[-0.01em]"
@@ -41,47 +34,27 @@ export function ClozeLine({
     );
   }
   if (phone) {
-    let gap: ReactNode;
-    if (!answered) {
-      gap = (
-        <span
-          className="mx-1 inline-block h-[1em] w-[3.3em] border-b-[1.5px] border-dashed border-boundary align-baseline"
-          role="img"
-          aria-label="пропуск"
-        />
-      );
-    } else {
-      const word = (
-        <span className="inline-block border-b-[1.5px] border-good leading-8 text-good">
-          {parts.answer}
-        </span>
-      );
-      gap = (
-        <span className="animate-[fade-in_var(--dur-quick)_var(--ease-enter)]">
-          {wrong && (
-            <>
-              <span className="sr-only">ваш ответ: </span>
-              <s className="mr-2 text-[22px] font-normal text-again decoration-[1.5px]">
-                {wrong}
-              </s>
-              <span className="sr-only">, верный: </span>
-            </>
-          )}
-          {onWord ? (
-            <button
-              type="button"
-              onClick={onWord}
-              aria-label={`Открыть карточку слова «${parts.answer}»`}
-              className="press-sm -my-1 py-1 text-left"
-            >
-              {word}
-            </button>
-          ) : (
-            word
-          )}
-        </span>
-      );
-    }
+    const word = <span className="inline-block border-b-[1.5px] border-good leading-8 text-good">{parts.answer}</span>;
+    const gap = answered ? (
+      <span className="animate-[fade-in_var(--dur-quick)_var(--ease-enter)]">
+        {wrong && (
+          <>
+            <span className="sr-only">ваш ответ: </span>
+            <s className="mr-2 text-[22px] font-normal text-again decoration-[1.5px]">{wrong}</s>
+            <span className="sr-only">, верный: </span>
+          </>
+        )}
+        {onWord ? (
+          <button type="button" onClick={onWord} aria-label={`Открыть карточку слова «${parts.answer}»`} className="press-sm -my-1 py-1 text-left">
+            {word}
+          </button>
+        ) : (
+          word
+        )}
+      </span>
+    ) : (
+      <span className="mx-1 inline-block h-[1em] w-[3.3em] border-b-[1.5px] border-dashed border-boundary align-baseline" role="img" aria-label="пропуск" />
+    );
     return (
       <p lang="fr" className={text}>
         {parts.before}
