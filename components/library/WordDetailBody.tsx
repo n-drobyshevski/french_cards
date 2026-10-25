@@ -277,9 +277,24 @@ function useWordEditor(word: Word | null, folders: readonly Folder[], defs: read
 function useSavedSpotlight() {
   const root = useRef<HTMLDivElement>(null);
   const [saved, setSaved] = useState<{ what: Exclude<Editing, null>; n: number } | null>(null);
+  // A part that was empty (the phone sheet's note, the first «своё поле») only renders once the
+  // saved word comes back: until then (a second at most) each render looks for it again.
+  const pending = useRef<{ what: Exclude<Editing, null>; until: number } | null>(null);
   useEffect(() => {
-    if (saved) root.current?.querySelectorAll(`[data-edited~="${saved.what}"]`).forEach((el) => spotlight(el));
+    if (saved) pending.current = { what: saved.what, until: Date.now() + 1000 };
   }, [saved]);
+  useEffect(() => {
+    const p = pending.current;
+    if (!p) return;
+    if (Date.now() > p.until) {
+      pending.current = null;
+      return;
+    }
+    const els = root.current?.querySelectorAll(`[data-edited~="${p.what}"]`);
+    if (!els?.length) return;
+    pending.current = null;
+    els.forEach((el) => spotlight(el));
+  });
   const lit = (what: Exclude<Editing, null>) => setSaved((s) => ({ what, n: (s?.n ?? 0) + 1 }));
   return { ref: root, lit };
 }

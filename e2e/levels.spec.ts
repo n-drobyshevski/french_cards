@@ -141,7 +141,8 @@ test("«Определить уровень языка» proposes levels by grou
   await expect(row(page, "c'est dur")).toHaveAccessibleName(/, ≈A2,/);
   await expect(row(page, "être dehors")).toHaveAccessibleName(/, без уровня,/);
   await row(page, "c'est dur").click();
-  await expect(card(page).getByText("· от Claude")).toBeVisible();
+  // Phones: the grammar line prints the level once; its button names the source.
+  await expect(card(page).getByRole("button", { name: /^Уровень языка: примерно A2, от Claude\./ })).toHaveText("≈A2");
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "Отменить", exact: true }).click();

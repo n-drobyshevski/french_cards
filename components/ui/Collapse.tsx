@@ -22,7 +22,9 @@ export interface CollapseProps {
  * --dur-move on --ease-standard. The content fades in over --dur-enter (--ease-enter) and out over
  * --dur-quick (--ease-exit), so it is gone before the height has closed. Under reduced motion both
  * shrink to --dur-quick (the height still eases, briefly). Pair an inserted row with `spotlight`.
- * The children are clipped (overflow hidden): keep focus rings inside with padding on `innerClassName`.
+ * The children are clipped (overflow clip, not hidden: a clip is no scroll box, so focusing or
+ * scrolling to something inside a half-open body cannot shift it): keep focus rings inside with
+ * padding on `innerClassName`.
  */
 export function Collapse({ open, appear = false, onClosed, className, innerClassName, children }: CollapseProps) {
   const onTransitionEnd = (event: TransitionEvent<HTMLDivElement>) => {
@@ -42,7 +44,7 @@ export function Collapse({ open, appear = false, onClosed, className, innerClass
         className,
       )}
     >
-      <div className={cx("min-h-0 overflow-hidden", innerClassName)}>{children}</div>
+      <div className={cx("min-h-0 overflow-clip", innerClassName)}>{children}</div>
     </div>
   );
 }

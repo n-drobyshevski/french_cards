@@ -204,7 +204,7 @@ test("pasted rows show their slang level, example and theme and are saved with t
   );
   await openReview(page);
   await tabBar(page).getByRole("button", { name: "Добавить" }).click();
-  await addSheet(page).getByRole("button", { name: "Список" }).click();
+  await addSheet(page).getByRole("button", { name: /^Списком/ }).click();
   const sheet = page.getByRole("dialog", { name: /Несколько слов/ });
   await sheet.getByRole("textbox", { name: "Список слов" }).fill("la caisse — тачка\nchelou — стрёмный");
   await expect(sheet.getByRole("combobox")).toHaveValue("auto");

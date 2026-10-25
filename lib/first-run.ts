@@ -7,10 +7,9 @@
 // about this screen on this device, not about the account. Same tiny store over localStorage as
 // components/review/filter.ts, with an in-memory copy when storage is blocked (private mode).
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { FIRST_RUN_KEY, FIRST_RUN_LIMIT } from "./first-run-init";
 
-export const FIRST_RUN_KEY = "kartochki:first-run";
-/** Sessions or opens a hint stays visible for. */
-export const FIRST_RUN_LIMIT = 3;
+export { FIRST_RUN_KEY, FIRST_RUN_LIMIT };
 
 type Counts = Record<string, number>;
 
@@ -123,6 +122,12 @@ export interface FirstRunHint {
    * past their first week).
    */
   show: boolean;
+  /**
+   * True on the server and during hydration, while `show` is not decided yet. A hint that takes
+   * layout space renders it then too, marked `data-first-run="<name>"`: FIRST_RUN_INIT_SCRIPT and
+   * globals.css hide it before first paint on devices past the hint, so nothing shifts either way.
+   */
+  pending: boolean;
   /** Counts this mount as one session/open; later calls in the same mount are ignored. */
   markSeen: () => void;
   /** Hides it now and for good on this device. */
@@ -162,6 +167,7 @@ export function useFirstRunHint(name: string, { limit = FIRST_RUN_LIMIT, countOn
   const retired = live >= limit && live > start + 1;
   return {
     show: client && !dismissed && !retired && start < limit,
+    pending: !client,
     markSeen,
     dismiss: () => {
       setDismissed(true);

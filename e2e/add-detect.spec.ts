@@ -152,7 +152,7 @@ test("«Список»: rows are 56px from the start; one status line counts the
   await mockSuggest(page, []);
   const enrich = await gateEnrich(page, (w) => enriched(w, { folder: "INBOX" }));
   await openSheet(page);
-  await addSheet(page).getByRole("button", { name: "Список" }).click();
+  await addSheet(page).getByRole("button", { name: /^Списком/ }).click();
   const sheet = page.getByRole("dialog", { name: /Несколько слов/ });
   await sheet.getByRole("textbox", { name: "Список слов" }).fill("la caisse — тачка\nchelou — стрёмный");
 

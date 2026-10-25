@@ -77,7 +77,8 @@ test("a schedule set narrows today's queue; editing and deleting it (with undo)"
   await expect(picker(page).getByRole("radio", { name: /^Все темы/ })).toHaveAttribute("aria-checked", "true");
   await page.getByRole("button", { name: "Отменить", exact: true }).click();
   await expect(picker(page).getByRole("radio", { name: /Разговорное/ })).toBeVisible();
-  await picker(page).getByRole("button", { name: "Закрыть" }).click();
+  // Phones: the auto-height sheet's ✕ is for keyboards and screen readers only (the grabber, scrim and drag close it).
+  await picker(page).getByRole("button", { name: "Закрыть" }).press("Enter");
   await expect(themeChip(page, "Все темы")).toBeVisible();
   await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
 });

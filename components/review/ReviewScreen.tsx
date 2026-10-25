@@ -982,10 +982,12 @@ export function ReviewScreen() {
           )}
           {/* The hint and grade bar keep their space on the question side too (invisible and inert),
               so the card does not change size when it flips. */}
-          {/* The swipe legend: only for the first sessions on this device (synthesis §1.3). */}
-          {swipeEnabled && legend.show && (
+          {/* The swipe legend: only for the first sessions on this device (synthesis §1.3). Its row is
+              laid out from the server render on, so hydration does not shrink the card (R1). */}
+          {swipeEnabled && (legend.show || legend.pending) && (
             <p
               aria-hidden="true"
+              data-first-run={legend.pending ? "swipe-legend" : undefined}
               className={cx("meta mt-4 mb-0 flex h-4 shrink-0 justify-between leading-4 md:hidden", card ? WRITE_IN : "invisible")}
             >
               <span>← {GRADE_LABELS[1]}</span>

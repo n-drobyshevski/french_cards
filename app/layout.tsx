@@ -4,6 +4,7 @@ import { RegisterSW } from "@/components/pwa/RegisterSW";
 import { THEME_INIT_SCRIPT } from "@/components/providers/theme";
 import { SIDEBAR_INIT_SCRIPT } from "@/components/shell/sidebar-init";
 import { APP_NAME, APP_SHORT_NAME } from "@/lib/brand";
+import { FIRST_RUN_INIT_SCRIPT } from "@/lib/first-run-init";
 import "./globals.css";
 
 const plexSans = IBM_Plex_Sans({
@@ -54,6 +55,8 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         {/* Desktop: keeps the sidebar hidden with `[` hidden from the first paint. */}
         <script dangerouslySetInnerHTML={{ __html: SIDEBAR_INIT_SCRIPT }} />
+        {/* First-run hints this device is past (the swipe legend): their space is never laid out. */}
+        <script dangerouslySetInnerHTML={{ __html: FIRST_RUN_INIT_SCRIPT }} />
       </head>
       <body className="min-h-full flex flex-col">
         {children}

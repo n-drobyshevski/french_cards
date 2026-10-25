@@ -210,7 +210,9 @@ test.describe("loading and moving on (MOTION-SPEC R1, R2, R9)", () => {
       const grades = (await page.locator("[data-review-focus][inert]").boundingBox())!;
       expect(card).toEqual(before);
       expect(box.y + box.height).toBeCloseTo(grades.y - 8, 0);
-      expect(box.y).toBeLessThan(card.y + card.height);
+      // It overlays what sits under the card (deck edges, the first-session swipe legend), taking no room.
+      const legend = (await page.locator("[data-review] p", { hasText: "тап — ответ" }).boundingBox())!;
+      expect(box.y).toBeLessThan(legend.y + legend.height);
     }).toPass();
   });
 });

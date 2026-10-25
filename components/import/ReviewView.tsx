@@ -174,7 +174,13 @@ export function ReviewView({
           </>
         )}
 
-        {/* «Найдено N слов» is the title: the status line stays only for a cut or stopped read. */}
+        {/* «Найдено N слов» is the title: the status line stays only for a cut or stopped read. The
+            result is still announced here, since the processing status (throttled) is gone. */}
+        {!incomplete && (
+          <p role="status" className="sr-only">
+            {deck ? `Готово · ${wordsRu(rows.length)}` : stage.announce}
+          </p>
+        )}
         {incomplete && (
           <div className="relative mt-3">
             <StatusLine text={deck ? `Готово · ${wordsRu(rows.length)}` : stage.status} active={false} announce={deck ? undefined : stage.announce} />

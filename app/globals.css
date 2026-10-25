@@ -205,6 +205,12 @@ body {
   display: none;
 }
 
+/* A first-run hint laid out before hydration (lib/first-run.ts `pending`) on a device already past
+   it: <html data-first-run-done> is set before first paint (FIRST_RUN_INIT_SCRIPT). */
+:root[data-first-run-done~="swipe-legend"] [data-first-run="swipe-legend"] {
+  display: none;
+}
+
 /* Mono meta labels: `23 К ПОВТОРЕНИЮ`, `FR → RU`, `07 / 30` */
 .meta {
   font-family: var(--font-mono);
