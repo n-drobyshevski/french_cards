@@ -21,6 +21,8 @@ const item = (id: string): ExerciseItem => ({
   type: "choice",
   skill: "meaning",
   ask: "fr",
+  tense: null,
+  person: null,
   word_id: `w-${id}`,
   new_ref: null,
   prompt: "meuf",
@@ -187,6 +189,17 @@ describe("requests", () => {
     expect(similarRequest(set({ scope: "due", folders: ["f-people"] }), names)).toEqual({
       text: "Сделай упражнение в Карточках по словам к повторению из всех тем, 8 вопросов.",
       summary: "слова к повторению, 8 вопросов",
+    });
+  });
+
+  it("summarises and repeats a verb test, without new words", () => {
+    const names = new Map([["f-people", "Люди"]]);
+    expect(requestSummary({ folders: ["Люди"], topic: null, size: 8, conjugation: true })).toBe("спряжение, «Люди», 8 вопросов");
+    const items = set().items.map((it, i) => (i < 6 ? { ...it, type: "conjugate" as const, tense: "futur" as const, person: "tu" as const } : it));
+    const newWord = { ref: "n1", fr: "x", ru: "y", note: null, example_fr: null, example_ru: null, pos: "verb" as const, gender: "none" as const, slang_level: 0 as const, verlan: false, origin: null, source_url: null };
+    expect(similarRequest(set({ folders: ["f-people"], items, new_words: [newWord] }), names)).toEqual({
+      text: "Сделай упражнение на спряжение глаголов в Карточках по теме «Люди», 8 вопросов.",
+      summary: "спряжение, «Люди», 8 вопросов",
     });
   });
 });

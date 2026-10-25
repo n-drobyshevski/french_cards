@@ -24,6 +24,7 @@ import { haptic } from "@/lib/haptics";
 import {
   REGISTER_LEVELS,
   buildQueue,
+  clozeParts,
   finishRun,
   getResumableRun,
   getSet,
@@ -490,6 +491,8 @@ function PlayerSession() {
     const level = options.correct;
     answerLabel = level >= 0 ? `${REGISTER_LEVELS[level]} · ${SLANG_NAMES_RU[level]}` : null;
   }
+  // A conjugate answer reads as the whole form, pronouns included («tu as kiffé»).
+  if (item?.type === "conjugate" && item.answer) answerLabel = `${clozeParts(item.sentence ?? "")?.before ?? ""}${item.answer}`;
   const announcement = resultAnnouncement(tone, result?.misses ?? 0, item?.type === "pairs" ? null : answerLabel);
 
   let card: ReactNode = null;

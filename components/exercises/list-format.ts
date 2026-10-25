@@ -1,5 +1,5 @@
 // Pure helpers for the «Упражнения» list (tiles, resume card, waiting line, request summaries).
-import { buildRequestText, parseScope, runSettled, scoreRun } from "@/lib/core/exercises";
+import { buildRequestText, isVerbSet, parseScope, runSettled, scoreRun } from "@/lib/core/exercises";
 import type { ExerciseRun, ExerciseScope, ExerciseSet } from "@/lib/types";
 
 /** Russian plural: [1, 2–4, 5+]. */
@@ -117,6 +117,8 @@ export interface RequestChoice {
   allowNew: boolean;
   /** Only the user's difficult and/or due words, from every theme (themes, topic and allowNew ignored). */
   scope?: ExerciseScope | null;
+  /** «Спряжение глаголов»: a short verb test (allowNew ignored). */
+  conjugation?: boolean;
 }
 
 /** A scoped request in the waiting line: «трудные слова, 12 вопросов». */
@@ -126,28 +128,31 @@ const SCOPE_SUMMARIES: Record<ExerciseScope, string> = {
   both: "трудные и к повторению",
 };
 
-/** «вечеринка», 12 вопросов — the waiting line and the offline bar. */
-export function requestSummary({ folders, topic, size, scope }: Pick<RequestChoice, "folders" | "topic" | "size" | "scope">): string {
-  if (scope) return `${SCOPE_SUMMARIES[scope]}, ${nQuestions(size)}`;
+/** «вечеринка», 12 вопросов — the waiting line and the offline bar; «спряжение, «Люди», 8 вопросов» for a verb test. */
+export function requestSummary({ folders, topic, size, scope, conjugation }: Pick<RequestChoice, "folders" | "topic" | "size" | "scope" | "conjugation">): string {
+  const verbs = conjugation ? "спряжение, " : "";
+  if (scope) return `${verbs}${SCOPE_SUMMARIES[scope]}, ${nQuestions(size)}`;
   const names = [...new Set(folders.map((f) => f.trim()).filter(Boolean))];
   const custom = topic?.replace(/\s+/g, " ").trim();
   const parts = [...names, ...(custom ? [custom] : [])].map((s) => `«${s}»`);
-  return `${parts.length ? parts.join(", ") : "все темы"}, ${nQuestions(size)}`;
+  return `${verbs}${parts.length ? parts.join(", ") : "все темы"}, ${nQuestions(size)}`;
 }
 
-/** «Скопировать запрос на похожий»: the same themes or topic (or scope), size and new-word choice. */
+/** «Скопировать запрос на похожий»: the same themes or topic (or scope), size and new-word choice; a verb set stays one. */
 export function similarRequest(
   set: Pick<ExerciseSet, "folders" | "topic" | "items" | "new_words"> & Partial<Pick<ExerciseSet, "scope">>,
   names: ReadonlyMap<string, string>,
 ): { text: string; summary: string } {
   const scope = parseScope(set.scope);
+  const conjugation = isVerbSet(set.items);
   const choice: RequestChoice = scope
-    ? { folders: [], topic: null, size: set.items.length, allowNew: false, scope }
+    ? { folders: [], topic: null, size: set.items.length, allowNew: false, scope, conjugation }
     : {
         folders: setFolderNames(set, names),
         topic: set.topic,
         size: set.items.length,
-        allowNew: set.new_words.length > 0,
+        allowNew: !conjugation && set.new_words.length > 0,
+        conjugation,
       };
   return { text: buildRequestText(choice), summary: requestSummary(choice) };
 }

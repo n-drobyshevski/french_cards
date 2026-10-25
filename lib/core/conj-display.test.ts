@@ -21,6 +21,10 @@ describe("conjugation display", () => {
     expect(splitForm("tu t'es cassé")).toEqual({ pro: "tu t'", verb: "es cassé" });
     expect(splitForm("j’aime")).toEqual({ pro: "j’", verb: "aime" });
     expect(splitForm("nous cassons")).toEqual({ pro: "nous ", verb: "cassons" });
+    // Slash-joined subjects, as textbooks write them.
+    expect(splitForm("il/elle/on kiffe")).toEqual({ pro: "il/elle/on ", verb: "kiffe" });
+    expect(splitForm("il/on se casse")).toEqual({ pro: "il/on se ", verb: "casse" });
+    expect(splitForm("elles/ils kiffent")).toEqual({ pro: "elles/ils ", verb: "kiffent" });
   });
 
   it("lights the endings of a simple tense and the auxiliary of the passé composé", () => {

@@ -263,6 +263,12 @@ describe("import", () => {
           { ...set, id: "x-6", items: [{ id: "q1", type: "typed" }] },
           { ...set, id: "x-7", new_words: [{ ref: "n1" }] },
           { ...set, id: "x-8", scope: "sometimes" },
+          // A conjugate item needs its tense, person and sentence (the card header and the gap).
+          { ...set, id: "x-10", items: [{ id: "q1", type: "conjugate", tense: "futur", person: "elle", sentence: "elle [[kiffera]]", distractors: [] }] },
+          { ...set, id: "x-12", items: [{ id: "q1", type: "conjugate", tense: "subjonctif", person: "tu", sentence: "tu [[kiffes]]", distractors: [] }] },
+          { ...set, id: "x-13", items: [{ id: "q1", type: "conjugate", tense: "futur", person: "tu", distractors: [] }] },
+          { ...set, id: "x-14", items: [{ id: "q1", type: "conjugate", tense: "futur", person: "tu", sentence: "tu [[kifferas]]" }] },
+          { ...set, id: "x-11", items: [{ id: "q1", type: "conjugate", tense: "futur", person: "tu", sentence: "tu [[kifferas]]", answer: "kifferas", distractors: ["kiffes", "kiffais", "as kiffé"] }] },
         ],
         exercise_runs: [
           { ...run, id: "r-2", answers: null },
@@ -270,8 +276,9 @@ describe("import", () => {
         ],
       },
     });
-    expect(malformed.exercise_sets.skipped).toBe(7);
-    expect(await db.exercise_sets.count()).toBe(1);
+    expect(malformed.exercise_sets.skipped).toBe(11);
+    expect(malformed.exercise_sets.inserted).toBe(1);
+    expect(await db.exercise_sets.count()).toBe(2);
     expect(malformed.exercise_runs.skipped).toBe(2);
 
     // A scoped set («Трудные · все темы») keeps its scope through export and import.

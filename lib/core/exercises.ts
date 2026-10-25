@@ -3,23 +3,29 @@
 // sides import it. The item contract is documented on ExerciseItem in lib/types.ts.
 //
 // Server side: `completeSet(input, ctx)` fills the server-written parts (ids, word snapshots, the
-// choice/meaning prompt and answer, the register answer, pairs tiles), then `validateSet(set, ctx)`
+// choice/meaning prompt and answer, the register answer, pairs tiles, the conjugate answer, gap and
+// distractors from the verb's conjugation), then `validateSet(set, ctx)`
 // refuses a broken set with path-precise errors and `warningsFor(set)` lists what is merely weak.
 // App side: `optionsFor`, `clozeParts`, `pairsBoard`, `buildQueue` / `requeue` / `resumeQueue`,
 // `scoreRun`, `missedWords`, and the request texts the user copies into Claude.
+import { CONJ_TENSE_ORDER, splitForm } from "./conj-display";
+import { cleanConjugation, conjugate, type ConjData } from "./conjugate";
 import { isRussian, normalizeLemma, searchKey } from "./text";
 import {
   SLANG_LABELS,
+  type Conjugation,
   type ExerciseAnswer,
   type ExerciseItem,
   type ExerciseItemType,
   type ExerciseNewWord,
   type ExerciseOutcome,
   type ExercisePairTile,
+  type ExercisePerson,
   type ExerciseRun,
   type ExerciseScope,
   type ExerciseSet,
   type ExerciseSkill,
+  type ExerciseTense,
   type ExerciseWordSnapshot,
   type Gender,
   type PartOfSpeech,
@@ -30,8 +36,11 @@ import {
 /** Set ids are "x-" + sha256(client_ref) (computed on the server with node crypto). */
 export const EXERCISE_ID_PREFIX = "x-";
 
-export const EXERCISE_ITEM_TYPES: readonly ExerciseItemType[] = ["choice", "cloze", "register", "pairs"];
+export const EXERCISE_ITEM_TYPES: readonly ExerciseItemType[] = ["choice", "cloze", "register", "pairs", "conjugate"];
 export const EXERCISE_SKILLS: readonly ExerciseSkill[] = ["meaning", "form", "neutral", "verlan", "situation"];
+/** A conjugate item's tense and person, in the conjugation table's order (person index = form index). */
+export const EXERCISE_TENSES: readonly ExerciseTense[] = CONJ_TENSE_ORDER;
+export const EXERCISE_PERSONS: readonly ExercisePerson[] = ["je", "tu", "il", "nous", "vous", "ils"];
 /** The register item's four options, in level order: index = slang_level. */
 export const REGISTER_LEVELS = SLANG_LABELS;
 
@@ -54,10 +63,14 @@ export const MIN_GAP = 2;
 export const MAX_ATTEMPTS = 3;
 /** The request sizes the app offers. */
 export const REQUEST_SIZES = [8, 12, 16] as const;
+/** «Спряжение глаголов»: a short test (8 by default), and never more than this many conjugate items. */
+export const CONJ_REQUEST_SIZES = [6, 8, 10] as const;
+export const CONJUGATE_MAX = 10;
 
 export const CLOZE_PROMPT = "Какое слово пропущено?";
 export const PAIRS_PROMPT = "Соедини слово и перевод";
 export const REGISTER_PROMPT = "Насколько это разговорно?";
+export const CONJ_PROMPT = "Какая форма?";
 
 // ---------------------------------------------------------------------------------------------
 // Inputs and the library lookup
@@ -65,7 +78,7 @@ export const REGISTER_PROMPT = "Насколько это разговорно?"
 /** The fields of a library word an exercise needs. Repo rows and Dexie rows both fit. */
 export type ExerciseLibraryWord = Pick<
   Word,
-  "id" | "fr" | "ru" | "pos" | "gender" | "slang_level" | "verlan" | "example_fr" | "example_ru" | "deleted_at"
+  "id" | "fr" | "ru" | "pos" | "gender" | "slang_level" | "verlan" | "example_fr" | "example_ru" | "deleted_at" | "conjugation"
 > & { muted?: boolean };
 
 export interface ExerciseContext {
@@ -76,14 +89,27 @@ export interface ExerciseContext {
    * must not be one. Paused words are included, with `muted`, so the refusal can say why.
    */
   savedWord?(fr: string): { id: string; muted?: boolean } | undefined;
+  /**
+   * A verb's conjugation for conjugate items: the one saved on the library word, else the one built
+   * from Lexique (a new word has only that one); null when there is none.
+   */
+  conjugationOf?(wordId: string | null, fr: string): Conjugation | null;
 }
 
-/** A context over a list of library words (the server's `repo.words()`, or Dexie rows). */
-export function contextFromWords(words: readonly ExerciseLibraryWord[]): ExerciseContext {
+/**
+ * A context over a list of library words (the server's `repo.words()`, or Dexie rows). `conjData` is
+ * the Lexique table (public/lexique/fr-conj.json); without it only the rules conjugate.
+ */
+export function contextFromWords(words: readonly ExerciseLibraryWord[], conjData: ConjData | null = null): ExerciseContext {
   const byId = new Map(words.map((w) => [w.id, w]));
   const byLemma = new Map<string, ExerciseLibraryWord>();
   for (const w of words) if (w.deleted_at === null && !byLemma.has(normalizeLemma(w.fr))) byLemma.set(normalizeLemma(w.fr), w);
-  return { word: (id) => byId.get(id), savedWord: (fr) => byLemma.get(normalizeLemma(fr)) };
+  return {
+    word: (id) => byId.get(id),
+    savedWord: (fr) => byLemma.get(normalizeLemma(fr)),
+    // The same rule as the word card and the connector's search_words: the saved one wins.
+    conjugationOf: (wordId, fr) => cleanConjugation(wordId ? byId.get(wordId)?.conjugation : null) ?? conjugate(fr, conjData),
+  };
 }
 
 /** An item as Claude sends it: everything but `type` is optional; completeSet fills the rest. */
@@ -92,6 +118,8 @@ export interface ExerciseItemInput {
   type: ExerciseItemType;
   skill?: ExerciseSkill | null;
   ask?: "fr" | "ru" | null;
+  tense?: ExerciseTense | null;
+  person?: ExercisePerson | null;
   word_id?: string | null;
   new_ref?: string | null;
   prompt?: string | null;
@@ -181,6 +209,56 @@ export function wordSnapshot(word: Pick<Word, "fr" | "ru" | "pos" | "gender" | "
 
 const usable = (w: ExerciseLibraryWord | undefined): w is ExerciseLibraryWord => !!w && w.deleted_at === null && !w.muted;
 
+/** Parts of speech a conjugate item may be about ("other" too: a new word defaults to it). */
+const CONJUGATE_POS: readonly string[] = ["verb", "expression", "other"];
+
+const AVOIR = ["ai", "as", "a", "avons", "avez", "ont"];
+const ETRE = ["suis", "es", "est", "sommes", "êtes", "sont"];
+const STARTS_VOWEL = /^[aeiouyàâäéèêëîïôöûüœæ]/i;
+
+/**
+ * Whether a verb part reads right after the item's pronouns: an elided «j'» / «t'» wants a vowel,
+ * an unelided «je» / «me» / «te» / «se» a consonant (h either way). So «je ___» never offers «irai».
+ */
+function fitsPronoun(pro: string, verb: string): boolean {
+  if (/^h/i.test(verb)) return true;
+  if (/['’]$/.test(pro.trim())) return STARTS_VOWEL.test(verb);
+  if (/(?:^|\s)(?:je|me|te|se)\s*$/i.test(pro)) return !STARTS_VOWEL.test(verb);
+  return true;
+}
+
+/**
+ * Three wrong options for a conjugate item: other forms of the same verb without their pronouns,
+ * deterministic (a retried create gives the same set). First the passé composé with the other
+ * auxiliary (avoir ↔ être, the singular participle), then the same person in the other tenses,
+ * then the same tense in the other persons (the paired one first: tu ↔ vous). Forms that would not
+ * read after the item's pronouns come last; every option is distinct under searchKey.
+ */
+export function conjugateDistractors(conj: Conjugation, tense: ExerciseTense, idx: number): string[] {
+  const { pro, verb: answer } = splitForm(conj.tenses[tense][idx]);
+  const candidates: string[] = [];
+  if (tense === "passe_compose") {
+    const words = answer.split(" ");
+    const swap = AVOIR.includes(words[0]) ? ETRE[idx] : ETRE.includes(words[0]) ? AVOIR[idx] : null;
+    // The participle (and the rest of an expression) of the singular person: «allés» → «allé».
+    const rest = splitForm(conj.tenses.passe_compose[idx % 3]).verb.split(" ").slice(1).join(" ");
+    if (swap && rest) candidates.push(`${swap} ${rest}`);
+  }
+  for (const t of EXERCISE_TENSES) if (t !== tense) candidates.push(splitForm(conj.tenses[t][idx]).verb);
+  const paired = (idx + 3) % 6;
+  for (const i of [paired, ...[0, 1, 2, 3, 4, 5].filter((i) => i !== idx && i !== paired)]) candidates.push(splitForm(conj.tenses[tense][i]).verb);
+  const seen = new Set([searchKey(answer)]);
+  const out: string[] = [];
+  for (const c of [...candidates.filter((c) => fitsPronoun(pro, c)), ...candidates.filter((c) => !fitsPronoun(pro, c))]) {
+    const key = searchKey(c);
+    if (!c || seen.has(key)) continue;
+    seen.add(key);
+    out.push(c);
+    if (out.length === DISTRACTORS) break;
+  }
+  return out;
+}
+
 /**
  * The set as it is stored: ids "q1".."qN" where missing, defaults (choice → skill "meaning",
  * meaning → ask "fr"), `null` / `[]` for absent fields, word snapshots, the choice/meaning prompt
@@ -221,14 +299,18 @@ export function completeSet(input: ExerciseSetInput, ctx: ExerciseContext): Exer
   const items = input.items.map((raw, i): ExerciseItem => {
     const type = raw.type;
     const pairs = type === "pairs";
+    const conjugateItem = type === "conjugate";
     const skill = type === "choice" ? (raw.skill ?? "meaning") : null;
     const ask = skill === "meaning" ? (raw.ask ?? "fr") : null;
+    const tense = conjugateItem ? (raw.tense ?? null) : null;
+    const person = conjugateItem ? (raw.person ?? null) : null;
     const word_id = pairs ? null : clean(raw.word_id);
     const new_ref = pairs ? null : clean(raw.new_ref);
     const word = pairs ? null : snapshotOf(word_id, new_ref);
     let prompt = clean(raw.prompt);
     let answer = clean(raw.answer);
-    const sentence = type === "cloze" ? clean(raw.sentence) : null;
+    let sentence = type === "cloze" ? clean(raw.sentence) : null;
+    let distractors = type === "choice" || type === "cloze" ? cleanList(raw.distractors) : [];
     if (skill === "meaning" && word) {
       prompt ??= ask === "ru" ? word.ru : word.fr;
       // One equivalent, the shape of a distractor (a whole «девушка, тёлка» list would stand out).
@@ -236,19 +318,39 @@ export function completeSet(input: ExerciseSetInput, ctx: ExerciseContext): Exer
     }
     if (type === "cloze" && !answer && sentence) answer = clozeParts(sentence)?.answer ?? null;
     if (type === "register") answer = word ? REGISTER_LEVELS[word.slang_level] : null;
+    if (conjugateItem) {
+      // The form comes from the verb's conjugation, whatever answer or sentence was sent.
+      answer = null;
+      const conj = word ? (ctx.conjugationOf?.(word_id, word.fr) ?? null) : null;
+      const at = person ? EXERCISE_PERSONS.indexOf(person) : -1;
+      // The infinitive is the stem, whatever prompt was sent.
+      if (word) prompt = word.fr;
+      if (conj && tense && EXERCISE_TENSES.includes(tense) && at >= 0) {
+        const { pro, verb } = splitForm(conj.tenses[tense][at]);
+        answer = verb;
+        // A saved form written without its pronoun still says who: «tu [[kiffes]]», «j'[[aime]]».
+        const fallback = person === "je" && /^[aeiouyhàâäéèêëîïôöûüœæ]/i.test(verb) ? "j'" : `${person} `;
+        sentence = `${pro || fallback}[[${verb}]]`;
+        // Options sent with their pronouns («tu kiffais») keep only the verb part.
+        distractors = cleanList(raw.distractors).map((d) => splitForm(d).verb);
+        if (distractors.length === 0) distractors = conjugateDistractors(conj, tense, at);
+      }
+    }
     const refs = pairs ? cleanList(raw.pairs) : [];
     return {
       id: clean(raw.id) ?? `q${i + 1}`,
       type,
       skill,
       ask,
+      tense,
+      person,
       word_id,
       new_ref,
       prompt: pairs ? null : prompt,
       sentence,
       sentence_ru: type === "cloze" ? clean(raw.sentence_ru) : null,
       answer: pairs ? null : answer,
-      distractors: type === "choice" || type === "cloze" ? cleanList(raw.distractors) : [],
+      distractors,
       pairs: refs,
       tiles: refs.map(tileOf).filter((t): t is ExercisePairTile => t !== null),
       explain_ru: clean(raw.explain_ru),
@@ -336,6 +438,8 @@ export function validateSet(set: ExerciseSetContent, ctx: ExerciseContext): Exer
 
   const items = Array.isArray(set.items) ? set.items : [];
   if (items.length < ITEMS_MIN || items.length > ITEMS_MAX) err("items", `${ITEMS_MIN}–${ITEMS_MAX} items (got ${items.length})`);
+  const conjugateCount = items.filter((i) => i.type === "conjugate").length;
+  if (conjugateCount > CONJUGATE_MAX) err("items", `at most ${CONJUGATE_MAX} conjugate items in a set, a short test (got ${conjugateCount})`);
 
   const checkWordRef = (path: string, id: string) => {
     const w = ctx.word(id);
@@ -449,6 +553,31 @@ export function validateSet(set: ExerciseSetContent, ctx: ExerciseContext): Exer
         checkEmpty(p, item, "pairs items have no distractors");
         break;
       }
+      case "conjugate": {
+        checkRef(p, item);
+        const tenseOk = !!item.tense && EXERCISE_TENSES.includes(item.tense);
+        const personOk = !!item.person && EXERCISE_PERSONS.includes(item.person);
+        if (!tenseOk) err(`${p}.tense`, `one of ${EXERCISE_TENSES.join(", ")}`);
+        if (!personOk) err(`${p}.person`, `one of ${EXERCISE_PERSONS.join(", ")}`);
+        // An unresolved word is reported by checkRef alone.
+        if (!item.word) break;
+        // A new word defaults to "other"; adjectives in -er («léger») would otherwise conjugate.
+        if (!CONJUGATE_POS.includes(item.word.pos)) {
+          err(item.word_id ? `${p}.word_id` : `${p}.new_ref`, `«${item.word.fr}» is not a verb; conjugate items need a verb`);
+          break;
+        }
+        if (!ctx.conjugationOf?.(item.word_id, item.word.fr)) {
+          err(
+            item.word_id ? `${p}.word_id` : `${p}.new_ref`,
+            `«${item.word.fr}» has no conjugation the app can build; pick another verb${item.word_id ? " or save its conjugation with update_word first" : ""}`,
+          );
+          break;
+        }
+        if (!tenseOk || !personOk) break;
+        if (!item.sentence || !clozeParts(item.sentence)) err(`${p}.sentence`, "must be built by the server from the verb's conjugation");
+        checkOptions(p, item);
+        break;
+      }
       default:
         err(`${p}.type`, `one of ${EXERCISE_ITEM_TYPES.join(", ")}`);
     }
@@ -487,8 +616,11 @@ const containsWord = (hay: string, needle: string) => {
 const stemsOf = (item: ExerciseItem): string[] =>
   [item.prompt, item.sentence?.replace(CLOZE_SPAN, " "), item.sentence_ru].filter((s): s is string => !!s);
 
+/** At least half conjugate items: a «Спряжение глаголов» set (conjugate plus a few cloze, by design; 3 + 3 counts). */
+export const isVerbSet = (items: readonly Pick<ExerciseItem, "type">[]): boolean => items.filter((i) => i.type === "conjugate").length * 2 >= items.length;
+
 /**
- * What makes a set weak, without blocking it: fewer than 3 item types; the answer is the longest
+ * What makes a set weak, without blocking it: fewer than 3 item types (not in a verb set); the answer is the longest
  * option in more than 60% of choice/cloze items; an answer shows in a stem (its own, or another
  * item's about a different word); the same word in two consecutive items; more than 30% of the
  * set's words are new.
@@ -498,7 +630,9 @@ export function warningsFor(set: Pick<ExerciseSet, "items" | "new_words">): Exer
   const items = set.items;
 
   const types = new Set(items.map((i) => i.type));
-  if (types.size < 3) out.push({ code: "few_types", message: `only ${types.size} item type(s); use at least 3 (choice, cloze, register, pairs)` });
+  if (types.size < 3 && !isVerbSet(items)) {
+    out.push({ code: "few_types", message: `only ${types.size} item type(s); use at least 3 (${EXERCISE_ITEM_TYPES.join(", ")})` });
+  }
 
   const optioned = items.filter((i) => (i.type === "choice" || i.type === "cloze") && i.answer && (i.distractors ?? []).length > 0);
   const longest = optioned.filter((i) => i.answer!.length > Math.max(...i.distractors.map((d) => d.length))).length;
@@ -736,12 +870,13 @@ export function resumeQueue(
 }
 
 /**
- * The items of a set that can still be played: choice / cloze / register items about a word in
- * `blocked` (deleted or paused in the library since the set was made) and pairs boards with such
- * a word are left out. Every item when nothing is blocked.
+ * The items of a set that can still be played: choice / cloze / register / conjugate items about a
+ * word in `blocked` (deleted or paused in the library since the set was made) and pairs boards with
+ * such a word are left out, and so are items of a type this version of the app does not know (a set
+ * written by a newer connector). Every item when nothing is blocked.
  */
 export function playableItemIds(set: Pick<ExerciseSet, "items">, blocked: ReadonlySet<string>): string[] {
-  return set.items.filter((i) => !itemWordKeys(i).some((k) => blocked.has(k))).map((i) => i.id);
+  return set.items.filter((i) => EXERCISE_ITEM_TYPES.includes(i.type) && !itemWordKeys(i).some((k) => blocked.has(k))).map((i) => i.id);
 }
 
 /** Items answered right on the first attempt with no miss in it (a pairs board can log misses before its last match). */
@@ -867,6 +1002,8 @@ export interface RequestSpec {
   allowNew: boolean;
   /** Only the user's difficult and/or due words, from every theme: themes, topic and new words are ignored. */
   scope?: ExerciseScope | null;
+  /** «Спряжение глаголов»: a short test on the verbs of those words; never new words. */
+  conjugation?: boolean;
 }
 
 /** «по трудным словам из всех тем»: where a scoped request takes its words from. */
@@ -881,32 +1018,37 @@ const SCOPE_WHERE: Record<ExerciseScope, string> = {
  * «Сделай упражнение в Карточках: темы «Люди», «Эмоции», 12 вопросов, можно новые слова.»,
  * «Сделай упражнение в Карточках на тему «вечеринка», 12 вопросов, можно новые слова.»,
  * «Сделай упражнение в Карточках по всем темам, 12 вопросов.»,
- * «Сделай упражнение в Карточках по трудным словам из всех тем, 12 вопросов.» (a scope: never new words).
+ * «Сделай упражнение в Карточках по трудным словам из всех тем, 12 вопросов.» (a scope: never new words),
+ * «Сделай упражнение на спряжение глаголов в Карточках по теме «Люди», 8 вопросов.» (never new words).
  */
-export function buildRequestText({ folders, topic, size, allowNew, scope }: RequestSpec): string {
-  if (scope) return `Сделай упражнение в Карточках ${SCOPE_WHERE[scope]}, ${questions(size)}.`;
+export function buildRequestText({ folders, topic, size, allowNew, scope, conjugation }: RequestSpec): string {
+  const what = conjugation ? "упражнение на спряжение глаголов" : "упражнение";
+  if (scope) return `Сделай ${what} в Карточках ${SCOPE_WHERE[scope]}, ${questions(size)}.`;
   const names = [...new Set(folders.map((f) => f.trim()).filter(Boolean))];
   const custom = topic?.replace(/\s+/g, " ").trim() || null;
   let where: string;
   if (names.length === 0) where = custom ? ` на тему ${quoted(custom)}` : " по всем темам";
   else if (names.length === 1) where = ` по теме ${quoted(names[0])}${custom ? ` и на тему ${quoted(custom)}` : ""}`;
   else where = `: темы ${names.map(quoted).join(", ")}${custom ? ` и тема ${quoted(custom)}` : ""}`;
-  return `Сделай упражнение в Карточках${where}, ${questions(size)}${allowNew ? ", можно новые слова" : ""}.`;
+  return `Сделай ${what} в Карточках${where}, ${questions(size)}${allowNew && !conjugation ? ", можно новые слова" : ""}.`;
 }
 
 /**
  * «Попросить следующий набор»: «Сделай следующее упражнение в Карточках после «Вечеринка»,
  * 12 вопросов, с упором на ошибки: relou, keuf, ouf.» A scoped set keeps its scope: «… в Карточках
- * по трудным словам из всех тем после «Трудные слова», …».
+ * по трудным словам из всех тем после «Трудные слова», …». A verb set (mostly conjugate) stays one:
+ * «Сделай следующее упражнение на спряжение глаголов в Карточках после «Глаголы · passé composé», …».
  */
 export function buildFollowUpText(
   set: Pick<ExerciseSet, "title" | "items" | "new_words"> & Partial<Pick<ExerciseSet, "scope">>,
   missed: readonly Pick<MissedWord, "fr">[],
 ): string {
   const scope = parseScope(set.scope);
+  const verbs = isVerbSet(set.items);
   const frs = [...new Set(missed.map((m) => m.fr))];
   const focus = frs.length ? `, с упором на ошибки: ${frs.join(", ")}` : "";
-  const fresh = !scope && set.new_words.length > 0 ? ", можно новые слова" : "";
+  const fresh = !scope && !verbs && set.new_words.length > 0 ? ", можно новые слова" : "";
   const where = scope ? ` ${SCOPE_WHERE[scope]}` : "";
-  return `Сделай следующее упражнение в Карточках${where} после ${quoted(set.title)}, ${questions(set.items.length)}${focus}${fresh}.`;
+  const what = verbs ? "упражнение на спряжение глаголов" : "упражнение";
+  return `Сделай следующее ${what} в Карточках${where} после ${quoted(set.title)}, ${questions(set.items.length)}${focus}${fresh}.`;
 }

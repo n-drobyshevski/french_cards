@@ -6,7 +6,8 @@ import { posAbbr } from "@/components/review/format";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { SlangMeter } from "@/components/ui/SlangMeter";
-import { CLOZE_PROMPT, PAIRS_PROMPT, REGISTER_PROMPT } from "@/lib/core/exercises";
+import { TENSE_NAMES } from "@/lib/core/conj-display";
+import { CLOZE_PROMPT, CONJ_PROMPT, PAIRS_PROMPT, REGISTER_PROMPT } from "@/lib/core/exercises";
 import type { ExerciseItem, ExerciseSkill } from "@/lib/types";
 import { ClozeLine } from "./ClozeLine";
 import { isRussian } from "./player-state";
@@ -19,9 +20,11 @@ const SKILL_LABEL: Record<ExerciseSkill, string> = {
   situation: "Ситуация",
 };
 
-/** The card header's label: the bold skill and the muted direction («ЗНАЧЕНИЕ · FR → RU»). */
-export function cardLabel(item: Pick<ExerciseItem, "type" | "skill" | "ask">): { label: string; detail: string | null } {
+/** The card header's label: the bold skill and the muted direction («ЗНАЧЕНИЕ · FR → RU», «СПРЯЖЕНИЕ · PASSÉ COMPOSÉ»). */
+export function cardLabel(item: Pick<ExerciseItem, "type" | "skill" | "ask"> & Partial<Pick<ExerciseItem, "tense">>): { label: string; detail: string | null } {
   switch (item.type) {
+    case "conjugate":
+      return { label: "Спряжение", detail: item.tense ? (TENSE_NAMES[item.tense] ?? null) : null };
     case "cloze":
       return { label: "Пропуск", detail: null };
     case "register":
@@ -112,6 +115,14 @@ function Prompt({ text }: { text: string }) {
 
 const question = "m-0 mt-5 text-[15px] leading-5 text-muted md:mt-1.5 md:leading-6";
 
+/**
+ * The conjugate infinitive, one step below frSize on md: the infinitive, the pronoun line and the
+ * question must fit the 296px card with «Ошиблись раньше — ещё раз» on a retry.
+ */
+function conjSize(text: string): string {
+  return text.length <= 28 ? "text-[32px] leading-[1.15] md:text-[40px] md:leading-[48px]" : frSize(text);
+}
+
 export interface QuestionCardProps {
   item: ExerciseItem;
   /** The set's title, in the footer («НАБОР: …»). */
@@ -131,7 +142,7 @@ export interface QuestionCardProps {
 /**
  * The question as the review index card (SPEC.md «Упражнения» → Player): 46px header with the red
  * rule — mono skill label left (ЗНАЧЕНИЕ · FR → RU / ФОРМА · RU → FR / ВЕРЛАН / СИТУАЦИЯ / ПРОПУСК /
- * РЕГИСТР / ПАРЫ), «ПОВТОР» on a requeued item, the slang meter right — the question, the stamp, and
+ * РЕГИСТР / ПАРЫ / СПРЯЖЕНИЕ · PASSÉ COMPOSÉ), «ПОВТОР» on a requeued item, the slang meter right — the question, the stamp, and
  * the footer «НАБОР: … · ИЗ ЧАТА». Phones (L-ExPlayer-B): it fills the column above the grid with the
  * skill word, the meter and the hero prompt — no direction, footer, cloze question or repeat line.
  * From 768 a 296px card.
@@ -195,6 +206,20 @@ export function QuestionCard({ item, setTitle, attempt, answered, pairsCount, st
         </>
       );
       break;
+    case "conjugate":
+      // The infinitive, then the pronouns with the gap («tu ___»), filled once answered.
+      body = (
+        <>
+          <h2 lang="fr" className={cx("m-0 font-serif font-medium tracking-[-0.015em] break-words", conjSize(item.prompt ?? word?.fr ?? ""))}>
+            {item.prompt ?? word?.fr ?? ""}
+          </h2>
+          <div className="mt-3 md:mt-2">
+            <ClozeLine sentence={item.sentence ?? ""} answered={answered} />
+          </div>
+          <p className="m-0 mt-5 text-[15px] leading-5 text-muted md:mt-1 md:leading-6">{CONJ_PROMPT}</p>
+        </>
+      );
+      break;
   }
 
   return (
@@ -214,8 +239,9 @@ export function QuestionCard({ item, setTitle, attempt, answered, pairsCount, st
         label={
           <span className="inline-flex items-center gap-2">
             <span className="font-medium text-ink uppercase">{label}</span>
-            {/* Phones: the skill word only; the prompt says the direction (L-ExPlayer-B). */}
-            {detail && <span className="max-md:hidden">· {detail}</span>}
+            {/* Phones: the skill word only; the prompt says the direction (L-ExPlayer-B). A conjugate
+                item keeps its tense: the question cannot be answered without it. */}
+            {detail && <span className={item.type === "conjugate" ? undefined : "max-md:hidden"}>· {detail}</span>}
             {pairsCount && <span>· {pairsCount.toUpperCase()}</span>}
             {repeat && (
               <span className="inline-flex h-[18px] items-center rounded-[3px] border border-ink px-[5px] text-[10px] font-medium text-ink">

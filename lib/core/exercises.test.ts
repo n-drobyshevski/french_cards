@@ -6,6 +6,8 @@ import {
   buildRequestText,
   clozeParts,
   completeSet,
+  conjugateDistractors,
+  CONJUGATE_MAX,
   contextFromWords,
   countFirstTry,
   DISTRACTORS,
@@ -28,13 +30,17 @@ import {
   resumeQueue,
   runSettled,
   ruEquivalents,
+  isVerbSet,
   scoreRun,
   seededRandom,
   shuffled,
   validateSet,
   warningsFor,
 } from "./exercises";
+import { conjugate } from "./conjugate";
+import { splitForm } from "./conj-display";
 import { advancePractice } from "./practice";
+import { searchKey } from "./text";
 
 const lib = (id: string, fr: string, ru: string, extra: Partial<ExerciseLibraryWord> = {}): ExerciseLibraryWord => ({
   id,
@@ -293,7 +299,7 @@ describe("validateSet", () => {
     expect(errorAt(withItem(1, { id: "q1" }), "items[1].id")).toMatch(/duplicate/);
     expect(errorAt(withItem(1, { id: "" }), "items[1].id")).toBe("required");
     expect(errorAt(withItem(1, { id: "q".repeat(21) }), "items[1].id")).toMatch(/too long/);
-    expect(errorAt(withItem(1, { type: "typed" as never }), "items[1].type")).toMatch(/one of choice, cloze, register, pairs/);
+    expect(errorAt(withItem(1, { type: "typed" as never }), "items[1].type")).toBe("one of choice, cloze, register, pairs, conjugate");
   });
 
   it("reports every problem at once", () => {
@@ -414,6 +420,8 @@ const item = (id: string, word: string, type: ExerciseItem["type"] = "choice"): 
   type,
   skill: type === "choice" ? "neutral" : null,
   ask: null,
+  tense: null,
+  person: null,
   word_id: word.startsWith("n") ? null : word,
   new_ref: word.startsWith("n") ? word : null,
   prompt: "p",
@@ -761,5 +769,228 @@ describe("ids and lookups", () => {
     expect(ctx.savedWord?.("une meuf.")?.id).toBe("w-meuf");
     expect(ctx.savedWord?.("la caisse")).toBeUndefined();
     expect(ctx.word("w-gone")?.deleted_at).not.toBeNull();
+  });
+});
+
+describe("conjugate items", () => {
+  const bosser = conjugate("bosser", null)!;
+  const VERBS = [
+    ...WORDS,
+    lib("w-casser", "se casser", "свалить", { pos: "verb", gender: "none", slang_level: 2 }),
+    lib("w-aimer", "aimer", "любить", { pos: "verb", gender: "none", slang_level: 0 }),
+    lib("w-arriver", "arriver", "приходить", { pos: "verb", gender: "none", slang_level: 0 }),
+    lib("w-prendre", "prendre", "брать", { pos: "verb", gender: "none", slang_level: 0 }),
+    // A saved conjugation wins over the one the rules build.
+    lib("w-bosser", "bosser", "вкалывать", {
+      pos: "verb",
+      gender: "none",
+      conjugation: { ...bosser, tenses: { ...bosser.tenses, present: bosser.tenses.present.map((f, i) => (i === 1 ? "tu taffes" : f)) } },
+    }),
+  ];
+  const vctx = contextFromWords(VERBS);
+  const verbSet = (items: ExerciseItemInput[]) =>
+    completeSet(
+      {
+        title: "Глаголы · passé composé",
+        items: [
+          { type: "conjugate", word_id: "w-kiffer", tense: "passe_compose", person: "je" },
+          { type: "conjugate", word_id: "w-casser", tense: "passe_compose", person: "je" },
+          { type: "conjugate", word_id: "w-aimer", tense: "present", person: "je" },
+          { type: "cloze", word_id: "w-bouffer", sentence: "Hier, j'ai [[bouffé]] une pizza.", distractors: ["bouffais", "bouffera", "bouffons"] },
+          { type: "conjugate", word_id: "w-arriver", tense: "passe_compose", person: "nous" },
+          { type: "conjugate", word_id: "w-bosser", tense: "present", person: "tu" },
+          ...items,
+        ],
+      },
+      vctx,
+    );
+  const errors = (set: ExerciseSetContent) => validateSet(set, vctx).errors;
+
+  it("writes the infinitive, the form split at the pronouns and three distractors", () => {
+    const set = verbSet([]);
+    const [kiffer, casser, aimer, cloze, arriver, bosserItem] = set.items;
+    expect(kiffer).toMatchObject({ type: "conjugate", tense: "passe_compose", person: "je", prompt: "kiffer", sentence: "j'[[ai kiffé]]", answer: "ai kiffé", skill: null, ask: null });
+    expect(kiffer.distractors).toHaveLength(3);
+    expect(casser).toMatchObject({ prompt: "se casser", sentence: "je me [[suis cassé]]", answer: "suis cassé" });
+    expect(aimer).toMatchObject({ sentence: "j'[[aime]]", answer: "aime" });
+    expect(arriver).toMatchObject({ sentence: "nous [[sommes arrivés]]", answer: "sommes arrivés" });
+    expect(bosserItem).toMatchObject({ sentence: "tu [[taffes]]", answer: "taffes" });
+    expect(cloze).toMatchObject({ tense: null, person: null });
+    expect(good().items.every((i) => i.tense === null && i.person === null)).toBe(true);
+    expect(errors(set)).toEqual([]);
+    // Mostly conjugate plus a cloze: two types by design, no few_types warning.
+    expect(warningsFor(set).map((w) => w.code)).not.toContain("few_types");
+  });
+
+  it("overrides a sent answer and sentence, keeps sent distractors without their pronouns", () => {
+    const set = verbSet([
+      { type: "conjugate", word_id: "w-kiffer", tense: "imparfait", person: "tu", answer: "kiffes", sentence: "tu [[kiffes]]", distractors: ["tu kiffes", "kifferas", "as kiffé"] },
+    ]);
+    expect(set.items[6]).toMatchObject({ answer: "kiffais", sentence: "tu [[kiffais]]", distractors: ["kiffes", "kifferas", "as kiffé"] });
+    expect(errors(set)).toEqual([]);
+  });
+
+  it("always writes the infinitive as the prompt, whatever prompt was sent", () => {
+    const set = verbSet([{ type: "conjugate", word_id: "w-aimer", tense: "futur", person: "nous", prompt: "Выбери форму" }]);
+    expect(set.items[6]).toMatchObject({ prompt: "aimer", sentence: "nous [[aimerons]]" });
+  });
+
+  it("fills in the pronoun for a saved form written without one, elided before a vowel", () => {
+    const aimer = conjugate("aimer", null)!;
+    const bare = Object.fromEntries(Object.entries(aimer.tenses).map(([t, forms]) => [t, forms.map((f) => splitForm(f).verb)]));
+    const kiffer = conjugate("kiffer", null)!;
+    const slashed = { ...kiffer.tenses, present: kiffer.tenses.present.map((f, i) => (i === 2 ? "il/elle/on kiffe" : f)) };
+    const c = contextFromWords([
+      lib("w-aimer", "aimer", "любить", { pos: "verb", gender: "none", conjugation: { ...aimer, tenses: bare as typeof aimer.tenses } }),
+      lib("w-kiffer", "kiffer", "обожать", { pos: "verb", gender: "none", conjugation: { ...kiffer, tenses: slashed } }),
+    ]);
+    const set = completeSet(
+      {
+        title: "t",
+        items: [
+          { type: "conjugate", word_id: "w-aimer", tense: "present", person: "je" },
+          { type: "conjugate", word_id: "w-aimer", tense: "present", person: "tu" },
+          { type: "conjugate", word_id: "w-kiffer", tense: "present", person: "il" },
+        ],
+      },
+      c,
+    );
+    expect(set.items[0]).toMatchObject({ sentence: "j'[[aime]]", answer: "aime" });
+    expect(set.items[1]).toMatchObject({ sentence: "tu [[aimes]]", answer: "aimes" });
+    // «il/elle/on kiffe» splits at the slash-joined subject: no doubled pronoun.
+    expect(set.items[2]).toMatchObject({ sentence: "il/elle/on [[kiffe]]", answer: "kiffe" });
+  });
+
+  it("refuses a conjugate item on a word that is not a verb", () => {
+    const c = contextFromWords([
+      ...VERBS,
+      lib("w-leger", "léger", "лёгкий", { pos: "adj", gender: "none" }),
+      lib("w-hier", "hier", "вчера", { pos: "adv", gender: "none" }),
+    ]);
+    const set = completeSet(
+      {
+        title: "t",
+        items: [
+          { type: "conjugate", word_id: "w-leger", tense: "present", person: "je" },
+          { type: "conjugate", word_id: "w-hier", tense: "futur", person: "nous" },
+          { type: "conjugate", word_id: "w-kiffer", tense: "futur", person: "nous" },
+        ],
+      },
+      c,
+    );
+    expect(validateSet(set, c).errors.filter((e) => e.path !== "items")).toEqual([
+      { path: "items[0].word_id", message: "«léger» is not a verb; conjugate items need a verb" },
+      { path: "items[1].word_id", message: "«hier» is not a verb; conjugate items need a verb" },
+    ]);
+  });
+
+  it("conjugates a new word from the rules and refuses one with no conjugation at its new_ref", () => {
+    // A library without these words (and without Lexique: «prendre» has no conjugation).
+    const fresh = contextFromWords([]);
+    const newWord = (ref: string, fr: string, pos: "verb" | "other" = "verb") => ({ ref, fr, ru: "x", pos, gender: "none" as const, slang_level: 1 as const });
+    const set = completeSet(
+      {
+        title: "t",
+        new_words: [newWord("n1", "kiffer"), newWord("n2", "prendre"), newWord("n3", "bosser", "other")],
+        items: [
+          { type: "conjugate", new_ref: "n1", tense: "present", person: "tu" },
+          { type: "conjugate", new_ref: "n2", tense: "futur", person: "tu" },
+          { type: "conjugate", new_ref: "n3", tense: "present", person: "nous" },
+        ],
+      },
+      fresh,
+    );
+    expect(set.items[0]).toMatchObject({ prompt: "kiffer", sentence: "tu [[kiffes]]", answer: "kiffes" });
+    expect(set.items[0].distractors).toHaveLength(3);
+    // pos "other" (a new word's default) is allowed.
+    expect(set.items[2]).toMatchObject({ sentence: "nous [[bossons]]" });
+    expect(validateSet(set, fresh).errors.filter((e) => e.path !== "items")).toEqual([{ path: "items[1].new_ref", message: "«prendre» has no conjugation the app can build; pick another verb" }]);
+  });
+
+  it("counts half conjugate plus cloze as a verb set (6 items, 3 cloze)", () => {
+    const set = {
+      ...completeSet(
+        {
+          title: "Глаголы",
+          items: [
+            { type: "conjugate", word_id: "w-kiffer", tense: "present", person: "nous" },
+            { type: "cloze", word_id: "w-bouffer", sentence: "Hier, on [[a bouffé]] une pizza.", distractors: ["bouffait", "bouffera", "bouffe"] },
+            { type: "conjugate", word_id: "w-aimer", tense: "futur", person: "tu" },
+            { type: "cloze", word_id: "w-kiffer", sentence: "Avant, je [[kiffais]] le rap.", distractors: ["ai kiffé", "kifferai", "kiffe"] },
+            { type: "conjugate", word_id: "w-arriver", tense: "imparfait", person: "ils" },
+            { type: "cloze", word_id: "w-bouffer", sentence: "Demain, on [[bouffera]] chez moi.", distractors: ["a bouffé", "bouffait", "bouffe"] },
+          ],
+        },
+        vctx,
+      ),
+      new_words: [],
+    };
+    expect(isVerbSet(set.items)).toBe(true);
+    expect(warningsFor(set).map((w) => w.code)).not.toContain("few_types");
+    expect(buildFollowUpText(set, [])).toContain("на спряжение глаголов");
+  });
+
+  it("refuses a bad tense or person, a verb with no conjugation and more than the cap", () => {
+    const bad = verbSet([
+      { type: "conjugate", word_id: "w-kiffer", tense: "subjonctif" as never, person: "tu" },
+      { type: "conjugate", word_id: "w-kiffer", tense: "futur", person: "elle" as never },
+      { type: "conjugate", word_id: "w-prendre", tense: "futur", person: "tu" },
+    ]);
+    expect(errors(bad).map((e) => e.path)).toEqual(["items[6].tense", "items[7].person", "items[8].word_id"]);
+    expect(errors(bad)[2].message).toBe("«prendre» has no conjugation the app can build; pick another verb or save its conjugation with update_word first");
+    const many = Array.from({ length: CONJUGATE_MAX - 5 }, (_, i): ExerciseItemInput => ({ type: "conjugate", word_id: i % 2 ? "w-aimer" : "w-kiffer", tense: "futur", person: "ils" }));
+    expect(errors(verbSet(many))).toEqual([]);
+    const tooMany = verbSet([...many, { type: "conjugate", word_id: "w-aimer", tense: "present", person: "nous" }]);
+    expect(errors(tooMany)).toEqual([{ path: "items", message: `at most ${CONJUGATE_MAX} conjugate items in a set, a short test (got ${CONJUGATE_MAX + 1})` }]);
+  });
+
+  it("builds three distinct distractors: the other auxiliary first, nothing that misreads after the pronoun", () => {
+    const kiffer = conjugate("kiffer", null)!;
+    const arriver = conjugate("arriver", null)!;
+    expect(conjugateDistractors(kiffer, "passe_compose", 1)).toEqual(["es kiffé", "kiffes", "kiffais"]);
+    // The singular participle with the swapped auxiliary.
+    expect(conjugateDistractors(arriver, "passe_compose", 3)[0]).toBe("avons arrivé");
+    // «j'» wants a vowel: no «suis kiffé» or «kiffe» after it.
+    expect(conjugateDistractors(kiffer, "passe_compose", 0)).toEqual(["avons kiffé", "as kiffé", "a kiffé"]);
+    // «je» / «me» want a consonant: «ai arrivé» and «ai cassé» go last or out.
+    expect(conjugateDistractors(arriver, "passe_compose", 0)).toEqual(["sommes arrivés", "sont arrivés", "ai arrivé"]);
+    expect(conjugateDistractors(conjugate("se casser", null)!, "passe_compose", 0)).toEqual(["casse", "cassais", "casserai"]);
+    for (const conj of [kiffer, arriver, conjugate("se casser", null)!]) {
+      for (const tense of ["present", "passe_compose", "imparfait", "futur"] as const) {
+        for (let i = 0; i < 6; i++) {
+          const list = conjugateDistractors(conj, tense, i);
+          const answer = conj.tenses[tense][i];
+          expect(list).toHaveLength(3);
+          expect(new Set(list.map(searchKey)).size).toBe(3);
+          expect(list.some((d) => answer.endsWith(` ${d}`) || answer.endsWith(`'${d}`))).toBe(false);
+        }
+      }
+    }
+  });
+
+  it("plays through the generic option grid", () => {
+    const item = verbSet([]).items[0];
+    const { options, correct } = optionsFor(item, seededRandom(4));
+    expect(options).toHaveLength(4);
+    expect(options[correct]).toBe("ai kiffé");
+    expect(new Set(options)).toEqual(new Set(["ai kiffé", ...item.distractors]));
+  });
+
+  it("asks for a verb test, never with new words, and keeps it in the follow-up", () => {
+    expect(buildRequestText({ folders: ["Люди"], topic: null, size: 8, allowNew: true, conjugation: true })).toBe(
+      "Сделай упражнение на спряжение глаголов в Карточках по теме «Люди», 8 вопросов.",
+    );
+    expect(buildRequestText({ folders: [], topic: null, size: 10, allowNew: false, scope: "difficult", conjugation: true })).toBe(
+      "Сделай упражнение на спряжение глаголов в Карточках по трудным словам из всех тем, 10 вопросов.",
+    );
+    const set = { ...verbSet([]), new_words: [] };
+    expect(buildFollowUpText(set, [{ fr: "kiffer" }])).toBe(
+      "Сделай следующее упражнение на спряжение глаголов в Карточках после «Глаголы · passé composé», 6 вопросов, с упором на ошибки: kiffer.",
+    );
+  });
+
+  it("an app that does not know an item type leaves the item out", () => {
+    const set = { items: [item("q1", "a"), { ...item("q2", "b"), type: "listen" as never }, item("q3", "c")] };
+    expect(playableItemIds(set, new Set())).toEqual(["q1", "q3"]);
   });
 });

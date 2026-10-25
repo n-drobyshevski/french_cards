@@ -27,6 +27,8 @@ const item = (id: string, word_id: string | null, extra: Partial<ExerciseItem> =
   type: "choice",
   skill: "meaning",
   ask: "fr",
+  tense: null,
+  person: null,
   word_id,
   new_ref: null,
   prompt: "relou",

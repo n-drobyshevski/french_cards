@@ -647,9 +647,12 @@ export async function holdDatabase(page: Page): Promise<() => Promise<void>> {
 
 export interface ExerciseItemSeed {
   id: string;
-  type: "choice" | "cloze" | "register" | "pairs";
+  type: "choice" | "cloze" | "register" | "pairs" | "conjugate";
   skill?: "meaning" | "form" | "neutral" | "verlan" | "situation" | null;
   ask?: "fr" | "ru" | null;
+  /** Conjugate: the tense and person asked (sentence, answer and distractors as the server writes them). */
+  tense?: "present" | "passe_compose" | "imparfait" | "futur" | null;
+  person?: "je" | "tu" | "il" | "nous" | "vous" | "ils" | null;
   /** A seeded library word by its French form: resolved to its word_id and snapshot in the page. */
   word?: string;
   new_ref?: string;
@@ -747,6 +750,8 @@ export async function seedExerciseSets(page: Page, sets: readonly ExerciseSetSee
                   type: it.type,
                   skill: it.skill ?? (it.type === "choice" ? "meaning" : null),
                   ask: it.ask ?? (it.type === "choice" ? "fr" : null),
+                  tense: it.tense ?? null,
+                  person: it.person ?? null,
                   word_id: w?.id ?? null,
                   new_ref: it.new_ref ?? null,
                   prompt: it.prompt ?? null,

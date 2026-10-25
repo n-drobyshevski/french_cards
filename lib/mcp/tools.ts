@@ -30,6 +30,7 @@ import {
   ANSWER_MAX,
   answerWords,
   completeSet,
+  CONJUGATE_MAX,
   contextFromWords,
   EXERCISE_ID_PREFIX,
   EXPLAIN_MAX,
@@ -72,10 +73,12 @@ import type {
   ExerciseFocusShare,
   ExerciseFocusTarget,
   ExerciseItemType,
+  ExercisePerson,
   ExerciseRun,
   ExerciseScope,
   ExerciseSet,
   ExerciseSkill,
+  ExerciseTense,
   FieldDef,
   Folder,
   ReviewState,
@@ -1606,8 +1609,12 @@ export const restoreFolder = tool({
 // are written only by the playing device, so they are read here and never written.
 
 const DAY_MS = 86_400_000;
-const ITEM_TYPES = ["choice", "cloze", "register", "pairs"] as const satisfies readonly ExerciseItemType[];
+const ITEM_TYPES = ["choice", "cloze", "register", "pairs", "conjugate"] as const satisfies readonly ExerciseItemType[];
 const SKILLS = ["meaning", "form", "neutral", "verlan", "situation"] as const satisfies readonly ExerciseSkill[];
+const TENSES = ["present", "passe_compose", "imparfait", "futur"] as const satisfies readonly ExerciseTense[];
+const PERSONS = ["je", "tu", "il", "nous", "vous", "ils"] as const satisfies readonly ExercisePerson[];
+/** «Спряжение глаголов»: the usual size of a verb set (6–10). */
+const VERB_SET_SIZE = 8;
 /** Most recent sets exercise_material lists, so Claude doesn't repeat one. */
 const RECENT_SETS = 5;
 const TOPIC_MATCHES_MAX = 40;
@@ -1722,14 +1729,21 @@ function scopeWords(words: readonly Word[], ctx: ViewContext, only: ExerciseScop
   );
 }
 
-/** exercise_material's `scope` additions when `only` is set: how many words there are and what to build. */
-function onlyBlock(only: ExerciseScope, available: number, themes: boolean) {
+/**
+ * exercise_material's `scope` additions when `only` is set: how many words there are and what to build.
+ * With `verbs` the words are the conjugable verbs only and the recipe is a verb set's (short, mostly conjugate).
+ */
+function onlyBlock(only: ExerciseScope, available: number, themes: boolean, verbs: boolean) {
   const what = FOCUS_WORDS_EN[only];
-  const suggested = scopeSuggestedItems(available);
+  const noun = verbs ? "verbs" : "words";
+  const suggested = verbs ? (available === 0 ? 0 : Math.min(VERB_SET_SIZE, Math.max(ITEMS_MIN, available * 3))) : scopeSuggestedItems(available);
+  const recipe = verbs
+    ? `Make ${suggested} questions (scale with the size the user asked for, 6–10): mostly conjugate items on these verbs plus 2–3 cloze items, the same verb at most twice and never back to back.`
+    : `Make ${suggested} questions (scale with the size the user asked for, at most ${available}×3 and at least ${ITEMS_MIN}): with few words make a shorter set, each word in 2–3 different question types (pairs need at least 4 words), the same word never twice in a row.`;
   const note =
     available === 0
-      ? `There are no ${what} words${themes ? " in these themes" : ""} right now, so there is nothing to drill: don't create a set; tell the user (in Russian) that they have no ${SCOPE_WORDS_RU[only]} now.`
-      : `Use only these ${available} ${what} words (words[]): no other library words and no new_words. Make ${suggested} questions (scale with the size the user asked for, at most ${available}×3 and at least ${ITEMS_MIN}): with few words make a shorter set, each word in 2–3 different question types (pairs need at least 4 words), the same word never twice in a row. Save it with create_exercise_set scope: "${only}".`;
+      ? `There are no ${what} ${noun}${themes ? " in these themes" : ""} right now, so there is nothing to drill: don't create a set; tell the user (in Russian) that they have no ${SCOPE_WORDS_RU[only]} now.`
+      : `Use only these ${available} ${what} ${noun} (words[]): no other library words and no new_words. ${recipe} Save it with create_exercise_set scope: "${only}".`;
   return { only, available, suggested_items: suggested, note };
 }
 
@@ -1831,6 +1845,10 @@ function topicStem(term: string): string {
   return term;
 }
 
+/** A verb (or verbal expression) conjugate items can ask about: it has a saved conjugation, or the app builds one from Lexique. */
+const isConjugable = (w: Pick<Word, "fr" | "pos" | "conjugation">) =>
+  (w.pos === "verb" || w.pos === "expression") && (cleanConjugation(w.conjugation) ?? conjugate(w.fr, CONJ_DATA)) !== null;
+
 /** The fields of a library word an exercise is built from (exercise_material's words and topic_matches). */
 const materialWord = (w: Word, live: ReadonlyMap<string, Folder>) => ({
   id: w.id,
@@ -1843,6 +1861,7 @@ const materialWord = (w: Word, live: ReadonlyMap<string, Folder>) => ({
   example_fr: w.example_fr,
   example_ru: w.example_ru,
   folder: folderRef(placeOf(w, live)),
+  ...(isConjugable(w) ? { conjugable: true } : {}),
 });
 
 /**
@@ -1890,7 +1909,7 @@ export const exerciseMaterial = tool({
   name: "exercise_material",
   title: "Material for an exercise",
   description:
-    `Read what an exercise set («Упражнения») should practise, before create_exercise_set. \`words\`: the live words of the given themes (all themes without \`folders\`), weakest first, each with \`signals\` merged from the last \`days\`: exercise answers (ex_attempts, ex_misses, confusions = wrong options the user picked), reviews graded «Снова»/«Трудно» (review_misses), lapses, due today and difficult cards. Words «на паузе» and deleted words are left out, and so are themes «на паузе» unless named in \`folders\`. With \`topic\` (a free-text subject like «вечеринка»), \`topic_matches\` lists saved words that fit it: use them by word_id and never put them in new_words (a muted one can't be used at all). \`recent_sets\` are the latest sets with their words, so the next one doesn't repeat them. \`focus\` is the user's «Чаще в упражнениях» (from Settings, or \`focus\` in the input when the user asks otherwise in this chat): when it is on, the matching words (difficult and/or due today) come first and carry \`focus: true\`, and its \`note\` says how many of the questions must be about them; honour it. With \`only\` («по трудным словам», «по словам к повторению», «без тем»), \`words\` are only the user's difficult and/or due words from every theme (\`folders\` still narrows), \`topic\` and \`focus\` are left out, and \`scope\` says how many there are (\`available\`), how many questions to make (\`suggested_items\`: fewer words → a shorter set, at least ${ITEMS_MIN}) and what to do when there are none.`,
+    `Read what an exercise set («Упражнения») should practise, before create_exercise_set. \`words\`: the live words of the given themes (all themes without \`folders\`), weakest first, each with \`signals\` merged from the last \`days\`: exercise answers (ex_attempts, ex_misses, confusions = wrong options the user picked), reviews graded «Снова»/«Трудно» (review_misses), lapses, due today and difficult cards. Words «на паузе» and deleted words are left out, and so are themes «на паузе» unless named in \`folders\`. With \`topic\` (a free-text subject like «вечеринка»), \`topic_matches\` lists saved words that fit it: use them by word_id and never put them in new_words (a muted one can't be used at all). \`recent_sets\` are the latest sets with their words, so the next one doesn't repeat them. \`focus\` is the user's «Чаще в упражнениях» (from Settings, or \`focus\` in the input when the user asks otherwise in this chat): when it is on, the matching words (difficult and/or due today) come first and carry \`focus: true\`, and its \`note\` says how many of the questions must be about them; honour it. With \`only\` («по трудным словам», «по словам к повторению», «без тем»), \`words\` are only the user's difficult and/or due words from every theme (\`folders\` still narrows), \`topic\` and \`focus\` are left out, and \`scope\` says how many there are (\`available\`), how many questions to make (\`suggested_items\`: fewer words → a shorter set, at least ${ITEMS_MIN}) and what to do when there are none. With \`verbs\` («упражнение на спряжение глаголов»), \`words\` are only the verbs conjugate items can ask about (\`conjugable: true\`: a saved conjugation or one the app builds).`,
   input: z.object({
     folders: jsonArray(z.array(folderSelector).max(10)).nullable().optional().describe(`Themes to draw words from (id, slug, name or "${INBOX_SELECTOR}"); default every theme.`),
     topic: z.string().trim().max(TOPIC_MAX).nullable().optional().describe("A free-text topic («вечеринка», «в баре»), when the user asked for one."),
@@ -1911,6 +1930,11 @@ export const exerciseMaterial = tool({
       .describe(
         "A set made ONLY of the user's own words, from every theme: difficult (cards rated «трудное»), due (due today) or both. For «упражнение по трудным словам / по словам к повторению» (the app's request says «из всех тем»). Leave it out for an ordinary set.",
       ),
+    verbs: z
+      .boolean()
+      .nullable()
+      .optional()
+      .describe("true for «упражнение на спряжение глаголов»: only the verbs that conjugate items can use (conjugable: true)."),
   }),
   write: false,
   annotations: READ,
@@ -1933,7 +1957,9 @@ export const exerciseMaterial = tool({
     const only = args.only ?? null;
     // A paused theme («на паузе») is left out of «all themes», but a theme named in `folders` is used as asked
     // (not with `only`: a scoped set takes the words the app counts, never paused ones).
-    const inScope = only ? scopeWords(words, ctx, only, targetIds) : exerciseScope(words, ctx, targetIds);
+    const scoped = only ? scopeWords(words, ctx, only, targetIds) : exerciseScope(words, ctx, targetIds);
+    const verbs = args.verbs === true;
+    const inScope = verbs ? scoped.filter(isConjugable) : scoped;
     const liveSets = sets.filter((s) => s.deleted_at === null);
     const signals = weaknessSignals(inScope, ctx, logs, runs, new Map(sets.map((s) => [s.id, s])));
     // «Чаще в упражнениях»: the focus words first, then the weakness order.
@@ -1955,7 +1981,7 @@ export const exerciseMaterial = tool({
         folders: targets ? targets.map(folderRef) : "all",
         ...(topic ? { topic } : {}),
         days: args.days,
-        ...(only ? onlyBlock(only, inScope.length, !!targets) : {}),
+        ...(only ? onlyBlock(only, inScope.length, !!targets, verbs) : {}),
       },
       total: inScope.length,
       ...(only ? {} : { focus: focusBlock(focus, args.focus ? "request" : "settings", ranked.filter((r) => r.focus).length) }),
@@ -1970,9 +1996,11 @@ export const exerciseMaterial = tool({
         .sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id))
         .slice(0, RECENT_SETS)
         .map((s) => ({ id: s.id, title: s.title, topic: s.topic, created_at: s.created_at, count: s.items.length, words: setWords(s) })),
-      note: only
-        ? "Follow scope.note: only these words, each in 2–3 types, the weakest late; save them with one create_exercise_set call with scope."
-        : "Build 10–15 items of at least 3 types, put the weakest words late and twice, and save them with one create_exercise_set call.",
+      note: verbs
+        ? `A verb set is a short test: ${VERB_SET_SIZE} items (6–10, at most ${CONJUGATE_MAX} conjugate), mostly conjugate items (word_id, tense, person; the server writes the form and the options) mixing the 4 tenses and the persons, plus 2–3 cloze items with a time marker for passé composé vs imparfait; the same verb at most twice and never back to back. Save it with one create_exercise_set call${only ? ` with scope: "${only}" (scope.note)` : ""}.`
+        : only
+          ? "Follow scope.note: only these words, each in 2–3 types, the weakest late; save them with one create_exercise_set call with scope."
+          : "Build 10–15 items of at least 3 types, put the weakest words late and twice, and save them with one create_exercise_set call.",
     };
   },
 });
@@ -1984,7 +2012,7 @@ const exerciseItemSchema = z.object({
   type: z
     .enum(ITEM_TYPES)
     .describe(
-      "choice: 4 options (answer + 3 distractors). cloze: a French sentence with a gap. register: the user picks the word's slang level (нейтр./fam./arg./vulg.). pairs: match 4–6 words with their translations.",
+      "choice: 4 options (answer + 3 distractors). cloze: a French sentence with a gap. register: the user picks the word's slang level (нейтр./fam./arg./vulg.). pairs: match 4–6 words with their translations. conjugate: pick the right form of a verb (word_id or new_ref) for a tense and person; the server writes the infinitive prompt, the answer, the gap («tu ___») and, when left out, 3 distractors from the verb's conjugation.",
     ),
   skill: z
     .enum(SKILLS)
@@ -1993,17 +2021,21 @@ const exerciseItemSchema = z.object({
     .describe(
       "choice only (default meaning): meaning = the word ↔ its translation (prompt and answer are written by the server from the word); form = the right French form for a Russian cue; neutral = the neutral equivalent of a slang word; verlan = the verlan form or its source; situation = what you would say in a described situation.",
     ),
+  tense: z.enum(TENSES).nullable().optional().describe("conjugate only: the tense asked."),
+  person: z.enum(PERSONS).nullable().optional().describe("conjugate only: the person asked (il = il / elle / on; the forms have no feminine agreement, so never ask for elle / elles)."),
   ask: z.enum(["fr", "ru"]).nullable().optional().describe("choice + meaning: fr (default) shows the French word with Russian options; ru the reverse. Distractors must be in the options' language (Russian for fr, French for ru): a mix is refused."),
-  word_id: z.string().trim().min(1).max(64).nullable().optional().describe("The library word the item is about (from exercise_material). choice, cloze, register: word_id or new_ref."),
+  word_id: z.string().trim().min(1).max(64).nullable().optional().describe("The library word the item is about (from exercise_material). choice, cloze, register, conjugate: word_id or new_ref."),
   new_ref: z.string().trim().min(1).max(REF_MAX).nullable().optional().describe("A new_words[].ref instead of word_id, for a word that is not in the library."),
-  prompt: exerciseText(TEXT_MAX, "The question on the card (Russian or French). Required for choice skills other than meaning; for cloze and register an optional instruction."),
+  prompt: exerciseText(TEXT_MAX, "The question on the card (Russian or French). Required for choice skills other than meaning; for cloze and register an optional instruction; conjugate ignores it (the server writes the infinitive)."),
   sentence: exerciseText(TEXT_MAX, "cloze only: a natural French sentence with exactly one [[…]] gap around the answer: «J'ai trop [[kiffé]] ce concert.»"),
   sentence_ru: exerciseText(TEXT_MAX, "cloze only: a short Russian hint of the situation. It must never translate the missing word."),
-  answer: exerciseText(ANSWER_MAX, "The right option (choice, cloze; a cloze answer defaults to its gap). Left out for meaning, register and pairs: the server writes it (meaning fr→ru: the word's first Russian equivalent, so distractors are single equivalents too)."),
+  answer: exerciseText(ANSWER_MAX, "The right option (choice, cloze; a cloze answer defaults to its gap). Left out for meaning, register, conjugate and pairs: the server writes it (meaning fr→ru: the word's first Russian equivalent, so distractors are single equivalents too)."),
   distractors: jsonArray(z.array(z.string().max(ANSWER_MAX)).max(6))
     .nullable()
     .optional()
-    .describe("choice and cloze: exactly 3 wrong options, same part of speech, gender, register and about the same length as the answer, each clearly wrong. Empty for register and pairs."),
+    .describe(
+      "choice and cloze: exactly 3 wrong options, same part of speech, gender, register and about the same length as the answer, each clearly wrong. Empty for register and pairs. conjugate: leave out (the server picks other forms of the verb), or send 3 forms of the same verb without the pronoun.",
+    ),
   pairs: jsonArray(z.array(z.string().trim().min(1).max(64)).max(10)).nullable().optional().describe("pairs only: 4–6 word_ids or new_refs with distinct translations; the server builds the tiles."),
   explain_ru: exerciseText(EXPLAIN_MAX, "Optional one-line Russian explanation shown after the answer («верлан от femme»)."),
 });
@@ -2057,7 +2089,7 @@ export const createExerciseSet = tool({
   name: "create_exercise_set",
   title: "Save an exercise set",
   description:
-    `Save one exercise set («Упражнения») that the app plays offline; it never changes the review schedule. Call exercise_material first, then send the whole set in one call: ${ITEMS_MIN}–${ITEMS_MAX} items (10–15 is best) of at least 3 types. Items are about library words (word_id) or new words (new_ref → new_words, at most ${NEW_WORDS_MAX}, found with your web search; the user adds them from the app, so never add_words them yourself). The server numbers the items, copies each word into the set, writes the meaning prompt and answer, the register answer and the pairs tiles, and checks every rule: a refusal names each problem by path (items[7].distractors …); fix them all and call again with the same client_ref. With \`scope\` (a set from exercise_material \`only\`: only the user's difficult and/or due words) new_words must be empty. \`warnings\` never block (focus_share: the set has fewer questions about the words of the user's saved «Чаще в упражнениях» than it asks for; follow exercise_material's \`focus\` next time; scope_words: a scoped set uses words that are not difficult / due). A retry with the same client_ref returns already_saved: true and writes nothing. The result is a short summary, not the set. Undo with delete_exercise_set.`,
+    `Save one exercise set («Упражнения») that the app plays offline; it never changes the review schedule. Call exercise_material first, then send the whole set in one call: ${ITEMS_MIN}–${ITEMS_MAX} items (10–15 is best) of at least 3 types (a verb set: ${VERB_SET_SIZE} items, mostly conjugate, at most ${CONJUGATE_MAX} conjugate). Items are about library words (word_id) or new words (new_ref → new_words, at most ${NEW_WORDS_MAX}, found with your web search; the user adds them from the app, so never add_words them yourself). The server numbers the items, copies each word into the set, writes the meaning prompt and answer, the register answer, the pairs tiles and the conjugate forms, and checks every rule: a refusal names each problem by path (items[7].distractors …); fix them all and call again with the same client_ref. With \`scope\` (a set from exercise_material \`only\`: only the user's difficult and/or due words) new_words must be empty. \`warnings\` never block (focus_share: the set has fewer questions about the words of the user's saved «Чаще в упражнениях» than it asks for; follow exercise_material's \`focus\` next time; scope_words: a scoped set uses words that are not difficult / due). A retry with the same client_ref returns already_saved: true and writes nothing. The result is a short summary, not the set. Undo with delete_exercise_set.`,
   input: z.object({
     client_ref: z
       .string()
@@ -2104,7 +2136,7 @@ export const createExerciseSet = tool({
     // Ids and order of themes as named; resolveFolder refuses unknown and deleted ones.
     const folderIds = [...new Set((args.folders ?? []).map((s) => resolveFolder(s, folders)?.id ?? INBOX_SELECTOR))];
     const words = await deps.repo.words();
-    const ctx = contextFromWords(words);
+    const ctx = contextFromWords(words, CONJ_DATA);
     const content = completeSet(
       {
         title: args.title,
@@ -2366,6 +2398,7 @@ export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard
 - Order the items recognise-before-produce (meaning fr→ru and pairs before ru→fr and cloze), put the weakest words (first in exercise_material) late and twice, keep the same word apart, and use 10–15 items of at least 3 types.
 - Honour exercise_material's \`focus\` (the user's «Чаще в упражнениях»): at least the share it names of the questions about the words marked focus: true, even for a plain «сделай упражнение»; pass \`focus\` to exercise_material only when the user asks otherwise in the chat.
 - «По трудным словам», «по словам к повторению», «без тем / из всех тем»: exercise_material \`only\` (difficult, due or both), then create_exercise_set with the same \`scope\`: only those words, \`scope.suggested_items\` questions (a shorter set when there are few, each word in 2–3 types), no new_words; with none available, say so instead of making a set.
+- «Спряжение глаголов» («упражнение на спряжение глаголов»): exercise_material \`verbs: true\`, then a short set of ${VERB_SET_SIZE} items (6–10): mostly conjugate items (word_id, tense, person; the server writes the form and the options) mixing the 4 tenses and the persons, with 30–40% of the passé composé on être or pronominal verbs; plus 2–3 cloze items with a verb gap and a time marker (hier / tous les jours / demain) for passé composé vs imparfait; the same verb at most twice, never back to back; never elle / elles (the forms have no feminine agreement).
 - «Работа над ошибками»: list_exercise_sets' last_run.missed and exercise_material's signals (ex_misses, confusions) say what to drill; reuse a confused option as a distractor only where it is in the item's options' language (a Russian one for meaning fr→ru, a French one for cloze and ru→fr).
 - After saving, give the set's title and number of questions and how to undo it; it shows in «Упражнения» after the app's next sync.
 - Make write calls one at a time, never in parallel: each reads the current rows first, and parallel writes to the same words conflict or slip past the duplicate check.

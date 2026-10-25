@@ -120,6 +120,7 @@ describe("conjugation", () => {
     expect(splitPronoun("j'ai kiffé")).toEqual(["j'", "ai kiffé"]);
     expect(splitPronoun("j’aime")).toEqual(["j’", "aime"]);
     expect(splitPronoun("il/elle kiffe")).toEqual(["il/elle ", "kiffe"]);
+    expect(splitPronoun("il/elle/on kiffe")).toEqual(["il/elle/on ", "kiffe"]);
     expect(splitPronoun("nous nous cassons")).toEqual(["nous ", "nous cassons"]);
     expect(splitPronoun("ils/elles se sont cassés")).toEqual(["ils/elles ", "se sont cassés"]);
     expect(splitPronoun("kiffe")).toEqual(["", "kiffe"]);

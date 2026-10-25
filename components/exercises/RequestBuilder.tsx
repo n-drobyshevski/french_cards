@@ -14,7 +14,7 @@ import { useSnackbar } from "@/components/ui/Snackbar";
 import { Toggle } from "@/components/ui/Toggle";
 import { focusSummary } from "@/lib/core/exercise-focus";
 import { db, liveRows } from "@/lib/db";
-import { buildRequestText, NEW_WORDS_MAX, REQUEST_SIZES, SCOPE_LABELS, TOPIC_MAX, useScopeCounts } from "@/lib/exercises";
+import { buildRequestText, CONJ_REQUEST_SIZES, NEW_WORDS_MAX, REQUEST_SIZES, SCOPE_LABELS, TOPIC_MAX, useScopeCounts } from "@/lib/exercises";
 import { listFolders } from "@/lib/folders";
 import type { ExerciseScope, ExerciseSet } from "@/lib/types";
 import { useExerciseFocus } from "@/lib/user-prefs";
@@ -105,7 +105,8 @@ export interface RequestBuilderProps {
 /**
  * The request builder (SPEC «Упражнения», D7 A): «Откуда слова» (themes, or only the difficult /
  * due words of every theme: Exercise-S-Request-Scope), theme chips (several, «Входящие» included), a
- * free-text «своя тема», 8 / 12 / 16 questions, «Можно новые слова», the request text built live,
+ * free-text «своя тема», «Спряжение глаголов» (a short verb test: 6 / 8 / 10 questions, no new
+ * words), 8 / 12 / 16 questions, «Можно новые слова», the request text built live,
  * «Скопировать запрос» and «Открыть Claude ↗» (copies first), and while «Чаще в упражнениях» is on, a
  * muted line saying so («Чаще трудные · половина набора · Настройки ›»). No network call and no
  * spark: Claude writes the set in the chat through the connector.
@@ -118,6 +119,9 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
   const [topic, setTopic] = useState("");
   const [size, setSize] = useState<number>(12);
   const [allowNew, setAllowNew] = useState(true);
+  // «Спряжение глаголов»: its own sizes (a short test), so switching it off keeps the usual size.
+  const [conjugation, setConjugation] = useState(false);
+  const [verbSize, setVerbSize] = useState<number>(8);
   // «Откуда слова»: null = the themes below. A scope whose words are gone (all reviewed, paused)
   // falls back to the themes.
   const [scopePick, setScopePick] = useState<ExerciseScope | null>(null);
@@ -145,9 +149,10 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
     folders: chosen.map((t) => t.name),
     // Compact: the topic field sits under «Ещё» with no chip, so it counts once it has text.
     topic: compact ? (topic.trim() ? topic : null) : topicOpen ? topic : null,
-    size,
-    allowNew,
+    size: conjugation ? verbSize : size,
+    allowNew: allowNew && !conjugation,
     scope,
+    conjugation,
   };
   const text = buildRequestText(choice);
   // «Чаще в упражнениях» (Settings): the connector reads it itself, so the request text stays as is;
@@ -183,6 +188,10 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
         }}
         size={size}
         onSize={setSize}
+        conjugation={conjugation}
+        onConjugation={setConjugation}
+        verbSize={verbSize}
+        onVerbSize={setVerbSize}
         topic={topic}
         onTopic={setTopic}
         allowNew={allowNew}
@@ -283,43 +292,31 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
         </>
       )}
 
-      <div className={cx("flex h-12 items-center gap-2 border-t border-rule", scope || topicOpen ? "mt-3" : "mt-2.5")}>
+      <SwitchRow
+        panel={panel}
+        id={`${ids}-verbs`}
+        label="Спряжение глаголов"
+        caption="Только глаголы, короткий тест"
+        checked={conjugation}
+        onChange={setConjugation}
+        className={scope || topicOpen ? "mt-3" : "mt-2.5"}
+      />
+
+      <div className="flex h-12 items-center gap-2 border-t border-rule">
         <span id={`${ids}-size`} className="flex-1 text-[15px] leading-5">
           Вопросов
         </span>
         <Segmented<number>
-          options={REQUEST_SIZES.map((n) => ({ value: n, label: String(n) }))}
-          value={size}
-          onChange={setSize}
+          options={(conjugation ? CONJ_REQUEST_SIZES : REQUEST_SIZES).map((n) => ({ value: n, label: String(n) }))}
+          value={conjugation ? verbSize : size}
+          onChange={conjugation ? setVerbSize : setSize}
           ariaLabelledby={`${ids}-size`}
           mono
         />
       </div>
 
-      {scope ? null : panel ? (
-        <button
-          type="button"
-          role="checkbox"
-          aria-checked={allowNew}
-          onClick={() => setAllowNew((v) => !v)}
-          className="flex min-h-[52px] items-start gap-2.5 border-t border-rule py-3 text-left"
-        >
-          <CheckMark checked={allowNew} className="mt-[3px]" />
-          <span className="flex min-w-0 flex-col">
-            <span className="text-[15px] leading-5">Можно новые слова</span>
-            <span className="text-[12px] leading-4 text-muted">{newCaption}</span>
-          </span>
-        </button>
-      ) : (
-        <div className="flex h-[52px] items-center gap-2 border-t border-rule">
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span id={`${ids}-new`} className="text-[15px] leading-5">
-              Можно новые слова
-            </span>
-            <span className="text-[12px] leading-4 text-muted">{newCaption}</span>
-          </span>
-          <Toggle checked={allowNew} onCheckedChange={setAllowNew} aria-labelledby={`${ids}-new`} />
-        </div>
+      {scope || conjugation ? null : (
+        <SwitchRow panel={panel} id={`${ids}-new`} label="Можно новые слова" caption={newCaption} checked={allowNew} onChange={setAllowNew} />
       )}
 
       <div className="flex flex-col border-t border-rule pt-2.5">
@@ -398,6 +395,57 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
     );
   }
   return <div className={cx("flex flex-col", className)}>{body}</div>;
+}
+
+/**
+ * One on/off option with a caption: a checkbox row in the desktop panel, a switch elsewhere
+ * («Спряжение глаголов», «Можно новые слова»).
+ */
+function SwitchRow({
+  panel,
+  id,
+  label,
+  caption,
+  checked,
+  onChange,
+  className,
+}: {
+  panel: boolean;
+  id: string;
+  label: string;
+  caption: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  className?: string;
+}) {
+  if (panel) {
+    return (
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={cx("flex min-h-[52px] items-start gap-2.5 border-t border-rule py-3 text-left", className)}
+      >
+        <CheckMark checked={checked} className="mt-[3px]" />
+        <span className="flex min-w-0 flex-col">
+          <span className="text-[15px] leading-5">{label}</span>
+          <span className="text-[12px] leading-4 text-muted">{caption}</span>
+        </span>
+      </button>
+    );
+  }
+  return (
+    <div className={cx("flex h-[52px] items-center gap-2 border-t border-rule", className)}>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span id={id} className="text-[15px] leading-5">
+          {label}
+        </span>
+        <span className="text-[12px] leading-4 text-muted">{caption}</span>
+      </span>
+      <Toggle checked={checked} onCheckedChange={onChange} aria-labelledby={id} />
+    </div>
+  );
 }
 
 /** «Открыть Claude ↗»: copies the request, then opens a new chat; offline it says «нужна сеть». */
@@ -524,6 +572,10 @@ function CompactBuilder({
   onScope,
   size,
   onSize,
+  conjugation,
+  onConjugation,
+  verbSize,
+  onVerbSize,
   topic,
   onTopic,
   allowNew,
@@ -543,6 +595,10 @@ function CompactBuilder({
   onScope: (scope: ExerciseScope | null) => void;
   size: number;
   onSize: (size: number) => void;
+  conjugation: boolean;
+  onConjugation: (on: boolean) => void;
+  verbSize: number;
+  onVerbSize: (size: number) => void;
   topic: string;
   onTopic: (topic: string) => void;
   allowNew: boolean;
@@ -556,7 +612,7 @@ function CompactBuilder({
   const ids = useId();
   // «Оба» stays a chat-only choice; a scope with no words is left out of the flow.
   const scopes = SCOPE_CHIPS.filter((o) => o.value !== "both" && (counts?.[o.value] ?? 0) > 0);
-  const summary = foldSummary([!scope && "своя тема", !scope && "новые слова", "текст запроса"]);
+  const summary = foldSummary([!scope && "своя тема", !scope && !conjugation && "новые слова", "текст запроса"]);
 
   return (
     <section aria-label="Запрос для Claude" className={cx("flex flex-col", className)}>
@@ -587,14 +643,20 @@ function CompactBuilder({
         })}
       </div>
 
-      <div className="mt-4 flex h-12 items-center gap-2 border-y border-rule">
+      <div className="mt-4 flex h-12 items-center gap-2 border-t border-rule">
+        <span id={`${ids}-verbs`} className="flex-1 text-[15px] leading-5">
+          Спряжение глаголов
+        </span>
+        <Toggle checked={conjugation} onCheckedChange={onConjugation} aria-labelledby={`${ids}-verbs`} />
+      </div>
+      <div className="flex h-12 items-center gap-2 border-y border-rule">
         <span id={`${ids}-size`} className="flex-1 text-[15px] leading-5">
           Вопросов
         </span>
         <Segmented<number>
-          options={REQUEST_SIZES.map((n) => ({ value: n, label: String(n) }))}
-          value={size}
-          onChange={onSize}
+          options={(conjugation ? CONJ_REQUEST_SIZES : REQUEST_SIZES).map((n) => ({ value: n, label: String(n) }))}
+          value={conjugation ? verbSize : size}
+          onChange={conjugation ? onVerbSize : onSize}
           ariaLabelledby={`${ids}-size`}
           mono
         />
@@ -620,12 +682,14 @@ function CompactBuilder({
                 onChange={(e) => onTopic(e.target.value)}
                 className="mt-1.5 h-11 min-w-0 rounded-chip border border-boundary bg-surface px-3 text-[16px] leading-5 text-ink outline-none focus:border-2 focus:border-ink focus:px-[11px]"
               />
-              <div className="mt-2 flex h-12 items-center gap-2">
-                <span id={`${ids}-new`} className="flex-1 text-[15px] leading-5">
-                  Можно новые слова
-                </span>
-                <Toggle checked={allowNew} onCheckedChange={onAllowNew} aria-labelledby={`${ids}-new`} />
-              </div>
+              {!conjugation && (
+                <div className="mt-2 flex h-12 items-center gap-2">
+                  <span id={`${ids}-new`} className="flex-1 text-[15px] leading-5">
+                    Можно новые слова
+                  </span>
+                  <Toggle checked={allowNew} onCheckedChange={onAllowNew} aria-labelledby={`${ids}-new`} />
+                </div>
+              )}
             </>
           )}
           <span id={`${ids}-text`} className="meta mt-2.5 leading-4">
