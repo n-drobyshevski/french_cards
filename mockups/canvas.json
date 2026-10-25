@@ -1708,6 +1708,60 @@
    "title": "Итог набора — C Разложенные карточки",
    "is_interactive": true,
    "radius": 28
+  },
+  "X-Level-A.dc.html": {
+   "x": 0,
+   "y": 44744,
+   "w": 390,
+   "h": 844,
+   "title": "Уровень набора — A слот во фразе",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Level-A-Auto.dc.html": {
+   "x": 470,
+   "y": 44744,
+   "w": 390,
+   "h": 844,
+   "title": "Уровень набора — A «Авто»",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Level-B.dc.html": {
+   "x": 940,
+   "y": 44744,
+   "w": 390,
+   "h": 844,
+   "title": "Уровень набора — B строка под фразой",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Level-C.dc.html": {
+   "x": 1410,
+   "y": 44744,
+   "w": 390,
+   "h": 844,
+   "title": "Уровень набора — C вместе с числом вопросов",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Level-Tile-A.dc.html": {
+   "x": 1880,
+   "y": 44744,
+   "w": 390,
+   "h": 844,
+   "title": "Плитки — A уровень на плитке",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "D-Exercise-Level.dc.html": {
+   "x": 2350,
+   "y": 44744,
+   "w": 1440,
+   "h": 800,
+   "title": "Уровень набора — десктоп",
+   "is_interactive": true,
+   "radius": 12
   }
  },
  "order": [
@@ -1905,7 +1959,13 @@
   "X-Player-B-Types.dc.html",
   "X-Done-A.dc.html",
   "X-Done-B.dc.html",
-  "X-Done-C.dc.html"
+  "X-Done-C.dc.html",
+  "X-Level-A.dc.html",
+  "X-Level-A-Auto.dc.html",
+  "X-Level-B.dc.html",
+  "X-Level-C.dc.html",
+  "X-Level-Tile-A.dc.html",
+  "D-Exercise-Level.dc.html"
  ],
  "notes": {
   "row1": {
@@ -2150,6 +2210,13 @@
    "x": 0,
    "y": 43460,
    "text": "35 · Упражнения · плеер и итог",
+   "kind": "title1",
+   "maxW": 1800
+  },
+  "row36": {
+   "x": 0,
+   "y": 44624,
+   "text": "36 · Упражнения · уровень набора (L1 место в запросе, L2 плитка)",
    "kind": "title1",
    "maxW": 1800
   }
