@@ -4,11 +4,12 @@ import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
 import { ContextRow } from "@/components/context/ContextLink";
 import { useCopyScopeRequest } from "@/components/exercises/scope-request";
-import { createElement, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createElement, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAddSheetActions } from "@/components/providers/AddSheetContext";
 import { useAppReady, useBootFailure } from "@/components/providers/AppProviders";
 import { Button, IconButton } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
+import { FoldRow, foldSummary } from "@/components/ui/FoldRow";
 import { Icon } from "@/components/ui/Icons";
 import { KEYBOARD_MIN, useVisualViewport } from "@/components/ui/Sheet";
 import { SkeletonRow } from "@/components/ui/Skeleton";
@@ -25,6 +26,7 @@ import { useSettings } from "@/lib/use-settings";
 import { BootNotice } from "./BootNotice";
 import { DeskPlaceholder } from "./DeskPlaceholder";
 import { DisbandSheet, disbandMessage } from "./DisbandSheet";
+import { DrawerRow, DrawerSkeleton, NewDrawerRow, PlainRow } from "./DrawerRow";
 import { EnrichPlanSheet } from "./EnrichPlanSheet";
 import { LevelFillSheet } from "./LevelFillSheet";
 import { useLevelData } from "@/lib/use-level-data";
@@ -32,11 +34,11 @@ import { rememberLibrary, rememberLibraryShape, STALE_DIM, useLibraryShape, useR
 import { FolderFormSheet } from "./FolderFormSheet";
 import { FolderMenuSheet } from "./FolderMenuSheet";
 import { LedgerMenuSheet, type LedgerKind } from "./LedgerMenuSheet";
-import { FolderTile, NAV_FORWARD, NewFolderTile, TileSkeleton } from "./FolderTile";
 import { enrichCaption, folderHref, nWords, plural } from "./format";
 import { useLibraryDesk } from "./lazy-desk";
 import { LibraryFilterSheet } from "./LibraryFilterSheet";
 import { levelCounts } from "./level";
+import { NAV_FORWARD } from "./NavSlide";
 import {
   ALL_THEMES,
   DEFAULT_PHONE_FILTER,
@@ -56,12 +58,16 @@ import { WordList } from "./WordList";
 /** Rows rendered at first and added per «Показать ещё», so a big library does not render thousands at once. */
 const PAGE_SIZE = 200;
 
+/** The drawers' mastery lines have drawn in this visit (they draw once, not on every return). */
+let linesDrawn = false;
+
 type LibraryView = Settings["library_view"];
 
 /**
- * Библиотека. Phones (< 768, mockups: Library «C · Под пальцем»): a ledger strip of counts that
- * doubles as quick filters, «Входящие» when something is unsorted, theme tiles with their newest
- * words or every word in one list (remembered on the device), and the search with «Фильтр и
+ * Библиотека. Phones (< 768, mockups/L-Library-B «Ящики каталога»): one subline of counts that
+ * doubles as quick filters, then a card-catalogue table of contents — «Все слова», «Входящие» while
+ * something is unsorted, the themes as ruled drawers, «Новая тема» and the upkeep folded into one
+ * row — or every word in one list (remembered on the device), and the search with «Фильтр и
  * порядок» at the bottom, above the tab bar. From 768 up: the desktop table with the detail pane
  * (LibraryDesk). The layout class is «compact» on the server and during hydration, so CSS keeps the
  * phone UI off wide screens until then.
@@ -83,7 +89,7 @@ export function LibraryScreen() {
 }
 
 /**
- * Everything the themes view shows, in one query, so the tiles, «Входящие» and the upkeep rows
+ * Everything the themes view shows, in one query, so the drawers, «Входящие» and the upkeep fold
  * arrive in the same frame instead of popping in one by one (MOTION-SPEC L1).
  */
 async function getLibraryOverview() {
@@ -116,10 +122,11 @@ function PhoneLibrary() {
   const [sortOpen, setSortOpen] = useState(false);
   const [enrichOpen, setEnrichOpen] = useState(false);
   const [levelOpen, setLevelOpen] = useState(false);
+  const [upkeepOpen, setUpkeepOpen] = useState(false);
   // «Определить уровень языка»: counted once the dictionaries are in (before, every word looks unlevelled).
   const levels = useLevelData();
   const toLevel = useLiveQuery(async () => (levels.ready ? countLevelCandidates(levels) : null), [levels]);
-  // Long press on a theme tile: its actions, then maybe the edit form.
+  // Long press on a theme drawer: its actions, then maybe the edit form.
   const [menuFolderId, setMenuFolderId] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -152,10 +159,15 @@ function PhoneLibrary() {
 
   const totals = stats?.totals;
   const inbox = stats?.inbox;
-  const tilesReveal = useRevealClass(!!stats);
+  const drawersReveal = useRevealClass(!!stats);
+  // The mastery lines draw in on the first view of this visit only.
+  const [drawLines] = useState(() => !linesDrawn);
+  useEffect(() => {
+    if (stats) linesDrawn = true;
+  }, [stats]);
   // Themes that just received words (sort plan applied, import added) are lit once (S5).
-  const tilesRef = useRef<HTMLDivElement>(null);
-  useFolderSpotlight(tilesRef, tileSelector, stats);
+  const drawersRef = useRef<HTMLDivElement>(null);
+  useFolderSpotlight(drawersRef, drawerSelector, stats);
   // «Разложить по темам» needs the network: offline it is disabled with the reason (B4).
   const online = useOnline();
 
@@ -213,6 +225,13 @@ function PhoneLibrary() {
       );
     }
   }
+  // «Уход за карточками · уровень языка, дополнить»: only what there is to do.
+  const upkeepSummary = foldSummary([
+    inbox && inbox.total === 0 && "раскладка",
+    !!toLevel && "уровень языка",
+    !!toEnrich?.total && "дополнить",
+    !!lastRun && "отмена раскладки",
+  ]);
 
   // Remember the shape for the next visit's reserved blanks, and the themes for their pages (L6).
   const shapeNow: LibraryShape | null = stats ? { tiles: stats.folders.length, inbox: stats.inbox.total > 0, upkeep: upkeep.length } : null;
@@ -229,14 +248,9 @@ function PhoneLibrary() {
     setLedgerKind(kind);
     setLedgerOpen(true);
   };
-  const onAllWords = () => {
-    if (filter.status !== "all") {
-      setFilter((f) => ({ ...f, status: "all" }));
-      setView("words");
-    } else {
-      setView(view === "words" ? "themes" : "words");
-    }
-  };
+  // The subline filter in effect, while it has words: its menu is also behind the list's «⋯».
+  const statusMenu: LedgerKind | null =
+    filter.status === "due" && totals?.due ? "due" : filter.status === "difficult" && totals?.difficult ? "difficult" : null;
 
   // The live theme, so the menu follows «Закрепить» and renames.
   const menuFolder: FolderWithStats | undefined = stats?.folders.find((f) => f.id === menuFolderId);
@@ -285,14 +299,15 @@ function PhoneLibrary() {
           <h1 className="m-0 shrink-0 font-serif text-[28px] leading-9 font-medium tracking-[-0.015em]">Библиотека</h1>
           <SyncMark />
         </div>
-        {/* «Контекст» lives here on phones since 2026-10-23 (no tab of its own). */}
+        {/* «Контекст» lives here on phones since 2026-10-23 (no tab of its own); ❝, since the
+            magnifier is the search at the bottom. */}
         <div className="-mr-3 flex shrink-0 items-center">
           <Link
             href="/context"
             aria-label="Контекст"
             className="inline-flex size-11 items-center justify-center rounded-chip text-ink active:bg-surface-2"
           >
-            <Icon name="search" size={20} strokeWidth={1.5} />
+            <Icon name="quote" size={20} strokeWidth={1.5} />
           </Link>
           <Link
             href="/settings"
@@ -304,45 +319,38 @@ function PhoneLibrary() {
         </div>
       </header>
 
-      {/* Ledger strip: the counts are also the quickest filters */}
-      <div className="mt-3 shrink-0 overflow-hidden rounded-card border border-rule bg-surface">
-        <div role="group" aria-label="Быстрый фильтр" className="grid grid-cols-3">
-          <LedgerCell
-            value={totals?.total}
-            label={plural(totals?.total ?? 0, ["слово", "слова", "слов"])}
-            ariaLabel={`Все слова: ${totals?.total ?? 0}`}
-            pressed={view === "words" && filter.status === "all"}
-            onClick={onAllWords}
-          />
-          <LedgerCell
-            value={totals?.due}
-            label="к повт."
-            ariaLabel={`К повторению: ${totals?.due ?? 0}`}
-            attention={!!totals?.due}
-            pressed={filter.status === "due"}
-            onClick={() => toggleStatus("due")}
-            onMenu={totals?.due ? () => openLedgerMenu("due") : undefined}
-          />
-          <LedgerCell
-            value={totals?.difficult}
-            label={plural(totals?.difficult ?? 0, ["трудное", "трудных", "трудных"])}
-            ariaLabel={`Трудные: ${totals?.difficult ?? 0}`}
-            pressed={filter.status === "difficult"}
-            onClick={() => toggleStatus("difficult")}
-            onMenu={totals?.difficult ? () => openLedgerMenu("difficult") : undefined}
-          />
+      {/* One subline (D2 B): the counts that need her are also the quickest filters. A count of 0 is
+          left out (the filter sheet still offers it), and with nothing due or difficult so is the
+          line (reserved until the counts are read); the total lives on «Все слова». */}
+      {(!totals || totals.due > 0 || totals.difficult > 0) && (
+        <div role="group" aria-label="Быстрый фильтр" className="mt-0.5 flex h-5 shrink-0 items-center gap-2 font-mono text-[11px] leading-5 tracking-[.06em] text-muted uppercase">
+          {!!totals?.due && (
+            <SublineFilter
+              label={`${totals.due} к повт.`}
+              ariaLabel={`К повторению: ${totals.due}`}
+              attention
+              pressed={filter.status === "due"}
+              onClick={() => toggleStatus("due")}
+              onMenu={() => openLedgerMenu("due")}
+            />
+          )}
+          {!!totals?.due && !!totals.difficult && <span aria-hidden="true">·</span>}
+          {!!totals?.difficult && (
+            <SublineFilter
+              label={`${totals.difficult} ${plural(totals.difficult, ["трудное", "трудных", "трудных"])}`}
+              ariaLabel={`Трудные: ${totals.difficult}`}
+              pressed={filter.status === "difficult"}
+              onClick={() => toggleStatus("difficult")}
+              onMenu={() => openLedgerMenu("difficult")}
+            />
+          )}
         </div>
-        {/* Progress KPIs: counts only, not filters */}
-        <div className="grid grid-cols-2 border-t border-rule">
-          <KpiCell value={totals?.reviewed} label="повторено" />
-          <KpiCell value={totals?.reviewedToday} label="сегодня" />
-        </div>
-      </div>
+      )}
 
       {listMode ? (
-        <section aria-label="Слова" aria-busy={!results || undefined} className="mt-5 flex flex-col">
-          <div className="meta flex h-8 items-center justify-between border-b border-ink">
-            <span className="font-medium text-ink" role="status">
+        <section aria-label="Слова" aria-busy={!results || undefined} className="mt-3.5 flex flex-col">
+          <div className="meta flex h-8 items-center justify-between gap-2 border-b border-ink">
+            <span className="min-w-0 truncate font-medium text-ink" role="status">
               {wait.searching
                 ? "Ищем…"
                 : !results
@@ -361,9 +369,21 @@ function PhoneLibrary() {
               </Button>
             ) : (
               narrows(filter) && (
-                <Button variant="tertiary" size="sm" className="-mr-1 text-[13px]" onClick={() => setFilter((f) => ({ ...DEFAULT_PHONE_FILTER, order: f.order }))}>
-                  Сбросить фильтр
-                </Button>
+                <span className="-mr-1 flex shrink-0 items-center">
+                  <Button variant="tertiary" size="sm" className="text-[13px]" onClick={() => setFilter((f) => ({ ...DEFAULT_PHONE_FILTER, order: f.order }))}>
+                    Сбросить фильтр
+                  </Button>
+                  {/* The visible way to what a held «к повт.» / «трудных» offers. */}
+                  {statusMenu && (
+                    <IconButton
+                      icon="more"
+                      label={statusMenu === "due" ? "Ещё: слова к повторению" : "Ещё: трудные слова"}
+                      aria-haspopup="dialog"
+                      className="-my-1.5"
+                      onClick={() => openLedgerMenu(statusMenu)}
+                    />
+                  )}
+                </span>
               )
             )}
           </div>
@@ -412,76 +432,62 @@ function PhoneLibrary() {
           </div>
         </section>
       ) : bootFailed ? (
-        // First-run setup failed: say so where the tiles would be (B1).
+        // First-run setup failed: say so where the drawers would be (B1).
         <BootNotice />
       ) : view === "themes" ? (
         <>
-          {/* «Входящие»: only while something is unsorted (reserved blank if it was there last time) */}
-          {!stats && shape.inbox && <div aria-hidden="true" className="mt-2 h-12 shrink-0" />}
-          {inbox && inbox.total > 0 && (
-            <div className={cx("mt-2 flex h-12 shrink-0 items-center gap-2 rounded-card border border-dashed border-muted pr-1 pl-3", tilesReveal)}>
-              <Link
-                href={folderHref(null)}
-                transitionTypes={NAV_FORWARD}
-                aria-label={`Входящие: ${nWords(inbox.total)} без темы, нужно разобрать`}
-                className="flex h-full min-w-0 flex-1 items-center gap-2 text-[14px] leading-5 text-ink no-underline"
-              >
-                Входящие
-                <span aria-hidden="true" className="text-muted">
-                  ·
-                </span>
-                <span className="meta font-medium text-red">{inbox.total} без темы</span>
-              </Link>
-              <Button
-                variant="tertiary"
-                size="sm"
-                className="gap-1.5 text-[13px] no-underline disabled:text-muted disabled:opacity-100!"
-                disabled={!online}
-                onClick={() => setSortOpen(true)}
-              >
-                <Icon name={online ? "spark" : "cloud-off"} size={15} strokeWidth={1.5} />
-                {online ? "Разложить" : "Нужна сеть"}
-                {online && <Icon name="chevron-right" size={16} />}
-              </Button>
-            </div>
-          )}
-
-          {/* Themes: the last known number of tiles is reserved blank; skeletons only if the read is
-              still pending at 300 ms (cold start, first-run seed) — L3 */}
-          <div ref={tilesRef} aria-busy={!stats || undefined} className={cx("mt-3 grid grid-cols-2 gap-2", tilesReveal)}>
+          {/* The drawer list (D2 B): «Все слова», «Входящие» while something is unsorted, the themes as
+              ruled drawers, «Новая тема», and the upkeep folded into one row. Until the overview is
+              read the last known number of drawers is reserved blank; skeleton rows only if the read
+              is still pending at 300 ms (cold start, first-run seed) — L3. */}
+          <div ref={drawersRef} aria-busy={!stats || undefined} className="mt-3.5 flex shrink-0 flex-col border-t border-ink">
             {!stats ? (
-              <>
-                <TileSkeleton wide className="delayed-in" />
-                {Array.from({ length: shape.tiles + 1 }, (_, i) => (
-                  <TileSkeleton key={i} index={i} tall className="delayed-in" />
+              <div className="delayed-in flex flex-col">
+                <DrawerSkeleton index={3} />
+                {shape.inbox && <DrawerSkeleton index={1} className="border-dashed border-boundary" />}
+                {Array.from({ length: shape.tiles }, (_, i) => (
+                  <DrawerSkeleton key={i} index={i} />
                 ))}
-              </>
+              </div>
             ) : (
-              <>
-                <button
-                  type="button"
-                  aria-label={`Все слова одним списком: ${totals?.total ?? 0}`}
-                  onClick={() => setView("words")}
-                  className="col-span-2 flex h-16 items-center gap-3 rounded-card bg-ink px-3 text-left text-on-ink active:opacity-90"
-                >
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="font-serif text-[19px] leading-6 font-medium">Все слова</span>
-                    <span className="font-mono text-[11px] leading-4 tracking-[.06em] uppercase opacity-80">
-                      {totals?.total ?? 0} · одним списком
-                    </span>
-                  </span>
-                  <Icon name="chevron-right" size={18} />
-                </button>
-                {stats.folders.map((f) => (
-                  <FolderTile key={f.id} folder={f} samples onLongPress={() => openMenu(f)} />
+              <div className={cx("flex flex-col", drawersReveal)}>
+                <PlainRow label="Все слова" count={totals?.total} ariaLabel={`Все слова: ${totals?.total ?? 0}`} onClick={() => setView("words")} />
+                {inbox && inbox.total > 0 && (
+                  // Dashed: not yet on record. ✦ «Разложить по темам» asks Claude; offline it says why.
+                  <div className="flex h-[52px] shrink-0 items-center border-b border-dashed border-boundary">
+                    <Link
+                      href={folderHref(null)}
+                      transitionTypes={NAV_FORWARD}
+                      aria-label={`Входящие: ${nWords(inbox.total)} без темы, нужно разобрать`}
+                      className="flex h-full min-w-0 flex-1 items-center gap-2.5 text-ink no-underline active:bg-surface-2"
+                    >
+                      <span className="font-serif text-[19px] leading-6 font-medium">Входящие</span>
+                      <span className="font-mono text-[12px] leading-4 font-medium text-red tabular-nums">{inbox.total}</span>
+                    </Link>
+                    {online ? (
+                      <IconButton icon="spark" label="Разложить по темам" strokeWidth={1.5} className="-mr-3" onClick={() => setSortOpen(true)} />
+                    ) : (
+                      <Button variant="tertiary" size="sm" disabled className="-mr-1 gap-1.5 text-[13px] no-underline disabled:text-muted disabled:opacity-100!">
+                        <Icon name="cloud-off" size={15} strokeWidth={1.5} />
+                        Нужна сеть
+                      </Button>
+                    )}
+                  </div>
+                )}
+                {stats.folders.map((f, i) => (
+                  <DrawerRow key={f.id} folder={f} index={i} draw={drawLines} onLongPress={() => openMenu(f)} />
                 ))}
-                <NewFolderTile tall onClick={() => setCreateOpen(true)} />
-              </>
+                <NewDrawerRow onClick={() => setCreateOpen(true)} />
+                {upkeep.length > 0 && (
+                  <FoldRow label="Уход за карточками" summary={upkeepSummary} rule="bottom" open={upkeepOpen} onOpenChange={setUpkeepOpen} bodyClassName="px-0.5">
+                    <div className="flex flex-col pb-2">{upkeep}</div>
+                  </FoldRow>
+                )}
+              </div>
             )}
           </div>
-
-          {/* Card upkeep: quiet rows under the themes */}
-          <UpkeepBlock rows={stats ? upkeep : null} reserve={shape.upkeep} reveal={tilesReveal} />
+          {/* The fold row, reserved until the overview is read when it was there last time. */}
+          {!stats && shape.upkeep > 0 && <div aria-hidden="true" className="h-11 shrink-0" />}
         </>
       ) : null}
 
@@ -577,112 +583,50 @@ function PhoneLibrary() {
   );
 }
 
-interface LedgerCellProps {
-  value: number | undefined;
+interface SublineFilterProps {
   label: string;
   ariaLabel: string;
   pressed: boolean;
-  /** Red number: something needs doing («к повт.»). */
+  /** A red ▪ before it: something needs doing («к повт.»). */
   attention?: boolean;
   onClick: () => void;
   /** Long press, right click or the menu key: «Показать в библиотеке» / «Упражнение по ним в Claude». */
-  onMenu?: () => void;
+  onMenu: () => void;
 }
 
-/** One count of the ledger strip; pressing it filters the list (ink when on), holding it offers more. */
-function LedgerCell({ value, label, ariaLabel, pressed, attention = false, onClick, onMenu }: LedgerCellProps) {
-  const longPress = useLongPress(() => onMenu?.());
+/**
+ * One count of the subline: an underlined mono word that filters the list (filled with ink when
+ * on), holding it offers more (the list's «⋯» is the visible way to the same menu). 44px tall over
+ * a 20px line.
+ */
+function SublineFilter({ label, ariaLabel, pressed, attention = false, onClick, onMenu }: SublineFilterProps) {
+  const longPress = useLongPress(onMenu);
   return (
     <button
       type="button"
       aria-pressed={pressed}
       aria-label={ariaLabel}
       onClick={onClick}
-      {...(onMenu ? longPress : {})}
-      className={cx(
-        "flex h-16 flex-col items-start justify-center gap-0.5 border-l border-rule px-3 text-left select-none first:border-l-0 [-webkit-touch-callout:none]",
-        pressed ? "bg-ink text-on-ink" : "bg-transparent text-ink active:bg-surface-2",
-      )}
+      {...longPress}
+      className="-my-3 inline-flex h-11 shrink-0 items-center gap-2 bg-transparent p-0 font-mono text-[11px] leading-5 font-medium tracking-[.06em] text-ink uppercase select-none [-webkit-touch-callout:none]"
     >
-      <span className={cx("h-7 min-w-[2ch] font-serif text-[26px] leading-7 font-medium tabular-nums", !pressed && attention && "text-red")}>{value}</span>
-      <span className={cx("font-mono text-[11px] leading-4 tracking-[.06em] uppercase", pressed ? "opacity-80" : "text-muted")}>{label}</span>
+      {attention && <span aria-hidden="true" className="size-1.5 shrink-0 bg-red" />}
+      <span
+        className={cx(
+          "rounded-[2px]",
+          pressed ? "-mx-1 bg-ink px-1 text-on-ink" : "underline decoration-boundary decoration-1 underline-offset-4 active:bg-surface-2",
+        )}
+      >
+        {label}
+      </span>
     </button>
   );
 }
 
-/** A ledger count that is not a filter (words reviewed so far, today). */
-function KpiCell({ value, label }: { value: number | undefined; label: string }) {
-  return (
-    <p className="m-0 flex h-14 flex-col items-start justify-center gap-0.5 border-l border-rule px-3 first:border-l-0">
-      <span className="h-6 min-w-[2ch] font-serif text-[22px] leading-6 font-medium tabular-nums">{value}</span>{" "}
-      <span className="font-mono text-[11px] leading-4 tracking-[.06em] text-muted uppercase">{label}</span>
-    </p>
-  );
-}
+/** Theme drawers are their links: lit by the spotlight after a bulk change (S5). */
+const drawerSelector = (id: string) => `a[href="${folderHref(id)}"]`;
 
-/** One upkeep row: 44px including its hairline. */
-const UPKEEP_ROW_H = 44;
-/** The block's 24px top gap and its 1px ink rule. */
-const UPKEEP_HEAD_H = 25;
-const upkeepHeight = (rows: number) => (rows > 0 ? UPKEEP_HEAD_H + rows * UPKEEP_ROW_H : 0);
-
-/**
- * The upkeep rows under the tiles (L1). Until the overview resolves the block reserves the last
- * known height; the rows then fade in together, and if their number changed the block resizes
- * once (`--dur-move`) instead of jumping. A row that comes later (the level count waits for the
- * dictionaries) resizes it the same way.
- */
-function UpkeepBlock({ rows, reserve, reveal }: { rows: ReactNode[] | null; reserve: number; reveal?: string }) {
-  const ref = useRef<HTMLDivElement>(null);
-  const loaded = rows !== null;
-  const count = rows ? rows.length : null;
-  // The rows last drawn; before the first load, the reserved number.
-  const drawn = useRef<number | null>(null);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el || count === null) return;
-    const from = upkeepHeight(drawn.current ?? reserve);
-    drawn.current = count;
-    const to = el.scrollHeight;
-    if (from === to || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    el.style.overflow = "hidden";
-    el.style.height = `${from}px`;
-    void el.offsetHeight;
-    el.style.height = `${to}px`;
-    const done = () => {
-      el.style.height = "";
-      el.style.overflow = "";
-    };
-    el.addEventListener("transitionend", done, { once: true });
-    const fallback = window.setTimeout(done, 400);
-    return () => {
-      window.clearTimeout(fallback);
-      el.removeEventListener("transitionend", done);
-      // Never leave the block at a fixed height: its rows would be clipped under what follows.
-      done();
-    };
-  }, [count, reserve]);
-
-  return (
-    <div
-      ref={ref}
-      aria-hidden={!loaded || undefined}
-      style={loaded ? undefined : { height: upkeepHeight(reserve) }}
-      className="shrink-0 transition-[height] duration-(--dur-move) ease-standard"
-    >
-      {rows && rows.length > 0 && (
-        <div className={cx("pt-6", reveal)}>
-          <div className="flex flex-col border-t border-ink">{rows}</div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** `ai`: the action asks Claude (a spark before it). */
-/** Theme tiles are their links: lit by the spotlight after a bulk change (S5). */
-const tileSelector = (id: string) => `a[href="${folderHref(id)}"]`;
-
+/** One chore inside «Уход за карточками»: what it is about, and its action. `ai`: the action asks Claude (a spark before it). */
 function UpkeepRow({
   caption,
   action,
@@ -697,7 +641,7 @@ function UpkeepRow({
   disabled?: boolean;
 }) {
   return (
-    <p className="m-0 flex min-h-11 items-center justify-between gap-3 border-b border-rule text-[13px] leading-[18px] text-muted">
+    <p className="m-0 flex min-h-11 items-center justify-between gap-3 border-b border-rule text-[13px] leading-[18px] text-muted last:border-b-0">
       <span className="min-w-0">{caption}</span>
       <Button variant="tertiary" size="sm" className="shrink-0 gap-1.5 text-[13px]" disabled={disabled} onClick={onClick}>
         {ai && <Icon name="spark" size={15} strokeWidth={1.5} className="shrink-0" />}
@@ -728,7 +672,7 @@ function SearchBar({ query, onQuery, filterCount, filterOpen, onFilter }: Search
     <div
       data-library-search=""
       className={cx(
-        "z-[3] border-t border-rule bg-paper px-4 py-2.5",
+        "z-[3] border-t border-rule bg-paper px-4 py-3",
         keyboard ? "fixed inset-x-0 mx-auto w-full max-w-[440px]" : "sticky bottom-(--shell-bottom) -mx-4 mt-auto",
       )}
       style={keyboard ? { bottom: keyboard } : undefined}
@@ -752,13 +696,14 @@ function SearchBar({ query, onQuery, filterCount, filterOpen, onFilter }: Search
           />
           {query && <IconButton icon="close" label="Очистить поиск" iconSize={18} onClick={() => onQuery("")} />}
         </label>
+        <span aria-hidden="true" className="my-2.5 w-px self-stretch bg-rule" />
         <button
           type="button"
           aria-haspopup="dialog"
           aria-expanded={filterOpen}
           aria-label={filterCount > 0 ? `Фильтр и порядок, выбрано: ${filterCount}` : "Фильтр и порядок"}
           onClick={onFilter}
-          className="relative flex h-full w-[52px] shrink-0 items-center justify-center border-l border-rule bg-transparent text-ink active:bg-surface-2"
+          className="relative flex h-full w-12 shrink-0 items-center justify-center bg-transparent text-ink active:bg-surface-2"
         >
           <Icon name="sliders" size={20} strokeWidth={1.5} />
           {filterCount > 0 && (

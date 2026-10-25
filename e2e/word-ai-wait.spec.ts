@@ -32,8 +32,10 @@ test("the note and the word form fill from the word's suggestion; nothing is sav
   await mockSuggest(page, [{ ...FLICS, slang_level: 2, gender: "mf" }], (body) => asked.push(body));
   const card = await openFlics(page);
 
-  // «Заметка»: the suggestion's note fills the open form.
-  await card.getByRole("button", { name: "Изменить заметку" }).click();
+  // «Заметка» (empty: offered by «+ Поле» under «Ещё»): the suggestion's note fills the open form.
+  await card.getByRole("button", { name: /^Ещё\s?·/ }).click();
+  await card.getByRole("button", { name: "Поле", exact: true }).click();
+  await page.getByRole("menu", { name: "Какое поле" }).getByRole("menuitem", { name: /^Заметка/ }).click();
   const noteForm = card.getByRole("form", { name: "Изменить заметку" });
   await noteForm.getByRole("button", { name: "Заполнить автоматически" }).click();
   await expect(noteForm.getByRole("textbox", { name: "Заметка" })).toHaveValue(FLICS.note!);
@@ -65,6 +67,7 @@ test("«Дополнить карточки»: steps, a bar per batch and «Пр
     await route.fulfill({ json: { results: words.map((w) => ({ id: w.id, ...enriched(w) })) } });
   });
   await page.goto("/library");
+  await page.getByRole("button", { name: /^Уход за карточками/ }).click();
   await page.getByRole("button", { name: /Дополнить карточки/ }).click();
   const sheet = page.getByRole("dialog", { name: "Дополнить карточки" });
 

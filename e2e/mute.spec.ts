@@ -1,8 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import { openReview, questionCard } from "./fixtures";
 
-// «На паузу» and «Удалить слово» next to the pencil on the review card's answer side; a paused word
-// stays in the library («на паузе») and comes back from its word card.
+// «На паузу» and «Удалить слово» for the review card's word: phones reach them through the pencil,
+// in the word sheet's «⋯» (L-Review-Ans-B; the desktop card buttons: desktop-mute.spec.ts); a paused
+// word stays in the library («на паузе») and comes back from its word card.
 
 /** The current card's prompt (the French word on a FR → RU card). */
 async function prompt(page: Page): Promise<string> {
@@ -10,15 +11,23 @@ async function prompt(page: Page): Promise<string> {
   return name.replace(/^Карточка /, "").replace(/, перевернуть$/, "");
 }
 
+/** From the answer side: the pencil, then the word sheet's «⋯» action (`/^На паузу/`, «Удалить слово»). */
+async function takeOut(page: Page, action: RegExp | string) {
+  await page.getByRole("button", { name: "Изменить карточку" }).click();
+  await page.getByRole("dialog", { name: "Карточка слова" }).getByRole("button", { name: /^Действия со словом/ }).click();
+  await page.getByRole("button", { name: action }).click();
+}
+
 test("«На паузу» takes the card out of review; «Вернуть» in the word card brings it back", async ({ page }) => {
   await openReview(page);
   await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
   const fr = await prompt(page);
-  // Only the answer side has the buttons.
+  // The phone card carries no «На паузу» of its own.
   await expect(page.getByRole("button", { name: "На паузу" })).toHaveCount(0);
   await questionCard(page).click();
-  await page.getByRole("button", { name: "На паузу" }).click();
-  await expect(page.getByText(`На паузе · ${fr}`)).toBeVisible();
+  await takeOut(page, /^На паузу/);
+  await expect(page.getByText("На паузе — в повторениях не появится")).toBeVisible();
+  await page.keyboard.press("Escape");
   await expect(page.getByText("00 / 10", { exact: true })).toBeVisible();
   expect(await prompt(page)).not.toBe(fr);
 
@@ -42,7 +51,7 @@ test("the trash deletes the word from the review card, «Отменить» brin
   await openReview(page);
   const fr = await prompt(page);
   await questionCard(page).click();
-  await page.getByRole("button", { name: "Удалить слово" }).click();
+  await takeOut(page, "Удалить слово");
   await expect(page.getByText(`Удалено · ${fr}`)).toBeVisible();
   await expect(page.getByText("00 / 10", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Отменить", exact: true }).click();
@@ -54,8 +63,8 @@ test("the phone filter sheet lists «На паузе» once a word is paused", a
   await openReview(page);
   const fr = await prompt(page);
   await questionCard(page).click();
-  await page.getByRole("button", { name: "На паузу" }).click();
-  await expect(page.getByText(`На паузе · ${fr}`)).toBeVisible();
+  await takeOut(page, /^На паузу/);
+  await expect(page.getByText("На паузе — в повторениях не появится")).toBeVisible();
   await page.goto("/library");
   await page.getByRole("button", { name: /Фильтр/ }).first().click();
   const sheet = page.getByRole("dialog", { name: "Фильтр и порядок" });

@@ -63,6 +63,7 @@ test("«+ Поле» in the add form adds origin, conjugation and a field of its
   await page.getByRole("searchbox", { name: "Поиск по FR и RU" }).fill("pécho");
   await page.getByText("pécho", { exact: true }).click();
   const card = page.getByRole("dialog", { name: "Карточка слова" });
+  await card.getByRole("button", { name: /^Ещё\s?·/ }).click();
   await expect(card.getByText("верлан от choper")).toBeVisible();
   await expect(card.getByText("своё · avoir")).toBeVisible();
   await expect(card.getByText("Где услышал")).toBeVisible();

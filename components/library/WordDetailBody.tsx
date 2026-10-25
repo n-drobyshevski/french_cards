@@ -9,15 +9,18 @@ import {
   useState,
   type FormEvent,
   type KeyboardEvent,
+  type CSSProperties,
   type ReactNode,
   type RefObject,
 } from "react";
 import { Button, IconButton } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
+import { Collapse } from "@/components/ui/Collapse";
+import { FoldRow, foldSummary } from "@/components/ui/FoldRow";
 import { Icon, type IconName } from "@/components/ui/Icons";
 import { Kbd } from "@/components/ui/Kbd";
 import { Segmented } from "@/components/ui/Segmented";
-import { SheetCloseButton } from "@/components/ui/Sheet";
+import { Sheet, SheetCloseButton, SheetHeader } from "@/components/ui/Sheet";
 import { SkeletonBar } from "@/components/ui/Skeleton";
 import { AbbrHint } from "@/components/ui/AbbrHint";
 import { SlangMeter } from "@/components/ui/SlangMeter";
@@ -65,8 +68,9 @@ import { conjDraftError, draftOf, isDirty, levelChoiceOf, patchFor, undoFor, wit
 import { CEFR_LEVELS, type LevelInfo } from "@/lib/core/level";
 import { RU_FR_UNLOCK_DAYS } from "@/lib/core/plan";
 import { useLevelData } from "@/lib/use-level-data";
+import { useLayoutClass } from "@/lib/use-media";
 import { getStudyPlan } from "@/lib/user-prefs";
-import { LEVEL_SOURCE_CAPTIONS, levelHint, levelText } from "./level";
+import { LEVEL_SOURCE_CAPTIONS, levelAria, levelHint, levelText } from "./level";
 import { LevelMark } from "./LevelMark";
 import { QuizIconButton, useConjugationView } from "@/components/conjugation/ConjugationViews";
 import { AddFieldButton, type FieldKind } from "./AddFieldButton";
@@ -89,6 +93,8 @@ const SLANG_OPTIONS = [
 ];
 const HISTORY_SLOTS = 8;
 const PANE_HISTORY = 6;
+/** The phone sheet's stamps ink in once it has settled (--dur-sheet). */
+const STAMPS_AFTER_MS = 320;
 
 /** ↻ and «+ Ещё пример» in the word's view: saved at once, with «Отменить». */
 function useExampleSaver(word: Word | null) {
@@ -107,6 +113,8 @@ interface ScheduleRow {
   text: string;
   /** Pane wording: every row in full. */
   full: string;
+  /** The phone sheet's mono line: «через 4 д», «пора повторить», «новая карточка» (later rows «новая»). */
+  brief: string;
   stability: string | null;
 }
 
@@ -143,11 +151,12 @@ function useWordDetail(wordId: string) {
       const due = formatDueIn(s, now);
       if (s.state === 0 && s.direction === "ru_fr" && ruLocked) {
         const waits = `откроется после ${RU_FR_UNLOCK_DAYS} дней узнавания`;
-        return { direction: s.direction, text: waits, full: waits, stability: formatStability(s) };
+        return { direction: s.direction, text: waits, full: waits, brief: `после ${RU_FR_UNLOCK_DAYS} дней узнавания`, stability: formatStability(s) };
       }
       const text = s.state === 0 ? "новая карточка" : due === "сейчас" ? "пора повторить" : i === 0 ? `следующий показ ${due}` : due;
       const full = s.state === 0 ? "ещё не показывалось" : due === "сейчас" ? "к повторению" : `следующий показ ${due}`;
-      return { direction: s.direction, text, full, stability: formatStability(s) };
+      const brief = s.state === 0 ? (i === 0 ? "новая карточка" : "новая") : due === "сейчас" ? "пора повторить" : due;
+      return { direction: s.direction, text, full, brief, stability: formatStability(s) };
     });
     return { word, schedule, history, reviews, folders, status: wordStatus(states) };
   }, [wordId]);
@@ -437,6 +446,11 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
   const proposal = useTranslationProposal(editor.draft?.fr ?? "", editor.draft?.ru ?? "", editor.editing === "entry");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [fieldFocus, setFieldFocus] = useState<string | null>(null);
+  // Phones (L-Word-B): the «⋯» actions sheet, the «Ещё» fold and the ≈B1 source row.
+  const lean = useLayoutClass() === "compact";
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [foldOpen, setFoldOpen] = useState(false);
+  const [levelOpen, setLevelOpen] = useState(false);
   const { ref: savedRef, lit: litSaved } = useSavedSpotlight();
   // L9: the content is usually there on the first frame; when it is not, the sheet keeps a reserved
   // blank (never a skeleton) and the content fades in --dur-quick over it.
@@ -477,73 +491,391 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
     </p>
   );
 
+  // The forms, the same in both layouts.
+  const entryForm = draft && (
+    <form onSubmit={save} className="mt-4 flex flex-col" aria-label="Изменить слово">
+      <label htmlFor={`${id}-fr`} className="meta">
+        Французский
+      </label>
+      <input
+        id={`${id}-fr`}
+        lang="fr"
+        value={draft.fr}
+        onChange={(e) => set("fr", e.target.value)}
+        autoComplete="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        className="mt-2 h-12 rounded-chip border border-rule bg-surface px-3 font-serif text-[20px] text-ink outline-none focus:border-ink"
+      />
+      <label htmlFor={`${id}-ru`} className="meta mt-4">
+        Русский
+      </label>
+      {/* H4: the form's ✕ / ✓ sit inside «Русский», the last box of the form. */}
+      <div className="mt-2 flex items-center rounded-chip border border-rule bg-surface pr-1 focus-within:border-ink">
+        <input
+          id={`${id}-ru`}
+          value={draft.ru}
+          onChange={(e) => set("ru", e.target.value)}
+          autoComplete="off"
+          className="h-12 min-w-0 flex-1 bg-transparent px-3 text-[16px] text-ink outline-none!"
+        />
+        {editPair()}
+      </div>
+      <ProposalLine proposal={proposal} onUse={(ru) => set("ru", ru)} />
+      <span id={`${id}-slang`} className="meta mt-4">
+        Сленг
+      </span>
+      <div className="mt-2 flex items-center gap-2">
+        <Segmented
+          variant="block"
+          options={SLANG_OPTIONS}
+          value={draft.slang_level}
+          onChange={(v) => set("slang_level", v)}
+          ariaLabelledby={`${id}-slang`}
+          itemClassName="font-serif italic text-[16px]"
+          className="min-w-0 flex-1"
+        />
+        <span className="flex items-center">
+          <span id={`${id}-verl`} lang="fr" className="abbr text-[16px]">
+            verl.
+          </span>
+          <Toggle checked={draft.verlan} onCheckedChange={(v) => set("verlan", v)} aria-labelledby={`${id}-verl`} />
+        </span>
+      </div>
+      <DetectEntry word={w} draft={draft} set={set} />
+      <LevelEditRow id={`${id}-cefr`} word={w} draft={draft} set={set} size="sheet" />
+      {errorLine}
+    </form>
+  );
+  const noteForm = draft && (
+    <form onSubmit={save} className="flex flex-col" aria-label="Изменить заметку">
+      <div className="mt-1 flex flex-col rounded-chip border border-rule bg-surface focus-within:border-ink">
+        <textarea
+          aria-label="Заметка"
+          value={draft.note}
+          onChange={(e) => set("note", e.target.value)}
+          rows={3}
+          autoFocus={lean}
+          className="resize-none rounded-chip bg-transparent px-3 pt-2.5 pb-0.5 text-[15px] leading-[22px] text-ink outline-none! pointer-coarse:text-[16px]"
+        />
+        {editPair("px-1 pb-1")}
+      </div>
+      <AutoFillButton className="mt-1" fill={(o) => autofillNote(draft, o)} onFill={(v) => set("note", v)} />
+      {errorLine}
+    </form>
+  );
+  const originForm = draft && (
+    <form onSubmit={save} className="flex flex-col" aria-label="Изменить происхождение">
+      <div className="mt-1 flex items-center rounded-chip border border-rule bg-surface pr-1 focus-within:border-ink">
+        <input
+          aria-label="Происхождение"
+          value={draft.origin}
+          onChange={(e) => set("origin", e.target.value)}
+          maxLength={ORIGIN_MAX}
+          placeholder="Например: верлан от lourd"
+          autoFocus
+          className="h-12 min-w-0 flex-1 bg-transparent px-3 text-[15px] text-ink outline-none! placeholder:text-muted pointer-coarse:text-[16px]"
+        />
+        {editPair()}
+      </div>
+      <AutoFillButton className="mt-1" fill={(o) => autofillOrigin(w, o)} onFill={(v) => set("origin", v)} />
+      {errorLine}
+    </form>
+  );
+  const conjForm = draft && (
+    <form onSubmit={save} className="flex flex-col" aria-label="Изменить спряжение">
+      <ConjugationForm draft={draft.conjugation} onChange={(next) => set("conjugation", next)} word={w} onReset={editor.cancel} autofill={builtin === null} size="sheet" />
+      {errorLine}
+      {editActions}
+    </form>
+  );
+  const exampleForm = draft && (
+    <form onSubmit={save} className="flex flex-col" aria-label="Изменить пример">
+      <ExampleList
+        editable
+        card={w}
+        examples={draft.examples.length ? draft.examples : [{ fr: "", ru: "" }]}
+        onChange={(next) => set("examples", next)}
+        frInputClass="mt-1 h-11 rounded-chip border border-rule bg-surface px-3 font-serif text-[17px] text-ink italic outline-none placeholder:text-muted focus:border-ink"
+        ruInputClass="mt-2 h-11 rounded-chip border border-rule bg-surface px-3 text-[15px] text-ink outline-none placeholder:text-muted focus:border-ink pointer-coarse:text-[16px]"
+        trailing={editPair()}
+      />
+      {errorLine}
+    </form>
+  );
+  const fieldsForm = draft && (
+    <form onSubmit={save} className="flex flex-col" aria-label="Изменить свои поля">
+      <FieldsForm size="sheet" rows={draft.fields} focusKey={fieldFocus} onChange={(rows) => set("fields", rows)} onFocusKey={setFieldFocus} trailing={editPair()} />
+      {errorLine}
+    </form>
+  );
+  const themeChip = (
+    <Chip dropdown onClick={() => setPickerOpen(true)} aria-label={`Тема: ${folder?.name ?? "Входящие"}, изменить`}>
+      {folder && <span aria-hidden="true" className="h-3 w-[3px]" style={{ background: folder.color }} />}
+      {folder?.name ?? "Входящие"}
+    </Chip>
+  );
+  const picker = (
+    <TargetPickerSheet
+      nested
+      open={pickerOpen}
+      onOpenChange={setPickerOpen}
+      title="Тема"
+      subtitle={w.fr}
+      options={folderOptions(data.folders)}
+      selectedKey={folder ? folder.id : INBOX_KEY}
+      onPick={(key) => void actions.changeFolder(key)}
+    />
+  );
+
+  if (lean) {
+    // L-Word-B «Словарная статья»: the entry reads like a print dictionary (no field labels, no
+    // pencils: the text is the edit button); the rest folds under one «Ещё»; rare and destructive
+    // actions sit behind «⋯»; the answers and the next show are the card's stamps at the bottom.
+    const examples = toDrafts(wordExamples(w));
+    const filled = shownFields.filter((f) => f.value);
+    const conjOn = conjugationShown(w, builtin, editing);
+    const originOn = !!w.origin || editing === "origin";
+    const fieldsOn = filled.length > 0 || editing === "fields";
+    const noLevel = !level && levels.ready;
+    // «+ Поле» lists what is empty: the note, origin, a verb's conjugation, the shared fields.
+    const kinds: FieldKind[] = [
+      ...(w.note ? [] : [{ label: "Заметка", caption: "нюанс, синонимы, когда так говорят", onSelect: () => editor.start("note") }]),
+      ...fieldKinds,
+      ...shownFields
+        .filter((f) => f.shared && !f.value)
+        .map((f) => ({ label: f.label, caption: f.hint ?? "общее поле", onSelect: () => editFields(f.key) })),
+    ];
+    const summary =
+      foldSummary([
+        conjOn && "спряжение",
+        originOn && "происхождение",
+        examples.length > 1 && (examples.length > 2 ? "ещё примеры" : "второй пример"),
+        fieldsOn && "свои поля",
+        noLevel && "уровень языка",
+      ]) || (w.note ? "добавить поле" : "добавить заметку, поле");
+    const actionNames = `сбросить прогресс, ${w.muted ? "вернуть в повторения" : "на паузу"}, удалить`;
+
+    return (
+      <div ref={savedRef} data-word-detail="" className={cx("flex flex-1 flex-col px-4", reveal)}>
+        {/* Card header: theme chip, «⋯», close, above the red index-card rule */}
+        <div className="flex h-11 shrink-0 items-center">
+          {themeChip}
+          <span className="flex-1" />
+          <IconButton icon="more" label={`Действия со словом: ${actionNames}`} aria-haspopup="dialog" onClick={() => setMenuOpen(true)} />
+          <SheetCloseButton className="-mr-3" />
+        </div>
+        <div aria-hidden="true" className="h-0.5 shrink-0 bg-red" />
+
+        {/* Entry: headword, grammar line (the level printed once), translation */}
+        {editing === "entry" ? (
+          entryForm
+        ) : (
+          <>
+            {/* The heading is named by the headword, not by its edit button. */}
+            <h2 data-edited="entry" aria-label={w.fr} className="m-0 mt-5">
+              <button
+                type="button"
+                onClick={() => editor.start("entry")}
+                aria-label={`Изменить слово и перевод: ${w.fr}`}
+                className="block w-full bg-transparent py-1 text-left text-ink"
+              >
+                <span lang="fr" className="block font-serif text-prompt-fit leading-[1.05] font-medium tracking-[-0.02em] break-words">
+                  {w.fr}
+                </span>
+              </button>
+            </h2>
+            <div data-edited="entry" className="mt-1.5 flex min-h-5 flex-wrap items-center gap-x-2">
+              {abbr && (
+                <>
+                  <AbbrHint abbr={abbr} className="text-[15px] leading-5" />
+                  <span aria-hidden="true" className="abbr">
+                    ·
+                  </span>
+                </>
+              )}
+              <SlangMeter level={w.slang_level} verlan={w.verlan} hints />
+              {level && (
+                <>
+                  <span aria-hidden="true" className="abbr">
+                    ·
+                  </span>
+                  <button
+                    type="button"
+                    aria-expanded={levelOpen}
+                    aria-controls={`${id}-level`}
+                    aria-label={`${levelAria(level)}${level.source === "flelex" || level.source === "freq" ? `, ${LEVEL_SOURCE_CAPTIONS[level.source]}` : ""}. ${levelOpen ? "Скрыть" : "Показать"} источник`}
+                    onClick={() => setLevelOpen(!levelOpen)}
+                    className="-my-3 h-11 bg-transparent px-1 font-mono text-[12px] leading-4 tracking-[.04em] text-ink underline decoration-boundary decoration-dotted decoration-1 underline-offset-4"
+                  >
+                    {levelText(level)}
+                  </button>
+                </>
+              )}
+            </div>
+            {level && (
+              <Collapse open={levelOpen}>
+                <p id={`${id}-level`} className="m-0 pt-1.5 pb-1 text-[13px] leading-[18px] text-muted">
+                  {levelNote(level)}{" "}
+                  <button
+                    type="button"
+                    aria-label="Изменить уровень языка"
+                    onClick={() => editor.start("entry")}
+                    // 18px line + 13px above and below: a 44px hit area.
+                    className="relative bg-transparent p-0 text-[13px] leading-[18px] font-medium text-ink underline decoration-1 underline-offset-[3px] before:absolute before:-inset-y-[13px] before:inset-x-0"
+                  >
+                    Изменить
+                  </button>
+                </p>
+              </Collapse>
+            )}
+            <p data-edited="entry" className="m-0 mt-2 text-[20px] leading-7">
+              {w.ru}
+            </p>
+          </>
+        )}
+
+        {/* Note: plain text, the edit button; nothing when empty («+ Поле» under «Ещё» offers it) */}
+        {editing === "note" ? (
+          <div className="mt-4">{noteForm}</div>
+        ) : (
+          w.note && (
+            <button
+              type="button"
+              data-edited="note"
+              onClick={() => editor.start("note")}
+              aria-label={`Изменить заметку: ${w.note}`}
+              className="mt-2 bg-transparent py-3 text-left text-[15px] leading-[22px] whitespace-pre-line text-ink"
+            >
+              {w.note}
+            </button>
+          )
+        )}
+
+        {/* One example, the headword in it inked; the others under «Ещё» */}
+        <div data-edited="example" className={w.note || editing === "note" ? "mt-1.5" : "mt-4"}>
+          {editing === "example" ? (
+            exampleForm
+          ) : (
+            <ExampleList
+              card={w}
+              examples={examples}
+              to={1}
+              size="entry"
+              mark={w.fr}
+              emptyText=""
+              addable={examples.length === 0}
+              onEdit={() => editor.start("example")}
+              onChange={(next, change) => void saveExamples(next, change)}
+              aside={<LifeExamplesLink fr={w.fr} onNavigate={onClose} className="h-11 no-underline! before:hidden" />}
+            />
+          )}
+        </div>
+
+        <FoldRow open={foldOpen} onOpenChange={setFoldOpen} summary={summary} rule="none" className="mt-3 border-t border-rule" bodyClassName="-mx-1 px-1">
+          <div className="flex flex-col pb-3">
+            {conjOn && (
+              <FoldSection
+                label="Спряжение"
+                tools={
+                  editing !== "conjugation" && (
+                    <>
+                      {(cleanConjugation(w.conjugation) ?? builtin) && <QuizIconButton on={conjView.quiz.on} onClick={conjView.toggleQuiz} />}
+                      <TextAction
+                        label="Изменить спряжение"
+                        onClick={() => editor.start("conjugation", withConjugationDraft(draftOf(w, defs), cleanConjugation(w.conjugation) ?? builtin))}
+                      >
+                        Изменить
+                      </TextAction>
+                    </>
+                  )
+                }
+              >
+                {editing === "conjugation" ? conjForm : <ConjugationShown word={w} builtin={builtin} size="sheet" view={conjView} />}
+              </FoldSection>
+            )}
+            {originOn && (
+              <FoldSection label="Происхождение">
+                {editing === "origin" ? (
+                  originForm
+                ) : (
+                  <TapToEdit label={`Изменить происхождение: ${w.origin}`} onClick={() => editor.start("origin")}>
+                    {w.origin}
+                  </TapToEdit>
+                )}
+              </FoldSection>
+            )}
+            {examples.length > 1 && editing !== "example" && (
+              <FoldSection label={examples.length > 2 ? "Ещё примеры" : "Второй пример"} edited="example">
+                <ExampleList
+                  card={w}
+                  examples={examples}
+                  from={1}
+                  size="entry"
+                  mark={w.fr}
+                  addable={false}
+                  onEdit={() => editor.start("example")}
+                  onChange={(next, change) => void saveExamples(next, change)}
+                />
+              </FoldSection>
+            )}
+            {fieldsOn && (
+              <FoldSection label="Свои поля" edited="fields">
+                {editing === "fields" ? fieldsForm : <FieldsView size="sheet" rows={filled} onEdit={editFields} tapToEdit />}
+              </FoldSection>
+            )}
+            {noLevel && editing !== "entry" && (
+              <FoldSection label="Уровень языка">
+                <LevelShown info={null} ready onChange={() => editor.start("entry")} size="sheet" />
+              </FoldSection>
+            )}
+            {editing !== "fields" && (canAddField(shownFields) || kinds.length > 0) && (
+              <AddFieldButton
+                extras={kinds}
+                onCustom={
+                  canAddField(shownFields)
+                    ? () => {
+                        const row = newFieldRow();
+                        editFields(row.key, [...shownFields, row]);
+                      }
+                    : null
+                }
+              />
+            )}
+          </div>
+        </FoldRow>
+
+        {/* The card's stamps: the answers, old to new, then the next show */}
+        <div className="mt-auto pt-8 pb-7">
+          {/* «На паузе» heads the stamps, between two rules */}
+          {(w.muted || folder?.muted) && (
+            <div className="border-t border-rule">
+              <PauseNotice word={w} folder={folder} actions={actions} size="sheet" />
+            </div>
+          )}
+          <div className={cx("pt-4", !(w.muted || folder?.muted) && "border-t border-rule")}>
+            <WordStamps history={[...history].reverse()} reviews={reviews} schedule={schedule} />
+          </div>
+        </div>
+
+        <WordActionsSheet open={menuOpen} onOpenChange={setMenuOpen} word={w} actions={actions} />
+        {picker}
+      </div>
+    );
+  }
+
   return (
     <div ref={savedRef} data-word-detail="" className={cx("flex flex-col px-4 pb-4", reveal)}>
       {/* Card header: theme chip + close, above the red index-card rule */}
       <div className="flex h-11 shrink-0 items-center justify-between">
-        <Chip dropdown onClick={() => setPickerOpen(true)} aria-label={`Тема: ${folder?.name ?? "Входящие"}, изменить`}>
-          {folder && <span aria-hidden="true" className="h-3 w-[3px]" style={{ background: folder.color }} />}
-          {folder?.name ?? "Входящие"}
-        </Chip>
+        {themeChip}
         <SheetCloseButton className="-mr-3" />
       </div>
       <div aria-hidden="true" className="h-0.5 shrink-0 bg-red" />
 
       {/* Entry */}
-      {editing === "entry" && draft ? (
-        <form onSubmit={save} className="mt-4 flex flex-col" aria-label="Изменить слово">
-          <label htmlFor={`${id}-fr`} className="meta">
-            Французский
-          </label>
-          <input
-            id={`${id}-fr`}
-            lang="fr"
-            value={draft.fr}
-            onChange={(e) => set("fr", e.target.value)}
-            autoComplete="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            className="mt-2 h-12 rounded-chip border border-rule bg-surface px-3 font-serif text-[20px] text-ink outline-none focus:border-ink"
-          />
-          <label htmlFor={`${id}-ru`} className="meta mt-4">
-            Русский
-          </label>
-          {/* H4: the form's ✕ / ✓ sit inside «Русский», the last box of the form. */}
-          <div className="mt-2 flex items-center rounded-chip border border-rule bg-surface pr-1 focus-within:border-ink">
-            <input
-              id={`${id}-ru`}
-              value={draft.ru}
-              onChange={(e) => set("ru", e.target.value)}
-              autoComplete="off"
-              className="h-12 min-w-0 flex-1 bg-transparent px-3 text-[16px] text-ink outline-none!"
-            />
-            {editPair()}
-          </div>
-          <ProposalLine proposal={proposal} onUse={(ru) => set("ru", ru)} />
-          <span id={`${id}-slang`} className="meta mt-4">
-            Сленг
-          </span>
-          <div className="mt-2 flex items-center gap-2">
-            <Segmented
-              variant="block"
-              options={SLANG_OPTIONS}
-              value={draft.slang_level}
-              onChange={(v) => set("slang_level", v)}
-              ariaLabelledby={`${id}-slang`}
-              itemClassName="font-serif italic text-[16px]"
-              className="min-w-0 flex-1"
-            />
-            <span className="flex items-center">
-              <span id={`${id}-verl`} lang="fr" className="abbr text-[16px]">
-                verl.
-              </span>
-              <Toggle checked={draft.verlan} onCheckedChange={(v) => set("verlan", v)} aria-labelledby={`${id}-verl`} />
-            </span>
-          </div>
-          <DetectEntry word={w} draft={draft} set={set} />
-          <LevelEditRow id={`${id}-cefr`} word={w} draft={draft} set={set} size="sheet" />
-          {errorLine}
-        </form>
+      {editing === "entry" ? (
+        entryForm
       ) : (
         <>
           <div data-edited="entry" className="mt-4 flex items-start gap-2">
@@ -585,31 +917,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             <LevelShown info={level} ready={levels.ready} onChange={() => editor.start("entry")} size="sheet" />
           </SheetField>
         )}
-        <SheetField
-          label="Заметка"
-          edited="note"
-          editLabel="Изменить заметку"
-          editing={editing === "note"}
-          onEdit={() => editor.start("note")}
-          form={
-            draft && (
-              <form onSubmit={save} className="flex flex-col" aria-label="Изменить заметку">
-                <div className="mt-1 flex flex-col rounded-chip border border-rule bg-surface focus-within:border-ink">
-                  <textarea
-                    aria-label="Заметка"
-                    value={draft.note}
-                    onChange={(e) => set("note", e.target.value)}
-                    rows={3}
-                    className="resize-none rounded-chip bg-transparent px-3 pt-2.5 pb-0.5 text-[15px] leading-[22px] text-ink outline-none! pointer-coarse:text-[16px]"
-                  />
-                  {editPair("px-1 pb-1")}
-                </div>
-                <AutoFillButton className="mt-1" fill={(o) => autofillNote(draft, o)} onFill={(v) => set("note", v)} />
-                {errorLine}
-              </form>
-            )
-          }
-        >
+        <SheetField label="Заметка" edited="note" editLabel="Изменить заметку" editing={editing === "note"} onEdit={() => editor.start("note")} form={noteForm}>
           {w.note ? (
             <span className="text-[15px] leading-[22px] whitespace-pre-line">{w.note}</span>
           ) : (
@@ -617,34 +925,9 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
           )}
         </SheetField>
         {(w.origin || editing === "origin") && (
-        <SheetField
-          label="Происхождение"
-          editLabel="Изменить происхождение"
-          editing={editing === "origin"}
-          onEdit={() => editor.start("origin")}
-          form={
-            draft && (
-              <form onSubmit={save} className="flex flex-col" aria-label="Изменить происхождение">
-                <div className="mt-1 flex items-center rounded-chip border border-rule bg-surface pr-1 focus-within:border-ink">
-                  <input
-                    aria-label="Происхождение"
-                    value={draft.origin}
-                    onChange={(e) => set("origin", e.target.value)}
-                    maxLength={ORIGIN_MAX}
-                    placeholder="Например: верлан от lourd"
-                    autoFocus
-                    className="h-12 min-w-0 flex-1 bg-transparent px-3 text-[15px] text-ink outline-none! placeholder:text-muted pointer-coarse:text-[16px]"
-                  />
-                  {editPair()}
-                </div>
-                <AutoFillButton className="mt-1" fill={(o) => autofillOrigin(w, o)} onFill={(v) => set("origin", v)} />
-                {errorLine}
-              </form>
-            )
-          }
-        >
-          <span className="text-[15px] leading-[22px]">{w.origin}</span>
-        </SheetField>
+          <SheetField label="Происхождение" editLabel="Изменить происхождение" editing={editing === "origin"} onEdit={() => editor.start("origin")} form={originForm}>
+            <span className="text-[15px] leading-[22px]">{w.origin}</span>
+          </SheetField>
         )}
         {conjugationShown(w, builtin, editing) && (
           <SheetField
@@ -653,42 +936,12 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
             editing={editing === "conjugation"}
             tools={(cleanConjugation(w.conjugation) ?? builtin) && <QuizIconButton on={conjView.quiz.on} onClick={conjView.toggleQuiz} />}
             onEdit={() => editor.start("conjugation", withConjugationDraft(draftOf(w, defs), cleanConjugation(w.conjugation) ?? builtin))}
-            form={
-              draft && (
-                <form onSubmit={save} className="flex flex-col" aria-label="Изменить спряжение">
-                  <ConjugationForm draft={draft.conjugation} onChange={(next) => set("conjugation", next)} word={w} onReset={editor.cancel} autofill={builtin === null} size="sheet" />
-                  {errorLine}
-                  {editActions}
-                </form>
-              )
-            }
+            form={conjForm}
           >
             <ConjugationShown word={w} builtin={builtin} size="sheet" view={conjView} />
           </SheetField>
         )}
-        <SheetField
-          label="Пример"
-          edited="example"
-          editLabel="Изменить пример"
-          editing={editing === "example"}
-          onEdit={() => editor.start("example")}
-          form={
-            draft && (
-              <form onSubmit={save} className="flex flex-col" aria-label="Изменить пример">
-                <ExampleList
-                  editable
-                  card={w}
-                  examples={draft.examples.length ? draft.examples : [{ fr: "", ru: "" }]}
-                  onChange={(next) => set("examples", next)}
-                  frInputClass="mt-1 h-11 rounded-chip border border-rule bg-surface px-3 font-serif text-[17px] text-ink italic outline-none placeholder:text-muted focus:border-ink"
-                  ruInputClass="mt-2 h-11 rounded-chip border border-rule bg-surface px-3 text-[15px] text-ink outline-none placeholder:text-muted focus:border-ink pointer-coarse:text-[16px]"
-                  trailing={editPair()}
-                />
-                {errorLine}
-              </form>
-            )
-          }
-        >
+        <SheetField label="Пример" edited="example" editLabel="Изменить пример" editing={editing === "example"} onEdit={() => editor.start("example")} form={exampleForm}>
           <ExampleList
             card={w}
             examples={toDrafts(wordExamples(w))}
@@ -699,21 +952,7 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
         <div data-edited="fields" className="flex items-start gap-2 border-t border-rule py-3">
           <div className="flex min-w-0 flex-1 flex-col gap-1">
             <span className="meta">Свои поля</span>
-            {editing === "fields" && draft ? (
-              <form onSubmit={save} className="flex flex-col" aria-label="Изменить свои поля">
-                <FieldsForm
-                  size="sheet"
-                  rows={draft.fields}
-                  focusKey={fieldFocus}
-                  onChange={(rows) => set("fields", rows)}
-                  onFocusKey={setFieldFocus}
-                  trailing={editPair()}
-                />
-                {errorLine}
-              </form>
-            ) : (
-              <FieldsView size="sheet" rows={shownFields} onEdit={editFields} extras={fieldKinds} />
-            )}
+            {editing === "fields" ? fieldsForm : <FieldsView size="sheet" rows={shownFields} onEdit={editFields} extras={fieldKinds} />}
           </div>
           {editing !== "fields" && shownFields.length > 0 && (
             <IconButton icon="pencil" label="Изменить свои поля" className="-mt-1 -mr-3 text-muted" onClick={() => editFields(null)} />
@@ -763,17 +1002,138 @@ function SheetBody({ wordId, onClose }: { wordId: string; onClose: () => void })
         Добавлено {formatDate(w.created_at)} · {SOURCE_LABELS[w.source]}
       </p>
 
-      <TargetPickerSheet
-        nested
-        open={pickerOpen}
-        onOpenChange={setPickerOpen}
-        title="Тема"
-        subtitle={w.fr}
-        options={folderOptions(data.folders)}
-        selectedKey={folder ? folder.id : INBOX_KEY}
-        onPick={(key) => void actions.changeFolder(key)}
-      />
+      {picker}
     </div>
+  );
+}
+
+/** The ≈B1 row's text: where the level comes from and how far to trust it («Изменить» follows). */
+function levelNote(info: LevelInfo): string {
+  if (!info.estimated) return "Уровень указали вы.";
+  const hint = levelHint(info)?.replace(/^≈\s*\S+\s+—\s+/u, "") ?? LEVEL_SOURCE_CAPTIONS[info.source];
+  return hint.charAt(0).toUpperCase() + hint.slice(1);
+}
+
+/** A part of the phone sheet's «Ещё»: a mono label (with tools at its right end), then the content. */
+function FoldSection({ label, edited, tools, children }: { label: string; edited?: Exclude<Editing, null>; tools?: ReactNode; children: ReactNode }) {
+  return (
+    <section data-edited={edited} aria-label={label} className="flex flex-col gap-1 border-t border-rule py-3 first:border-t-0 first:pt-1">
+      <div className="flex min-h-5 items-center gap-2">
+        <span className="meta min-w-0 flex-1">{label}</span>
+        {tools && <div className="-my-3 -mr-3 flex shrink-0 items-center">{tools}</div>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/** A field's text as its own edit button (no pencil column): 22px lines, 44px tall at least. */
+function TapToEdit({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <button type="button" aria-label={label} onClick={onClick} className="-my-2.5 min-h-11 bg-transparent py-2.5 text-left text-[15px] leading-[22px] break-words text-ink">
+      {children}
+    </button>
+  );
+}
+
+/** A 44px text button («Изменить» on «Спряжение»). */
+function TextAction({ label, onClick, children }: { label: string; onClick: () => void; children: ReactNode }) {
+  return (
+    <button type="button" aria-label={label} onClick={onClick} className="h-11 bg-transparent px-3 text-[13px] leading-5 font-medium text-ink underline decoration-1 underline-offset-4">
+      {children}
+    </button>
+  );
+}
+
+/**
+ * The phone sheet's «⋯» (L-Word-B): reset, pause or bring back, delete, with today's undo snackbars;
+ * where the word came from as the caption. Opens over the word sheet (nested).
+ */
+function WordActionsSheet({
+  open,
+  onOpenChange,
+  word,
+  actions,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  word: Word;
+  actions: ReturnType<typeof useWordActions>;
+}) {
+  const run = (action: () => Promise<void>) => {
+    onOpenChange(false);
+    void action();
+  };
+  return (
+    <Sheet nested open={open} onOpenChange={onOpenChange} description="Действия со словом">
+      <SheetHeader title={<span lang="fr">{word.fr}</span>} />
+      <div className="mx-4 mt-1 flex flex-col border-t border-rule">
+        <SheetAction icon="reset" caption="начать заново" onClick={() => run(actions.reset)}>
+          Сбросить прогресс
+        </SheetAction>
+        {word.muted ? (
+          <SheetAction icon="cards" caption="снова показывать" onClick={() => run(() => actions.setMuted(false))}>
+            Вернуть в повторения
+          </SheetAction>
+        ) : (
+          <SheetAction icon="mute" caption="не повторять" onClick={() => run(() => actions.setMuted(true))}>
+            На паузу
+          </SheetAction>
+        )}
+        <SheetAction icon="trash" danger onClick={() => run(actions.remove)}>
+          Удалить слово
+        </SheetAction>
+      </div>
+      <p className="meta m-0 px-4 pt-3 pb-4">
+        Добавлено {formatDate(word.created_at)} · {SOURCE_LABELS[word.source]}
+      </p>
+    </Sheet>
+  );
+}
+
+/**
+ * The phone sheet's history (L-Word-B): one 16px stamp per answer, old to new (знаю: ink; сложно:
+ * a hollow ink square; не знаю: an --again outline with a slash, a shape and not only a colour),
+ * then a dashed slot for the next show, which is not on record yet; under it the next show in mono.
+ * The stamps ink in once, left to right, after the sheet has settled (reduced motion: a short fade).
+ */
+function WordStamps({ history, reviews, schedule }: { history: readonly ReviewLog[]; reviews: number; schedule: readonly ScheduleRow[] }) {
+  const label =
+    history.length === 0
+      ? "Ответов ещё не было"
+      : `История ответов, от старых к новым: ${history.map((l) => RATING_NAMES[l.rating]).join(", ")}. Всего ${reviews} ${plural(reviews, ["показ", "показа", "показов"])}`;
+  const [first, ...rest] = schedule;
+  return (
+    <>
+      <div role="img" aria-label={label} className="flex items-center gap-1">
+        {history.map((l, i) => (
+          <span
+            key={l.id}
+            style={{ "--strip-group": i, "--strip-delay": `${STAMPS_AFTER_MS}ms` } as CSSProperties}
+            className={cx(
+              "strip-write box-border flex size-4 items-center justify-center rounded-[2px]",
+              l.rating === 1 && "border-[1.5px] border-again bg-surface",
+              l.rating === 2 && "border border-ink bg-surface",
+              l.rating >= 3 && "bg-ink",
+            )}
+          >
+            {l.rating === 1 && (
+              <svg aria-hidden="true" width="13" height="13" viewBox="0 0 13 13" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" className="text-again">
+                <path d="M2.5 10.5 10.5 2.5" />
+              </svg>
+            )}
+          </span>
+        ))}
+        {history.length > 0 && <span aria-hidden="true" className="mx-1 h-5 w-px bg-rule" />}
+        <span className="box-border size-4 rounded-[2px] border border-dashed border-boundary" />
+      </div>
+      {first && (
+        <p className="m-0 mt-2.5 font-mono text-[11px] leading-4 tracking-[.06em] text-muted uppercase">
+          <span className="text-ink">{first.direction === "fr_ru" ? first.brief : `${DIRECTION_LABEL[first.direction]} ${first.brief}`}</span>
+          {rest.map((s) => ` · ${DIRECTION_LABEL[s.direction]} ${s.brief}`).join("")}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -1794,9 +2154,46 @@ function addableKinds(
   return out;
 }
 
-/** The fields as label / value rows. Without `onEdit` (the desktop card while its entry is edited) only filled ones, read-only. */
-function FieldsView({ size, rows, onEdit, extras = [] }: { size: FieldsSize; rows: readonly FieldRow[]; onEdit?: EditFields; extras?: readonly FieldKind[] }) {
+/**
+ * The fields as label / value rows. Without `onEdit` (the desktop card while its entry is edited) only filled ones, read-only.
+ * `tapToEdit` (the phone sheet's «Ещё»): each row is its own edit button, and «+ Поле» is the caller's.
+ */
+function FieldsView({
+  size,
+  rows,
+  onEdit,
+  extras = [],
+  tapToEdit = false,
+}: {
+  size: FieldsSize;
+  rows: readonly FieldRow[];
+  onEdit?: EditFields;
+  extras?: readonly FieldKind[];
+  tapToEdit?: boolean;
+}) {
   const pane = size === "pane";
+  if (tapToEdit && onEdit) {
+    return (
+      <dl className="m-0 flex flex-col">
+        {rows.map((r) => (
+          <div key={r.key} data-field={r.label} className="relative grid grid-cols-[minmax(0,108px)_minmax(0,1fr)] gap-x-3 py-2.5 first:-mt-2.5">
+            <dt className="text-[13px] leading-[22px] break-words text-muted">{r.label}</dt>
+            <dd className="m-0 min-w-0">
+              {/* The whole row is the target (44px at least); the value names it. */}
+              <button
+                type="button"
+                aria-label={`Изменить поле «${r.label}»: ${r.value}`}
+                onClick={() => onEdit(r.key)}
+                className="w-full bg-transparent p-0 text-left text-[15px] leading-[22px] break-words text-ink before:absolute before:inset-x-0 before:-inset-y-px"
+              >
+                {r.value}
+              </button>
+            </dd>
+          </div>
+        ))}
+      </dl>
+    );
+  }
   return (
     <div className="flex flex-col">
       {rows.length > 0 && (

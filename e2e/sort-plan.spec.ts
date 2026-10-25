@@ -76,8 +76,10 @@ test("the plan shows its two steps, a bar on the batches and «Применит�
 
   releaseAssign();
   await expect(sheet.getByRole("region", { name: "Повседневное: 3 слова" })).toBeVisible();
-  // Ready (S2): the steps stay, both done, and the status line turns into the result.
-  await expect(steps.getByRole("listitem")).toHaveText([/^01Темы$/, /^02Слова · 3 \/ 3$/]);
+  // Ready (S2), phones: the finished steps and the subline fold away; the status line turns into the
+  // result, the hand-placed words are said under it.
+  await expect(sheet.locator("ol[aria-label=Этапы]").locator("xpath=ancestor::*[@data-state][1]")).toHaveAttribute("data-state", "closed");
+  await expect(sheet.getByText(/^\d+ вручную не трогаем$/)).toBeVisible();
   await expect(sheet.getByText("3 перемещения", { exact: true })).toBeVisible();
   await expect(apply).toBeEnabled();
   await expect(sheet.getByText("Можно применить, когда план готов")).toHaveCount(0);
