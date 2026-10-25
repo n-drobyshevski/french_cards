@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Движение · чернила — B Тихо</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#111111}a:hover{color:#c8331f}
+button{font:inherit}
+input{font:inherit}
+@keyframes mlc-cardA {
+  0% { transform: translateX(0px) rotate(0deg) scale(1); }
+  8.108% { transform: translateX(0px) rotate(0deg) scale(1); animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  9.054% { transform: translateX(0px) rotate(0deg) scale(.98); animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  10.541% { transform: translateX(0px) rotate(0deg) scale(1); }
+  25.676% { transform: translateX(0px) rotate(0deg) scale(1); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  33.784% { transform: translateX(128px) rotate(7deg) scale(1); animation-timing-function: linear; }
+  37.838% { transform: translateX(134px) rotate(7.5deg) scale(1); animation-timing-function: cubic-bezier(0.4, 0.14, 1, 1); }
+  40.27% { transform: translateX(480px) rotate(8deg) scale(1); }
+  63.514% { transform: translateX(480px) rotate(8deg) scale(1); animation-timing-function: linear; }
+  63.527% { transform: translateX(0px) rotate(0deg) scale(1); }
+  100% { transform: translateX(0px) rotate(0deg) scale(1); }
+}
+@keyframes mlc-head {
+  0% { transform: translateY(122px) scale(1.5625); }
+  9.054% { transform: translateY(122px) scale(1.5625); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  11.757% { transform: translateY(0px) scale(1); }
+  63.514% { transform: translateY(0px) scale(1); animation-timing-function: linear; }
+  63.527% { transform: translateY(122px) scale(1.5625); }
+  100% { transform: translateY(122px) scale(1.5625); }
+}
+@keyframes mlc-pos {
+  0% { transform: translateY(148px); }
+  9.054% { transform: translateY(148px); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  11.757% { transform: translateY(0px); }
+  63.514% { transform: translateY(0px); animation-timing-function: linear; }
+  63.527% { transform: translateY(148px); }
+  100% { transform: translateY(148px); }
+}
+@keyframes mlc-write {
+  0% { opacity: 0; transform: translateY(4px); }
+  10.676% { opacity: 0; transform: translateY(4px); animation-timing-function: cubic-bezier(0, 0, 0.3, 1); }
+  13.919% { opacity: 1; transform: translateY(0px); }
+  63.514% { opacity: 1; transform: translateY(0px); animation-timing-function: linear; }
+  63.527% { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 0; transform: translateY(4px); }
+}
+@keyframes mlc-ink {
+  0% { transform: scaleX(0); }
+  13.919% { transform: scaleX(0); animation-timing-function: linear; }
+  16.622% { transform: scaleX(1); }
+  63.514% { transform: scaleX(1); animation-timing-function: linear; }
+  63.527% { transform: scaleX(0); }
+  100% { transform: scaleX(0); }
+}
+@keyframes mlc-stampA {
+  0% { opacity: 0; transform: rotate(-8deg) scale(1); }
+  26.351% { opacity: 0; transform: rotate(-8deg) scale(1); animation-timing-function: linear; }
+  32.432% { opacity: .6; transform: rotate(-8deg) scale(1); }
+  32.973% { opacity: .6; transform: rotate(-8deg) scale(1); animation-timing-function: linear; }
+  33.919% { opacity: 1; transform: rotate(-8deg) scale(1.04); animation-timing-function: linear(0, 0.008 1.3%, 0.027 2.6%, 0.061 4.1%, 0.109 5.7%, 0.208 8.5%, 0.556 17.3%, 0.657 20.3%, 0.744 23.2%, 0.818 26.2%, 0.878 29.1%, 0.927 32.2%, 0.964 35.4%, 0.99 38.5%, 1.009 41.9%, 1.027 49.8%, 1.004 80%, 1); }
+  37.973% { opacity: 1; transform: rotate(-8deg) scale(1); }
+  63.514% { opacity: 1; transform: rotate(-8deg) scale(1); animation-timing-function: linear; }
+  63.527% { opacity: 0; transform: rotate(-8deg) scale(1); }
+  100% { opacity: 0; transform: rotate(-8deg) scale(1); }
+}
+@keyframes mlc-grades {
+  0% { opacity: 0; }
+  10.676% { opacity: 0; animation-timing-function: linear; }
+  12.162% { opacity: 1; }
+  37.838% { opacity: 1; animation-timing-function: cubic-bezier(0.4, 0.14, 1, 1); }
+  39.73% { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes mlc-cardB {
+  0% { transform: translateX(0px) translateY(4px) rotate(0deg) scale(.97); }
+  25.676% { transform: translateX(0px) translateY(4px) rotate(0deg) scale(.97); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  33.784% { transform: translateX(0px) translateY(2px) rotate(0deg) scale(.985); }
+  37.838% { transform: translateX(0px) translateY(2px) rotate(0deg) scale(.985); animation-timing-function: linear(0, 0.006 1.1%, 0.024 2.4%, 0.05 3.7%, 0.092 5.3%, 0.176 7.9%, 0.495 16.9%, 0.591 20.1%, 0.675 23.2%, 0.746 26.4%, 0.804 29.5%, 0.856 33%, 0.897 36.5%, 0.931 40.5%, 0.957 45%, 0.977 50%, 0.99 55.7%, 1 69.8%, 1); }
+  42.568% { transform: translateX(0px) translateY(0px) rotate(0deg) scale(1); }
+  50% { transform: translateX(0px) translateY(0px) rotate(0deg) scale(1); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  52.432% { transform: translateX(100px) translateY(0px) rotate(5deg) scale(1); animation-timing-function: cubic-bezier(0.4, 0.14, 1, 1); }
+  54.595% { transform: translateX(480px) translateY(0px) rotate(7deg) scale(1); }
+  63.514% { transform: translateX(480px) translateY(0px) rotate(7deg) scale(1); animation-timing-function: linear; }
+  63.527% { transform: translateX(0px) translateY(4px) rotate(0deg) scale(.97); }
+  100% { transform: translateX(0px) translateY(4px) rotate(0deg) scale(.97); }
+}
+@keyframes mlc-stampB {
+  0% { opacity: 0; transform: rotate(-8deg) scale(1); }
+  50.27% { opacity: 0; transform: rotate(-8deg) scale(1); animation-timing-function: linear; }
+  52.027% { opacity: .6; transform: rotate(-8deg) scale(1); }
+  52.162% { opacity: .6; transform: rotate(-8deg) scale(1); animation-timing-function: linear; }
+  53.108% { opacity: 1; transform: rotate(-8deg) scale(1.04); animation-timing-function: linear(0, 0.008 1.3%, 0.027 2.6%, 0.061 4.1%, 0.109 5.7%, 0.208 8.5%, 0.556 17.3%, 0.657 20.3%, 0.744 23.2%, 0.818 26.2%, 0.878 29.1%, 0.927 32.2%, 0.964 35.4%, 0.99 38.5%, 1.009 41.9%, 1.027 49.8%, 1.004 80%, 1); }
+  57.162% { opacity: 1; transform: rotate(-8deg) scale(1); }
+  63.514% { opacity: 1; transform: rotate(-8deg) scale(1); animation-timing-function: linear; }
+  63.527% { opacity: 0; transform: rotate(-8deg) scale(1); }
+  100% { opacity: 0; transform: rotate(-8deg) scale(1); }
+}
+@keyframes mlc-edge2 {
+  0% { opacity: 1; }
+  37.838% { opacity: 1; animation-timing-function: linear; }
+  39.324% { opacity: 0; }
+  63.514% { opacity: 0; animation-timing-function: linear; }
+  63.527% { opacity: 1; }
+  100% { opacity: 1; }
+}
+@keyframes mlc-edge1 {
+  0% { opacity: 1; }
+  52.432% { opacity: 1; animation-timing-function: linear; }
+  53.919% { opacity: 0; }
+  63.514% { opacity: 0; animation-timing-function: linear; }
+  63.527% { opacity: 1; }
+  100% { opacity: 1; }
+}
+@keyframes mlc-fill {
+  0% { transform: scaleX(.8333); }
+  37.838% { transform: scaleX(.8333); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  40.541% { transform: scaleX(.9167); }
+  52.432% { transform: scaleX(.9167); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  55.135% { transform: scaleX(1); }
+  63.514% { transform: scaleX(1); animation-timing-function: linear; }
+  63.527% { transform: scaleX(.8333); }
+  100% { transform: scaleX(.8333); }
+}
+@keyframes mlc-tick {
+  0% { transform: translateX(233.3px); }
+  37.838% { transform: translateX(233.3px); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  40.541% { transform: translateX(256.7px); }
+  52.432% { transform: translateX(256.7px); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  55.135% { transform: translateX(279px); }
+  63.514% { transform: translateX(279px); animation-timing-function: linear; }
+  63.527% { transform: translateX(233.3px); }
+  100% { transform: translateX(233.3px); }
+}
+@keyframes mlc-c11 {
+  0% { opacity: 1; }
+  37.838% { opacity: 1; animation-timing-function: linear; }
+  37.851% { opacity: 0; }
+  63.514% { opacity: 0; animation-timing-function: linear; }
+  63.527% { opacity: 1; }
+  100% { opacity: 1; }
+}
+@keyframes mlc-c12 {
+  0% { opacity: 0; }
+  37.838% { opacity: 0; animation-timing-function: linear; }
+  37.851% { opacity: 1; }
+  63.514% { opacity: 1; animation-timing-function: linear; }
+  63.527% { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes mlc-rev {
+  0% { opacity: 1; }
+  60.541% { opacity: 1; animation-timing-function: cubic-bezier(0.4, 0.14, 1, 1); }
+  62.432% { opacity: 0; }
+  98.649% { opacity: 0; animation-timing-function: linear; }
+  100% { opacity: 1; }
+}
+@keyframes mlc-done {
+  0% { opacity: 0; }
+  62.432% { opacity: 0; animation-timing-function: linear; }
+  62.446% { opacity: 1; }
+  97.297% { opacity: 1; animation-timing-function: linear; }
+  98.649% { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes mlc-hl {
+  0% { opacity: 0; }
+  62.703% { opacity: 0; animation-timing-function: linear; }
+  67.027% { opacity: 1; }
+  100% { opacity: 1; }
+}
+@keyframes mlc-hlrise {
+  0% { transform: translateY(6px); }
+  62.703% { transform: translateY(6px); animation-timing-function: linear(0, 0.006 1.1%, 0.024 2.4%, 0.055 3.8%, 0.096 5.2%, 0.187 7.8%, 0.516 16.5%, 0.616 19.5%, 0.702 22.6%, 0.774 25.6%, 0.833 28.6%, 0.883 31.9%, 0.922 35.2%, 0.953 38.9%, 0.975 42.8%, 0.991 47.3%, 1.001 52.5%, 1.006 63.1%, 1); }
+  69.189% { transform: translateY(0px); }
+  100% { transform: translateY(0px); }
+}
+@keyframes mlc-rule {
+  0% { transform: scaleX(0); }
+  67.027% { transform: scaleX(0); animation-timing-function: linear; }
+  72.432% { transform: scaleX(1); }
+  100% { transform: scaleX(1); }
+}
+@keyframes mlc-meta {
+  0% { opacity: 0; }
+  76.216% { opacity: 0; animation-timing-function: linear; }
+  77.703% { opacity: 1; }
+  100% { opacity: 1; }
+}
+@keyframes mlc-date {
+  0% { opacity: 0; transform: rotate(-4deg) scale(1.04); }
+  78.378% { opacity: 0; transform: rotate(-4deg) scale(1.04); animation-timing-function: linear; }
+  79.324% { opacity: 1; transform: rotate(-4deg) scale(1.04); animation-timing-function: linear(0, 0.008 1.3%, 0.027 2.6%, 0.061 4.1%, 0.109 5.7%, 0.208 8.5%, 0.556 17.3%, 0.657 20.3%, 0.744 23.2%, 0.818 26.2%, 0.878 29.1%, 0.927 32.2%, 0.964 35.4%, 0.99 38.5%, 1.009 41.9%, 1.027 49.8%, 1.004 80%, 1); }
+  83.378% { opacity: 1; transform: rotate(-4deg) scale(1); }
+  100% { opacity: 1; transform: rotate(-4deg) scale(1); }
+}
+@keyframes mlc-btn {
+  0% { opacity: 0; }
+  83.378% { opacity: 0; animation-timing-function: linear; }
+  84.865% { opacity: 1; }
+  100% { opacity: 1; }
+}
+@keyframes mlc-play {
+  0% { transform: scaleX(0); animation-timing-function: linear; }
+  100% { transform: scaleX(1); }
+}
+@keyframes mlc-g0 {
+  0% { opacity: 0; transform: translateY(4px); }
+  72.432% { opacity: 0; transform: translateY(4px); animation-timing-function: cubic-bezier(0, 0, 0.3, 1); }
+  75.676% { opacity: 1; transform: translateY(0px); }
+  100% { opacity: 1; transform: translateY(0px); }
+}
+@keyframes mlc-g1 {
+  0% { opacity: 0; transform: translateY(4px); }
+  72.973% { opacity: 0; transform: translateY(4px); animation-timing-function: cubic-bezier(0, 0, 0.3, 1); }
+  76.216% { opacity: 1; transform: translateY(0px); }
+  100% { opacity: 1; transform: translateY(0px); }
+}
+@keyframes mlc-g2 {
+  0% { opacity: 0; transform: translateY(4px); }
+  73.514% { opacity: 0; transform: translateY(4px); animation-timing-function: cubic-bezier(0, 0, 0.3, 1); }
+  76.757% { opacity: 1; transform: translateY(0px); }
+  100% { opacity: 1; transform: translateY(0px); }
+}
+@keyframes mlc-g3 {
+  0% { opacity: 0; transform: translateY(4px); }
+  74.054% { opacity: 0; transform: translateY(4px); animation-timing-function: cubic-bezier(0, 0, 0.3, 1); }
+  77.297% { opacity: 1; transform: translateY(0px); }
+  100% { opacity: 1; transform: translateY(0px); }
+}
+@keyframes mlc-cap1 {
+  0% { opacity: 1; }
+  24.189% { opacity: 1; animation-timing-function: linear; }
+  25.676% { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes mlc-cap2 {
+  0% { opacity: 0; }
+  25.676% { opacity: 0; animation-timing-function: linear; }
+  27.162% { opacity: 1; }
+  36.351% { opacity: 1; animation-timing-function: linear; }
+  37.838% { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes mlc-cap3 {
+  0% { opacity: 0; }
+  37.838% { opacity: 0; animation-timing-function: linear; }
+  39.324% { opacity: 1; }
+  48.514% { opacity: 1; animation-timing-function: linear; }
+  50% { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes mlc-cap4 {
+  0% { opacity: 0; }
+  50% { opacity: 0; animation-timing-function: linear; }
+  51.486% { opacity: 1; }
+  70.946% { opacity: 1; animation-timing-function: linear; }
+  72.432% { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes mlc-cap5 {
+  0% { opacity: 0; }
+  72.432% { opacity: 0; animation-timing-function: linear; }
+  73.919% { opacity: 1; }
+  100% { opacity: 1; }
+}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #f1f1ee; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif; display: flex; flex-direction: column">
+  <div aria-label="Подпись к анимации" style="position: absolute; left: 0; right: 0; top: 0; height: 40px; box-sizing: border-box; background: #e8e8e4; border-bottom: 1px solid #d6d6d1; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; z-index: 5">
+    <div style="position: absolute; left: 16px; right: 16px; top: 0; height: 40px">
+      <span style="position: absolute; left: 0; right: 0; top: 0; height: 40px; display: block; white-space: nowrap; animation: mlc-cap1 7400ms linear infinite both">
+        <span style="position: absolute; left: 0; right: 96px; top: 4px; height: 16px; font-weight: 500; color: #111111; overflow: hidden">1 · Подчёркивание</span>
+        <span style="position: absolute; left: 0; right: 0; top: 20px; height: 16px; color: #5a5a57; overflow: hidden">слово в примере · 1,5 px · 200 мс</span>
+      </span>
+      <span style="position: absolute; left: 0; right: 0; top: 0; height: 40px; display: block; white-space: nowrap; animation: mlc-cap2 7400ms linear infinite both">
+        <span style="position: absolute; left: 0; right: 96px; top: 4px; height: 16px; font-weight: 500; color: #111111; overflow: hidden">2 · Свайп</span>
+        <span style="position: absolute; left: 0; right: 0; top: 20px; height: 16px; color: #5a5a57; overflow: hidden">штамп «Знаю» на пороге</span>
+      </span>
+      <span style="position: absolute; left: 0; right: 0; top: 0; height: 40px; display: block; white-space: nowrap; animation: mlc-cap3 7400ms linear infinite both">
+        <span style="position: absolute; left: 0; right: 96px; top: 4px; height: 16px; font-weight: 500; color: #111111; overflow: hidden">3 · Кромка и линия</span>
+        <span style="position: absolute; left: 0; right: 0; top: 20px; height: 16px; color: #5a5a57; overflow: hidden">кромка тает 110 мс · линия +1</span>
+      </span>
+      <span style="position: absolute; left: 0; right: 0; top: 0; height: 40px; display: block; white-space: nowrap; animation: mlc-cap4 7400ms linear infinite both">
+        <span style="position: absolute; left: 0; right: 96px; top: 4px; height: 16px; font-weight: 500; color: #111111; overflow: hidden">4 · Готово на сегодня</span>
+        <span style="position: absolute; left: 0; right: 0; top: 20px; height: 16px; color: #5a5a57; overflow: hidden">пауза 400 мс · черта 400 мс</span>
+      </span>
+      <span style="position: absolute; left: 0; right: 0; top: 0; height: 40px; display: block; white-space: nowrap; animation: mlc-cap5 7400ms linear infinite both">
+        <span style="position: absolute; left: 0; right: 96px; top: 4px; height: 16px; font-weight: 500; color: #111111; overflow: hidden">5 · Полоска сессии</span>
+        <span style="position: absolute; left: 0; right: 0; top: 20px; height: 16px; color: #5a5a57; overflow: hidden">4 группы · шаг 40 мс</span>
+      </span>
+    </div>
+    <span style="position: absolute; right: 16px; top: 4px; height: 16px; color: #5a5a57; white-space: nowrap; font-variant-numeric: tabular-nums">тихо · 7,4 с</span>
+    <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: #111111; transform-origin: left center; animation: mlc-play 7400ms linear infinite both"></span>
+  </div>
+
+  <header style="position: absolute; left: 16px; right: 16px; top: 48px; height: 44px; display: flex; align-items: center; gap: 8px">
+    <div style="position: relative; height: 44px; flex-shrink: 0; display: flex; align-items: stretch">
+      <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 7px; height: 30px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 4px"></span>
+      <button type="button" aria-label="Направление FR → RU, сменить" style="position: relative; height: 44px; padding: 0 10px 0 11px; display: inline-flex; align-items: center; border: 0; background: transparent; color: #111111; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 500; letter-spacing: .06em; white-space: nowrap; cursor: pointer">FR → RU</button>
+      <span aria-hidden="true" style="position: relative; align-self: center; width: 1px; height: 16px; background: #d6d6d1"></span>
+      <button type="button" aria-haspopup="dialog" aria-label="Что повторять: все темы" style="position: relative; height: 44px; padding: 0 9px 0 10px; display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; color: #111111; font-size: 13px; white-space: nowrap; cursor: pointer">
+        <span>Все темы</span>
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5a5a57" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+      </button>
+    </div>
+    <div style="flex: 1"></div>
+    <button type="button" aria-label="Отменить последний ответ" style="width: 44px; height: 44px; margin-right: -12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 4px; background: transparent; color: #111111; cursor: pointer; padding: 0">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"></path></svg>
+    </button>
+  </header>
+
+  <div style="position: absolute; left: 0; top: 0; width: 390px; height: 756px; animation: mlc-rev 7400ms linear infinite both">
+  <button type="button" aria-haspopup="dialog" aria-label="План на сегодня · карточка 11 из 12" style="position: absolute; left: 16px; right: 16px; top: 96px; height: 44px; margin: 0; padding: 0; border: 0; background: transparent; display: flex; align-items: center; gap: 16px; cursor: pointer; color: #111111">
+    <span aria-hidden="true" style="position: relative; width: 280px; height: 9px; flex-shrink: 0">
+      <span style="position: absolute; left: 0; right: 0; top: 4px; height: 1px; background: #d6d6d1"></span>
+      <span style="position: absolute; left: 0; right: 0; top: 4px; height: 1px; background: #111111; transform-origin: left center; transform: scaleX(.8333); animation: mlc-fill 7400ms linear infinite both"></span>
+      <span style="position: absolute; left: 0; top: 0; width: 1px; height: 9px; background: #111111; animation: mlc-tick 7400ms linear infinite both"></span>
+    </span>
+    <span style="position: relative; flex: 1; height: 16px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; letter-spacing: .06em; font-weight: 500; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap">
+      <span style="position: absolute; right: 0; top: 0; white-space: nowrap; animation: mlc-c11 7400ms linear infinite both">11 / 12</span>
+      <span style="position: absolute; right: 0; top: 0; white-space: nowrap; animation: mlc-c12 7400ms linear infinite both">12 / 12</span>
+    </span>
+  </button>
+  <div style="position: absolute; left: 16px; top: 152px; width: 358px; height: 520px">
+      <span aria-hidden="true" style="position: absolute; left: 10px; width: 338px; top: 8px; height: 508px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; animation: mlc-edge2 7400ms linear infinite both"></span>
+      <span aria-hidden="true" style="position: absolute; left: 5px; width: 348px; top: 4px; height: 508px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; animation: mlc-edge1 7400ms linear infinite both"></span>
+      <article aria-label="Следующая карточка: bouffer" style="position: absolute; left: 0; top: 0; width: 358px; height: 508px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; transform-origin: 50% 100%; animation: mlc-cardB 7400ms linear infinite both">
+        <div style="position: absolute; left: 0; right: 0; top: 0; height: 46px; box-sizing: border-box; padding: 0 20px; display: flex; align-items: center; gap: 8px; border-bottom: 2px solid #c8331f">
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; color: #5a5a57">FR</span>
+          <div style="flex: 1"></div>
+          
+        </div>
+        <span lang="fr" style="position: absolute; left: 24px; top: 196px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 50px; line-height: 62px; letter-spacing: -0.02em; color: #111111; white-space: nowrap">bouffer</span>
+        <span lang="fr" style="position: absolute; left: 25px; top: 264px; font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; line-height: 20px; color: #5a5a57">v.</span>
+        <span aria-hidden="true" style="position: absolute; left: 24px; top: 86px; height: 40px; box-sizing: border-box; padding: 0 12px; display: flex; align-items: center; border: 2px solid #1d6b45; border-radius: 4px; color: #1d6b45; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 20px; font-weight: 500; letter-spacing: .08em; background: transparent; z-index: 3; animation: mlc-stampB 7400ms linear infinite both">ЗНАЮ</span>
+      </article>
+      <article aria-label="Карточка: se casser — свалить, сбежать" style="position: absolute; left: 0; top: 0; width: 358px; height: 508px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; transform-origin: 50% 100%; animation: mlc-cardA 7400ms linear infinite both">
+        <div style="position: absolute; left: 0; right: 0; top: 0; height: 46px; box-sizing: border-box; padding: 0 4px 0 20px; display: flex; align-items: center; gap: 8px; border-bottom: 2px solid #c8331f">
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; color: #5a5a57">FR</span>
+          <div style="flex: 1"></div>
+          <span style="display: inline-flex; align-items: center; gap: 8px; animation: mlc-write 7400ms linear infinite both">
+            <span role="img" aria-label="Уровень сленга: арго, 3 из 4" style="display: inline-flex; align-items: center; gap: 2px"><span style="width: 10px; height: 3px; background: #111111"></span><span style="width: 10px; height: 3px; background: #111111"></span><span style="width: 10px; height: 3px; background: #111111"></span><span style="width: 10px; height: 3px; background: #d6d6d1"></span></span>
+            <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; line-height: 20px; color: #5a5a57">arg.</span>
+            <a href="Review-Edit-Sheet.dc.html" aria-label="Изменить карточку" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #5a5a57; text-decoration: none"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path><path d="m14.5 5.5 3 3"></path></svg></a>
+          </span>
+        </div>
+        <h1 lang="fr" style="position: absolute; left: 24px; top: 74px; margin: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 32px; line-height: 40px; letter-spacing: -0.02em; color: #111111; white-space: nowrap; transform-origin: left top; animation: mlc-head 7400ms linear infinite both">se casser</h1>
+        <span lang="fr" style="position: absolute; left: 25px; top: 116px; font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; line-height: 20px; color: #5a5a57; animation: mlc-pos 7400ms linear infinite both">v. pron.</span>
+        <div style="position: absolute; left: 24px; right: 24px; top: 164px; display: flex; flex-direction: column; animation: mlc-write 7400ms linear infinite both">
+          <p style="margin: 0; font-size: 24px; font-weight: 500; line-height: 32px">свалить, сбежать</p>
+          <div style="margin-top: 36px; display: flex; flex-direction: column; gap: 6px">
+            <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 19px; line-height: 28px">Allez, on <span style="position: relative; display: inline-block">se casse<span aria-hidden="true" style="position: absolute; left: 0; right: 1px; bottom: 5px; height: 1.5px; background: #c8331f; transform-origin: left center; animation: mlc-ink 7400ms linear infinite both"></span></span> d'ici.</span>
+            <span style="font-size: 14px; line-height: 20px; color: #5a5a57">Ладно, сваливаем отсюда.</span>
+          </div>
+        </div>
+        <button type="button" aria-expanded="false" style="position: absolute; left: 24px; right: 24px; bottom: 0; height: 48px; padding: 0; box-sizing: border-box; border: 0; border-top: 1px solid #d6d6d1; background: transparent; display: flex; align-items: center; gap: 8px; color: #111111; cursor: pointer; text-align: left; animation: mlc-write 7400ms linear infinite both">
+          <span style="flex: 1; min-width: 0; font-size: 13px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><span style="font-weight: 500">Ещё</span><span style="color: #5a5a57"> · заметка, происхождение</span></span>
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5a5a57" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+        </button>
+        
+        <span aria-hidden="true" style="position: absolute; left: 24px; top: 330px; height: 40px; box-sizing: border-box; padding: 0 12px; display: flex; align-items: center; border: 2px solid #1d6b45; border-radius: 4px; color: #1d6b45; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 20px; font-weight: 500; letter-spacing: .08em; background: transparent; z-index: 3; animation: mlc-stampA 7400ms linear infinite both">ЗНАЮ</span>
+      </article>
+
+  </div>
+  <div role="group" aria-label="Оценка" style="position: absolute; left: 16px; right: 16px; top: 684px; height: 56px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr) minmax(0, 1.15fr); gap: 8px; animation: mlc-grades 7400ms linear infinite both">
+    <button type="button" style="height: 56px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 6px; background: #ffffff; border: 1px solid #b3261e; color: #b3261e; padding: 0; cursor: pointer">
+      <span style="font-size: 15px; font-weight: 500; line-height: 20px">Не знаю</span>
+      <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px">&lt;1 мин</span>
+    </button>
+    <button type="button" style="height: 56px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 6px; background: #ffffff; border: 1px solid #d6d6d1; color: #111111; padding: 0; cursor: pointer">
+      <span style="font-size: 15px; font-weight: 500; line-height: 20px">Сложно</span>
+      <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57">6 мин</span>
+    </button>
+    <button type="button" style="height: 56px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 6px; background: #ffffff; border: 1px solid #1d6b45; color: #1d6b45; padding: 0; cursor: pointer">
+      <span style="font-size: 15px; font-weight: 500; line-height: 20px">Знаю</span>
+      <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px">1 д</span>
+    </button>
+  </div>
+  </div>
+
+  <section aria-label="Готово на сегодня" style="position: absolute; left: 16px; right: 16px; top: 92px; height: 664px; animation: mlc-done 7400ms linear infinite both">
+    <div style="position: absolute; left: 0; right: 0; top: 128px; display: flex; align-items: center; gap: 12px; animation: mlc-hlrise 7400ms linear infinite both">
+      <h2 style="flex: 1; min-width: 0; margin: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 34px; line-height: 40px; letter-spacing: -0.015em; animation: mlc-hl 7400ms linear infinite both">Готово на сегодня</h2>
+      <span aria-label="Дата сессии 25.10" style="flex-shrink: 0; height: 23px; box-sizing: border-box; padding: 2px 6px; border: 1.5px solid #111111; border-radius: 2px; background: #ffffff; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; line-height: 16px; font-weight: 500; font-variant-numeric: tabular-nums; animation: mlc-date 7400ms linear infinite both">25.10</span>
+    </div>
+    <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 180px; height: 2px; background: #c8331f; transform-origin: left center; animation: mlc-rule 7400ms linear infinite both"></span>
+    <div role="img" aria-label="12 карточек по порядку: 9 с первого раза, 2 ошибки, 1 вернулась в очередь" style="position: absolute; left: 0; top: 214px; height: 20px; display: flex; gap: 10px"><span style="display: flex; gap: 4px; animation: mlc-g0 7400ms linear infinite both"><span style="flex-shrink: 0; width: 8px; height: 20px; box-sizing: border-box; border-radius: 1px; background: #111111"></span><span style="flex-shrink: 0; width: 8px; height: 20px; box-sizing: border-box; border-radius: 1px; background: #111111"></span><span style="flex-shrink: 0; width: 8px; height: 20px; box-sizing: border-box; border-radius: 1px; position: relative; background: #ffffff; border: 1.5px solid #b3261e"><span style="position: absolute; left: 1px; right: 1px; top: 5px; bottom: 5px; background: #b3261e"></span></span></span><span style="display: flex; gap: 4px; animation: mlc-g1 7400ms linear infinite both"><span style="flex-shrink: 0; width: 8px; height: 20px; box-sizing: border-box; border-radius: 1px; background: #111111"></span><span style="flex-shrink: 0; width: 8px; height: 20px; box-sizing: border-box; border-radius: 1px; background: #111111"></span><span style="flex-shrink: 0; width: 8px; height: 20px; box-sizing: border-box; border-radius: 1px; background: #111111"></span></span><span style="display: flex; gap: 4px; animation: mlc-g2 7400ms linear infinite both"><span style="flex-shrink: 0; width: 8px; height: 20px; box-sizing: border-box; border-radius: 1px; background: #ffffff; border: 1px solid #111111"></span><span style="flex-shrink: 0; width: 8px; height: 20px; box-sizing: border-box; border-radius: 1px; background: #111111"></span><span style="flex-shrink: 0; width: 8px; height: 20px; box-sizing: border-box; border-radius: 1px; position: relative; background: #ffffff; border: 1.5px solid #b3261e"><span style="position: absolute; left: 1px; right: 1px; top: 5px; bottom: 5px; background: #b3261e"></span></span></span><span style="display: flex; gap: 4px; animation: mlc-g3 7400ms linear infinite both"><span style="flex-shrink: 0; width: 8px; height: 20px; box-sizing: border-box; border-radius: 1px; background: #111111"></span><span style="flex-shrink: 0; width: 8px; height: 20px; box-sizing: border-box; border-radius: 1px; background: #111111"></span><span style="flex-shrink: 0; width: 8px; height: 20px; box-sizing: border-box; border-radius: 1px; background: #111111"></span></span></div>
+    <p style="position: absolute; left: 0; right: 0; top: 246px; margin: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57; animation: mlc-meta 7400ms linear infinite both"><span style="color: #111111; font-weight: 500">12</span> карточек · <span style="color: #111111; font-weight: 500">9</span> с первого раза</p>
+    <a href="Library.dc.html" aria-label="Трудные: chelou, la galère. Открыть список" style="position: absolute; left: 0; right: 0; top: 290px; min-height: 44px; display: flex; align-items: center; color: #111111; text-decoration: none; animation: mlc-meta 7400ms linear infinite both">
+      <span style="font-size: 15px; line-height: 28px; color: #5a5a57">Трудные:&#160;</span><span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 21px; line-height: 28px">chelou, la galère</span><span aria-hidden="true" style="margin-left: 8px; font-size: 20px; line-height: 28px; color: #5a5a57">›</span>
+    </a>
+    <div style="position: absolute; left: 0; right: 0; top: 512px; display: flex; flex-direction: column; gap: 8px; animation: mlc-btn 7400ms linear infinite both">
+      <a href="Main.dc.html" style="height: 52px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: #111111; color: #ffffff; font-size: 15px; font-weight: 500; text-decoration: none">Повторить ошибки (2)</a>
+      <div style="height: 44px; display: flex; align-items: stretch; justify-content: center">
+        <a href="Main.dc.html" aria-label="Ещё практика — не влияет на расписание" style="padding: 0 16px; display: flex; align-items: center; color: #111111; font-size: 15px; font-weight: 500; text-decoration: underline; text-decoration-color: #8a8a85; text-underline-offset: 4px; text-decoration-thickness: 1px">Ещё практика</a>
+        <span aria-hidden="true" style="align-self: center; width: 3px; height: 3px; background: #8a8a85"></span>
+        <a href="Add-Empty.dc.html" style="padding: 0 16px; display: flex; align-items: center; color: #111111; font-size: 15px; font-weight: 500; text-decoration: underline; text-decoration-color: #8a8a85; text-underline-offset: 4px; text-decoration-thickness: 1px">Добавить слова</a>
+      </div>
+    </div>
+  </section>
+
+  <nav aria-label="Основная навигация" style="position: absolute; left: 0; right: 0; bottom: 0; height: 88px; box-sizing: border-box; padding-bottom: 28px; background: #ffffff; border-top: 1px solid #d6d6d1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr))">
+    <span aria-hidden="true" style="position: absolute; top: -1px; left: 0; width: 25%; height: 2px; background: #c8331f; "></span>
+    <a href="Main.dc.html" aria-current="page" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #111111; font-size: 12px; font-weight: 600; text-decoration: none">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="14" height="13" rx="1"></rect><path d="M3.5 11h14"></path><path d="M7 4.5h12.5a1 1 0 0 1 1 1V17"></path></svg>
+      <span>Повторение</span>
+    </a>
+    <a href="Exercise-List-B.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; font-size: 12px; font-weight: 500; text-decoration: none">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="1.5"></rect><path d="m7.5 9 1.5 1.5 3-3"></path><path d="M14 9h3"></path><path d="M7.5 15h2"></path><path d="M14 15h3"></path></svg>
+      <span>Упражнения</span>
+    </a>
+    <a href="Add-Empty.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; font-size: 12px; font-weight: 500; text-decoration: none">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+      <span>Добавить</span>
+    </a>
+    <a href="Library.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; font-size: 12px; font-weight: 500; text-decoration: none">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="1"></rect><path d="M3.5 12h17"></path><path d="M10 8h4"></path><path d="M10 16h4"></path></svg>
+      <span>Библиотека</span>
+    </a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

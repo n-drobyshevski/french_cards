@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Библиотека · главная — C Стена ящиков</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#111111}a:hover{color:#c8331f}
+button{font:inherit}
+input{font:inherit}
+::placeholder{color:#5a5a57;opacity:1}
+:root{--ms:1}
+@media (prefers-reduced-motion: reduce){:root{--ms:0}}
+@keyframes ll-draw{from{transform:scaleX(calc(1 - var(--ms)))}to{transform:scaleX(1)}}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #f1f1ee; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif; display: flex; flex-direction: column">
+  <main style="flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 16px 16px 0; box-sizing: border-box; overflow: hidden">
+    <header style="height: 44px; flex-shrink: 0; display: flex; align-items: center">
+      <h1 style="margin: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 28px; line-height: 36px; letter-spacing: -0.015em">Библиотека</h1>
+      <div style="flex: 1"></div>
+      <button type="button" aria-label="Контекст" style="width: 44px; height: 44px; padding: 0; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 4px; background: transparent; color: #111111; cursor: pointer"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"></path><path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z"></path></svg></button>
+      <a href="Settings.dc.html" aria-label="Настройки" style="width: 44px; height: 44px; margin-right: -12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #111111; text-decoration: none"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg></a>
+    </header>
+    <div style="height: 20px; margin-top: 2px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 20px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57">
+      <button type="button" aria-pressed="false" aria-label="Фильтр: 27 к повторению. Долгое нажатие — меню" style="height: 44px; margin: -12px 0; padding: 0; border: 0; background: transparent; cursor: pointer; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 20px; letter-spacing: .06em; text-transform: uppercase; color: #111111; font-weight: 500; text-decoration: underline; text-decoration-color: #b9b9b3; text-underline-offset: 4px; text-decoration-thickness: 1px; display: inline-flex; align-items: center; gap: 6px"><span aria-hidden="true" style="width: 6px; height: 6px; background: #c8331f; display: inline-block"></span>27 к повт.</button>
+      <span aria-hidden="true">·</span>
+      <button type="button" aria-pressed="false" aria-label="Фильтр: 56 трудных. Долгое нажатие — меню" style="height: 44px; margin: -12px 0; padding: 0; border: 0; background: transparent; cursor: pointer; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 20px; letter-spacing: .06em; text-transform: uppercase; color: #111111; font-weight: 500; text-decoration: underline; text-decoration-color: #b9b9b3; text-underline-offset: 4px; text-decoration-thickness: 1px">56 трудных</button>
+    </div>
+
+    <div style="margin-top: 16px; flex-shrink: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+      <a href="Folder.dc.html" aria-label="Все слова: 1318, одним списком" style="grid-column: span 2; height: 76px; position: relative; display: flex; flex-direction: column; justify-content: space-between; padding: 12px 10px 12px 12px; box-sizing: border-box; background: #111111; border-radius: 6px; color: #ffffff; text-decoration: none">
+        <span style="display: flex; align-items: center; justify-content: space-between">
+          <span style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px">Все слова</span>
+          <span style="display: flex; color: #ffffff"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"></path></svg></span>
+        </span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 22px; line-height: 26px; font-weight: 500; letter-spacing: .02em; font-variant-numeric: tabular-nums">1318</span>
+      </a>
+      <div style="height: 76px; position: relative; box-sizing: border-box; border: 1px dashed #5a5a57; border-radius: 6px">
+        <a href="Folder.dc.html" aria-label="Входящие: 7 слов без темы" style="position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: space-between; padding: 11px 10px 11px 11px; color: #111111; text-decoration: none">
+          <span style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 15px; line-height: 18px">Входящие</span>
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 22px; line-height: 26px; font-weight: 500; color: #c8331f; font-variant-numeric: tabular-nums">7</span>
+        </a>
+        <button type="button" aria-label="Разложить по темам" style="position: absolute; right: 1px; bottom: 1px; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #111111; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3c.5 4.4 2.6 6.5 7 7-4.4.5-6.5 2.6-7 7-.5-4.4-2.6-6.5-7-7 4.4-.5 6.5-2.6 7-7Z"></path><path d="M19 16c.2 1.6.9 2.3 2.5 2.5-1.6.2-2.3.9-2.5 2.5-.2-1.6-.9-2.3-2.5-2.5 1.6-.2 2.3-.9 2.5-2.5Z"></path></svg></button>
+      </div>
+      <a href="Folder.dc.html" aria-label="01 Частые глаголы 1: 20 слов, выучено 86 %" style="height: 96px; position: relative; display: flex; flex-direction: column; padding: 10px 9px 0 10px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; text-decoration: none">
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #5a5a57"></span>
+        <span aria-hidden="true" style="height: 22px; display: flex; align-items: center; gap: 6px">
+          <span style="flex: 1; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 18px; line-height: 22px; font-weight: 500; letter-spacing: .02em; font-variant-numeric: tabular-nums">01</span>
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">20</span>
+        </span>
+        <span style="margin-top: 2px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 15px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; hyphens: manual">Частые глаголы 1</span>
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #e8e8e4"><span style="display: block; width: 86%; height: 3px; background: #111111; transform-origin: left center; animation: ll-draw 400ms linear 120ms both"></span></span>
+      </a>
+      <a href="Folder.dc.html" aria-label="02 Частые глаголы 2: 20 слов, выучено 78 %" style="height: 96px; position: relative; display: flex; flex-direction: column; padding: 10px 9px 0 10px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; text-decoration: none">
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #2f6b4f"></span>
+        <span aria-hidden="true" style="height: 22px; display: flex; align-items: center; gap: 6px">
+          <span style="flex: 1; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 18px; line-height: 22px; font-weight: 500; letter-spacing: .02em; font-variant-numeric: tabular-nums">02</span>
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">20</span>
+        </span>
+        <span style="margin-top: 2px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 15px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; hyphens: manual">Частые глаголы 2</span>
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #e8e8e4"><span style="display: block; width: 78%; height: 3px; background: #111111; transform-origin: left center; animation: ll-draw 400ms linear 140ms both"></span></span>
+      </a>
+      <a href="Folder.dc.html" aria-label="03 Жильё: 55 слов, выучено 64 %" style="height: 96px; position: relative; display: flex; flex-direction: column; padding: 10px 9px 0 10px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; text-decoration: none">
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #a0522d"></span>
+        <span aria-hidden="true" style="height: 22px; display: flex; align-items: center; gap: 6px">
+          <span style="flex: 1; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 18px; line-height: 22px; font-weight: 500; letter-spacing: .02em; font-variant-numeric: tabular-nums">03</span>
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">55</span>
+        </span>
+        <span style="margin-top: 2px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 15px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; hyphens: manual">Жильё</span>
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #e8e8e4"><span style="display: block; width: 64%; height: 3px; background: #111111; transform-origin: left center; animation: ll-draw 400ms linear 160ms both"></span></span>
+      </a>
+      <a href="Folder.dc.html" aria-label="04 Учёба и работа: 44 слова, выучено 0 %" style="height: 96px; position: relative; display: flex; flex-direction: column; padding: 10px 9px 0 10px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; text-decoration: none">
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #2f4b8a"></span>
+        <span aria-hidden="true" style="height: 22px; display: flex; align-items: center; gap: 6px">
+          <span style="flex: 1; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 18px; line-height: 22px; font-weight: 500; letter-spacing: .02em; font-variant-numeric: tabular-nums">04</span>
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">44</span>
+        </span>
+        <span style="margin-top: 2px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 15px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; hyphens: manual">Учёба и работа</span>
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #e8e8e4"><span style="display: block; width: 0%; height: 3px; background: #111111; transform-origin: left center; animation: ll-draw 400ms linear 180ms both"></span></span>
+      </a>
+      <a href="Folder.dc.html" aria-label="05 Транспорт и поездки: 39 слов, выучено 0 %" style="height: 96px; position: relative; display: flex; flex-direction: column; padding: 10px 9px 0 10px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; text-decoration: none">
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #6b4a8a"></span>
+        <span aria-hidden="true" style="height: 22px; display: flex; align-items: center; gap: 6px">
+          <span style="flex: 1; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 18px; line-height: 22px; font-weight: 500; letter-spacing: .02em; font-variant-numeric: tabular-nums">05</span>
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">39</span>
+        </span>
+        <span style="margin-top: 2px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 15px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; hyphens: manual">Транспорт и поездки</span>
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #e8e8e4"><span style="display: block; width: 0%; height: 3px; background: #111111; transform-origin: left center; animation: ll-draw 400ms linear 200ms both"></span></span>
+      </a>
+      <a href="Folder.dc.html" aria-label="06 Время и количество: 20 слов, выучено 0 %" style="height: 96px; position: relative; display: flex; flex-direction: column; padding: 10px 9px 0 10px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; text-decoration: none">
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #a33a3a"></span>
+        <span aria-hidden="true" style="height: 22px; display: flex; align-items: center; gap: 6px">
+          <span style="flex: 1; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 18px; line-height: 22px; font-weight: 500; letter-spacing: .02em; font-variant-numeric: tabular-nums">06</span>
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">20</span>
+        </span>
+        <span style="margin-top: 2px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 15px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; hyphens: manual">Время и количество</span>
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #e8e8e4"><span style="display: block; width: 0%; height: 3px; background: #111111; transform-origin: left center; animation: ll-draw 400ms linear 220ms both"></span></span>
+      </a>
+      <a href="Folder.dc.html" aria-label="07 Досуг и культура: 39 слов, выучено 0 %" style="height: 96px; position: relative; display: flex; flex-direction: column; padding: 10px 9px 0 10px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; text-decoration: none">
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #2f6f74"></span>
+        <span aria-hidden="true" style="height: 22px; display: flex; align-items: center; gap: 6px">
+          <span style="flex: 1; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 18px; line-height: 22px; font-weight: 500; letter-spacing: .02em; font-variant-numeric: tabular-nums">07</span>
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">39</span>
+        </span>
+        <span style="margin-top: 2px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 15px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; hyphens: manual">Досуг и культура</span>
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #e8e8e4"><span style="display: block; width: 0%; height: 3px; background: #111111; transform-origin: left center; animation: ll-draw 400ms linear 240ms both"></span></span>
+      </a>
+      <a href="Folder.dc.html" aria-label="08 Покупки, услуги, деньги: 53 слова, 4 к повторению, выучено 14 %" style="height: 96px; position: relative; display: flex; flex-direction: column; padding: 10px 9px 0 10px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; text-decoration: none">
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #7a6a2f"></span>
+        <span aria-hidden="true" style="height: 22px; display: flex; align-items: center; gap: 6px">
+          <span style="flex: 1; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 18px; line-height: 22px; font-weight: 500; letter-spacing: .02em; font-variant-numeric: tabular-nums">08</span>
+          <span aria-hidden="true" style="width: 6px; height: 6px; background: #c8331f; flex-shrink: 0"></span><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">53</span>
+        </span>
+        <span style="margin-top: 2px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 15px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; hyphens: manual">Покупки, услуги, деньги</span>
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #e8e8e4"><span style="display: block; width: 14%; height: 3px; background: #111111; transform-origin: left center; animation: ll-draw 400ms linear 260ms both"></span></span>
+      </a>
+      <a href="Folder.dc.html" aria-label="09 Экология: 43 слова, выучено 0 %" style="height: 96px; position: relative; display: flex; flex-direction: column; padding: 10px 9px 0 10px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; text-decoration: none">
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #4a6b2f"></span>
+        <span aria-hidden="true" style="height: 22px; display: flex; align-items: center; gap: 6px">
+          <span style="flex: 1; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 18px; line-height: 22px; font-weight: 500; letter-spacing: .02em; font-variant-numeric: tabular-nums">09</span>
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">43</span>
+        </span>
+        <span style="margin-top: 2px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 15px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; hyphens: manual">Экология</span>
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #e8e8e4"><span style="display: block; width: 0%; height: 3px; background: #111111; transform-origin: left center; animation: ll-draw 400ms linear 280ms both"></span></span>
+      </a>
+      <a href="Folder.dc.html" aria-label="10 Технологии и интернет: 40 слов, выучено 0 %" style="height: 96px; position: relative; display: flex; flex-direction: column; padding: 10px 9px 0 10px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; text-decoration: none">
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #8a4a6b"></span>
+        <span aria-hidden="true" style="height: 22px; display: flex; align-items: center; gap: 6px">
+          <span style="flex: 1; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 18px; line-height: 22px; font-weight: 500; letter-spacing: .02em; font-variant-numeric: tabular-nums">10</span>
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">40</span>
+        </span>
+        <span style="margin-top: 2px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 15px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; hyphens: manual">Технологии и интернет</span>
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #e8e8e4"><span style="display: block; width: 0%; height: 3px; background: #111111; transform-origin: left center; animation: ll-draw 400ms linear 300ms both"></span></span>
+      </a>
+      <a href="Folder.dc.html" aria-label="11 Работа и карьера: 53 слова, 2 к повторению, выучено 12 %" style="height: 96px; position: relative; display: flex; flex-direction: column; padding: 10px 9px 0 10px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; text-decoration: none">
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #2f5a8a"></span>
+        <span aria-hidden="true" style="height: 22px; display: flex; align-items: center; gap: 6px">
+          <span style="flex: 1; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 18px; line-height: 22px; font-weight: 500; letter-spacing: .02em; font-variant-numeric: tabular-nums">11</span>
+          <span aria-hidden="true" style="width: 6px; height: 6px; background: #c8331f; flex-shrink: 0"></span><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">53</span>
+        </span>
+        <span style="margin-top: 2px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 15px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; hyphens: manual">Работа и карьера</span>
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #e8e8e4"><span style="display: block; width: 12%; height: 3px; background: #111111; transform-origin: left center; animation: ll-draw 400ms linear 320ms both"></span></span>
+      </a>
+      <a href="Folder.dc.html" aria-label="12 Частые прилагательные: 52 слова, 1 к повторению, выучено 4 %" style="height: 96px; position: relative; display: flex; flex-direction: column; padding: 10px 9px 0 10px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; text-decoration: none">
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #6b5a4a"></span>
+        <span aria-hidden="true" style="height: 22px; display: flex; align-items: center; gap: 6px">
+          <span style="flex: 1; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 18px; line-height: 22px; font-weight: 500; letter-spacing: .02em; font-variant-numeric: tabular-nums">12</span>
+          <span aria-hidden="true" style="width: 6px; height: 6px; background: #c8331f; flex-shrink: 0"></span><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">52</span>
+        </span>
+        <span style="margin-top: 2px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 15px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; hyphens: manual">Частые прилага&shy;тельные</span>
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #e8e8e4"><span style="display: block; width: 4%; height: 3px; background: #111111; transform-origin: left center; animation: ll-draw 400ms linear 340ms both"></span></span>
+      </a>
+      <a href="Folder.dc.html" aria-label="13 Общество и семья: 49 слов, 1 к повторению, выучено 6 %" style="height: 96px; position: relative; display: flex; flex-direction: column; padding: 10px 9px 0 10px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; text-decoration: none">
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #5a5a57"></span>
+        <span aria-hidden="true" style="height: 22px; display: flex; align-items: center; gap: 6px">
+          <span style="flex: 1; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 18px; line-height: 22px; font-weight: 500; letter-spacing: .02em; font-variant-numeric: tabular-nums">13</span>
+          <span aria-hidden="true" style="width: 6px; height: 6px; background: #c8331f; flex-shrink: 0"></span><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">49</span>
+        </span>
+        <span style="margin-top: 2px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 15px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; hyphens: manual">Общество и семья</span>
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #e8e8e4"><span style="display: block; width: 6%; height: 3px; background: #111111; transform-origin: left center; animation: ll-draw 400ms linear 360ms both"></span></span>
+      </a>
+      <a href="Folder.dc.html" aria-label="14 Университет: 46 слов, 1 к повторению, выучено 4 %" style="height: 96px; position: relative; display: flex; flex-direction: column; padding: 10px 9px 0 10px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; text-decoration: none">
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #2f6b4f"></span>
+        <span aria-hidden="true" style="height: 22px; display: flex; align-items: center; gap: 6px">
+          <span style="flex: 1; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 18px; line-height: 22px; font-weight: 500; letter-spacing: .02em; font-variant-numeric: tabular-nums">14</span>
+          <span aria-hidden="true" style="width: 6px; height: 6px; background: #c8331f; flex-shrink: 0"></span><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">46</span>
+        </span>
+        <span style="margin-top: 2px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 15px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; hyphens: manual">Университет</span>
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #e8e8e4"><span style="display: block; width: 4%; height: 3px; background: #111111; transform-origin: left center; animation: ll-draw 400ms linear 380ms both"></span></span>
+      </a>
+      <a href="Folder.dc.html" aria-label="15 СМИ: 40 слов, выучено 0 %" style="height: 96px; position: relative; display: flex; flex-direction: column; padding: 10px 9px 0 10px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; text-decoration: none">
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #a0522d"></span>
+        <span aria-hidden="true" style="height: 22px; display: flex; align-items: center; gap: 6px">
+          <span style="flex: 1; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 18px; line-height: 22px; font-weight: 500; letter-spacing: .02em; font-variant-numeric: tabular-nums">15</span>
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">40</span>
+        </span>
+        <span style="margin-top: 2px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 15px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; hyphens: manual">СМИ</span>
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #e8e8e4"><span style="display: block; width: 0%; height: 3px; background: #111111; transform-origin: left center; animation: ll-draw 400ms linear 400ms both"></span></span>
+      </a>
+      <a href="Folder.dc.html" aria-label="16 Экономика и потребление: 42 слова, 1 к повторению, выучено 2 %" style="height: 96px; position: relative; display: flex; flex-direction: column; padding: 10px 9px 0 10px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; text-decoration: none">
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #2f4b8a"></span>
+        <span aria-hidden="true" style="height: 22px; display: flex; align-items: center; gap: 6px">
+          <span style="flex: 1; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 18px; line-height: 22px; font-weight: 500; letter-spacing: .02em; font-variant-numeric: tabular-nums">16</span>
+          <span aria-hidden="true" style="width: 6px; height: 6px; background: #c8331f; flex-shrink: 0"></span><span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">42</span>
+        </span>
+        <span style="margin-top: 2px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 15px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; hyphens: manual">Экономика и потребление</span>
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #e8e8e4"><span style="display: block; width: 2%; height: 3px; background: #111111; transform-origin: left center; animation: ll-draw 400ms linear 420ms both"></span></span>
+      </a>
+      <a href="Folder.dc.html" aria-label="17 Администрация и документы: 44 слова, выучено 6 %" style="height: 96px; position: relative; display: flex; flex-direction: column; padding: 10px 9px 0 10px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; text-decoration: none">
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #6b4a8a"></span>
+        <span aria-hidden="true" style="height: 22px; display: flex; align-items: center; gap: 6px">
+          <span style="flex: 1; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 18px; line-height: 22px; font-weight: 500; letter-spacing: .02em; font-variant-numeric: tabular-nums">17</span>
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">44</span>
+        </span>
+        <span style="margin-top: 2px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 15px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; hyphens: manual">Админи&shy;страция и документы</span>
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #e8e8e4"><span style="display: block; width: 6%; height: 3px; background: #111111; transform-origin: left center; animation: ll-draw 400ms linear 420ms both"></span></span>
+      </a>
+      <a href="Folder.dc.html" aria-label="18 Здоровье и спорт: 47 слов, выучено 4 %" style="height: 96px; position: relative; display: flex; flex-direction: column; padding: 10px 9px 0 10px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; color: #111111; text-decoration: none">
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #a33a3a"></span>
+        <span aria-hidden="true" style="height: 22px; display: flex; align-items: center; gap: 6px">
+          <span style="flex: 1; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 18px; line-height: 22px; font-weight: 500; letter-spacing: .02em; font-variant-numeric: tabular-nums">18</span>
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">47</span>
+        </span>
+        <span style="margin-top: 2px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 15px; line-height: 18px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: break-word; hyphens: manual">Здоровье и спорт</span>
+        <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: #e8e8e4"><span style="display: block; width: 4%; height: 3px; background: #111111; transform-origin: left center; animation: ll-draw 400ms linear 420ms both"></span></span>
+      </a>
+    </div>
+  </main>
+  <div style="position: absolute; left: 0; right: 0; bottom: 88px; padding: 12px 16px; box-sizing: border-box; background: #f1f1ee; border-top: 1px solid #d6d6d1; ">
+    <div style="height: 48px; display: flex; align-items: stretch; box-sizing: border-box; background: #ffffff; border: 1px solid #111111; border-radius: 4px">
+      <label style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0 12px; color: #5a5a57">
+        <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+        <input type="search" placeholder="Поиск по FR и RU" aria-label="Поиск по FR и RU" style="flex: 1; min-width: 0; height: 44px; padding: 0; border: 0; outline: none; background: transparent; color: #111111; font-size: 15px">
+      </label>
+      <span aria-hidden="true" style="width: 1px; margin: 10px 0; background: #d6d6d1"></span>
+      <button type="button" aria-haspopup="dialog" aria-label="Фильтр и порядок" style="width: 48px; padding: 0; border: 0; background: transparent; color: #111111; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10"></path><path d="M18 7h2"></path><circle cx="16" cy="7" r="2"></circle><path d="M4 17h4"></path><path d="M12 17h8"></path><circle cx="10" cy="17" r="2"></circle></svg></button>
+    </div>
+  </div>
+  <nav aria-label="Основная навигация" style="position: absolute; left: 0; right: 0; bottom: 0; height: 88px; box-sizing: border-box; padding-bottom: 28px; background: #ffffff; border-top: 1px solid #d6d6d1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr))">
+    <a href="Main.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; font-size: 12px; font-weight: 500; text-decoration: none">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="14" height="13" rx="1"></rect><path d="M3.5 11h14"></path><path d="M7 4.5h12.5a1 1 0 0 1 1 1V17"></path></svg>
+      <span>Повторение</span>
+    </a>
+    <a href="Exercise-List-B.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; font-size: 12px; font-weight: 500; text-decoration: none">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="1.5"></rect><path d="m7.5 9 1.5 1.5 3-3"></path><path d="M14 9h3"></path><path d="M7.5 15h2"></path><path d="M14 15h3"></path></svg>
+      <span>Упражнения</span>
+    </a>
+    <a href="Add-Empty.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; font-size: 12px; font-weight: 500; text-decoration: none">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+      <span>Добавить</span>
+    </a>
+    <a href="Library.dc.html" aria-current="page" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #111111; font-size: 12px; font-weight: 600; text-decoration: none">
+      <span aria-hidden="true" style="position: absolute; top: -1px; left: 0; right: 0; height: 2px; background: #c8331f"></span>
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="1"></rect><path d="M3.5 12h17"></path><path d="M10 8h4"></path><path d="M10 16h4"></path></svg>
+      <span>Библиотека</span>
+    </a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

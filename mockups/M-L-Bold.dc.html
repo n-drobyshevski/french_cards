@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Движение · чернила — C Смело</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#111111}a:hover{color:#c8331f}
+button{font:inherit}
+input{font:inherit}
+@keyframes mlb-cardA {
+  0% { transform: translateX(0px) rotate(0deg) scale(1); }
+  7.895% { transform: translateX(0px) rotate(0deg) scale(1); animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  8.816% { transform: translateX(0px) rotate(0deg) scale(.98); animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  10.263% { transform: translateX(0px) rotate(0deg) scale(1); }
+  22.368% { transform: translateX(0px) rotate(0deg) scale(1); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  30.263% { transform: translateX(128px) rotate(7deg) scale(1); animation-timing-function: linear; }
+  34.211% { transform: translateX(134px) rotate(7.5deg) scale(1); animation-timing-function: cubic-bezier(0.4, 0.14, 1, 1); }
+  36.579% { transform: translateX(480px) rotate(8deg) scale(1); }
+  48.684% { transform: translateX(480px) rotate(8deg) scale(1); animation-timing-function: linear; }
+  48.697% { transform: translateX(0px) rotate(0deg) scale(1); }
+  100% { transform: translateX(0px) rotate(0deg) scale(1); }
+}
+@keyframes mlb-head {
+  0% { transform: translateY(122px) scale(1.5625); }
+  8.816% { transform: translateY(122px) scale(1.5625); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  11.447% { transform: translateY(0px) scale(1); }
+  48.684% { transform: translateY(0px) scale(1); animation-timing-function: linear; }
+  48.697% { transform: translateY(122px) scale(1.5625); }
+  100% { transform: translateY(122px) scale(1.5625); }
+}
+@keyframes mlb-pos {
+  0% { transform: translateY(148px); }
+  8.816% { transform: translateY(148px); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  11.447% { transform: translateY(0px); }
+  48.684% { transform: translateY(0px); animation-timing-function: linear; }
+  48.697% { transform: translateY(148px); }
+  100% { transform: translateY(148px); }
+}
+@keyframes mlb-write {
+  0% { opacity: 0; transform: translateY(4px); }
+  10.395% { opacity: 0; transform: translateY(4px); animation-timing-function: cubic-bezier(0, 0, 0.3, 1); }
+  13.553% { opacity: 1; transform: translateY(0px); }
+  48.684% { opacity: 1; transform: translateY(0px); animation-timing-function: linear; }
+  48.697% { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 0; transform: translateY(4px); }
+}
+@keyframes mlb-ink {
+  0% { transform: scaleX(0); }
+  13.553% { transform: scaleX(0); animation-timing-function: linear; }
+  16.184% { transform: scaleX(1); }
+  48.684% { transform: scaleX(1); animation-timing-function: linear; }
+  48.697% { transform: scaleX(0); }
+  100% { transform: scaleX(0); }
+}
+@keyframes mlb-stampA {
+  0% { opacity: 0; transform: rotate(-8deg) scale(1); }
+  23.026% { opacity: 0; transform: rotate(-8deg) scale(1); animation-timing-function: linear; }
+  28.947% { opacity: .6; transform: rotate(-8deg) scale(1); }
+  29.474% { opacity: .6; transform: rotate(-8deg) scale(1); animation-timing-function: linear; }
+  30.395% { opacity: 1; transform: rotate(-8deg) scale(1.04); animation-timing-function: linear(0, 0.008 1.3%, 0.027 2.6%, 0.061 4.1%, 0.109 5.7%, 0.208 8.5%, 0.556 17.3%, 0.657 20.3%, 0.744 23.2%, 0.818 26.2%, 0.878 29.1%, 0.927 32.2%, 0.964 35.4%, 0.99 38.5%, 1.009 41.9%, 1.027 49.8%, 1.004 80%, 1); }
+  34.342% { opacity: 1; transform: rotate(-8deg) scale(1); }
+  48.684% { opacity: 1; transform: rotate(-8deg) scale(1); animation-timing-function: linear; }
+  48.697% { opacity: 0; transform: rotate(-8deg) scale(1); }
+  100% { opacity: 0; transform: rotate(-8deg) scale(1); }
+}
+@keyframes mlb-grades {
+  0% { opacity: 0; }
+  10.395% { opacity: 0; animation-timing-function: linear; }
+  11.842% { opacity: 1; }
+  34.211% { opacity: 1; animation-timing-function: cubic-bezier(0.4, 0.14, 1, 1); }
+  36.053% { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes mlb-cardB {
+  0% { transform: translateX(0px) translateY(4px) rotate(0deg) scale(.97); }
+  22.368% { transform: translateX(0px) translateY(4px) rotate(0deg) scale(.97); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  30.263% { transform: translateX(0px) translateY(2px) rotate(0deg) scale(.985); }
+  34.211% { transform: translateX(0px) translateY(2px) rotate(0deg) scale(.985); animation-timing-function: linear(0, 0.006 1.1%, 0.024 2.4%, 0.05 3.7%, 0.092 5.3%, 0.176 7.9%, 0.495 16.9%, 0.591 20.1%, 0.675 23.2%, 0.746 26.4%, 0.804 29.5%, 0.856 33%, 0.897 36.5%, 0.931 40.5%, 0.957 45%, 0.977 50%, 0.99 55.7%, 1 69.8%, 1); }
+  38.816% { transform: translateX(0px) translateY(0px) rotate(0deg) scale(1); }
+  48.684% { transform: translateX(0px) translateY(0px) rotate(0deg) scale(1); animation-timing-function: linear; }
+  48.697% { transform: translateX(0px) translateY(4px) rotate(0deg) scale(.97); }
+  100% { transform: translateX(0px) translateY(4px) rotate(0deg) scale(.97); }
+}
+@keyframes mlb-stampB {
+  0% { opacity: 0; transform: rotate(-8deg) scale(1); }
+  100% { opacity: 0; transform: rotate(-8deg) scale(1); }
+}
+@keyframes mlb-edge2 {
+  0% { opacity: 1; }
+  34.211% { opacity: 1; animation-timing-function: linear; }
+  35.658% { opacity: 0; }
+  48.684% { opacity: 0; animation-timing-function: linear; }
+  48.697% { opacity: 1; }
+  100% { opacity: 1; }
+}
+@keyframes mlb-fill {
+  0% { transform: scaleX(.8333); }
+  34.211% { transform: scaleX(.8333); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  36.842% { transform: scaleX(.9167); }
+  48.684% { transform: scaleX(.9167); animation-timing-function: linear; }
+  48.697% { transform: scaleX(.8333); }
+  100% { transform: scaleX(.8333); }
+}
+@keyframes mlb-tick {
+  0% { transform: translateX(233.3px); }
+  34.211% { transform: translateX(233.3px); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  36.842% { transform: translateX(256.7px); }
+  48.684% { transform: translateX(256.7px); animation-timing-function: linear; }
+  48.697% { transform: translateX(233.3px); }
+  100% { transform: translateX(233.3px); }
+}
+@keyframes mlb-c11 {
+  0% { opacity: 1; }
+  34.211% { opacity: 1; animation-timing-function: linear; }
+  34.224% { opacity: 0; }
+  48.684% { opacity: 0; animation-timing-function: linear; }
+  48.697% { opacity: 1; }
+  100% { opacity: 1; }
+}
+@keyframes mlb-c12 {
+  0% { opacity: 0; }
+  34.211% { opacity: 0; animation-timing-function: linear; }
+  34.224% { opacity: 1; }
+  48.684% { opacity: 1; animation-timing-function: linear; }
+  48.697% { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes mlb-seg0 {
+  0% { opacity: 0; transform: scaleX(0); }
+  10.395% { opacity: 0; transform: scaleX(0); animation-timing-function: cubic-bezier(0, 0, 0.3, 1); }
+  11.842% { opacity: 1; transform: scaleX(1); }
+  48.684% { opacity: 1; transform: scaleX(1); animation-timing-function: linear; }
+  48.697% { opacity: 0; transform: scaleX(0); }
+  100% { opacity: 0; transform: scaleX(0); }
+}
+@keyframes mlb-seg1 {
+  0% { opacity: 0; transform: scaleX(0); }
+  10.921% { opacity: 0; transform: scaleX(0); animation-timing-function: cubic-bezier(0, 0, 0.3, 1); }
+  12.368% { opacity: 1; transform: scaleX(1); }
+  48.684% { opacity: 1; transform: scaleX(1); animation-timing-function: linear; }
+  48.697% { opacity: 0; transform: scaleX(0); }
+  100% { opacity: 0; transform: scaleX(0); }
+}
+@keyframes mlb-seg2 {
+  0% { opacity: 0; transform: scaleX(0); }
+  11.447% { opacity: 0; transform: scaleX(0); animation-timing-function: cubic-bezier(0, 0, 0.3, 1); }
+  12.895% { opacity: 1; transform: scaleX(1); }
+  48.684% { opacity: 1; transform: scaleX(1); animation-timing-function: linear; }
+  48.697% { opacity: 0; transform: scaleX(0); }
+  100% { opacity: 0; transform: scaleX(0); }
+}
+@keyframes mlb-markR {
+  0% { opacity: .3; }
+  22.368% { opacity: .3; animation-timing-function: linear; }
+  29.474% { opacity: 1; }
+  36.579% { opacity: 1; animation-timing-function: linear; }
+  38.816% { opacity: .3; }
+  100% { opacity: .3; }
+}
+@keyframes mlb-markL {
+  0% { opacity: .3; }
+  22.368% { opacity: .3; animation-timing-function: linear; }
+  26.316% { opacity: 0; }
+  36.579% { opacity: 0; animation-timing-function: linear; }
+  38.816% { opacity: .3; }
+  100% { opacity: .3; }
+}
+@keyframes mlb-rev {
+  0% { opacity: 1; }
+  44.737% { opacity: 1; animation-timing-function: cubic-bezier(0.4, 0.14, 1, 1); }
+  46.579% { opacity: 0; }
+  98.684% { opacity: 0; animation-timing-function: linear; }
+  100% { opacity: 1; }
+}
+@keyframes mlb-lib {
+  0% { opacity: 0; }
+  46.579% { opacity: 0; animation-timing-function: cubic-bezier(0, 0, 0.3, 1); }
+  49.737% { opacity: 1; }
+  97.368% { opacity: 1; animation-timing-function: linear; }
+  98.684% { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes mlb-marker {
+  0% { transform: translateX(0px); }
+  44.737% { transform: translateX(0px); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  47.368% { transform: translateX(292.5px); }
+  97.368% { transform: translateX(292.5px); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  100% { transform: translateX(0px); }
+}
+@keyframes mlb-tab0 {
+  0% { color: #111111; font-weight: 600; }
+  44.737% { color: #111111; font-weight: 600; animation-timing-function: linear; }
+  46.184% { color: #5a5a57; font-weight: 500; }
+  97.368% { color: #5a5a57; font-weight: 500; animation-timing-function: linear; }
+  98.816% { color: #111111; font-weight: 600; }
+  100% { color: #111111; font-weight: 600; }
+}
+@keyframes mlb-tab3 {
+  0% { color: #5a5a57; font-weight: 500; }
+  44.737% { color: #5a5a57; font-weight: 500; animation-timing-function: linear; }
+  46.184% { color: #111111; font-weight: 600; }
+  97.368% { color: #111111; font-weight: 600; animation-timing-function: linear; }
+  98.816% { color: #5a5a57; font-weight: 500; }
+  100% { color: #5a5a57; font-weight: 500; }
+}
+@keyframes mlb-librest {
+  0% { opacity: 1; }
+  54.605% { opacity: 1; animation-timing-function: cubic-bezier(0.4, 0.14, 1, 1); }
+  56.447% { opacity: 0; }
+  98.947% { opacity: 0; animation-timing-function: linear; }
+  98.961% { opacity: 1; }
+  100% { opacity: 1; }
+}
+@keyframes mlb-tint {
+  0% { background-color: rgba(232, 232, 228, 0); }
+  52.632% { background-color: rgba(232, 232, 228, 0); animation-timing-function: cubic-bezier(0.2, 0, 0, 1); }
+  53.553% { background-color: rgba(232, 232, 228, 1); }
+  54.605% { background-color: rgba(232, 232, 228, 1); animation-timing-function: cubic-bezier(0.4, 0.14, 1, 1); }
+  56.447% { background-color: rgba(232, 232, 228, 0); }
+  100% { background-color: rgba(232, 232, 228, 0); }
+}
+@keyframes mlb-rowtxt {
+  0% { opacity: 1; }
+  54.605% { opacity: 1; animation-timing-function: linear; }
+  54.618% { opacity: 0; }
+  98.947% { opacity: 0; animation-timing-function: linear; }
+  98.961% { opacity: 1; }
+  100% { opacity: 1; }
+}
+@keyframes mlb-title {
+  0% { opacity: 0; transform: translate(13px, 215px) scale(.59375); }
+  54.605% { opacity: 0; transform: translate(13px, 215px) scale(.59375); animation-timing-function: linear; }
+  54.618% { opacity: 1; transform: translate(13px, 215px) scale(.59375); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  58.829% { opacity: 1; transform: translate(0px, 0px) scale(1); }
+  99.987% { opacity: 1; transform: translate(0px, 0px) scale(1); animation-timing-function: linear; }
+  100% { opacity: 0; transform: translate(13px, 215px) scale(.59375); }
+}
+@keyframes mlb-metaline {
+  0% { opacity: 0; transform: translateY(201px); }
+  54.605% { opacity: 0; transform: translateY(201px); animation-timing-function: linear; }
+  54.618% { opacity: 1; transform: translateY(201px); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  58.829% { opacity: 1; transform: translateY(0px); }
+  99.987% { opacity: 1; transform: translateY(0px); animation-timing-function: linear; }
+  100% { opacity: 0; transform: translateY(201px); }
+}
+@keyframes mlb-thead {
+  0% { opacity: 0; }
+  56.447% { opacity: 0; animation-timing-function: cubic-bezier(0, 0, 0.3, 1); }
+  59.605% { opacity: 1; }
+  100% { opacity: 1; }
+}
+@keyframes mlb-trows {
+  0% { opacity: 0; transform: translateY(4px); }
+  57.763% { opacity: 0; transform: translateY(4px); animation-timing-function: cubic-bezier(0, 0, 0.3, 1); }
+  60.921% { opacity: 1; transform: translateY(0px); }
+  100% { opacity: 1; transform: translateY(0px); }
+}
+@keyframes mlb-scroll {
+  0% { transform: translateY(0px); }
+  69.737% { transform: translateY(0px); animation-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9); }
+  78.947% { transform: translateY(-120px); }
+  100% { transform: translateY(-120px); }
+}
+@keyframes mlb-htitle {
+  0% { opacity: 0; transform: translateY(4px); }
+  73.158% { opacity: 0; transform: translateY(4px); animation-timing-function: cubic-bezier(0, 0, 0.3, 1); }
+  74.605% { opacity: 1; transform: translateY(0px); }
+  100% { opacity: 1; transform: translateY(0px); }
+}
+@keyframes mlb-hair {
+  0% { transform: scaleX(0); }
+  73.158% { transform: scaleX(0); animation-timing-function: linear; }
+  78.421% { transform: scaleX(1); }
+  100% { transform: scaleX(1); }
+}
+@keyframes mlb-play {
+  0% { transform: scaleX(0); animation-timing-function: linear; }
+  100% { transform: scaleX(1); }
+}
+@keyframes mlb-cap1 {
+  0% { opacity: 1; }
+  20.921% { opacity: 1; animation-timing-function: linear; }
+  22.368% { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes mlb-cap2 {
+  0% { opacity: 0; }
+  22.368% { opacity: 0; animation-timing-function: linear; }
+  23.816% { opacity: 1; }
+  32.763% { opacity: 1; animation-timing-function: linear; }
+  34.211% { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes mlb-cap3 {
+  0% { opacity: 0; }
+  34.211% { opacity: 0; animation-timing-function: linear; }
+  35.658% { opacity: 1; }
+  43.289% { opacity: 1; animation-timing-function: linear; }
+  44.737% { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes mlb-cap4 {
+  0% { opacity: 0; }
+  44.737% { opacity: 0; animation-timing-function: linear; }
+  46.184% { opacity: 1; }
+  68.289% { opacity: 1; animation-timing-function: linear; }
+  69.737% { opacity: 0; }
+  100% { opacity: 0; }
+}
+@keyframes mlb-cap5 {
+  0% { opacity: 0; }
+  69.737% { opacity: 0; animation-timing-function: linear; }
+  71.184% { opacity: 1; }
+  100% { opacity: 1; }
+}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #f1f1ee; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif; display: flex; flex-direction: column">
+  <div aria-label="Подпись к анимации" style="position: absolute; left: 0; right: 0; top: 0; height: 40px; box-sizing: border-box; background: #e8e8e4; border-bottom: 1px solid #d6d6d1; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; z-index: 5">
+    <div style="position: absolute; left: 16px; right: 16px; top: 0; height: 40px">
+      <span style="position: absolute; left: 0; right: 0; top: 0; height: 40px; display: block; white-space: nowrap; animation: mlb-cap1 7600ms linear infinite both">
+        <span style="position: absolute; left: 0; right: 96px; top: 4px; height: 16px; font-weight: 500; color: #111111; overflow: hidden">1 · Шкала и черта</span>
+        <span style="position: absolute; left: 0; right: 0; top: 20px; height: 16px; color: #5a5a57; overflow: hidden">сегменты шаг 40 мс · черта 200 мс</span>
+      </span>
+      <span style="position: absolute; left: 0; right: 0; top: 0; height: 40px; display: block; white-space: nowrap; animation: mlb-cap2 7600ms linear infinite both">
+        <span style="position: absolute; left: 0; right: 96px; top: 4px; height: 16px; font-weight: 500; color: #111111; overflow: hidden">2 · Метки краёв</span>
+        <span style="position: absolute; left: 0; right: 0; top: 20px; height: 16px; color: #5a5a57; overflow: hidden">зелёная темнеет с пальцем</span>
+      </span>
+      <span style="position: absolute; left: 0; right: 0; top: 0; height: 40px; display: block; white-space: nowrap; animation: mlb-cap3 7600ms linear infinite both">
+        <span style="position: absolute; left: 0; right: 96px; top: 4px; height: 16px; font-weight: 500; color: #111111; overflow: hidden">3 · Кромка и линия</span>
+        <span style="position: absolute; left: 0; right: 0; top: 20px; height: 16px; color: #5a5a57; overflow: hidden">кромка тает 110 мс · линия +1</span>
+      </span>
+      <span style="position: absolute; left: 0; right: 0; top: 0; height: 40px; display: block; white-space: nowrap; animation: mlb-cap4 7600ms linear infinite both">
+        <span style="position: absolute; left: 0; right: 96px; top: 4px; height: 16px; font-weight: 500; color: #111111; overflow: hidden">4 · Ящик → тема</span>
+        <span style="position: absolute; left: 0; right: 0; top: 20px; height: 16px; color: #5a5a57; overflow: hidden">строка становится шапкой · 320 мс</span>
+      </span>
+      <span style="position: absolute; left: 0; right: 0; top: 0; height: 40px; display: block; white-space: nowrap; animation: mlb-cap5 7600ms linear infinite both">
+        <span style="position: absolute; left: 0; right: 96px; top: 4px; height: 16px; font-weight: 500; color: #111111; overflow: hidden">5 · Заголовок складывается</span>
+        <span style="position: absolute; left: 0; right: 0; top: 20px; height: 16px; color: #5a5a57; overflow: hidden">волосяная линия 400 мс</span>
+      </span>
+    </div>
+    <span style="position: absolute; right: 16px; top: 4px; height: 16px; color: #5a5a57; white-space: nowrap; font-variant-numeric: tabular-nums">смело · 7,6 с</span>
+    <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: #111111; transform-origin: left center; animation: mlb-play 7600ms linear infinite both"></span>
+  </div>
+
+  <div style="position: absolute; left: 0; top: 0; width: 390px; height: 756px; animation: mlb-rev 7600ms linear infinite both">
+  <header style="position: absolute; left: 16px; right: 16px; top: 48px; height: 44px; display: flex; align-items: center; gap: 8px">
+    <div style="position: relative; height: 44px; flex-shrink: 0; display: flex; align-items: stretch">
+      <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 7px; height: 30px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 4px"></span>
+      <button type="button" aria-label="Направление FR → RU, сменить" style="position: relative; height: 44px; padding: 0 10px 0 11px; display: inline-flex; align-items: center; border: 0; background: transparent; color: #111111; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; font-weight: 500; letter-spacing: .06em; white-space: nowrap; cursor: pointer">FR → RU</button>
+      <span aria-hidden="true" style="position: relative; align-self: center; width: 1px; height: 16px; background: #d6d6d1"></span>
+      <button type="button" aria-haspopup="dialog" aria-label="Что повторять: все темы" style="position: relative; height: 44px; padding: 0 9px 0 10px; display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; color: #111111; font-size: 13px; white-space: nowrap; cursor: pointer">
+        <span>Все темы</span>
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#5a5a57" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+      </button>
+    </div>
+    <div style="flex: 1"></div>
+    <button type="button" aria-label="Отменить последний ответ" style="width: 44px; height: 44px; margin-right: -12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 4px; background: transparent; color: #111111; cursor: pointer; padding: 0">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14 4 9l5-5"></path><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"></path></svg>
+    </button>
+  </header>
+  <button type="button" aria-haspopup="dialog" aria-label="План на сегодня · карточка 11 из 12" style="position: absolute; left: 16px; right: 16px; top: 96px; height: 44px; margin: 0; padding: 0; border: 0; background: transparent; display: flex; align-items: center; gap: 16px; cursor: pointer; color: #111111">
+    <span aria-hidden="true" style="position: relative; width: 280px; height: 9px; flex-shrink: 0">
+      <span style="position: absolute; left: 0; right: 0; top: 4px; height: 1px; background: #d6d6d1"></span>
+      <span style="position: absolute; left: 0; right: 0; top: 4px; height: 1px; background: #111111; transform-origin: left center; transform: scaleX(.8333); animation: mlb-fill 7600ms linear infinite both"></span>
+      <span style="position: absolute; left: 0; top: 0; width: 1px; height: 9px; background: #111111; animation: mlb-tick 7600ms linear infinite both"></span>
+    </span>
+    <span style="position: relative; flex: 1; height: 16px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; letter-spacing: .06em; font-weight: 500; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap">
+      <span style="position: absolute; right: 0; top: 0; white-space: nowrap; animation: mlb-c11 7600ms linear infinite both">11 / 12</span>
+      <span style="position: absolute; right: 0; top: 0; white-space: nowrap; animation: mlb-c12 7600ms linear infinite both">12 / 12</span>
+    </span>
+  </button>
+  <div style="position: absolute; left: 16px; top: 152px; width: 358px; height: 520px">
+      <span aria-hidden="true" style="position: absolute; left: 10px; width: 338px; top: 8px; height: 508px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; animation: mlb-edge2 7600ms linear infinite both"></span>
+      <span aria-hidden="true" style="position: absolute; left: 5px; width: 348px; top: 4px; height: 508px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; "></span>
+      <article aria-label="Следующая карточка: bouffer" style="position: absolute; left: 0; top: 0; width: 358px; height: 508px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; transform-origin: 50% 100%; animation: mlb-cardB 7600ms linear infinite both">
+        <div style="position: absolute; left: 0; right: 0; top: 0; height: 46px; box-sizing: border-box; padding: 0 20px; display: flex; align-items: center; gap: 8px; border-bottom: 2px solid #c8331f">
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; color: #5a5a57">FR</span>
+          <div style="flex: 1"></div>
+          
+        </div>
+        <span lang="fr" style="position: absolute; left: 24px; top: 196px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 50px; line-height: 62px; letter-spacing: -0.02em; color: #111111; white-space: nowrap">bouffer</span>
+        <span lang="fr" style="position: absolute; left: 25px; top: 264px; font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; line-height: 20px; color: #5a5a57">v.</span>
+        <span aria-hidden="true" style="position: absolute; left: 24px; top: 86px; height: 40px; box-sizing: border-box; padding: 0 12px; display: flex; align-items: center; border: 2px solid #1d6b45; border-radius: 4px; color: #1d6b45; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 20px; font-weight: 500; letter-spacing: .08em; background: transparent; z-index: 3; animation: mlb-stampB 7600ms linear infinite both">ЗНАЮ</span>
+      </article>
+      <article aria-label="Карточка: se casser — свалить, сбежать" style="position: absolute; left: 0; top: 0; width: 358px; height: 508px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden; transform-origin: 50% 100%; animation: mlb-cardA 7600ms linear infinite both">
+        <div style="position: absolute; left: 0; right: 0; top: 0; height: 46px; box-sizing: border-box; padding: 0 4px 0 20px; display: flex; align-items: center; gap: 8px; border-bottom: 2px solid #c8331f">
+          <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; letter-spacing: .06em; color: #5a5a57">FR</span>
+          <div style="flex: 1"></div>
+          <span style="display: inline-flex; align-items: center; gap: 8px; animation: mlb-write 7600ms linear infinite both">
+            <span role="img" aria-label="Уровень сленга: арго, 3 из 4" style="display: inline-flex; align-items: center; gap: 2px"><span style="position: relative; width: 10px; height: 3px; background: #d6d6d1"><span style="position: absolute; inset: 0; background: #111111; transform-origin: left center; animation: mlb-seg0 7600ms linear infinite both"></span></span><span style="position: relative; width: 10px; height: 3px; background: #d6d6d1"><span style="position: absolute; inset: 0; background: #111111; transform-origin: left center; animation: mlb-seg1 7600ms linear infinite both"></span></span><span style="position: relative; width: 10px; height: 3px; background: #d6d6d1"><span style="position: absolute; inset: 0; background: #111111; transform-origin: left center; animation: mlb-seg2 7600ms linear infinite both"></span></span><span style="width: 10px; height: 3px; background: #d6d6d1"></span></span>
+            <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; line-height: 20px; color: #5a5a57">arg.</span>
+            <a href="Review-Edit-Sheet.dc.html" aria-label="Изменить карточку" style="width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #5a5a57; text-decoration: none"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4Z"></path><path d="m14.5 5.5 3 3"></path></svg></a>
+          </span>
+        </div>
+        <h1 lang="fr" style="position: absolute; left: 24px; top: 74px; margin: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 32px; line-height: 40px; letter-spacing: -0.02em; color: #111111; white-space: nowrap; transform-origin: left top; animation: mlb-head 7600ms linear infinite both">se casser</h1>
+        <span lang="fr" style="position: absolute; left: 25px; top: 116px; font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 15px; line-height: 20px; color: #5a5a57; animation: mlb-pos 7600ms linear infinite both">v. pron.</span>
+        <div style="position: absolute; left: 24px; right: 24px; top: 164px; display: flex; flex-direction: column; animation: mlb-write 7600ms linear infinite both">
+          <p style="margin: 0; font-size: 24px; font-weight: 500; line-height: 32px">свалить, сбежать</p>
+          <div style="margin-top: 36px; display: flex; flex-direction: column; gap: 6px">
+            <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-style: italic; font-size: 19px; line-height: 28px">Allez, on <span style="position: relative; display: inline-block">se casse<span aria-hidden="true" style="position: absolute; left: 0; right: 1px; bottom: 5px; height: 1.5px; background: #c8331f; transform-origin: left center; animation: mlb-ink 7600ms linear infinite both"></span></span> d'ici.</span>
+            <span style="font-size: 14px; line-height: 20px; color: #5a5a57">Ладно, сваливаем отсюда.</span>
+          </div>
+        </div>
+        <button type="button" aria-expanded="false" style="position: absolute; left: 24px; right: 24px; bottom: 0; height: 48px; padding: 0; box-sizing: border-box; border: 0; border-top: 1px solid #d6d6d1; background: transparent; display: flex; align-items: center; gap: 8px; color: #111111; cursor: pointer; text-align: left; animation: mlb-write 7600ms linear infinite both">
+          <span style="flex: 1; min-width: 0; font-size: 13px; line-height: 20px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"><span style="font-weight: 500">Ещё</span><span style="color: #5a5a57"> · заметка, происхождение</span></span>
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#5a5a57" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg>
+        </button>
+        
+        <span aria-hidden="true" style="position: absolute; left: 24px; top: 330px; height: 40px; box-sizing: border-box; padding: 0 12px; display: flex; align-items: center; border: 2px solid #1d6b45; border-radius: 4px; color: #1d6b45; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 20px; font-weight: 500; letter-spacing: .08em; background: transparent; z-index: 3; animation: mlb-stampA 7600ms linear infinite both">ЗНАЮ</span>
+      </article>
+      <span aria-hidden="true" style="position: absolute; left: 4px; top: 242px; width: 2px; height: 24px; background: #b3261e; z-index: 4; animation: mlb-markL 7600ms linear infinite both"></span>
+      <span aria-hidden="true" style="position: absolute; left: 352px; top: 242px; width: 2px; height: 24px; background: #1d6b45; z-index: 4; animation: mlb-markR 7600ms linear infinite both"></span>
+  </div>
+  <div role="group" aria-label="Оценка" style="position: absolute; left: 16px; right: 16px; top: 684px; height: 56px; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr) minmax(0, 1.15fr); gap: 8px; animation: mlb-grades 7600ms linear infinite both">
+    <button type="button" style="height: 56px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 6px; background: #ffffff; border: 1px solid #b3261e; color: #b3261e; padding: 0; cursor: pointer">
+      <span style="font-size: 15px; font-weight: 500; line-height: 20px">Не знаю</span>
+      <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px">&lt;1 мин</span>
+    </button>
+    <button type="button" style="height: 56px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 6px; background: #ffffff; border: 1px solid #d6d6d1; color: #111111; padding: 0; cursor: pointer">
+      <span style="font-size: 15px; font-weight: 500; line-height: 20px">Сложно</span>
+      <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; color: #5a5a57">6 мин</span>
+    </button>
+    <button type="button" style="height: 56px; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 6px; background: #ffffff; border: 1px solid #1d6b45; color: #1d6b45; padding: 0; cursor: pointer">
+      <span style="font-size: 15px; font-weight: 500; line-height: 20px">Знаю</span>
+      <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px">1 д</span>
+    </button>
+  </div>
+  </div>
+
+  <div style="position: absolute; left: 0; top: 0; width: 390px; height: 756px; animation: mlb-lib 7600ms linear infinite both">
+    <header style="position: absolute; left: 16px; right: 16px; top: 48px; height: 44px; display: flex; align-items: center; animation: mlb-librest 7600ms linear infinite both">
+      <h1 style="margin: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 28px; line-height: 36px; letter-spacing: -0.015em">Библиотека</h1>
+      <div style="flex: 1"></div>
+      <button type="button" aria-label="Контекст" style="width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 4px; background: transparent; color: #111111; cursor: pointer"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="6.5"></circle><path d="m20 20-4.4-4.4"></path></svg></button>
+      <a href="Settings.dc.html" aria-label="Настройки" style="width: 44px; height: 44px; margin-right: -12px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #111111; text-decoration: none"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg></a>
+    </header>
+    <div style="position: absolute; left: 16px; right: 16px; top: 94px; height: 20px; display: flex; align-items: center; gap: 8px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 20px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57; animation: mlb-librest 7600ms linear infinite both">
+      <span style="display: inline-flex; align-items: center; gap: 6px; color: #111111; font-weight: 500"><span aria-hidden="true" style="width: 6px; height: 6px; background: #c8331f"></span>23 к повт.</span>
+      <span aria-hidden="true">·</span>
+      <span style="color: #111111; font-weight: 500">9 трудных</span>
+    </div>
+    <div style="position: absolute; left: 16px; right: 16px; top: 128px; height: 113px; border-top: 1px solid #111111; animation: mlb-librest 7600ms linear infinite both">
+      <a href="Folder.dc.html" aria-label="Все слова: 158, одним списком" style="height: 52px; display: flex; align-items: center; gap: 10px; color: #111111; text-decoration: none; border-bottom: 1px solid #d6d6d1">
+        <span style="flex: 1; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px">Все слова</span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">158</span>
+        <span aria-hidden="true" style="font-size: 18px; line-height: 20px; color: #5a5a57">›</span>
+      </a>
+      <a href="Folder.dc.html" aria-label="Входящие: 7 слов без темы" style="margin-top: 8px; height: 52px; box-sizing: border-box; padding-left: 13px; display: flex; align-items: center; gap: 10px; border: 1px dashed #5a5a57; border-radius: 6px; color: #111111; text-decoration: none">
+        <span style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px">Входящие</span>
+        <span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; font-weight: 500; color: #c8331f; font-variant-numeric: tabular-nums">7</span>
+      </a>
+    </div>
+    <a href="Folder.dc.html" aria-label="Повседневное: 42 слов, выучено 71 %" style="position: absolute; left: 16px; width: 358px; top: 249px; height: 52px; display: flex; align-items: center; gap: 10px; color: #111111; text-decoration: none; animation: mlb-librest 7600ms linear infinite both">
+      <span aria-hidden="true" style="width: 3px; height: 14px; flex-shrink: 0; background: #5a5a57"></span>
+      <span style="flex: 1; min-width: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; white-space: nowrap">Повседневное</span>
+      <span aria-hidden="true" style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">42</span>
+      <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: #d6d6d1"></span>
+      <span aria-hidden="true" style="position: absolute; left: 0; bottom: 0; width: 71%; height: 2px; background: #5a5a57"></span>
+    </a>
+    <a href="Folder.dc.html" aria-label="Деньги: 18 слов, выучено 61 %" style="position: absolute; left: 16px; width: 358px; top: 301px; height: 52px; display: flex; align-items: center; gap: 10px; color: #111111; text-decoration: none; animation: mlb-tint 7600ms linear infinite both">
+      <span aria-hidden="true" style="width: 3px; height: 14px; flex-shrink: 0; background: #2f6b4f; animation: mlb-librest 7600ms linear infinite both"></span>
+      <span style="flex: 1; min-width: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; white-space: nowrap; animation: mlb-rowtxt 7600ms linear infinite both">Деньги</span>
+      <span aria-hidden="true" style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums; animation: mlb-rowtxt 7600ms linear infinite both">18</span>
+      <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: #d6d6d1; animation: mlb-rowtxt 7600ms linear infinite both"></span>
+      <span aria-hidden="true" style="position: absolute; left: 0; bottom: 0; width: 61%; height: 2px; background: #2f6b4f; animation: mlb-rowtxt 7600ms linear infinite both"></span>
+    </a>
+    <a href="Folder.dc.html" aria-label="Еда: 15 слов, выучено 80 %" style="position: absolute; left: 16px; width: 358px; top: 353px; height: 52px; display: flex; align-items: center; gap: 10px; color: #111111; text-decoration: none; animation: mlb-librest 7600ms linear infinite both">
+      <span aria-hidden="true" style="width: 3px; height: 14px; flex-shrink: 0; background: #a0522d"></span>
+      <span style="flex: 1; min-width: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; white-space: nowrap">Еда</span>
+      <span aria-hidden="true" style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">15</span>
+      <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: #d6d6d1"></span>
+      <span aria-hidden="true" style="position: absolute; left: 0; bottom: 0; width: 80%; height: 2px; background: #a0522d"></span>
+    </a>
+    <a href="Folder.dc.html" aria-label="Полиция: 9 слов, выучено 44 %" style="position: absolute; left: 16px; width: 358px; top: 405px; height: 52px; display: flex; align-items: center; gap: 10px; color: #111111; text-decoration: none; animation: mlb-librest 7600ms linear infinite both">
+      <span aria-hidden="true" style="width: 3px; height: 14px; flex-shrink: 0; background: #2f4b8a"></span>
+      <span style="flex: 1; min-width: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; white-space: nowrap">Полиция</span>
+      <span aria-hidden="true" style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">9</span>
+      <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: #d6d6d1"></span>
+      <span aria-hidden="true" style="position: absolute; left: 0; bottom: 0; width: 44%; height: 2px; background: #2f4b8a"></span>
+    </a>
+    <a href="Folder.dc.html" aria-label="Тусовка: 21 слов, выучено 52 %" style="position: absolute; left: 16px; width: 358px; top: 457px; height: 52px; display: flex; align-items: center; gap: 10px; color: #111111; text-decoration: none; animation: mlb-librest 7600ms linear infinite both">
+      <span aria-hidden="true" style="width: 3px; height: 14px; flex-shrink: 0; background: #6b4a8a"></span>
+      <span style="flex: 1; min-width: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; white-space: nowrap">Тусовка</span>
+      <span aria-hidden="true" style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">21</span>
+      <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: #d6d6d1"></span>
+      <span aria-hidden="true" style="position: absolute; left: 0; bottom: 0; width: 52%; height: 2px; background: #6b4a8a"></span>
+    </a>
+    <a href="Folder.dc.html" aria-label="Эмоции: 27 слов, выучено 67 %" style="position: absolute; left: 16px; width: 358px; top: 509px; height: 52px; display: flex; align-items: center; gap: 10px; color: #111111; text-decoration: none; animation: mlb-librest 7600ms linear infinite both">
+      <span aria-hidden="true" style="width: 3px; height: 14px; flex-shrink: 0; background: #a33a3a"></span>
+      <span style="flex: 1; min-width: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; white-space: nowrap">Эмоции</span>
+      <span aria-hidden="true" style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">27</span>
+      <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: #d6d6d1"></span>
+      <span aria-hidden="true" style="position: absolute; left: 0; bottom: 0; width: 67%; height: 2px; background: #a33a3a"></span>
+    </a>
+    <a href="Folder.dc.html" aria-label="Люди: 19 слов, выучено 74 %" style="position: absolute; left: 16px; width: 358px; top: 561px; height: 52px; display: flex; align-items: center; gap: 10px; color: #111111; text-decoration: none; animation: mlb-librest 7600ms linear infinite both">
+      <span aria-hidden="true" style="width: 3px; height: 14px; flex-shrink: 0; background: #2f6f74"></span>
+      <span style="flex: 1; min-width: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; white-space: nowrap">Люди</span>
+      <span aria-hidden="true" style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">19</span>
+      <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: #d6d6d1"></span>
+      <span aria-hidden="true" style="position: absolute; left: 0; bottom: 0; width: 74%; height: 2px; background: #2f6f74"></span>
+    </a>
+    <div style="position: absolute; left: 16px; right: 16px; top: 692px; height: 48px; box-sizing: border-box; display: flex; align-items: center; gap: 8px; padding-left: 12px; background: #ffffff; border: 1px solid #111111; border-radius: 4px; animation: mlb-librest 7600ms linear infinite both">
+      <input type="search" placeholder="Поиск по FR и RU" aria-label="Поиск по FR и RU" style="flex: 1; min-width: 0; height: 44px; padding: 0; border: 0; outline: none; background: transparent; color: #111111; font-size: 15px">
+      <button type="button" aria-label="Фильтр и порядок" style="width: 44px; height: 44px; padding: 0; border: 0; background: transparent; color: #111111; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10"></path><path d="M18 7h2"></path><circle cx="16" cy="7" r="2"></circle><path d="M4 17h4"></path><path d="M12 17h8"></path><circle cx="10" cy="17" r="2"></circle></svg></button>
+    </div>
+
+    <div style="position: absolute; left: 0; right: 0; top: 92px; height: 588px; overflow: hidden">
+      <div style="position: absolute; left: 0; right: 0; top: 0; height: 900px; animation: mlb-scroll 7600ms linear infinite both">
+        <h2 style="position: absolute; left: 16px; top: 8px; margin: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 32px; line-height: 40px; white-space: nowrap; transform-origin: left top; animation: mlb-title 7600ms linear infinite both">Деньги</h2>
+        <div aria-label="18 слов, выучено 61 %" style="position: absolute; left: 16px; right: 16px; top: 26px; height: 36px; animation: mlb-metaline 7600ms linear infinite both">
+          <span style="position: absolute; right: 0; top: 0; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; line-height: 16px; color: #5a5a57; font-variant-numeric: tabular-nums">18</span>
+          <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 33px; height: 1px; background: #d6d6d1"></span>
+          <span aria-hidden="true" style="position: absolute; left: 0; top: 32px; width: 61%; height: 2px; background: #2f6b4f"></span>
+        </div>
+        <div style="position: absolute; left: 16px; right: 16px; top: 76px; display: flex; flex-direction: column; animation: mlb-trows 7600ms linear infinite both">
+        <a href="Word-Detail.dc.html" style="height: 64px; flex-shrink: 0; box-sizing: border-box; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #d6d6d1; color: #111111; text-decoration: none">
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+            <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; white-space: nowrap">la thune</span>
+            <span style="font-size: 13px; line-height: 18px; color: #5a5a57; white-space: nowrap">бабки, деньги</span>
+          </span>
+          <span role="img" aria-label="Сленг: арго" style="display: inline-flex; gap: 2px"><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #d6d6d1"></span></span>
+        </a>
+        <a href="Word-Detail.dc.html" style="height: 64px; flex-shrink: 0; box-sizing: border-box; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #d6d6d1; color: #111111; text-decoration: none">
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+            <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; white-space: nowrap">le fric</span>
+            <span style="font-size: 13px; line-height: 18px; color: #5a5a57; white-space: nowrap">бабло</span>
+          </span>
+          <span role="img" aria-label="Сленг: фам." style="display: inline-flex; gap: 2px"><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #d6d6d1"></span><span style="width: 8px; height: 3px; background: #d6d6d1"></span></span>
+        </a>
+        <a href="Word-Detail.dc.html" style="height: 64px; flex-shrink: 0; box-sizing: border-box; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #d6d6d1; color: #111111; text-decoration: none">
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+            <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; white-space: nowrap">l'oseille</span>
+            <span style="font-size: 13px; line-height: 18px; color: #5a5a57; white-space: nowrap">бабло, капуста</span>
+          </span>
+          <span role="img" aria-label="Сленг: арго" style="display: inline-flex; gap: 2px"><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #d6d6d1"></span></span>
+        </a>
+        <a href="Word-Detail.dc.html" style="height: 64px; flex-shrink: 0; box-sizing: border-box; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #d6d6d1; color: #111111; text-decoration: none">
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+            <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; white-space: nowrap">le blé</span>
+            <span style="font-size: 13px; line-height: 18px; color: #5a5a57; white-space: nowrap">бабки</span>
+          </span>
+          <span role="img" aria-label="Сленг: фам." style="display: inline-flex; gap: 2px"><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #d6d6d1"></span><span style="width: 8px; height: 3px; background: #d6d6d1"></span></span>
+        </a>
+        <a href="Word-Detail.dc.html" style="height: 64px; flex-shrink: 0; box-sizing: border-box; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #d6d6d1; color: #111111; text-decoration: none">
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+            <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; white-space: nowrap">raquer</span>
+            <span style="font-size: 13px; line-height: 18px; color: #5a5a57; white-space: nowrap">раскошелиться</span>
+          </span>
+          <span role="img" aria-label="Сленг: фам." style="display: inline-flex; gap: 2px"><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #d6d6d1"></span><span style="width: 8px; height: 3px; background: #d6d6d1"></span></span>
+        </a>
+        <a href="Word-Detail.dc.html" style="height: 64px; flex-shrink: 0; box-sizing: border-box; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #d6d6d1; color: #111111; text-decoration: none">
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+            <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; white-space: nowrap">être fauché</span>
+            <span style="font-size: 13px; line-height: 18px; color: #5a5a57; white-space: nowrap">быть на мели</span>
+          </span>
+          <span role="img" aria-label="Сленг: фам." style="display: inline-flex; gap: 2px"><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #d6d6d1"></span><span style="width: 8px; height: 3px; background: #d6d6d1"></span></span>
+        </a>
+        <a href="Word-Detail.dc.html" style="height: 64px; flex-shrink: 0; box-sizing: border-box; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #d6d6d1; color: #111111; text-decoration: none">
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+            <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; white-space: nowrap">le flouze</span>
+            <span style="font-size: 13px; line-height: 18px; color: #5a5a57; white-space: nowrap">бабки</span>
+          </span>
+          <span role="img" aria-label="Сленг: арго" style="display: inline-flex; gap: 2px"><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #d6d6d1"></span></span>
+        </a>
+        <a href="Word-Detail.dc.html" style="height: 64px; flex-shrink: 0; box-sizing: border-box; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #d6d6d1; color: #111111; text-decoration: none">
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+            <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; white-space: nowrap">la maille</span>
+            <span style="font-size: 13px; line-height: 18px; color: #5a5a57; white-space: nowrap">бабки</span>
+          </span>
+          <span role="img" aria-label="Сленг: арго" style="display: inline-flex; gap: 2px"><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #d6d6d1"></span></span>
+        </a>
+        <a href="Word-Detail.dc.html" style="height: 64px; flex-shrink: 0; box-sizing: border-box; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #d6d6d1; color: #111111; text-decoration: none">
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+            <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; white-space: nowrap">les sous</span>
+            <span style="font-size: 13px; line-height: 18px; color: #5a5a57; white-space: nowrap">деньги, гроши</span>
+          </span>
+          <span role="img" aria-label="Сленг: фам." style="display: inline-flex; gap: 2px"><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #d6d6d1"></span><span style="width: 8px; height: 3px; background: #d6d6d1"></span></span>
+        </a>
+        <a href="Word-Detail.dc.html" style="height: 64px; flex-shrink: 0; box-sizing: border-box; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #d6d6d1; color: #111111; text-decoration: none">
+          <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+            <span lang="fr" style="font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px; white-space: nowrap">être blindé</span>
+            <span style="font-size: 13px; line-height: 18px; color: #5a5a57; white-space: nowrap">быть при деньгах</span>
+          </span>
+          <span role="img" aria-label="Сленг: фам." style="display: inline-flex; gap: 2px"><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #111111"></span><span style="width: 8px; height: 3px; background: #d6d6d1"></span><span style="width: 8px; height: 3px; background: #d6d6d1"></span></span>
+        </a>
+        </div>
+      </div>
+    </div>
+
+    <div style="position: absolute; left: 0; right: 0; top: 32px; height: 60px; background: #f1f1ee; animation: mlb-thead 7600ms linear infinite both">
+      <a href="Library.dc.html" aria-label="Назад: Библиотека" style="position: absolute; left: 4px; top: 16px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #111111; text-decoration: none"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="m11 18-6-6 6-6"></path></svg></a>
+      <span aria-hidden="true" style="position: absolute; left: 60px; right: 60px; top: 16px; height: 44px; display: flex; align-items: center; justify-content: center; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 17px; line-height: 24px; animation: mlb-htitle 7600ms linear infinite both">Деньги</span>
+      <button type="button" aria-label="Действия с темой" style="position: absolute; right: 4px; top: 16px; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: #111111; display: flex; align-items: center; justify-content: center; cursor: pointer"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="0.75"></circle><circle cx="12" cy="12" r="0.75"></circle><circle cx="19" cy="12" r="0.75"></circle></svg></button>
+      <span aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: #d6d6d1; transform-origin: left center; animation: mlb-hair 7600ms linear infinite both"></span>
+    </div>
+
+    <div style="position: absolute; left: 0; right: 0; top: 680px; height: 76px; background: #f1f1ee; animation: mlb-trows 7600ms linear infinite both">
+      <a href="Main.dc.html" style="position: absolute; left: 16px; right: 16px; top: 8px; height: 52px; display: flex; align-items: center; justify-content: center; gap: 10px; border-radius: 6px; background: #111111; color: #ffffff; font-size: 15px; font-weight: 500; text-decoration: none">Повторить тему<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 12px; letter-spacing: .06em; font-variant-numeric: tabular-nums">3</span></a>
+    </div>
+  </div>
+
+  <nav aria-label="Основная навигация" style="position: absolute; left: 0; right: 0; bottom: 0; height: 88px; box-sizing: border-box; padding-bottom: 28px; background: #ffffff; border-top: 1px solid #d6d6d1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr))">
+    <span aria-hidden="true" style="position: absolute; top: -1px; left: 0; width: 25%; height: 2px; background: #c8331f; animation: mlb-marker 7600ms linear infinite both"></span>
+    <a href="Main.dc.html" aria-current="page" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #111111; font-size: 12px; font-weight: 600; text-decoration: none; animation: mlb-tab0 7600ms linear infinite both">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="14" height="13" rx="1"></rect><path d="M3.5 11h14"></path><path d="M7 4.5h12.5a1 1 0 0 1 1 1V17"></path></svg>
+      <span>Повторение</span>
+    </a>
+    <a href="Exercise-List-B.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; font-size: 12px; font-weight: 500; text-decoration: none">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="1.5"></rect><path d="m7.5 9 1.5 1.5 3-3"></path><path d="M14 9h3"></path><path d="M7.5 15h2"></path><path d="M14 15h3"></path></svg>
+      <span>Упражнения</span>
+    </a>
+    <a href="Add-Empty.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; font-size: 12px; font-weight: 500; text-decoration: none">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+      <span>Добавить</span>
+    </a>
+    <a href="Library.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; font-size: 12px; font-weight: 500; text-decoration: none; animation: mlb-tab3 7600ms linear infinite both">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="1"></rect><path d="M3.5 12h17"></path><path d="M10 8h4"></path><path d="M10 16h4"></path></svg>
+      <span>Библиотека</span>
+    </a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

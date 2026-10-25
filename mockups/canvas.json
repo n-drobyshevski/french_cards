@@ -1180,6 +1180,222 @@
    "h": 800,
    "title": "Десктоп · уровень языка слова",
    "is_interactive": true
+  },
+  "L-Review-Q-A.dc.html": {
+   "x": 0,
+   "y": 32224,
+   "w": 390,
+   "h": 844,
+   "title": "A — подрезать",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Review-Q-B.dc.html": {
+   "x": 470,
+   "y": 32224,
+   "w": 390,
+   "h": 844,
+   "title": "B — колода",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Review-Q-C.dc.html": {
+   "x": 940,
+   "y": 32224,
+   "w": 390,
+   "h": 844,
+   "title": "C — фокус-сессия",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Review-Ans-A.dc.html": {
+   "x": 0,
+   "y": 33388,
+   "w": 390,
+   "h": 844,
+   "title": "A — подрезать",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Review-Ans-B.dc.html": {
+   "x": 470,
+   "y": 33388,
+   "w": 390,
+   "h": 844,
+   "title": "B — ответ и «Ещё ⌄»",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Review-Ans-C.dc.html": {
+   "x": 940,
+   "y": 33388,
+   "w": 390,
+   "h": 844,
+   "title": "C — штамп и шкала",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Library-A.dc.html": {
+   "x": 0,
+   "y": 34552,
+   "w": 390,
+   "h": 844,
+   "title": "A — плитки 96px",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Library-B.dc.html": {
+   "x": 470,
+   "y": 34552,
+   "w": 390,
+   "h": 844,
+   "title": "B — ящики-оглавление",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Library-C.dc.html": {
+   "x": 940,
+   "y": 34552,
+   "w": 390,
+   "h": 844,
+   "title": "C — стена ящиков",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Done-A.dc.html": {
+   "x": 0,
+   "y": 35716,
+   "w": 390,
+   "h": 844,
+   "title": "A — короткая квитанция",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Done-B.dc.html": {
+   "x": 470,
+   "y": 35716,
+   "w": 390,
+   "h": 844,
+   "title": "B — полоса сессии",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Done-C.dc.html": {
+   "x": 940,
+   "y": 35716,
+   "w": 390,
+   "h": 844,
+   "title": "C — итог на карточке",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-ExPlayer-A.dc.html": {
+   "x": 1410,
+   "y": 35716,
+   "w": 390,
+   "h": 844,
+   "title": "Плеер A — счётчик",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-ExPlayer-B.dc.html": {
+   "x": 1880,
+   "y": 35716,
+   "w": 390,
+   "h": 844,
+   "title": "Плеер B — тики",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Add-A.dc.html": {
+   "x": 0,
+   "y": 36880,
+   "w": 390,
+   "h": 844,
+   "title": "Добавить A — подрезать",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Add-B.dc.html": {
+   "x": 470,
+   "y": 36880,
+   "w": 390,
+   "h": 844,
+   "title": "Добавить B — строка на карточке",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Add-C.dc.html": {
+   "x": 940,
+   "y": 36880,
+   "w": 390,
+   "h": 844,
+   "title": "Добавить C — пустая карточка",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Word-A.dc.html": {
+   "x": 1410,
+   "y": 36880,
+   "w": 390,
+   "h": 844,
+   "title": "Слово A — без дублей",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Word-B.dc.html": {
+   "x": 1880,
+   "y": 36880,
+   "w": 390,
+   "h": 844,
+   "title": "Слово B — сначала статья",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Word-C.dc.html": {
+   "x": 2350,
+   "y": 36880,
+   "w": 390,
+   "h": 844,
+   "title": "Слово C — переворот",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "M-L-Calm.dc.html": {
+   "x": 0,
+   "y": 38044,
+   "w": 390,
+   "h": 844,
+   "title": "Движение — тихо (чернила по смыслу)",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "M-L-Bold.dc.html": {
+   "x": 470,
+   "y": 38044,
+   "w": 390,
+   "h": 844,
+   "title": "Движение — смелее",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Kit.dc.html": {
+   "x": 940,
+   "y": 38044,
+   "w": 390,
+   "h": 844,
+   "title": "Кит — светлая",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Kit-Dark.dc.html": {
+   "x": 1410,
+   "y": 38044,
+   "w": 390,
+   "h": 844,
+   "title": "Кит — тёмная",
+   "is_interactive": true,
+   "radius": 28
   }
  },
  "order": [
@@ -1318,7 +1534,31 @@
   "D-Review-Settings.dc.html",
   "D-Review-Plan.dc.html",
   "D-Level-Library.dc.html",
-  "D-Level-Word.dc.html"
+  "D-Level-Word.dc.html",
+  "L-Review-Q-A.dc.html",
+  "L-Review-Q-B.dc.html",
+  "L-Review-Q-C.dc.html",
+  "L-Review-Ans-A.dc.html",
+  "L-Review-Ans-B.dc.html",
+  "L-Review-Ans-C.dc.html",
+  "L-Library-A.dc.html",
+  "L-Library-B.dc.html",
+  "L-Library-C.dc.html",
+  "L-Done-A.dc.html",
+  "L-Done-B.dc.html",
+  "L-Done-C.dc.html",
+  "L-ExPlayer-A.dc.html",
+  "L-ExPlayer-B.dc.html",
+  "L-Add-A.dc.html",
+  "L-Add-B.dc.html",
+  "L-Add-C.dc.html",
+  "L-Word-A.dc.html",
+  "L-Word-B.dc.html",
+  "L-Word-C.dc.html",
+  "M-L-Calm.dc.html",
+  "M-L-Bold.dc.html",
+  "L-Kit.dc.html",
+  "L-Kit-Dark.dc.html"
  ],
  "notes": {
   "row1": {
@@ -1488,6 +1728,48 @@
    "text": "24 · План и уровень — десктоп",
    "kind": "title1",
    "maxW": 6000
+  },
+  "row25": {
+   "x": 0,
+   "y": 32104,
+   "text": "25 · Мобильный минимализм · D1 Повторение, вопрос",
+   "kind": "title1",
+   "maxW": 1800
+  },
+  "row26": {
+   "x": 0,
+   "y": 33268,
+   "text": "26 · Мобильный минимализм · D1′ Повторение, ответ",
+   "kind": "title1",
+   "maxW": 1800
+  },
+  "row27": {
+   "x": 0,
+   "y": 34432,
+   "text": "27 · Мобильный минимализм · D2 Библиотека",
+   "kind": "title1",
+   "maxW": 1800
+  },
+  "row28": {
+   "x": 0,
+   "y": 35596,
+   "text": "28 · Мобильный минимализм · D3 Итоги",
+   "kind": "title1",
+   "maxW": 1800
+  },
+  "row29": {
+   "x": 0,
+   "y": 36760,
+   "text": "29 · Мобильный минимализм · D5 Добавить, D6 Лист слова",
+   "kind": "title1",
+   "maxW": 1800
+  },
+  "row30": {
+   "x": 0,
+   "y": 37924,
+   "text": "30 · Мобильный минимализм · D4 Движение и кит",
+   "kind": "title1",
+   "maxW": 1800
   }
  },
  "designSystems": []
