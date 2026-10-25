@@ -95,18 +95,18 @@ describe("counting per study day (plan units)", () => {
 });
 
 describe("planFit: gates (warming up shows nothing)", () => {
-  it("needs 14 days since the first study day", () => {
-    const fit = planFit(input(surplusDays(), { firstStudyDay: addDays(TODAY, -10) }));
-    expect(fit).toMatchObject({ fit: "warming_up", suggestion: null });
+  it("needs 5 days since the first study day", () => {
+    expect(planFit(input(surplusDays(), { firstStudyDay: addDays(TODAY, -4) }))).toMatchObject({ fit: "warming_up", suggestion: null });
+    expect(planFit(input(surplusDays(), { firstStudyDay: addDays(TODAY, -5) })).fit).toBe("room");
   });
 
-  it("needs 7 study days in the window; with 5–6 a suggestion is for the connector only (low)", () => {
-    const six: Days = { 0: { fresh: 10, inter: 58 }, [-1]: { fresh: 10, inter: 58 }, [-3]: { fresh: 10, inter: 58 }, [-6]: { fresh: 10, inter: 58 }, [-9]: { fresh: 10, inter: 58 }, [-12]: { fresh: 10, inter: 58 } };
-    const fit = planFit(input(six, { dayPlans: {} }));
-    expect(fit.fit).toBe("warming_up");
-    expect(fit.window.active).toBe(6);
-    expect(fit.suggestion).toMatchObject({ kind: "raise_new", confidence: "low" });
-    const four = Object.fromEntries(Object.entries(six).slice(0, 4));
+  it("needs 5 study days in the window; from 5 a suggestion shows (medium, preliminary in the copy under 7)", () => {
+    const five: Days = { 0: { fresh: 10, inter: 58 }, [-1]: { fresh: 10, inter: 58 }, [-3]: { fresh: 10, inter: 58 }, [-6]: { fresh: 10, inter: 58 }, [-9]: { fresh: 10, inter: 58 } };
+    const fit = planFit(input(five, { dayPlans: {} }));
+    expect(fit.fit).toBe("room");
+    expect(fit.window.active).toBe(5);
+    expect(fit.suggestion).toMatchObject({ kind: "raise_new", confidence: "medium" });
+    const four = Object.fromEntries(Object.entries(five).slice(0, 4));
     expect(planFit(input(four, { dayPlans: {} }))).toMatchObject({ fit: "warming_up", suggestion: null });
   });
 

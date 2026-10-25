@@ -182,3 +182,12 @@ describe("the copy rules", () => {
     expect(checked).toBeGreaterThan(10_000);
   });
 });
+
+describe("a suggestion from a short history", () => {
+  it("says it is preliminary under 7 study days («пока по 5 учебным дням»)", () => {
+    expect(suggestionCopy(raise(), "words", 5).more).toContain("· пока по 5 учебным дням ·");
+    expect(suggestionCopy(raise(), "words", 6).more).toContain("пока по 6 учебным дням");
+    expect(suggestionCopy(raise(), "words", 7).more).not.toContain("пока");
+    expect(suggestionCopy(raise()).more).not.toContain("пока");
+  });
+});

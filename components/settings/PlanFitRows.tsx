@@ -92,7 +92,7 @@ export function PhoneSuggestion({ fit, suggestion }: { fit: PlanFit; suggestion:
   const { apply, dismiss, busy } = useSuggestionActions(fit, rowRef);
   const moreId = useId();
   const descId = useId();
-  const copy = suggestionCopy(suggestion, fit.newWords.unit);
+  const copy = suggestionCopy(suggestion, fit.newWords.unit, fit.window.active);
   return (
     <div ref={rowRef} data-plan-suggestion={suggestion.kind} className="flex shrink-0 flex-col border-b border-rule">
       {/* The forecast, for «Поставить 15»'s description while the fold is closed (inert). */}
@@ -206,7 +206,7 @@ export function DeskSuggestion({ fit, suggestion }: { fit: PlanFit; suggestion: 
   const { apply, dismiss, busy } = useSuggestionActions(fit, rowRef);
   const titleId = useId();
   const moreId = useId();
-  const copy = suggestionCopy(suggestion, fit.newWords.unit);
+  const copy = suggestionCopy(suggestion, fit.newWords.unit, fit.window.active);
   return (
     <div ref={rowRef} data-plan-suggestion={suggestion.kind} className="flex min-h-14 items-center gap-4 border-b border-rule py-2">
       <span className="flex min-w-0 flex-1 flex-col">
