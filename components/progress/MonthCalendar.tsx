@@ -6,6 +6,7 @@ import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { SLANG_NAMES_RU, SlangMeter } from "@/components/ui/SlangMeter";
 import { useProgressDay, type DayPoint, type Progress, type ProgressMistake } from "@/lib/progress";
+import { useStudyPlan } from "@/lib/user-prefs";
 import {
   WEEKDAY_HEADS,
   calendarDayAria,
@@ -164,7 +165,8 @@ function DayDetail({ day, onCollapse, onOpenWord }: { day: string; onCollapse: (
   const detail = useProgressDay(day);
   const headingId = useId();
   const missesId = useId();
-  const stats = detail ? dayStatParts(detail.point) : [];
+  const together = useStudyPlan()?.ru_fr === "together";
+  const stats = detail ? dayStatParts(detail.point, together) : [];
   return (
     <section aria-labelledby={headingId} className="border-t border-ink">
       <div className="flex h-11 items-center">

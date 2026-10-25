@@ -11,13 +11,15 @@ export interface StepperProps {
   disabled?: boolean;
   /** Shown in place of the number (e.g. «∞» for «без лимита»). */
   display?: ReactNode;
+  /** id of a line that explains the value (the plan's fit line). */
+  describedBy?: string;
 }
 
 /**
  * Outlined − value + stepper (30px box, 44px hit areas). Press (T4): the pressed half of the box
  * tints --surface-2 and the button scales .96; the number is a plain tabular swap.
  */
-export function Stepper({ value, onStep, min = 0, max = Infinity, label, disabled, display }: StepperProps) {
+export function Stepper({ value, onStep, min = 0, max = Infinity, label, disabled, display, describedBy }: StepperProps) {
   // The tint fills the pressed half inside the box's 1px outline (box: 6px in, 7px down, 30px tall).
   const btn = cx(
     "press-sm relative flex size-11 items-center justify-center bg-transparent p-0 text-ink disabled:opacity-40",
@@ -25,7 +27,7 @@ export function Stepper({ value, onStep, min = 0, max = Infinity, label, disable
     "active:before:bg-surface-2 active:before:duration-(--dur-instant) disabled:before:bg-transparent",
   );
   return (
-    <div role="group" aria-label={label} className="relative -mr-1.5 flex h-11 items-center">
+    <div role="group" aria-label={label} aria-describedby={describedBy} className="relative -mr-1.5 flex h-11 items-center">
       <span aria-hidden="true" className="absolute inset-x-1.5 top-[7px] h-[30px] rounded-chip border border-rule bg-surface" />
       <button
         type="button"

@@ -9,8 +9,11 @@ import {
   EXERCISE_FOCUS_PREF,
   getExerciseFocus,
   getNewOverrideDay,
+  getPlanDay,
   getStudyPlan,
   isNewOverrideOn,
+  recordPlanDay,
+  recordPlanDayAfterPull,
   saveMigratedStudyPlan,
   setExerciseFocus,
   setNewOverride,
@@ -133,5 +136,29 @@ describe("«Всё равно добавить новые» (device-local, one s
     expect(await db.settings.get("settings")).toBeUndefined();
     await setNewOverride(null);
     expect(await isNewOverrideOn(DAY_START)).toBe(false);
+  });
+});
+
+describe("the day's plan (user_prefs plan_day)", () => {
+  const snap = { ceiling: 10, budget: 6, reason: "load" as const, cap: 200, due: 80, deferred: 0, forecast7: 105.4, override: false };
+
+  it("pulls before a new day's first write, so another device's yesterday survives as prev", async () => {
+    await recordPlanDay("2026-10-20", snap, new Date("2026-10-20T08:00:00.000Z")); // this device, days ago
+    let pulls = 0;
+    // The pull brings yesterday's plan, kept by the device that studied.
+    const pull = async () => {
+      pulls++;
+      await db.user_prefs.put({ id: "plan_day", value: { day: "2026-10-22", ...snap, budget: 3, prev: null }, updated_at: "2026-10-22T20:00:00.000Z", deleted_at: null });
+    };
+    expect(await recordPlanDayAfterPull("2026-10-23", { ...snap, budget: 10, reason: "limit" }, pull, NOW)).toBe(true);
+    expect(await getPlanDay()).toMatchObject({ day: "2026-10-23", budget: 10, prev: { day: "2026-10-22", budget: 3 } });
+    // The same day again: no pull, and nothing to write.
+    expect(await recordPlanDayAfterPull("2026-10-23", { ...snap, budget: 10, reason: "limit" }, pull, NOW)).toBe(false);
+    expect(pulls).toBe(1);
+  });
+
+  it("writes anyway when the pull fails", async () => {
+    expect(await recordPlanDayAfterPull("2026-10-23", snap, () => Promise.reject(new Error("offline")), NOW)).toBe(true);
+    expect(await getPlanDay()).toMatchObject({ day: "2026-10-23", prev: null });
   });
 });

@@ -1095,6 +1095,11 @@ Everything phones can do, desktop can do too. Where the boards above differ, thi
   the layout is §10. Differences from the phone: two calendar months instead of one, the selected day in a
   pane instead of in place, mistakes open the word in Библиотека instead of the word sheet, and no slang meter
   on mistake rows.
+- **«План и прогресс»** (added 2026-10-25; SPEC.md «План и прогресс», picks R34 D1 A, D2 A; board `D-Plan-Fit-A`):
+  the same `planFit` numbers, fit line, suggestion, copy rules N1–N6 and undo snackbar as on phones; the layout
+  is §11. Differences from the phone: a 120×24 sparkline of new words a day beside the fit line, the suggestion's
+  forecast and «Не сейчас» in the row instead of behind a fold, and the ledger's plan as a second line in
+  «Изменение».
 - «Вибрация при свайпах» stays phone-only (§5 #20); the offline page is 560px wide from 768 and says
   «…не сохранена на устройстве».
 
@@ -1126,8 +1131,9 @@ Built from `D-Progress-A` «Ведомость» (`components/progress/ProgressD
   Under it the Plex 13 tabular subline «412 знаю · 350 учу · 500 новых · на паузе 56 · помню ≈ 640 · 88 % верно»
   (a part at 0 is left out), then one muted line explaining «знаю» and «помню ≈» (the phone's fold text).
 - **Period**: the text filter «Месяц · 3 месяца · Год · Всё», its dates at the right.
-- **Ledger**: the phone's four rows (Помню ≈ / Повторений в день / Новых в день / Верно) at full width. The
-  sparklines fill the column and are 32px tall, with dashed average / target lines. Today's point is ink, not
+- **Ledger**: the phone's four rows (Помню ≈ / Повторений в день / Новых слов в день / Верно) at full width. The
+  sparklines fill the column and are 32px tall, with dashed average / target lines (the plan's ceiling in ink on
+  «Новых слов в день», §11). Today's point is ink, not
   red. The selected day is a thin vertical line with a hollow dot on each sparkline.
 - **Calendar**: last month and this month side by side, ink squares sized by the day's reviews, a 12px muted
   outlined square for a day without study, today framed 1.5px red; the selected day is a 1px ink frame on white. The legend sits under the grids. The header carries only «7 из
@@ -1136,7 +1142,7 @@ Built from `D-Progress-A` «Ведомость» (`components/progress/ProgressD
 - **Day pane**: 400px at the right from 1100 (360 at 1200–1439, as the library's detail pane); below 1100 it
   follows the calendar in the one column. It opens on today once studied, else on the last study day. ‹ ›
   and ← → step through study days. An index card «Среда, 21 октября» (red header rule) with the receipt
-  «Повторено 104 · Новых 12 · Верно 92 % · Знаю 398», plus «Упражнений N» when the day had one and a quiet line
+  «Повторено 104 · Новых слов 10 · Новых карточек 14 · Верно 92 % · Знаю 398» (as on phones), plus «Упражнений N» when the day had one and a quiet line
   for a day without study. Then «Ошибки»: FR — RU rows without the slang meter; a row opens
   `/library?word=<id>`.
 - **Empty**: the phone's blank card with «К повторению ›».
@@ -1144,3 +1150,23 @@ Built from `D-Progress-A` «Ведомость» (`components/progress/ProgressD
   holds the whole day and scrolls).
 - **Red**: at most 3. The active sidebar bar, the day card's header rule and today's outline (ink once today
   is the selected day).
+
+## 11. План и прогресс (added 2026-10-25; see SPEC.md «План и прогресс» for the feature, the rules and the copy)
+
+Built from `D-Plan-Fit-A` (`components/settings/PlanFitRows.tsx` `DeskFitCaption` / `DeskSuggestion` in
+`DeskStudyPlan`, and `ProgressDesk`). Not `D-Plan-Fit-B` (a «Темп» panel with range rules and a ghost value in
+DeskStepper), not `D-Plan-Fit-C` (the 14-cell strip and a blank-card suggestion).
+- **«План повторения» → «Темп»**: under «Новых слов в день», its caption and the stepper, a line across the
+  whole row: a 120×24 sparkline of new words per study day of the fit's window (days off are gaps, the dashed
+  ink line is the ceiling, today's point ink, its own accessible name), then the fit line in 13 muted (the
+  stepper's `aria-describedby` points at the line only). Nothing while warming up.
+- **Suggestion row** (medium or high confidence), a hairline row under it: «Можно брать 15 в день» (15 ink) over
+  the forecast in 12 muted («≈ 80–90 повторений в день через месяц · вернуть можно в любой момент»); at the right
+  an outlined 32px «Поставить 15» (1px boundary border, radius 6, hover fill), then text links: «или до 250
+  повторений» (ink, when a lower suggestion has it) and «Не сейчас» (muted, ink on hover). The phone's snackbar
+  «Новых слов: 15 в день · Вернуть»; focus goes back to the stepper when the row leaves.
+- **ProgressDesk ledger**: «Новых слов в день» («Новых карточек в день» with «Назавтра»), the dashed reference is
+  the ceiling in ink, the sparkline has study days only, and «Изменение» (≈ 112px) holds two lines, «обычно 10»
+  over «до 10 по плану», since one line would cut the plan off.
+- **Day pane**: «Новых слов 10 · Новых карточек 14» in the receipt, the accessible name with the same numbers.
+- **Red**: none for the plan; the plan's facts are ink and muted only.

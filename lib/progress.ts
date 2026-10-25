@@ -27,6 +27,8 @@ import {
   type RetentionSummary,
   type Streaks,
 } from "./core/progress";
+import { parsePlanDayPref, PLAN_DAY_PREF, snapshotForDay, type DayPlanSnapshot } from "./core/plan";
+import { parseStudyPlan, STUDY_PLAN_PREF } from "./core/study-plan";
 import { pausedFolderIds } from "./core/words";
 import { db as defaultDb, liveRows, type KartochkiDB } from "./db";
 import { FSRS_ALGO, TARGET_RETENTION } from "./scheduler";
@@ -62,7 +64,14 @@ async function firstDataDay(database: KartochkiDB): Promise<string | null> {
 
 const liveIds = (rows: readonly (ProgressDay | undefined)[]) => rows.filter((r): r is ProgressDay => !!r && r.deleted_at === null).map((r) => r.id);
 
-const toRow = (day: string, counts: DayCounts, activity: DayActivity, source: ProgressDay["source"], iso: string): ProgressDay => ({
+const toRow = (
+  day: string,
+  counts: DayCounts,
+  activity: DayActivity,
+  source: ProgressDay["source"],
+  iso: string,
+  plan: DayPlanSnapshot | null,
+): ProgressDay => ({
   id: day,
   known: counts.known,
   learning: counts.learning,
@@ -77,16 +86,32 @@ const toRow = (day: string, counts: DayCounts, activity: DayActivity, source: Pr
   added: activity.added,
   source,
   algo: FSRS_ALGO,
+  plan,
   updated_at: iso,
   deleted_at: null,
 });
+
+/** The kept day plans from the synced `plan_day` pref (lib/session.ts keeps it): `of(day)` is that day's, or null. */
+async function keptPlans(database: KartochkiDB): Promise<(day: string) => DayPlanSnapshot | null> {
+  const row = await database.user_prefs.get(PLAN_DAY_PREF);
+  const pref = row && row.deleted_at === null ? parsePlanDayPref(row.value) : null;
+  return (day) => snapshotForDay(pref, day);
+}
+
+/** Whether the plan counts new cards of both directions as new words (its "together" mode). */
+async function planTogether(database: KartochkiDB): Promise<boolean> {
+  const row = await database.user_prefs.get(STUDY_PLAN_PREF);
+  return !!row && row.deleted_at === null && parseStudyPlan(row.value).ru_fr === "together";
+}
 
 /**
  * Stores every finished study day that has no row yet, from the first day with data up to
  * yesterday; today is never stored. Yesterday gets `source: "live"` (its counts come from the
  * current cards, through the log for the cards reviewed since), older gaps `"replay"` (rebuilt
  * from review_log). An existing row is never overwritten, so this is idempotent; when nothing is
- * missing it costs three small reads. Returns how many rows it wrote.
+ * missing it costs three small reads. A row also keeps the day's plan (`plan`) when the synced
+ * `plan_day` pref still holds that day (yesterday's, or the one before when the app wasn't opened
+ * in between), whichever device studied; otherwise null. Returns how many rows it wrote.
  */
 export async function ensureProgressDays(database: KartochkiDB = defaultDb, now: Date = new Date()): Promise<number> {
   const yesterday = addDays(dayKey(now), -1);
@@ -97,17 +122,18 @@ export async function ensureProgressDays(database: KartochkiDB = defaultDb, now:
   const missing = daysBetween(first, yesterday).filter((k) => !stored.has(k));
   if (missing.length === 0) return 0;
 
-  const [words, states, logs, folders] = await Promise.all([
+  const [words, states, logs, folders, plan] = await Promise.all([
     database.words.toArray(),
     database.review_state.toArray(),
     database.review_log.toArray(),
     liveRows(database.folders),
+    keptPlans(database),
   ]);
   const counts = replayCounts({ days: missing, words, states, logs, pausedFolderIds: pausedFolderIds(folders) });
   const activity = activityByDay({ logs, words });
   const iso = now.toISOString();
   const rows = missing.map((day) =>
-    toRow(day, counts.get(day)!, activity.get(day) ?? emptyActivity(), day === yesterday ? "live" : "replay", iso),
+    toRow(day, counts.get(day)!, activity.get(day) ?? emptyActivity(), day === yesterday ? "live" : "replay", iso, plan(day)),
   );
 
   return database.transaction("rw", database.progress_days, async () => {
@@ -214,7 +240,7 @@ async function pastActiveDays(database: KartochkiDB, rows: readonly ProgressDay[
 }
 
 /** The library now, as a screen point for today. */
-async function todayPoint(database: KartochkiDB, now: Date): Promise<{ point: DayPoint; mistakes: string[] }> {
+async function todayPoint(database: KartochkiDB, now: Date, together: boolean): Promise<{ point: DayPoint; mistakes: string[] }> {
   const today = dayKey(now);
   const start = dayStartOf(today);
   const end = dayEndOf(today);
@@ -227,12 +253,18 @@ async function todayPoint(database: KartochkiDB, now: Date): Promise<{ point: Da
     liveRows(database.exercise_runs),
   ]);
   const counts = countsFromStates(words, states, pausedFolderIds(folders), now);
-  const activity = activityByDay({ logs, words: added, runs }).get(today) ?? emptyActivity();
+  const activity = activityByDay({ logs, words: added, runs, together }).get(today) ?? emptyActivity();
   return { point: dayPoint(today, counts, activity, "today"), mistakes: activity.mistakes };
 }
 
-function storedPoint(row: ProgressDay, exercises: number): DayPoint {
-  return dayPoint(row.id, row, { reviews: row.reviews, again: row.again, new_introduced: row.new_introduced, added: row.added, exercises }, row.source);
+/** A stored day outside the logs read: its activity as stored (`new_words`, never stored, from `newWords` when known). */
+function storedPoint(row: ProgressDay, exercises: number, newWords: number): DayPoint {
+  return dayPoint(
+    row.id,
+    row,
+    { reviews: row.reviews, again: row.again, new_introduced: row.new_introduced, new_words: newWords, added: row.added, exercises },
+    row.source,
+  );
 }
 
 export type ProgressRange = "month" | "3m" | "year" | "all";
@@ -272,10 +304,11 @@ function monthStartBack(key: string, n: number): string {
 /** Everything the «Прогресс» screen shows for a range (use inside useLiveQuery). */
 export async function loadProgress(range: ProgressRange, now: Date = new Date(), database: KartochkiDB = defaultDb): Promise<Progress> {
   const today = dayKey(now);
+  const together = await planTogether(database);
   const [rows, exercises, current] = await Promise.all([
     liveRows(database.progress_days).then((r) => r.filter((row) => row.id < today).sort((a, b) => a.id.localeCompare(b.id))),
     exercisesByDay(database),
-    todayPoint(database, now),
+    todayPoint(database, now, together),
   ]);
   const rangeFrom =
     range === "month" ? monthStartBack(today, 0) : range === "3m" ? monthStartBack(today, 2) : range === "year" ? monthStartBack(today, 11) : (rows[0]?.id ?? today);
@@ -292,11 +325,15 @@ export async function loadProgress(range: ProgressRange, now: Date = new Date(),
   const retention = retentionSummary(logs, today, TARGET_RETENTION);
   // A stored row keeps its end-of-day counts, but its activity is re-read from the log: reviews
   // synced in after the row was written (another device, offline) still show on the chart.
-  const activity = activityByDay({ logs: logs.filter((l) => l.review >= dayStartOf(rangeFrom).toISOString()), words: added });
+  const activity = activityByDay({ logs: logs.filter((l) => l.review >= dayStartOf(rangeFrom).toISOString()), words: added, together });
+  // New words in plan units are never stored: days before the range (a week ago) take them from the logs read.
+  const older = activityByDay({ logs, together });
   const points = rows.map((row) => {
     const live = row.id >= rangeFrom ? (activity.get(row.id) ?? emptyActivity()) : undefined;
     const exercisesDone = exercises.get(row.id) ?? 0;
-    return live ? dayPoint(row.id, row, { ...live, exercises: exercisesDone }, row.source) : storedPoint(row, exercisesDone);
+    return live
+      ? dayPoint(row.id, row, { ...live, exercises: exercisesDone }, row.source)
+      : storedPoint(row, exercisesDone, older.get(row.id)?.new_words ?? 0);
   });
   const fromMonth = monthOf(rangeFrom);
   retention.month = retention.month.filter((m) => m.month >= fromMonth);
@@ -351,20 +388,21 @@ export interface ProgressDayDetail {
 export async function loadProgressDay(day: string, now: Date = new Date(), database: KartochkiDB = defaultDb): Promise<ProgressDayDetail | null> {
   const today = dayKey(now);
   if (day > today) return null;
-  const [row, exercises, rows] = await Promise.all([
+  const [row, exercises, rows, together] = await Promise.all([
     database.progress_days.get(day),
     exercisesByDay(database),
     liveRows(database.progress_days),
+    planTogether(database),
   ]);
   let point: DayPoint;
   let mistakeIds: string[];
   if (day === today) {
-    ({ point, mistakes: mistakeIds } = await todayPoint(database, now));
+    ({ point, mistakes: mistakeIds } = await todayPoint(database, now, together));
   } else {
     const start = dayStartOf(day);
     const end = dayEndOf(day);
     const [logs, added] = await Promise.all([logsBetween(database, start, end), wordsAddedBetween(database, start, end)]);
-    const activity = activityByDay({ logs, words: added }).get(day) ?? emptyActivity();
+    const activity = activityByDay({ logs, words: added, together }).get(day) ?? emptyActivity();
     activity.exercises = exercises.get(day) ?? 0;
     mistakeIds = activity.mistakes;
     let counts: DayCounts | undefined = row && row.deleted_at === null ? row : undefined;

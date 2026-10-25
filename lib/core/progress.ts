@@ -289,6 +289,12 @@ export interface DayActivity {
   again: number;
   /** Cards seen for the first time (a log from state New), as on the done screen. */
   new_introduced: number;
+  /**
+   * New words in plan units («Новых слов в день»): FR→RU words seen for the first time; in the
+   * plan's "together" mode new cards of both directions, as the plan counts them (`newWordKey`).
+   * Derived from the log, never stored.
+   */
+  new_words: number;
   /** Words created that day, later-deleted ones included. */
   added: number;
   /** Exercise runs finished that day. */
@@ -297,7 +303,18 @@ export interface DayActivity {
   mistakes: string[];
 }
 
-export const emptyActivity = (): DayActivity => ({ reviews: 0, again: 0, new_introduced: 0, added: 0, exercises: 0, mistakes: [] });
+export const emptyActivity = (): DayActivity => ({ reviews: 0, again: 0, new_introduced: 0, new_words: 0, added: 0, exercises: 0, mistakes: [] });
+
+/**
+ * What a log counts as in the plan's units of new words (lib/core/plan.ts `planDay`: `newToday`):
+ * a log from state New of a FR→RU card is that word; in "together" mode (`together`) any new card
+ * counts, by card. null for any other log.
+ */
+export function newWordKey(log: Pick<ReviewLog, "word_id" | "direction" | "state">, together: boolean): string | null {
+  if (log.state !== 0) return null;
+  if (together) return cardKey(log.word_id, log.direction);
+  return log.direction === "fr_ru" ? log.word_id : null;
+}
 
 /** A day counts for the streak and the calendar with a review or a finished exercise run. */
 export const isActive = (a: Pick<DayActivity, "reviews" | "exercises">) => a.reviews > 0 || a.exercises > 0;
@@ -307,10 +324,12 @@ export interface ActivityInput {
   words?: readonly Pick<Word, "created_at">[];
   runs?: readonly Pick<ExerciseRun, "finished_at" | "deleted_at">[];
   startHour?: number;
+  /** The plan's RU→FR mode is "together": `new_words` counts new cards of both directions. */
+  together?: boolean;
 }
 
 /** What happened on each study day, keyed by day; days without anything are absent. */
-export function activityByDay({ logs, words = [], runs = [], startHour = STUDY_DAY_START_HOUR }: ActivityInput): Map<string, DayActivity> {
+export function activityByDay({ logs, words = [], runs = [], startHour = STUDY_DAY_START_HOUR, together = false }: ActivityInput): Map<string, DayActivity> {
   const out = new Map<string, DayActivity>();
   const of = (key: string) => {
     let a = out.get(key);
@@ -319,6 +338,7 @@ export function activityByDay({ logs, words = [], runs = [], startHour = STUDY_D
   };
   const live = logs.filter((l) => l.deleted_at === null && !Number.isNaN(Date.parse(l.review)));
   const newCards = new Map<string, Set<string>>();
+  const newWords = new Map<string, Set<string>>();
   const misses = new Map<string, ReviewLog[]>();
   for (const l of live) {
     const key = dayKey(l.review, startHour);
@@ -335,8 +355,15 @@ export function activityByDay({ logs, words = [], runs = [], startHour = STUDY_D
       if (!set) newCards.set(key, (set = new Set()));
       set.add(cardKey(l.word_id, l.direction));
     }
+    const nw = newWordKey(l, together);
+    if (nw !== null) {
+      let set = newWords.get(key);
+      if (!set) newWords.set(key, (set = new Set()));
+      set.add(nw);
+    }
   }
   for (const [key, set] of newCards) of(key).new_introduced = set.size;
+  for (const [key, set] of newWords) of(key).new_words = set.size;
   for (const [key, list] of misses) {
     list.sort((a, b) => b.review.localeCompare(a.review));
     of(key).mistakes = [...new Set(list.map((l) => l.word_id))];
@@ -512,6 +539,7 @@ export function dayPoint(day: string, counts: DayCounts, activity: Omit<DayActiv
     reviews: activity.reviews,
     again: activity.again,
     new_introduced: activity.new_introduced,
+    new_words: activity.new_words,
     added: activity.added,
     exercises: activity.exercises,
     active: isActive(activity),

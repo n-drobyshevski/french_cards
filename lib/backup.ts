@@ -1,6 +1,7 @@
 // JSON export of every table, and import that merges by updated_at (newer row wins).
 import { EXERCISE_ITEM_TYPES, EXERCISE_PERSONS, EXERCISE_SCOPES, EXERCISE_TENSES } from "./core/exercises";
 import { isCefr, isStoredLevelSource } from "./core/level";
+import { parseDayPlanSnapshot } from "./core/plan";
 import { db, legacyReviewSets } from "./db";
 import { DEFAULT_SETTINGS, SYNC_TABLES, type ExerciseItemType, type ExercisePerson, type ExerciseScope, type ExerciseSet, type ExerciseTense, type Settings, type SyncTable, type Syncable, type Word } from "./types";
 
@@ -135,6 +136,8 @@ const NORMALIZE: Partial<Record<SyncTable, (row: Syncable) => Record<string, unk
       : { cefr: null, cefr_source: null };
   },
   exercise_sets: (row) => ({ scope: (row as Partial<ExerciseSet>).scope ?? null }),
+  // The day's plan (jsonb) came with migration 0017: missing in older backups, and junk is dropped.
+  progress_days: (row) => ({ plan: parseDayPlanSnapshot((row as { plan?: unknown }).plan) }),
 };
 
 function hasFields(table: SyncTable, row: Record<string, unknown>): boolean {
