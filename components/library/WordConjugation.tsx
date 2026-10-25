@@ -4,7 +4,6 @@
 // with where it comes from («своё» — saved on the word by hand or from the chat; «из словаря» —
 // built on the device from Lexique), and the form that edits the four tenses.
 import { useEffect, useState, type ReactNode } from "react";
-import { TENSE_NAMES } from "@/components/context/data";
 import {
   ConjugationBrief,
   ConjugationCards,
@@ -20,6 +19,7 @@ import { cx } from "@/components/ui/cx";
 import { autofillConjugation } from "@/lib/autofill";
 import { loadConjData } from "@/lib/conjugation";
 import { wordExamples } from "@/lib/examples";
+import { TENSE_NAMES } from "@/lib/core/conj-display";
 import { cleanConjugation, conjugate } from "@/lib/core/conjugate";
 import type { Conjugation, Word } from "@/lib/types";
 import { updateWord } from "@/lib/words";

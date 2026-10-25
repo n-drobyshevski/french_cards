@@ -1,8 +1,8 @@
 // JSON export of every table, and import that merges by updated_at (newer row wins).
-import { EXERCISE_ITEM_TYPES, EXERCISE_SCOPES } from "./core/exercises";
+import { EXERCISE_ITEM_TYPES, EXERCISE_PERSONS, EXERCISE_SCOPES, EXERCISE_TENSES } from "./core/exercises";
 import { isCefr, isStoredLevelSource } from "./core/level";
 import { db, legacyReviewSets } from "./db";
-import { DEFAULT_SETTINGS, SYNC_TABLES, type ExerciseItemType, type ExerciseScope, type ExerciseSet, type Settings, type SyncTable, type Syncable, type Word } from "./types";
+import { DEFAULT_SETTINGS, SYNC_TABLES, type ExerciseItemType, type ExercisePerson, type ExerciseScope, type ExerciseSet, type ExerciseTense, type Settings, type SyncTable, type Syncable, type Word } from "./types";
 
 export const BACKUP_FORMAT = "kartochki-backup";
 export const BACKUP_VERSION = 1;
@@ -104,7 +104,9 @@ const isOptionalText = (v: unknown) => v === null || v === undefined || typeof v
 function isExerciseItem(v: unknown): boolean {
   if (!isRecord(v) || !isText(v.id) || !EXERCISE_ITEM_TYPES.includes(v.type as ExerciseItemType)) return false;
   if (![v.answer, v.prompt, v.sentence, v.sentence_ru, v.explain_ru, v.word_id, v.new_ref].every(isOptionalText)) return false;
-  if ((v.type === "choice" || v.type === "cloze") && !(Array.isArray(v.distractors) && v.distractors.every(isText))) return false;
+  if ((v.type === "choice" || v.type === "cloze" || v.type === "conjugate") && !(Array.isArray(v.distractors) && v.distractors.every(isText))) return false;
+  // A conjugate card shows its tense in the header and its sentence's gap.
+  if (v.type === "conjugate" && !(EXERCISE_TENSES.includes(v.tense as ExerciseTense) && EXERCISE_PERSONS.includes(v.person as ExercisePerson) && isText(v.sentence))) return false;
   if (v.type === "pairs") {
     const tiles = v.tiles;
     if (!Array.isArray(v.pairs) || !Array.isArray(tiles)) return false;

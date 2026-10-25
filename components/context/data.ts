@@ -1,6 +1,6 @@
 // «Контекст»: pure helpers for the screen (no Dexie, no React), unit-tested in data.test.ts.
 import type { DraftPrefill } from "@/components/add/draft";
-import type { ConjTense, ExampleKind } from "@/lib/ai/constants";
+import type { ExampleKind } from "@/lib/ai/constants";
 import type { ContextExample, LookupResponse, LookupSynonym, LookupTranslation } from "@/lib/ai/schemas";
 import { examplesPatch, MAX_EXAMPLES, wordExamples } from "@/lib/examples";
 import type { SlangLevel, Word, WordExample } from "@/lib/types";
@@ -109,14 +109,7 @@ export function synonymColumns(headword: Pick<LookupResponse, "fr" | "slang_leve
   return columns;
 }
 
-export const TENSE_NAMES: Record<ConjTense, string> = {
-  present: "Présent",
-  passe_compose: "Passé composé",
-  imparfait: "Imparfait",
-  futur: "Futur",
-};
-
-const PRONOUN = /^(je |j['’]|tu |il\/elle |il |elle |on |nous |vous |ils\/elles |ils |elles )/i;
+const PRONOUN = /^(je |j['’]|tu |(?:il|elle|on)(?:\/(?:il|elle|on))* |nous |vous |(?:ils|elles)(?:\/(?:ils|elles))* )/i;
 
 /** «j'ai kiffé» → ["j'", "ai kiffé"]; «nous nous cassons» → ["nous ", "nous cassons"]; no pronoun → ["", form]. */
 export function splitPronoun(form: string): [pronoun: string, verb: string] {

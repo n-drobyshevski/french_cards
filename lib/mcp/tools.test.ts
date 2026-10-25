@@ -1235,7 +1235,7 @@ describe("exercises («Упражнения»)", () => {
     deleted_at: null,
   };
   function blankItem(id: string, wordId: string): ExerciseSet["items"][number] {
-    return { id, type: "choice", skill: "meaning", ask: "fr", word_id: wordId, new_ref: null, prompt: null, sentence: null, sentence_ru: null, answer: null, distractors: ["a", "b", "c"], pairs: [], tiles: [], explain_ru: null, word: null };
+    return { id, type: "choice", skill: "meaning", ask: "fr", tense: null, person: null, word_id: wordId, new_ref: null, prompt: null, sentence: null, sentence_ru: null, answer: null, distractors: ["a", "b", "c"], pairs: [], tiles: [], explain_ru: null, word: null };
   }
   const run = (id: string, startedAt: string, answers: ExerciseRun["answers"], extra: Partial<ExerciseRun> = {}): ExerciseRun => ({
     id,
@@ -1425,6 +1425,68 @@ describe("exercises («Упражнения»)", () => {
     expect(match).toEqual({ id: "w-rade", fr: "le rade", ru: "бар, кабак", pos: "noun", gender: "m", slang_level: 1, verlan: false, example_fr: null, example_ru: null, folder: expect.anything() });
     // A null topic is "no topic", as on create_exercise_set.
     expect(await ok(exerciseMaterial, fake, { folders: null, topic: null })).not.toHaveProperty("topic_matches");
+  });
+
+  describe("verb sets («Спряжение глаголов»)", () => {
+    const VERBS = [...LIB, word("w-aller", "aller", "идти", { pos: "verb" }), word("w-falloir", "falloir", "надо", { pos: "verb" })];
+    const VERB_ITEMS: Record<string, unknown>[] = [
+      { type: "conjugate", word_id: "w-aller", tense: "futur", person: "je" },
+      { type: "conjugate", word_id: "w-kiffer", tense: "passe_compose", person: "tu" },
+      { type: "conjugate", word_id: "w-aller", tense: "passe_compose", person: "nous" },
+      { type: "conjugate", word_id: "w-kiffer", tense: "imparfait", person: "ils" },
+      { type: "conjugate", word_id: "w-aller", tense: "present", person: "vous" },
+      { type: "cloze", word_id: "w-kiffer", sentence: "Hier, j'ai trop [[kiffé]] ce concert.", distractors: ["kiffais", "kifferai", "kiffons"] },
+    ];
+
+    it("create_exercise_set writes the conjugate forms from the verb's conjugation (Lexique for irregular verbs)", async () => {
+      const fake = fakeLib({ words: VERBS });
+      const out = await ok(createExerciseSet, fake, { client_ref: "verbs-1", title: "Глаголы", items: VERB_ITEMS });
+      expect(out.set).toMatchObject({ count: 6, by_type: { conjugate: 5, cloze: 1 } });
+      expect(out.warnings).toEqual([]);
+      const [row] = stored(fake);
+      expect(row.items[0]).toMatchObject({ type: "conjugate", tense: "futur", person: "je", prompt: "aller", sentence: "j'[[irai]]", answer: "irai" });
+      expect(row.items[0].distractors).toHaveLength(3);
+      expect(row.items[2]).toMatchObject({ sentence: "nous [[sommes allés]]", answer: "sommes allés" });
+      expect(row.items[2].distractors[0]).toBe("avons allé");
+      expect(row.items[5]).toMatchObject({ tense: null, person: null, answer: "kiffé" });
+    });
+
+    it("create_exercise_set refuses a conjugate item about a verb the app can't conjugate", async () => {
+      const fake = fakeLib({ words: VERBS });
+      const items = [...VERB_ITEMS.slice(0, 5), { type: "conjugate", word_id: "w-falloir", tense: "present", person: "il" }];
+      expect(await refused(createExerciseSet, fake, { client_ref: "verbs-2", title: "Глаголы", items })).toMatch(
+        /items\[5\]\.word_id: «falloir» has no conjugation the app can build; pick another verb or save its conjugation with update_word first/,
+      );
+      expect(stored(fake)).toEqual([]);
+    });
+
+    it("exercise_material verbs: true keeps the verbs the app can conjugate and flags them", async () => {
+      const fake = fakeLib({ words: VERBS });
+      const out = await ok(exerciseMaterial, fake, { verbs: true });
+      expect(out.words.map((w: { id: string }) => w.id).sort()).toEqual(["w-aller", "w-kiffer"]);
+      expect(out.words.every((w: { conjugable?: boolean }) => w.conjugable === true)).toBe(true);
+      expect(out.note).toMatch(/at most 10 conjugate/);
+      const all = await ok(exerciseMaterial, fake, {});
+      const byId = Object.fromEntries(all.words.map((w: { id: string }) => [w.id, w]));
+      expect(byId["w-kiffer"]).toMatchObject({ conjugable: true });
+      expect(byId["w-falloir"]).not.toHaveProperty("conjugable");
+      expect(byId["w-meuf"]).not.toHaveProperty("conjugable");
+    });
+
+    it("exercise_material verbs: true with only gives one verb-set recipe, saved with scope", async () => {
+      const hard = (wordId: string): ReviewState => ({ ...cards(wordId, false)[0], state: 2, reps: 6, lapses: 3, stability: 2, difficulty: 6, due: "2026-10-30T00:00:00.000Z" });
+      const words = [...VERBS, word("w-bosser", "bosser", "вкалывать", { pos: "verb" })];
+      const fake = fakeLib({ words, review_state: ["w-aller", "w-kiffer", "w-bosser", "w-bagnole", "w-falloir"].map(hard) });
+      const out = await ok(exerciseMaterial, fake, { only: "difficult", verbs: true });
+      expect(out.words.map((w: { id: string }) => w.id).sort()).toEqual(["w-aller", "w-bosser", "w-kiffer"]);
+      expect(out.scope).toMatchObject({ only: "difficult", available: 3, suggested_items: 8 });
+      expect(out.scope.suggested_items).toBeLessThanOrEqual(10);
+      expect(out.scope.note).toMatch(/only these 3 difficult verbs.*mostly conjugate.*scope: "difficult"/);
+      expect(out.scope.note).not.toMatch(/pairs|2–3 different question types/);
+      expect(out.note).toMatch(/mostly conjugate.*scope: "difficult"/);
+      const none = await ok(exerciseMaterial, fake, { only: "due", verbs: true });
+      expect(none.scope).toMatchObject({ available: 0, suggested_items: 0, note: expect.stringMatching(/no due today verbs/) });
+    });
   });
 
   describe("«Чаще в упражнениях» (user_prefs exercise_focus)", () => {

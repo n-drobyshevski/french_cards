@@ -10,11 +10,11 @@ import { useState } from "react";
 import { Button, IconButton } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import { DialogChrome, Sheet } from "@/components/ui/Sheet";
-import { TENSE_NAMES } from "@/components/context/data";
 import {
   CONJ_TENSE_ORDER,
   PAIRED,
   participleOf,
+  TENSE_NAMES,
   TENSE_WHEN,
   tenseExample,
   tenseParts,
