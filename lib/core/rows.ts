@@ -25,6 +25,10 @@ export const REMOTE_COLUMNS: Record<SyncTable, readonly string[]> = {
   exercise_sets: ["id", "title", "topic", "folders", "items", "new_words", "scope", "source", "created_at", "updated_at", "deleted_at"],
   exercise_runs: ["id", "set_id", "kind", "item_ids", "started_at", "finished_at", "answers", "total", "first_try", "updated_at", "deleted_at"],
   user_prefs: ["id", "value", "updated_at", "deleted_at"],
+  progress_days: [
+    "id", "known", "learning", "fresh", "difficult", "paused", "total", "memorized", "reviews", "again", "new_introduced", "added",
+    "source", "algo", "updated_at", "deleted_at",
+  ],
 };
 
 /** Postgres returns `2026-10-21T08:00:00.123+00:00`; locally every timestamp is `toISOString()`. */
@@ -39,6 +43,7 @@ const TIMESTAMP_COLUMNS: Record<SyncTable, readonly string[]> = {
   exercise_sets: ["created_at", "updated_at", "deleted_at"],
   exercise_runs: ["started_at", "finished_at", "updated_at", "deleted_at"],
   user_prefs: ["updated_at", "deleted_at"],
+  progress_days: ["updated_at", "deleted_at"],
 };
 
 export function toRemoteRow(table: SyncTable, row: object): Record<string, unknown> {

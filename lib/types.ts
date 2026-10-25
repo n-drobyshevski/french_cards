@@ -446,6 +446,38 @@ export interface UserPref extends Syncable {
   value: unknown;
 }
 
+/**
+ * «Прогресс»: the library at the end of one study day (from 04:00 local, lib/session.ts), saved
+ * automatically the day after (lib/progress.ts `ensureProgressDays`). Synced table `progress_days`
+ * (migration 0016_progress_days.sql). Counts are words: `known` + `learning` + `fresh` + `paused` =
+ * `total` (paused words count only as paused), `difficult` ⊂ `learning`, `memorized` = «помню ≈».
+ * Pure rules in lib/core/progress.ts.
+ */
+export interface ProgressDay extends Syncable {
+  /** The study day, "YYYY-MM-DD". */
+  id: string;
+  known: number;
+  learning: number;
+  fresh: number;
+  difficult: number;
+  paused: number;
+  total: number;
+  /** Sum over words of their cards' mean retrievability at the day's end (a float). */
+  memorized: number;
+  /** Live review_log rows of the day. */
+  reviews: number;
+  /** Of those, «Не знаю» (rating 1). */
+  again: number;
+  /** Cards seen for the first time (a log from state New). */
+  new_introduced: number;
+  /** Words created that day (later-deleted ones included). */
+  added: number;
+  /** live: written the day after from the current data; replay: rebuilt later from review_log. */
+  source: "live" | "replay";
+  /** The FSRS version the numbers came from (lib/scheduler.ts FSRS_ALGO). */
+  algo: string;
+}
+
 export const SYNC_TABLES = [
   "folders",
   "words",
@@ -457,5 +489,6 @@ export const SYNC_TABLES = [
   "exercise_sets",
   "exercise_runs",
   "user_prefs",
+  "progress_days",
 ] as const;
 export type SyncTable = (typeof SYNC_TABLES)[number];

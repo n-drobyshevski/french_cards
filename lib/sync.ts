@@ -16,6 +16,7 @@ import { isAuthRetryableFetchError, type SupabaseClient } from "@supabase/supaba
 import { fromRemoteRow, toRemoteRow, type Row } from "./core/rows";
 import { db as defaultDb, nowIso, type KartochkiDB, type Outbox } from "./db";
 import { isSyncTable, skipOutboxFor } from "./outbox";
+import { holdingProgressDays, saveProgressDays } from "./progress";
 import { getSupabaseBrowserClient } from "./supabase/client";
 import { isSupabaseConfigured } from "./supabase/config";
 import { SYNC_TABLES, type Settings, type SyncTable } from "./types";
@@ -413,7 +414,8 @@ async function cycle(opts: SyncOptions): Promise<SyncResult> {
     // retry backoff) until a full cycle gets through.
     const pullFailure = opts.pull === false && status.state === "error" && status.errorKind !== "rejected" ? status : null;
     setStatus({ state: "syncing", error: null });
-    const result = await runSyncCycle(client, defaultDb, opts);
+    // «Прогресс» stores no day while the pull is under way (lib/progress.ts).
+    const result = await holdingProgressDays(() => runSyncCycle(client, defaultDb, opts));
     if (pullFailure && result.rejected === 0) {
       setStatus(pullFailure);
       return { ok: true, state: "idle", pushed: result.pushed, pulled: 0, rejected: 0 };
@@ -421,6 +423,8 @@ async function cycle(opts: SyncOptions): Promise<SyncResult> {
     failures = 0;
     // Pulled: a device that never saved «План повторения» shares the plan it migrated (lib/user-prefs.ts).
     if (result.lastSyncAt) await saveMigratedStudyPlan().catch(() => {});
+    // Pulled: store the finished study days «Прогресс» still lacks, now with the synced log (never rejects).
+    if (result.lastSyncAt) void saveProgressDays();
     const state: SyncState = result.rejected > 0 ? "error" : "idle";
     setStatus({
       state,

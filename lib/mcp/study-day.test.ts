@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { DAY_START_HOUR as DEVICE_DAY_START } from "@/lib/session";
-import { DAY_START_HOUR, studyDay, studyDayStartBefore } from "./study-day";
+import { DAY_START_HOUR, studyDay, studyDayKey, studyDayKeyer, studyDayStartBefore, studyDayStartOf } from "./study-day";
 
 const iso = (d: Date) => d.toISOString();
 const day = (now: string, zone: string) => {
@@ -46,5 +46,18 @@ describe("studyDay", () => {
     const spring = studyDay(new Date("2026-04-01T12:00:00Z"), "Europe/Paris").start;
     expect(iso(studyDayStartBefore(spring, 7, "Europe/Paris"))).toBe("2026-03-25T03:00:00.000Z");
     expect(iso(studyDayStartBefore(new Date("2026-01-03T03:00:00Z"), 7, "Europe/Paris"))).toBe("2025-12-27T03:00:00.000Z");
+  });
+});
+
+describe("studyDayKey", () => {
+  it("names the study day on the zone's clock, before 04:00 the previous date", () => {
+    expect(studyDayKey(new Date("2026-10-22T01:30:00Z"), "Europe/Paris")).toBe("2026-10-21");
+    expect(studyDayKey(new Date("2026-10-22T02:30:00Z"), "Europe/Paris")).toBe("2026-10-22");
+    expect(studyDayKey(new Date("2026-10-22T02:30:00Z"), "UTC")).toBe("2026-10-21");
+    expect(studyDayStartOf("2026-10-25", "Europe/Paris").toISOString()).toBe("2026-10-25T03:00:00.000Z");
+    const keyOf = studyDayKeyer("Europe/Paris");
+    const ats = ["2026-10-24T01:00:00Z", "2026-10-24T02:00:00Z", "2026-10-25T02:59:59Z", "2026-10-25T03:00:00Z", "2026-10-26T02:00:00Z"];
+    expect(ats.map((t) => keyOf(Date.parse(t)))).toEqual(ats.map((t) => studyDayKey(Date.parse(t), "Europe/Paris")));
+    expect(ats.map((t) => keyOf(Date.parse(t)))).toEqual(["2026-10-23", "2026-10-24", "2026-10-24", "2026-10-25", "2026-10-25"]);
   });
 });

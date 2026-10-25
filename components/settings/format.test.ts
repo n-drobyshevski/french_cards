@@ -100,6 +100,7 @@ describe("import summaries", () => {
     exercise_sets: empty,
     exercise_runs: empty,
     user_prefs: empty,
+    progress_days: empty,
     settings: "kept",
     ...patch,
   });
@@ -128,6 +129,7 @@ describe("import summaries", () => {
           review_log: { inserted: 31, updated: 0, skipped: 0, deleted: 0 },
           exercise_sets: { inserted: 2, updated: 0, skipped: 0, deleted: 0 },
           exercise_runs: { inserted: 5, updated: 0, skipped: 0, deleted: 0 },
+          progress_days: { inserted: 20, updated: 1, skipped: 0, deleted: 0 },
         }),
       ),
     ).toEqual([
@@ -136,6 +138,7 @@ describe("import summaries", () => {
       { label: "Прогресс", text: "24 карточки" },
       { label: "История", text: "31 ответ" },
       { label: "Упражнения", text: "2 набора" },
+      { label: "Прогресс по дням", text: "за 21 день" },
     ]);
     expect(describeBackupPreview(result({}))).toEqual([]);
   });

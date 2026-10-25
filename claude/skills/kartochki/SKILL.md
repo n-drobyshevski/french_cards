@@ -1,6 +1,6 @@
 ---
 name: kartochki
-description: Conventions for the user's «Карточки» flashcard app for colloquial French (the user is a Russian speaker). Use whenever the user wants to add, find, fix, sort, pause or delete French words, slang or themes, asks what to review today («что повторить сегодня») or to change the review plan, sends a French text, chat, song or screenshot to turn into cards, asks for an exercise («упражнение», тест, квиз, QCM, по трудным словам), or mentions карточки, темы or «Входящие». Covers card format, the slang level rubric 0–3 with verlan, theme choice, when to ask first, exercise rules, and recipes for the Kartochki connector tools (search_words, add_words, update_word, set_word_levels, move_words, restore_moves, delete_words, restore_words, create/update/delete/restore_folder, list_folders, list_fields, create/update/delete/restore_field, study_summary, update_study_plan, exercise_material, create_exercise_set, list_exercise_sets, delete/restore_exercise_set). Needs the Kartochki connector (else: say to add it).
+description: Conventions for the user's «Карточки» flashcard app for colloquial French (the user is a Russian speaker). Use whenever the user wants to add, find, fix, sort, pause or delete French words, slang or themes, asks what to review today («что повторить сегодня»), how their progress is going («как у меня с прогрессом») or to change the review plan, sends a French text, chat, song or screenshot to turn into cards, asks for an exercise («упражнение», тест, квиз, QCM, по трудным словам), or mentions карточки, темы or «Входящие». Covers card format, the slang rubric 0–3 with verlan, themes, when to ask first, exercises, and recipes for the Kartochki connector tools (search/add/update/delete/restore words, set_word_levels, move_words, restore_moves, folder and field tools, study_summary, update_study_plan, exercise_material and the exercise-set tools). Needs the Kartochki connector (else: say to add it).
 ---
 
 # Карточки: working with the user's French cards
@@ -104,6 +104,11 @@ Make write calls one at a time, never in parallel, even for different fields of 
 
 1. `study_summary`: it plans the day exactly as the app does, with the user's «План повторения».
 2. Answer in two or three lines: how many cards are due, how many new words today (`plan.new_words_today` of `plan.ceiling`, and why fewer: `plan.reason` load / accuracy / backlog), how many reviews are done, and a few of the words due soonest. Mention `muted_themes` if there are any. If new cards pile up across many themes that look sequential, offer to pause the later ones (see Themes). Reviewing itself happens in the app, so suggest opening it. The numbers come from the synced copy, so reviews the phone has not synced yet are missing.
+
+### «Как у меня с прогрессом за месяц?»
+
+1. `study_summary` with `history_days: 30` (7 for «за неделю», 90 or 365 for longer). `history.days` holds the app's saved end-of-day numbers as rows named by `history.columns`; `history.today` is now.
+2. Answer in Russian in three or four lines about trends: «знаю» (`known`) and «помню ≈» (`memorized`, rounded) then vs now, how many words moved from «новых» to «учу», «Верно» per month against the 90 % target (`retention`), the days studied (`active_days` of the range). Name the streak (`streak.current`, `streak.best`) at most once, plainly; never press to keep it, never scold for missed days. Days without a row were simply not saved; don't call them gaps in study.
 
 ### «План повторения»: «давай 15 новых слов в день», «новые по темам», «без обратной стороны»
 

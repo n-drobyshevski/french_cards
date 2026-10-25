@@ -275,6 +275,13 @@ const PATHS = {
       <path d="M5 3a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2 1 1 0 0 1 1 1v1a2 2 0 0 1-2 2 1 1 0 0 0-1 1v2a1 1 0 0 0 1 1 6 6 0 0 0 6-6V5a2 2 0 0 0-2-2z" />
     </>
   ),
+  /** «Прогресс» in the phone library header: a line chart on two axes (mockups/Progress-Entry.dc.html). */
+  chart: (
+    <>
+      <path d="M4 4v16h16" />
+      <path d="m7.5 15 3.5-4 3 2.5 5-6.5" />
+    </>
+  ),
 } as const;
 
 export type IconName = keyof typeof PATHS;

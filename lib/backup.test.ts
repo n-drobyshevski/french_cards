@@ -45,6 +45,7 @@ describe("export", () => {
     expect(file.tables.review_state).toHaveLength(4);
     expect(file.tables.review_log).toHaveLength(1);
     expect(file.tables.reorg_runs).toEqual([]);
+    expect(file.tables.progress_days).toEqual([]);
     expect(file.tables.settings[0]).toMatchObject({ new_per_day: 7 });
     expect((file.tables.words as Word[]).find((w) => w.id === gone.id)?.deleted_at).not.toBeNull();
   });
@@ -293,6 +294,22 @@ describe("import", () => {
     const old = await importBackup({ format: "kartochki-backup", version: 1, exported_at: T0.toISOString(), tables: { words: [], folders: [] } });
     expect(old.exercise_sets).toEqual({ inserted: 0, updated: 0, skipped: 0, deleted: 0 });
     expect(await db.exercise_sets.count()).toBe(0);
+  });
+
+  it("round-trips «Прогресс» days and skips malformed ones", async () => {
+    const day = {
+      id: "2026-10-20", known: 3, learning: 2, fresh: 1, difficult: 1, paused: 0, total: 6, memorized: 4.2, reviews: 12, again: 2,
+      new_introduced: 1, added: 0, source: "live", algo: "v5.4.2 using FSRS-6.0", updated_at: T0.toISOString(), deleted_at: null,
+    };
+    const res = await importBackup({
+      format: "kartochki-backup",
+      version: 1,
+      exported_at: T0.toISOString(),
+      tables: { progress_days: [day, { ...day, id: "2026-10-21", known: "3" }] },
+    });
+    expect(res.progress_days).toEqual({ inserted: 1, updated: 0, skipped: 1, deleted: 0 });
+    expect(await db.progress_days.get("2026-10-20")).toEqual(day);
+    expect((await exportBackup(later(30))).tables.progress_days).toEqual([day]);
   });
 
   it("rejects files that are not backups", () => {

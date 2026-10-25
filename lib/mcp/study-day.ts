@@ -79,3 +79,33 @@ export function studyDayStartBefore(start: Date, days: number, timeZone: string)
   const w = wallClock(start.getTime(), timeZone);
   return new Date(zonedInstant(w.year, w.month, w.day - days, DAY_START_HOUR, timeZone));
 }
+
+/** "YYYY-MM-DD" of the study day holding `at` on the zone's clock (before 04:00 = the previous date), as lib/core/progress.ts `dayKey` on a device in that zone. */
+export function studyDayKey(at: Date | number, timeZone: string): string {
+  const w = wallClock(typeof at === "number" ? at : at.getTime(), timeZone);
+  return new Date(Date.UTC(w.year, w.month - 1, w.day - (w.hour < DAY_START_HOUR ? 1 : 0))).toISOString().slice(0, 10);
+}
+
+/** When the study day `key` ("YYYY-MM-DD") starts: 04:00 on the zone's clock that date. */
+export function studyDayStartOf(key: string, timeZone: string): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(zonedInstant(y, m, d, DAY_START_HOUR, timeZone));
+}
+
+/**
+ * `studyDayKey` for many instants: remembers the last day's bounds, so instants in time order cost
+ * one zone lookup per day instead of one each.
+ */
+export function studyDayKeyer(timeZone: string): (at: number) => string {
+  let start = Infinity;
+  let end = -Infinity;
+  let key = "";
+  return (at) => {
+    if (at >= start && at < end) return key;
+    key = studyDayKey(at, timeZone);
+    const [y, m, d] = key.split("-").map(Number);
+    start = zonedInstant(y, m, d, DAY_START_HOUR, timeZone);
+    end = zonedInstant(y, m, d + 1, DAY_START_HOUR, timeZone);
+    return key;
+  };
+}

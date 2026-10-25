@@ -19,7 +19,7 @@ describe("globalKeyAction", () => {
     expect(globalKeyAction(key("KeyG", "g"))).toEqual({ type: "sequence" });
   });
 
-  it("finishes G sequences with R, E, L, C or I", () => {
+  it("finishes G sequences with R, E, L, P, C or I", () => {
     expect(globalKeyAction(key("KeyR", "r"), true)).toEqual({ type: "go", href: "/" });
     expect(globalKeyAction(key("KeyE", "e"), true)).toEqual({ type: "go", href: "/exercises" });
     expect(globalKeyAction(key("KeyE", "у"), true)).toEqual({ type: "go", href: "/exercises" });
@@ -28,6 +28,8 @@ describe("globalKeyAction", () => {
     expect(globalKeyAction(key("KeyL", "д"), true)).toEqual({ type: "go", href: "/library" });
     expect(globalKeyAction(key("KeyI", "i"), true)).toEqual({ type: "go", href: "/import" });
     expect(globalKeyAction(key("KeyC", "с"), true)).toEqual({ type: "go", href: "/context" });
+    expect(globalKeyAction(key("KeyP", "p"), true)).toEqual({ type: "go", href: "/progress" });
+    expect(globalKeyAction(key("KeyP", "з"), true)).toEqual({ type: "go", href: "/progress" });
     expect(globalKeyAction(key("KeyN", "n"), true)).toBeNull();
     expect(globalKeyAction(key("KeyR", "r"))).toBeNull();
   });
@@ -53,6 +55,14 @@ describe("globalKeyAction", () => {
     for (const ev of [key("KeyN", "n"), key("KeyG", "g"), key("BracketLeft", "["), key("Slash", "/")]) {
       expect(reviewKeyAction(ev, { revealed: true, gradeButtons: 3 })).toBeNull();
     }
+  });
+
+  it("keeps a bare P for «Ещё практика»; only G then P opens «Прогресс»", () => {
+    const p = key("KeyP", "p");
+    expect(globalKeyAction(p)).toBeNull();
+    expect(reviewKeyAction(p, { revealed: false, gradeButtons: 3, desktop: true, done: true })).toEqual({ type: "practice" });
+    expect(globalKeyAction(p, true)).toEqual({ type: "go", href: "/progress" });
+    expect(globalKeyAction(key("KeyP", "P", { shiftKey: true }), true)).toBeNull();
   });
 });
 

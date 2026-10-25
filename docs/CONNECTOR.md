@@ -1,6 +1,6 @@
 # Claude connector («Карточки» in the Claude apps)
 
-The app serves a remote MCP server at `/api/mcp/<MCP_SECRET>`. Added once as a custom connector on claude.ai, it works in Claude on the web, desktop and mobile, and in Claude Code signed in with the same account. Claude can then search, add, edit, move, delete and restore words, fill in custom fields («Свои поля»), undo moves, create themes, read today's study numbers and write exercise sets («Упражнения») for the app to play. Grading reviews and playing exercises stay in the app.
+The app serves a remote MCP server at `/api/mcp/<MCP_SECRET>`. Added once as a custom connector on claude.ai, it works in Claude on the web, desktop and mobile, and in Claude Code signed in with the same account. Claude can then search, add, edit, move, delete and restore words, fill in custom fields («Свои поля»), undo moves, create themes, read today's study numbers and the «Прогресс» history and write exercise sets («Упражнения») for the app to play. Grading reviews and playing exercises stay in the app.
 
 An optional skill (`claude/skills/kartochki/`) teaches Claude the card conventions: the slang-level rubric, verlan, translation and example style, when to ask before changing anything, and recipes. The connector works without it.
 
@@ -21,6 +21,7 @@ An optional skill (`claude/skills/kartochki/`) teaches Claude the card conventio
 - **No subscriptions:** the server's tool list never changes, so it refuses `subscriptions/listen` streams (`maxSubscriptions: 0`) instead of holding a function open.
 - **Rate limit:** write tools take a token from the in-memory `mcp` bucket (`lib/ai/rate-limit.ts`, 20 in a burst, then one per 3 s). An exhausted bucket gives an `isError` tool result; `initialize` and `tools/list` are never limited.
 - **«Сегодня»:** `study_summary` computes the 04:00-to-04:00 study day in `MCP_TIMEZONE` (`lib/mcp/study-day.ts`) and plans it with `planDay` (`lib/core/plan.ts`) and the synced «План повторения» (`user_prefs` `study_plan`), as the app does. Without a saved plan it uses the default migrated from 15 cards a day (8 words); a device with another «Новых в день» saves its migrated plan after a sync. The one-day «Всё равно добавить новые» is device-local and not seen here.
+- **«Прогресс»:** `study_summary` `history_days` (1–365) adds `history`, see below.
 
 ## Tools
 
@@ -33,7 +34,7 @@ An optional skill (`claude/skills/kartochki/`) teaches Claude the card conventio
 | `update_field` | write | Rename a field, change its hint or auto_fill, or move it (`position`, 1-based); returns `previous` for undo. Values on cards follow the new name. |
 | `delete_field` | write | Soft-deletes a shared field; cards keep their values as one-off fields. Undo: `restore_field`. |
 | `restore_field` | write | Brings a deleted field back by id. |
-| `study_summary` | read | Cards due today, new cards left, reviews done, words by status, words due soonest, and `plan`: today's new-word budget and why (`reason`), RU→FR unlocks, deferred reviews, the week's forecast, and the saved settings (`plan.settings`). `new_per_day` plans a «what if» without saving. |
+| `study_summary` | read | Cards due today, new cards left, reviews done, words by status, words due soonest, and `plan`: today's new-word budget and why (`reason`), RU→FR unlocks, deferred reviews, the week's forecast, and the saved settings (`plan.settings`). `new_per_day` plans a «what if» without saving. `history_days` (1–365) adds `history` («Прогресс»: saved days, today, streak, «Верно»). |
 | `update_study_plan` | write | Changes «План повторения», the same synced setting as the app's Settings → «План повторения»: any of `new_words` (0–30 a day, a ceiling), `review_cap` (50–999, null = none), `new_order` (`level` / `themes` / `added`), `mix` (`mixed` / `after`), `ru_fr` (`after` / `together` / `recognition`); the rest stay. Returns `plan`, `changed`, `previous` and `undo` (`update_study_plan` with the previous plan). Needs migration `0015_connector_study_plan.sql`. |
 | `add_words` | write | 1–50 words with every field, custom fields included; skips duplicates by lemma (`on_duplicate: "add"` overrides); `folder_chosen_by_user` (per call, or per word) decides `folder_source`. Returns the ids for undo. |
 | `update_word` | write | Patches one word's text, example, note, tags, part of speech, slang level, verlan, «Уровень языка» (`cefr`), custom fields, `origin`, a verb's `conjugation` or `muted` («на паузе»); `both_directions` adds or removes the RU→FR card. |
@@ -80,6 +81,16 @@ The shared definitions are edited in the app (Settings → «Свои поля»
 - **A whole theme:** `update_folder` `muted: true` pauses every word of the theme (`false` brings them back with their progress). `list_folders` marks it `muted: true` and gives every theme a `new` count (words never reviewed); `search_words` marks its words `theme_muted: true`; `study_summary` lists `muted_themes` and leaves their words out of the due and new counts. Storage: `folders.muted`, migration `0010_folder_muted.sql`.
 - **Proposals:** the server instructions ask Claude to suggest pausing themes that look like later steps of a sequence (levels, lessons, chapters) or that the user said can wait, when many themes still hold new words — naming them and waiting for the OK, never pausing on its own.
 
+### «Прогресс» (`study_summary` `history_days`)
+The app saves the library's end-of-day numbers once per finished study day in the synced `progress_days` table (`lib/progress.ts` `ensureProgressDays`, migration `0016_progress_days.sql`, which grants `service_role` `select`); the connector only reads it (`repo.progressDays()`), and never writes or replays days. With `history_days: N`, `study_summary` adds:
+- `from` / `to`: the range, today − N + 1 to today (study days in `MCP_TIMEZONE`).
+- `columns` + `days`: the stored rows of the range as arrays, ascending — `day, known («знаю»), learning («учу»), fresh («новых»), paused («на паузе»), difficult («трудных», part of learning), memorized («помню ≈», 1 decimal), reviews, again, new_introduced, added, source (live | replay)`. Days without a row are missing; today is never stored.
+- `today`: the same counts now (`countsFromStates`).
+- `active_days` (in the range) and `streak: { current, best }` (`streaks`): a day is active with a live `review_log` row or a finished exercise run; days before the logs read (the 1st of `from`'s month) count from their stored row's `reviews`, as the app's calendar does.
+- `retention`: «Верно», true retention (the first live log of each card per study day, when it came as a review card; passed = rating > 1) for the range and per calendar month from `from`'s month (`retentionOf`), with `target` 0.9 (`TARGET_RETENTION`); rates have 2 decimals, months without counted reviews are left out.
+
+The rules are the shared pure ones in `lib/core/progress.ts`; their day keys follow the device clock, so the connector keys every log, run and row by `MCP_TIMEZONE` instead (`lib/mcp/study-day.ts` `studyDayKey`, `lib/mcp/history.ts`). Without migration 0016 a call with `history_days` fails with a database error (plain `study_summary` does not read the table).
+
 ### Упражнения
 Claude writes Duolingo-style question sets through the connector; the app plays them offline from its synced copy and never asks the API for them. Exercises never write `review_state` or `review_log`.
 - **Storage:** `exercise_sets` and `exercise_runs`, migration `0011_exercises.sql`, synced like the other tables. The connector writes a set's content once and later only its `deleted_at` (delete / restore); the app only sets `deleted_at` too. Runs are written only by the device that plays them (one row per playthrough, upserted after each answer), so the connector reads them and never writes them. `service_role` has `select, insert, update` on `exercise_sets` and `select` on `exercise_runs`.
@@ -103,7 +114,7 @@ Claude writes Duolingo-style question sets through the connector; the app plays 
    - `MCP_TIMEZONE` (optional): your IANA time zone, for example `Europe/Moscow`. The default is `Europe/Paris`.
 
    Then redeploy.
-   Apply `supabase/migrations/0005_connector_grants.sql`, `0006_custom_fields.sql`, `0007_connector_field_writes.sql`, `0008_word_origin_conjugation.sql`, `0009_word_muted.sql`, `0010_folder_muted.sql`, `0011_exercises.sql`, `0012_user_prefs.sql`, `0013_exercise_scope.sql`, `0014_word_level.sql` and `0015_connector_study_plan.sql` if you haven't (README, step 1). Without 0011, `exercise_material` and the exercise-set tools fail with a database error, and so do `exercise_material` and `create_exercise_set` without 0012, `create_exercise_set` without 0013, and `add_words`, `update_word` and `set_word_levels` without 0014 (the app's sync fails too, so apply them before deploying), and `update_study_plan` without 0015.
+   Apply `supabase/migrations/0005_connector_grants.sql`, `0006_custom_fields.sql`, `0007_connector_field_writes.sql`, `0008_word_origin_conjugation.sql`, `0009_word_muted.sql`, `0010_folder_muted.sql`, `0011_exercises.sql`, `0012_user_prefs.sql`, `0013_exercise_scope.sql`, `0014_word_level.sql`, `0015_connector_study_plan.sql` and `0016_progress_days.sql` if you haven't (README, step 1). Without 0011, `exercise_material` and the exercise-set tools fail with a database error, and so do `exercise_material` and `create_exercise_set` without 0012, `create_exercise_set` without 0013, and `add_words`, `update_word` and `set_word_levels` without 0014 (the app's sync fails too, so apply them before deploying), `update_study_plan` without 0015, and `study_summary` with `history_days` without 0016.
 3. Check the endpoint. A wrong key must give `404`, with no redirect:
    ```sh
    curl -s -o /dev/null -w "%{http_code}\n" -X POST https://frenchcards.vercel.app/api/mcp/wrong
