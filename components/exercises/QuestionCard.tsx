@@ -5,10 +5,10 @@ import { CardHeader, cardShell } from "@/components/review/card-parts";
 import { posAbbr } from "@/components/review/format";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
-import { SLANG_NAMES_RU, SlangMeter } from "@/components/ui/SlangMeter";
+import { SlangMeter } from "@/components/ui/SlangMeter";
 import { TENSE_NAMES } from "@/lib/core/conj-display";
-import { CLOZE_PROMPT, CONJ_PROMPT, PAIRS_PROMPT, REGISTER_LEVELS, REGISTER_PROMPT, clozeParts } from "@/lib/core/exercises";
-import type { ExerciseItem, ExerciseSkill, SlangLevel } from "@/lib/types";
+import { CLOZE_PROMPT, CONJ_PROMPT, PAIRS_PROMPT, clozeParts } from "@/lib/core/exercises";
+import type { ExerciseItem, ExerciseSkill } from "@/lib/types";
 import { ClozeLine } from "./ClozeLine";
 import { isRussian } from "./player-state";
 import type { StampPlace } from "./Stamp";
@@ -28,8 +28,6 @@ export function cardLabel(item: Pick<ExerciseItem, "type" | "skill" | "ask"> & P
       return { label: "Спряжение", detail: item.tense ? (TENSE_NAMES[item.tense] ?? null) : null };
     case "cloze":
       return { label: "Пропуск", detail: null };
-    case "register":
-      return { label: "Регистр", detail: null };
     case "pairs":
       return { label: "Пары", detail: null };
     case "choice": {
@@ -38,12 +36,15 @@ export function cardLabel(item: Pick<ExerciseItem, "type" | "skill" | "ask"> & P
         skill === "meaning" ? (item.ask === "ru" ? "RU → FR" : "FR → RU") : skill === "form" || skill === "situation" ? "RU → FR" : null;
       return { label: SKILL_LABEL[skill], detail };
     }
+    default:
+      // An old register item never reaches the card (it is not played).
+      return { label: "", detail: null };
   }
 }
 
 /**
- * The slang meter shows in the header only where it gives nothing away: not on register items (it is
- * the question), not on situation / neutral choices (it would hint at the answer), not on cloze and pairs.
+ * The slang meter shows in the header only where it gives nothing away: not on situation / neutral
+ * choices (it would hint at the answer), not on cloze and pairs.
  */
 export function showsMeter(item: Pick<ExerciseItem, "type" | "skill" | "word">): boolean {
   if (!item.word || item.type !== "choice") return false;
@@ -161,7 +162,7 @@ export interface Written {
 /**
  * The question as the review index card (SPEC.md «Упражнения» → Player): 46px header with the red
  * rule — mono skill label left (ЗНАЧЕНИЕ · FR → RU / ФОРМА · RU → FR / ВЕРЛАН / СИТУАЦИЯ / ПРОПУСК /
- * РЕГИСТР / ПАРЫ / СПРЯЖЕНИЕ · PASSÉ COMPOSÉ), «ПОВТОР» on a requeued item, the slang meter right — the question, the stamp, and
+ * ПАРЫ / СПРЯЖЕНИЕ · PASSÉ COMPOSÉ), «ПОВТОР» on a requeued item, the slang meter right — the question, the stamp, and
  * the footer «НАБОР: … · ИЗ ЧАТА». From 768 a 296px card. Phones (`phone`, X-Player-B):
  * PhoneQuestionCard below.
  */
@@ -202,19 +203,6 @@ export function QuestionCard(props: QuestionCardProps) {
           {item.sentence_ru && <p className="m-0 mt-3 text-[15px] leading-5 text-muted">{item.sentence_ru}</p>}
           {/* Phones: the dashed gap asks it on screen (L-ExPlayer-B); screen readers still hear it. */}
           <p className={cx(question, "max-md:sr-only md:mt-3")}>{item.prompt ?? CLOZE_PROMPT}</p>
-        </>
-      );
-      break;
-    case "register":
-      body = (
-        <>
-          <Prompt text={word?.fr ?? item.prompt ?? ""} />
-          {word && (
-            <span className="mt-2 font-serif text-[15px] leading-5 text-muted italic md:text-[17px] md:leading-6">
-              {pos && <span lang="fr">{pos} </span>}— {word.ru}
-            </span>
-          )}
-          <p className={question}>{item.prompt ?? REGISTER_PROMPT}</p>
         </>
       );
       break;
@@ -312,9 +300,8 @@ function QuestionHeader({ item, repeat, pairsCount }: { item: ExerciseItem; repe
 
 // --- Phones (X-Player-B) ------------------------------------------------------------------------
 
-/** The French word on the card: the register item's word, else the prompt (or the item's word). */
-function headwordText(item: Pick<ExerciseItem, "type" | "prompt" | "word">): string {
-  if (item.type === "register") return item.word?.fr ?? item.prompt ?? "";
+/** The French word on the card: the prompt (or the item's word). */
+function headwordText(item: Pick<ExerciseItem, "prompt" | "word">): string {
   return item.prompt ?? item.word?.fr ?? "";
 }
 
@@ -340,10 +327,11 @@ export function stampPlace(item: Pick<ExerciseItem, "type" | "prompt" | "word" |
     }
     case "conjugate":
       return text.length <= 14 ? "line1" : "head";
-    case "register":
     case "choice":
       if (isParagraph(text)) return "head";
       return text.length <= (isRussian(text) ? 11 : 9) ? "line1" : "head";
+    default:
+      return "head";
   }
 }
 
@@ -379,14 +367,11 @@ const LEAD = "shrink-0 pb-0.5 font-serif text-[28px] leading-7 text-boundary";
 function AnswerLine({
   lead,
   written,
-  empty,
   right,
   wrong,
 }: {
   lead: ReactNode;
   written: Written | null;
-  /** Before the dashes while asked (the register item's empty meter). */
-  empty?: ReactNode;
   /** The right answer as written (default: the text, French in Newsreader). */
   right?: ReactNode;
   /** The wrong pick as written (default: the text, struck through). */
@@ -396,7 +381,6 @@ function AnswerLine({
     return (
       <div className="mt-[22px] flex h-11 items-end gap-2.5">
         {lead}
-        {empty}
         <span aria-hidden="true" className="mb-1 h-0 min-w-8 flex-1 border-b-[1.5px] border-dashed border-boundary" />
       </div>
     );
@@ -453,27 +437,17 @@ function ExplainLine({ text, answered, ruled = false, indent = false }: { text: 
   );
 }
 
-/** The register item's blank: the meter's four segments as empty outlines. */
-const EMPTY_METER = (
-  <span aria-hidden="true" className="mb-[5px] inline-flex shrink-0 gap-[2px]">
-    {[0, 1, 2, 3].map((i) => (
-      <span key={i} className="h-[5px] w-3.5 border border-boundary" />
-    ))}
-  </span>
-);
-
 /**
  * The phone question card (X-Player-B): the index card sized to its content on a small deck (the
  * player draws the edges), the headword and under it the dashed blank «= ____» where the answer is
  * written once given — the stamp beside it, then explain_ru. The French word on the card opens the
- * word sheet after the answer. Cloze: the gap in the sentence is the blank. Register: an empty meter
- * blank. Pairs: the board's rows (the player passes them as children). Conjugate: the infinitive,
- * then the pronouns with the blank, the tense in the header. No set footer, no repeat line (the
- * ПОВТОР tag and the hollow tick say it).
+ * word sheet after the answer. Cloze: the gap in the sentence is the blank. Pairs: the board's
+ * rows (the player passes them as children). Conjugate: the infinitive, then the pronouns with the
+ * blank, the tense in the header. No set footer, no repeat line (the ПОВТОР tag and the hollow tick
+ * say it).
  */
 function PhoneQuestionCard({ item, attempt, answered, pairsCount, stamp, children, written = null, explain = null, onWord = null }: QuestionCardProps) {
   const word = item.word;
-  const pos = word ? posAbbr(word) : null;
   const fr = word?.fr ?? headwordText(item);
   const open = answered && onWord ? { fr, onWord } : null;
   const shown = answered ? written : null;
@@ -523,44 +497,6 @@ function PhoneQuestionCard({ item, attempt, answered, pairsCount, stamp, childre
         </>
       );
       break;
-    case "register": {
-      const level = (lv: string) => (REGISTER_LEVELS as readonly string[]).indexOf(lv);
-      const right = shown ? level(shown.right) : -1;
-      body = (
-        <>
-          <Prompt text={word?.fr ?? item.prompt ?? ""} open={open} />
-          {pos && (
-            <span lang="fr" className="mt-1 font-serif text-[15px] leading-5 text-muted italic">
-              {pos}
-            </span>
-          )}
-          {/* The empty meter asks it on screen; screen readers still hear it. */}
-          <p className="sr-only">{item.prompt ?? REGISTER_PROMPT}</p>
-          <AnswerLine
-            lead={equals}
-            written={shown}
-            empty={EMPTY_METER}
-            wrong={
-              shown?.wrong && (
-                <s lang={level(shown.wrong) === 0 ? "ru" : "fr"} className="font-serif text-[17px] leading-6 text-again italic decoration-[1.5px]">
-                  {shown.wrong}
-                </s>
-              )
-            }
-            right={
-              right >= 0 && (
-                <span className="inline-flex items-center gap-3 self-center">
-                  <SlangMeter level={right as SlangLevel} size="lg" showLabel={false} />
-                  <span className="text-[17px] leading-6 font-medium text-good">{SLANG_NAMES_RU[right]}</span>
-                </span>
-              )
-            }
-          />
-          <ExplainLine text={explain} answered={answered} indent />
-        </>
-      );
-      break;
-    }
     case "pairs":
       body = (
         <>

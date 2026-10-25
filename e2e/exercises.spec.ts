@@ -13,7 +13,7 @@ import {
 
 // «Упражнения» on phones (SPEC.md «Упражнения»; plan picks D1 B, D3 B, D4 C, D5 C, D6 B, D7 A).
 // Sets come from the chat through sync; here they are put straight into IndexedDB (SLANG_SET:
-// choice «les flics», cloze «vas-y», register «se casser», pairs, and the new web word «avoir la
+// choice «les flics», cloze «vas-y», choice «se casser», pairs, and the new web word «avoir la
 // flemme» with its intro card). Items play in the set's order; a miss comes back after 3 others.
 
 const stamp = (page: Page, verdict: "right" | "wrong") => page.locator(`[data-exercise-stamp="${verdict}"]`);
@@ -133,9 +133,9 @@ test("a round: wrong → «ПОВТОР», right waits for «Дальше» too,
   await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "cloze");
   await next(page).click();
 
-  // q3 register, right.
+  // q3 choice, right.
   await expect(exerciseCard(page)).toContainText("se casser");
-  await page.locator('button[data-option="3"]').click(); // arg. (level 2)
+  await optionTile(page, "свалить").click();
   await expect(stamp(page, "right")).toBeVisible();
   await goOn(page);
 
@@ -222,8 +222,8 @@ test("a new word's question comes right after its intro card, even when a miss c
   await goOn(page);
   await optionTile(page, "vas-y").click();
   await goOn(page);
-  await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "register");
-  await page.locator('button[data-option="3"]').click();
+  await expect(exerciseCard(page)).toContainText("se casser");
+  await optionTile(page, "свалить").click();
   await goOn(page);
   const intro = page.getByRole("article", { name: "Новое слово" });
   await expect(intro).toBeVisible({ timeout: 4000 });
@@ -329,8 +329,8 @@ test("× on the last card, once answered, finishes the run", async ({ page }) =>
   await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "cloze");
   await optionTile(page, "vas-y").click();
   await goOn(page);
-  await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "register");
-  await page.locator('button[data-option="3"]').click();
+  await expect(exerciseCard(page)).toContainText("se casser");
+  await optionTile(page, "свалить").click();
   await goOn(page);
   await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "pairs");
   await matchAllPairs(page);

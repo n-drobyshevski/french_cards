@@ -58,10 +58,10 @@ async function fixture(opts: { folders?: string[]; id?: string; createdAt?: Date
       items: [
         { type: "choice", word_id: meuf.id, distractors: ["a", "b", "c"] },
         { type: "cloze", word_id: kiffer.id, sentence: "J'ai [[kiffé]].", distractors: ["x", "y", "z"] },
-        { type: "register", word_id: bagnole.id },
+        { type: "choice", skill: "neutral", word_id: bagnole.id, prompt: "la bagnole", answer: "la voiture", distractors: ["g", "h", "i"] },
         { type: "pairs", pairs: [thune.id, keuf.id, daron.id, meuf.id] },
         { type: "choice", skill: "meaning", ask: "ru", new_ref: "n1", distractors: ["d", "e", "f"] },
-        { type: "register", new_ref: "n2" },
+        { type: "cloze", new_ref: "n2", sentence: "Grosse [[teuf]] ce soir.", distractors: ["j", "k", "l"] },
       ],
     },
     contextFromWords(words),

@@ -3,8 +3,8 @@
 // sides import it. The item contract is documented on ExerciseItem in lib/types.ts.
 //
 // Server side: `completeSet(input, ctx)` fills the server-written parts (ids, word snapshots, the
-// choice/meaning prompt and answer, the register answer, pairs tiles, the conjugate answer, gap and
-// distractors from the verb's conjugation), then `validateSet(set, ctx)`
+// choice/meaning prompt and answer, pairs tiles, the conjugate answer, gap and distractors from the
+// verb's conjugation), then `validateSet(set, ctx)`
 // refuses a broken set with path-precise errors and `warningsFor(set)` lists what is merely weak.
 // App side: `optionsFor`, `clozeParts`, `pairsBoard`, `buildQueue` / `requeue` / `resumeQueue`,
 // `scoreRun`, `missedWords`, and the request texts the user copies into Claude.
@@ -13,7 +13,6 @@ import { cleanConjugation, conjugate, type ConjData } from "./conjugate";
 import { CEFR_LEVELS, isCefr, type Cefr } from "./level";
 import { isRussian, normalizeLemma, searchKey } from "./text";
 import {
-  SLANG_LABELS,
   type Conjugation,
   type ExerciseAnswer,
   type ExerciseItem,
@@ -37,13 +36,24 @@ import {
 /** Set ids are "x-" + sha256(client_ref) (computed on the server with node crypto). */
 export const EXERCISE_ID_PREFIX = "x-";
 
+/**
+ * Every item type a stored set can hold: what old rows and backups are read with. «register» (pick
+ * нейтр. / fam. / arg. / vulg.) is no longer made or played; its items stay in old sets only.
+ */
 export const EXERCISE_ITEM_TYPES: readonly ExerciseItemType[] = ["choice", "cloze", "register", "pairs", "conjugate"];
+/**
+ * The item types still made and played. Anything else in a stored set (an old register item, a type
+ * a newer connector invents) is left out of the round, its score and its count, as if it were not there.
+ */
+export const PLAYED_ITEM_TYPES: readonly ExerciseItemType[] = ["choice", "cloze", "pairs", "conjugate"];
+/** An item of a type the player plays (PLAYED_ITEM_TYPES). */
+export const isPlayedItem = (item: Pick<ExerciseItem, "type">): boolean => PLAYED_ITEM_TYPES.includes(item.type);
+/** The items of a set that count: its played ones, in set order («8 вопросов», the round, the score). */
+export const playedItems = <I extends Pick<ExerciseItem, "type">>(items: readonly I[]): I[] => items.filter(isPlayedItem);
 export const EXERCISE_SKILLS: readonly ExerciseSkill[] = ["meaning", "form", "neutral", "verlan", "situation"];
 /** A conjugate item's tense and person, in the conjugation table's order (person index = form index). */
 export const EXERCISE_TENSES: readonly ExerciseTense[] = CONJ_TENSE_ORDER;
 export const EXERCISE_PERSONS: readonly ExercisePerson[] = ["je", "tu", "il", "nous", "vous", "ils"];
-/** The register item's four options, in level order: index = slang_level. */
-export const REGISTER_LEVELS = SLANG_LABELS;
 
 export const ITEMS_MIN = 6;
 export const ITEMS_MAX = 20;
@@ -70,7 +80,6 @@ export const CONJUGATE_MAX = 10;
 
 export const CLOZE_PROMPT = "Какое слово пропущено?";
 export const PAIRS_PROMPT = "Соедини слово и перевод";
-export const REGISTER_PROMPT = "Насколько это разговорно?";
 export const CONJ_PROMPT = "Какая форма?";
 
 // ---------------------------------------------------------------------------------------------
@@ -327,8 +336,8 @@ export function conjugateDistractors(conj: Conjugation, tense: ExerciseTense, id
 /**
  * The set as it is stored: ids "q1".."qN" where missing, defaults (choice → skill "meaning",
  * meaning → ask "fr"), `null` / `[]` for absent fields, word snapshots, the choice/meaning prompt
- * and answer when left out, the register answer from the word's level, the cloze answer from its
- * span when left out, and the pairs tiles. Unknown refs stay unresolved for `validateSet` to report.
+ * and answer when left out, the cloze answer from its span when left out, and the pairs tiles.
+ * Unknown refs stay unresolved for `validateSet` to report.
  */
 export function completeSet(input: ExerciseSetInput, ctx: ExerciseContext): ExerciseSetContent {
   const newWords: ExerciseNewWord[] = (input.new_words ?? []).map((w) => ({
@@ -382,7 +391,6 @@ export function completeSet(input: ExerciseSetInput, ctx: ExerciseContext): Exer
       answer ??= ask === "ru" ? word.fr : (ruEquivalents(word.ru)[0] ?? word.ru);
     }
     if (type === "cloze" && !answer && sentence) answer = clozeParts(sentence)?.answer ?? null;
-    if (type === "register") answer = word ? REGISTER_LEVELS[word.slang_level] : null;
     if (conjugateItem) {
       // The form comes from the verb's conjugation, whatever answer or sentence was sent.
       answer = null;
@@ -588,10 +596,8 @@ export function validateSet(set: ExerciseSetContent, ctx: ExerciseContext): Exer
         break;
       }
       case "register":
-        checkRef(p, item);
-        if (!item.word || !isLevel(item.word.slang_level)) err(`${p}.word`, "a register item needs a word with a slang_level");
-        else if (item.answer !== REGISTER_LEVELS[item.word.slang_level]) err(`${p}.answer`, `must be «${REGISTER_LEVELS[item.word.slang_level]}»`);
-        checkEmpty(p, item, "register items use the four levels as options; leave distractors empty");
+        // Old sets keep theirs (left out of play); a new one is refused.
+        err(`${p}.type`, `register items are no longer made; use one of ${PLAYED_ITEM_TYPES.join(", ")}`);
         break;
       case "pairs": {
         const list = Array.isArray(item.pairs) ? item.pairs : [];
@@ -646,7 +652,7 @@ export function validateSet(set: ExerciseSetContent, ctx: ExerciseContext): Exer
         break;
       }
       default:
-        err(`${p}.type`, `one of ${EXERCISE_ITEM_TYPES.join(", ")}`);
+        err(`${p}.type`, `one of ${PLAYED_ITEM_TYPES.join(", ")}`);
     }
   });
 
@@ -763,9 +769,10 @@ export function warningsFor(set: Pick<ExerciseSet, "items" | "new_words">): Exer
   const out: ExerciseWarning[] = [];
   const items = set.items;
 
-  const types = new Set(items.map((i) => i.type));
-  if (types.size < 3 && !isVerbSet(items)) {
-    out.push({ code: "few_types", message: `only ${types.size} item type(s); use at least 3 (${EXERCISE_ITEM_TYPES.join(", ")})` });
+  // Only the types still played count: an old register item adds no variety the user sees.
+  const types = new Set(playedItems(items).map((i) => i.type));
+  if (types.size < 3 && !isVerbSet(playedItems(items))) {
+    out.push({ code: "few_types", message: `only ${types.size} item type(s); use at least 3 (${PLAYED_ITEM_TYPES.join(", ")})` });
   }
 
   const optioned = items.filter((i) => (i.type === "choice" || i.type === "cloze") && i.answer && (i.distractors ?? []).length > 0);
@@ -778,7 +785,7 @@ export function warningsFor(set: Pick<ExerciseSet, "items" | "new_words">): Exer
   }
 
   items.forEach((item, i) => {
-    if (!item.answer || item.type === "register" || item.type === "pairs") return;
+    if (!item.answer || !isPlayedItem(item) || item.type === "pairs") return;
     // A fr→ru meaning item is answered by any of the word's equivalents: look for each one.
     const forms =
       item.type === "choice" && item.skill === "meaning" && item.ask === "fr" && item.word
@@ -852,15 +859,11 @@ export interface ExerciseOptions {
 
 /**
  * The options of an item as the grid shows them: choice / cloze shuffle the answer among its
- * distractors (reshuffle on each attempt with a new `random`); register lists the four levels in
- * order (index = slang_level); pairs has none (see `pairsBoard`).
+ * distractors (reshuffle on each attempt with a new `random`); pairs (and a type no longer played)
+ * has none (see `pairsBoard`).
  */
 export function optionsFor(item: ExerciseItem, random: () => number = Math.random): ExerciseOptions {
-  if (item.type === "register") {
-    const level = item.word && isLevel(item.word.slang_level) ? item.word.slang_level : REGISTER_LEVELS.indexOf(item.answer as (typeof REGISTER_LEVELS)[number]);
-    return { options: [...REGISTER_LEVELS], correct: level };
-  }
-  if (item.type === "pairs" || !item.answer) return { options: [], correct: -1 };
+  if (item.type === "pairs" || !isPlayedItem(item) || !item.answer) return { options: [], correct: -1 };
   const distractors = item.distractors ?? [];
   const order = shuffled([0, ...distractors.map((_, i) => i + 1)], random);
   const all = [item.answer, ...distractors];
@@ -889,11 +892,15 @@ export interface QueueOptions {
   blocked?: ReadonlySet<string>;
 }
 
-/** The items a run plays, in set order. */
+/**
+ * The items a run plays, in set order. Only played types: an old run that listed a register item
+ * neither waits for it (runSettled) nor counts it (scoreRun, `total`).
+ */
 export function runItems(set: Pick<ExerciseSet, "items">, itemIds?: readonly string[]): ExerciseItem[] {
-  if (!itemIds || itemIds.length === 0) return [...set.items];
+  const items = playedItems(set.items);
+  if (!itemIds || itemIds.length === 0) return items;
   const wanted = new Set(itemIds);
-  return set.items.filter((i) => wanted.has(i.id));
+  return items.filter((i) => wanted.has(i.id));
 }
 
 /**
@@ -1004,13 +1011,13 @@ export function resumeQueue(
 }
 
 /**
- * The items of a set that can still be played: choice / cloze / register / conjugate items about a
- * word in `blocked` (deleted or paused in the library since the set was made) and pairs boards with
- * such a word are left out, and so are items of a type this version of the app does not know (a set
- * written by a newer connector). Every item when nothing is blocked.
+ * The items of a set that can still be played: choice / cloze / conjugate items about a word in
+ * `blocked` (deleted or paused in the library since the set was made) and pairs boards with such a
+ * word are left out, and so are items of a type no longer played (PLAYED_ITEM_TYPES: an old
+ * register item, or a type a newer connector writes). Every played item when nothing is blocked.
  */
 export function playableItemIds(set: Pick<ExerciseSet, "items">, blocked: ReadonlySet<string>): string[] {
-  return set.items.filter((i) => EXERCISE_ITEM_TYPES.includes(i.type) && !itemWordKeys(i).some((k) => blocked.has(k))).map((i) => i.id);
+  return playedItems(set.items).filter((i) => !itemWordKeys(i).some((k) => blocked.has(k))).map((i) => i.id);
 }
 
 /** Items answered right on the first attempt with no miss in it (a pairs board can log misses before its last match). */
@@ -1106,7 +1113,7 @@ export function missedWords(run: Pick<ExerciseRun, "answers">, set: Pick<Exercis
         out.set(key, entry);
       }
       if (!entry.item_ids.includes(a.item_id)) entry.item_ids.push(a.item_id);
-      // A register miss picked a level label («arg.»), never a usable distractor.
+      // A miss on an old register item picked a level label («arg.»), never a usable distractor.
       if (a.chosen && item?.type !== "register" && !entry.chosen.includes(a.chosen)) entry.chosen.push(a.chosen);
     }
   }
@@ -1255,7 +1262,7 @@ export function buildFollowUpText(
   missed: readonly Pick<MissedWord, "fr">[],
 ): string {
   const scope = parseScope(set.scope);
-  const verbs = isVerbSet(set.items);
+  const verbs = isVerbSet(playedItems(set.items));
   const frs = [...new Set(missed.map((m) => m.fr))];
   const focus = frs.length ? `, с упором на ошибки: ${frs.join(", ")}` : "";
   const fresh = !scope && !verbs && set.new_words.length > 0 ? ", можно новые слова" : "";

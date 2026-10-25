@@ -225,8 +225,10 @@ describe("phone tiles (E1 A)", () => {
     expect(setKind(typed(["conjugate", "conjugate", "conjugate", "choice"]))).toBe("спряжение");
     expect(setKind(typed(["cloze", "cloze", "cloze", "choice", "pairs"]))).toBe("пропуски");
     expect(setKind(typed(["pairs", "pairs", "choice"]))).toBe("пары");
-    expect(setKind(typed(["register", "register", "register", "choice"]))).toBe("регистр");
-    expect(setKind(typed(["choice", "cloze", "register", "pairs"]))).toBeNull();
+    // Old register items are not played: they neither name a kind nor dilute one.
+    expect(setKind(typed(["register", "register", "register", "choice"]))).toBeNull();
+    expect(setKind(typed(["cloze", "register", "register", "cloze", "choice"]))).toBe("пропуски");
+    expect(setKind(typed(["choice", "cloze", "conjugate", "pairs"]))).toBeNull();
     expect(setKind(typed(["choice", "choice", "cloze"]))).toBeNull();
     expect(setKind([])).toBeNull();
   });
@@ -244,6 +246,9 @@ describe("phone tiles (E1 A)", () => {
     expect(tileLines(set({ title: "Полиция", folders: ["f-police"] }), names)).toEqual({ text: "", spoken: "8 вопросов" });
     expect(tileLines(set({ title: "Сленг на каждый день", folders: ["f-people", "f-emo"] }), names).text).toBe("Люди, Эмоции");
     expect(tileLines(set({ title: "Вечеринка" }), names).text).toBe("все темы");
+    // An old set's register items are not played, so not counted.
+    const old = set({ title: "Полиция", folders: ["f-police"], items: typed(["choice", "register", "cloze", "register", "pairs", "choice"]) });
+    expect(tileLines(old, names).spoken).toBe("4 вопроса");
   });
 
   it("counts the web words and keeps an own topic only when the title does not say it", () => {

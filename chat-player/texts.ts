@@ -14,7 +14,7 @@ const listed = (missed: readonly MissedWord[]) => missed.map((m) => `${m.fr} (${
 
 /**
  * «Упражнение «Сленг» в чате: 3 из 5 с первого раза; ошибки: les flics (копы). Не сохранено в Карточки.»
- * `saved`: the round was saved to the app (null: the user has not been asked by the player yet).
+ * `saved`: the round was saved to the app; a «Повторить ошибки» round is never saved on its own.
  */
 export function roundSummary(title: string, kind: "set" | "mistakes", score: RunScore, missed: readonly MissedWord[], saved: boolean): string {
   const head = kind === "mistakes" ? `Повтор ошибок упражнения «${title}» в чате` : `Упражнение «${title}» в чате`;

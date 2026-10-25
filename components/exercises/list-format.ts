@@ -1,5 +1,5 @@
 // Pure helpers for the «Упражнения» list (tiles, resume card, waiting line, request summaries).
-import { buildRequestText, isVerbSet, levelsText, parseScope, pickedLevels, runSettled, scoreRun, setLevelLabel, type ExerciseLevel } from "@/lib/core/exercises";
+import { buildRequestText, isVerbSet, levelsText, parseScope, pickedLevels, playedItems, runSettled, scoreRun, setLevelLabel, type ExerciseLevel } from "@/lib/core/exercises";
 import type { StripMark } from "@/components/ui/SessionStrip";
 import type { ExerciseItem, ExerciseItemType, ExerciseRun, ExerciseScope, ExerciseSet } from "@/lib/types";
 import { attemptMarks } from "./player-state";
@@ -63,11 +63,11 @@ export function setThemesLine(
 const KIND_NAMES: readonly (readonly [ExerciseItemType, string])[] = [
   ["cloze", "пропуски"],
   ["pairs", "пары"],
-  ["register", "регистр"],
 ];
 
-/** «спряжение», «пропуски», «пары», «регистр»; null for a mixed set (or mostly «choice»). */
-export function setKind(items: readonly Pick<ExerciseItem, "type">[]): string | null {
+/** «спряжение», «пропуски», «пары»; null for a mixed set (or mostly «choice»). Only played items count. */
+export function setKind(all: readonly Pick<ExerciseItem, "type">[]): string | null {
+  const items = playedItems(all);
   if (items.length === 0) return null;
   if (isVerbSet(items)) return "спряжение";
   for (const [type, name] of KIND_NAMES) if (items.filter((i) => i.type === type).length * 2 > items.length) return name;
@@ -122,7 +122,7 @@ export function tileLines(
   const web = fresh > 0 ? nWebWords(fresh) : "";
   return {
     text: [head, web && `+ ${web}`].filter(Boolean).join(" · "),
-    spoken: [head, nQuestions(set.items.length), spokenLevel(set), web].filter(Boolean).join(", "),
+    spoken: [head, nQuestions(playedItems(set.items).length), spokenLevel(set), web].filter(Boolean).join(", "),
   };
 }
 
@@ -261,7 +261,7 @@ export function similarRequest(
   names: ReadonlyMap<string, string>,
 ): { text: string; summary: string } {
   const scope = parseScope(set.scope);
-  const conjugation = isVerbSet(set.items);
+  const conjugation = isVerbSet(playedItems(set.items));
   const levels = pickedLevels(set);
   const choice: RequestChoice = scope
     ? { folders: [], topic: null, size: set.items.length, allowNew: false, scope, conjugation, levels }

@@ -647,7 +647,7 @@ export async function holdDatabase(page: Page): Promise<() => Promise<void>> {
 
 export interface ExerciseItemSeed {
   id: string;
-  type: "choice" | "cloze" | "register" | "pairs" | "conjugate";
+  type: "choice" | "cloze" | "pairs" | "conjugate";
   skill?: "meaning" | "form" | "neutral" | "verlan" | "situation" | null;
   ask?: "fr" | "ru" | null;
   /** Conjugate: the tense and person asked (sentence, answer and distractors as the server writes them). */
@@ -817,7 +817,7 @@ export async function dbRows<T = Record<string, unknown>>(page: Page, store: str
   );
 }
 
-/** «Сленг на каждый день»: choice, cloze, register, pairs and a new web word, on the first-run seed words. */
+/** «Сленг на каждый день»: choice, cloze, choice, pairs and a new web word, on the first-run seed words. */
 export const SLANG_SET: ExerciseSetSeed = {
   id: "x-e2e-slang",
   title: "Сленг на каждый день",
@@ -847,7 +847,7 @@ export const SLANG_SET: ExerciseSetSeed = {
       answer: "vas-y",
       distractors: ["arrête", "dépêche-toi", "une blague"],
     },
-    { id: "q3", type: "register", word: "se casser", answer: "arg." },
+    { id: "q3", type: "choice", word: "se casser", prompt: "se casser", answer: "свалить", distractors: ["вернуться", "остаться", "успокоиться"] },
     { id: "q4", type: "pairs", pairs: ["une blague", "le gras", "arrête", "c'est dur"] },
     { id: "q5", type: "choice", new_ref: "flemme", prompt: "avoir la flemme", answer: "лениться, неохота", distractors: ["торопиться", "злиться", "веселиться"] },
   ],

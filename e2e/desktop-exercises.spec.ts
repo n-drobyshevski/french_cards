@@ -88,12 +88,12 @@ test("player keys: 1–4 answer, Enter goes on, 0 is «Не знаю», Esc leav
   await settle(page, 1600);
   await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "cloze");
   await page.keyboard.press("Enter");
-  await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "register");
+  await expect(exerciseCard(page)).toContainText("se casser");
 
-  // 0: «Не знаю», with the right level on the line.
+  // 0: «Не знаю», with the right answer on the line.
   await page.keyboard.press("0");
   await expect(stamp(page, "wrong")).toBeVisible();
-  await expect(page.getByRole("region", { name: "Результат ответа" })).toContainText("arg.");
+  await expect(page.getByRole("region", { name: "Результат ответа" })).toContainText("свалить");
   await settle(page, 300);
   await page.keyboard.press("Enter");
   await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "pairs");

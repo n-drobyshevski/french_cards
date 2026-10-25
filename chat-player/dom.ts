@@ -2,21 +2,24 @@
 // one small inline script), and every screen is rebuilt from its state on each change.
 
 type Attr = string | number | boolean | null | undefined | ((event: Event) => void);
-export type Child = Node | string | null | undefined | false;
+export type Child = Node | string | null | undefined | false | readonly Child[];
 
 /** `h("p", { class: "q", onclick: fn }, "text", child)`; false / null attributes and children are left out. */
-export function h(tag: string, attrs: Record<string, Attr> | null = null, ...children: (Child | Child[])[]): HTMLElement {
+export function h(tag: string, attrs: Record<string, Attr> | null = null, ...children: Child[]): HTMLElement {
   const el = document.createElement(tag);
   for (const [key, value] of Object.entries(attrs ?? {})) {
     if (value === null || value === undefined || value === false) continue;
     if (typeof value === "function") el.addEventListener(key.slice(2), value);
     else el.setAttribute(key, value === true ? "" : String(value));
   }
-  for (const child of children.flat()) {
-    if (child === null || child === undefined || child === false) continue;
-    el.append(child);
-  }
+  append(el, children);
   return el;
+}
+
+function append(el: HTMLElement, child: Child) {
+  if (child === null || child === undefined || child === false) return;
+  if (Array.isArray(child)) for (const c of child as readonly Child[]) append(el, c);
+  else el.append(child as Node | string);
 }
 
 const PATHS = {

@@ -27,8 +27,9 @@ import {
   parseScope,
   SCOPE_LABELS,
   playableItemIds,
+  playedItems,
+  PLAYED_ITEM_TYPES,
   type QueueEntry,
-  REGISTER_LEVELS,
   requeue,
   requestSentence,
   resumeQueue,
@@ -101,7 +102,7 @@ function goodInput(): ExerciseSetInput {
     items: [
       { type: "choice", word_id: "w-meuf", distractors: ["машина", "деньги", "полицейский"] },
       { type: "cloze", word_id: "w-kiffer", sentence: "J'ai trop [[kiffé]] ce concert.", sentence_ru: "Концерт был что надо.", answer: "kiffé", distractors: ["bouffé", "galéré", "flippé"] },
-      { type: "register", word_id: "w-bagnole" },
+      { type: "choice", skill: "neutral", word_id: "w-bagnole", prompt: "la bagnole", answer: "la voiture", distractors: ["la trottinette", "la maison", "la valise"] },
       { type: "pairs", pairs: ["w-thune", "w-keuf", "w-daron", "w-bouffer"] },
       {
         type: "choice",
@@ -141,7 +142,7 @@ describe("completeSet", () => {
   it("fills ids, defaults, snapshots and the server-written answers", () => {
     const set = good();
     expect(set.items.map((i) => i.id)).toEqual(["q1", "q2", "q3", "q4", "q5", "q6"]);
-    const [meaning, cloze, register, pairs, situation, fresh] = set.items;
+    const [meaning, cloze, neutral, pairs, situation, fresh] = set.items;
     expect(meaning).toMatchObject({ skill: "meaning", ask: "fr", prompt: "la meuf", answer: "девушка", new_ref: null, sentence: null, tiles: [], pairs: [] });
     expect(meaning.word).toEqual({
       fr: "la meuf",
@@ -154,7 +155,7 @@ describe("completeSet", () => {
       example_ru: "Это моя девушка.",
     });
     expect(cloze).toMatchObject({ skill: null, ask: null, prompt: null, answer: "kiffé", sentence_ru: "Концерт был что надо." });
-    expect(register).toMatchObject({ answer: "fam.", distractors: [], prompt: null });
+    expect(neutral).toMatchObject({ skill: "neutral", ask: null, prompt: "la bagnole", answer: "la voiture" });
     expect(pairs).toMatchObject({ word_id: null, new_ref: null, word: null, answer: null, prompt: null });
     expect(pairs.tiles).toEqual([
       { key: "w-thune", fr: "la thune", ru: "бабки" },
@@ -176,7 +177,6 @@ describe("completeSet", () => {
         items: [
           { type: "choice", word_id: "w-meuf", prompt: "Как сказать «девушка»?", answer: "la meuf", ask: "ru", distractors: ["a", "b", "c"] },
           { type: "cloze", word_id: "w-kiffer", sentence: "Je [[kiffe]] ça.", distractors: ["x", "y", "z"], skill: "form", pairs: ["w-thune"] },
-          { type: "register", word_id: "w-keuf", answer: "vulg.", distractors: ["a"] },
           { type: "pairs", word_id: "w-meuf", prompt: "ignored", pairs: ["w-thune", "zzz"], distractors: ["a"] },
         ],
       },
@@ -187,9 +187,8 @@ describe("completeSet", () => {
     expect(set.new_words).toEqual([]);
     expect(set.items[0]).toMatchObject({ prompt: "Как сказать «девушка»?", answer: "la meuf" });
     expect(set.items[1]).toMatchObject({ answer: "kiffe", skill: null, pairs: [] });
-    expect(set.items[2]).toMatchObject({ answer: "arg.", distractors: [] });
-    expect(set.items[3]).toMatchObject({ word_id: null, prompt: null, distractors: [], pairs: ["w-thune", "zzz"] });
-    expect(set.items[3].tiles).toEqual([{ key: "w-thune", fr: "la thune", ru: "бабки" }]);
+    expect(set.items[2]).toMatchObject({ word_id: null, prompt: null, distractors: [], pairs: ["w-thune", "zzz"] });
+    expect(set.items[2].tiles).toEqual([{ key: "w-thune", fr: "la thune", ru: "бабки" }]);
   });
 
   it("round-trips through JSON unchanged (null, not undefined)", () => {
@@ -265,11 +264,10 @@ describe("validateSet", () => {
     expect(errorAt(withInput(1, { sentence: "J'ai trop [[kiffe]] ce concert." }), "items[1].sentence")).toMatch(/differs/);
   });
 
-  it("needs a register word with a slang level and the matching answer", () => {
-    expect(errorAt(withInput(2, { word_id: "nope" }), "items[2].word")).toMatch(/slang_level/);
-    expect(errorAt(withItem(2, { answer: "arg." }), "items[2].answer")).toBe("must be «fam.»");
-    expect(errorAt(withItem(2, { distractors: ["arg."] }), "items[2].distractors")).toMatch(/four levels/);
-    expect(paths(withInput(2, { new_ref: "n1", word_id: null }))).toEqual([]);
+  it("refuses a new register item: the type is no longer made", () => {
+    const set = withInput(2, { type: "register", word_id: "w-bagnole" }, true);
+    expect(paths(set)).toEqual(["items[2].type"]);
+    expect(errorAt(set, "items[2].type")).toBe("register items are no longer made; use one of choice, cloze, pairs, conjugate");
   });
 
   it("needs 4–6 unique, live pairs words (new words allowed)", () => {
@@ -309,7 +307,7 @@ describe("validateSet", () => {
     expect(errorAt(withItem(1, { id: "q1" }), "items[1].id")).toMatch(/duplicate/);
     expect(errorAt(withItem(1, { id: "" }), "items[1].id")).toBe("required");
     expect(errorAt(withItem(1, { id: "q".repeat(21) }), "items[1].id")).toMatch(/too long/);
-    expect(errorAt(withItem(1, { type: "typed" as never }), "items[1].type")).toBe("one of choice, cloze, register, pairs, conjugate");
+    expect(errorAt(withItem(1, { type: "typed" as never }), "items[1].type")).toBe("one of choice, cloze, pairs, conjugate");
   });
 
   it("reports every problem at once", () => {
@@ -338,9 +336,10 @@ describe("warningsFor", () => {
     const set = good();
     set.items[0] = { ...set.items[0], distractors: ["коп", "тачка", "бабки"] };
     set.items[4] = { ...set.items[4], distractors: ["ouf", "zarb", "ouej"] };
-    expect(codes(set)).not.toContain("longest_answer"); // 2 of 4
+    expect(codes(set)).not.toContain("longest_answer"); // 2 of 5
     set.items[1] = { ...set.items[1], distractors: ["vu", "lu", "eu"] };
-    expect(warningsFor(set).find((w) => w.code === "longest_answer")?.message).toMatch(/3 of 4/);
+    set.items[2] = { ...set.items[2], distractors: ["le bus", "le car", "le vélo"] };
+    expect(warningsFor(set).find((w) => w.code === "longest_answer")?.message).toMatch(/4 of 5/);
   });
 
   it("warns when an answer shows in a stem", () => {
@@ -394,12 +393,9 @@ describe("options", () => {
     expect(optionsFor(item, seededRandom(7))).toEqual(optionsFor(item, seededRandom(7)));
   });
 
-  it("lists the four register levels in order", () => {
-    const set = good();
-    expect(optionsFor(set.items[2], seededRandom(3))).toEqual({ options: ["нейтр.", "fam.", "arg.", "vulg."], correct: 1 });
-    expect(REGISTER_LEVELS).toHaveLength(4);
-    const keuf = completeSet({ ...goodInput(), items: [{ type: "register", word_id: "w-keuf" }] }, ctx).items[0];
-    expect(optionsFor(keuf).correct).toBe(2);
+  it("has no options for an old register item (it is not played)", () => {
+    const old: ExerciseItem = { ...good().items[2], type: "register", skill: null, answer: "fam.", distractors: [] };
+    expect(optionsFor(old)).toEqual({ options: [], correct: -1 });
   });
 
   it("has no options for pairs; pairsBoard shuffles both columns", () => {
@@ -752,12 +748,12 @@ describe("review fixes", () => {
   });
 
   it("a meaning item whose word does not resolve reports only the reference", () => {
-    const set = complete([{ type: "choice", word_id: "nope", distractors: ["тачка", "бабки", "хата"] }, { type: "register", word_id: "w-meuf" }]);
+    const set = complete([{ type: "choice", word_id: "nope", distractors: ["тачка", "бабки", "хата"] }, { type: "cloze", word_id: "w-kiffer", sentence: "J'ai [[kiffé]] le concert.", distractors: ["bouffé", "galéré", "flippé"] }]);
     expect(validateSet(set, slangCtx).errors.map((e) => e.path)).toEqual(["items[4].word_id"]);
   });
 
   it("a new word matching a paused library word is refused as paused, not «use word_id»", () => {
-    const set = complete([{ type: "register", word_id: "w-meuf" }, { type: "register", word_id: "w-relou" }], [{ ...FLEMME, ref: "n1", fr: "le keuf2" }]);
+    const set = complete([{ type: "cloze", word_id: "w-kiffer", sentence: "J'ai [[kiffé]] le concert.", distractors: ["bouffé", "galéré", "flippé"] }], [{ ...FLEMME, ref: "n1", fr: "le keuf2" }]);
     const error = validateSet(set, slangCtx).errors.find((e) => e.path === "new_words[0].fr");
     expect(error?.message).toMatch(/paused/);
     expect(error?.message).not.toMatch(/use word_id/);
@@ -790,8 +786,9 @@ describe("review fixes", () => {
     expect(runSettled(pairsSet, run([...third, answer("p", 3, "dont_know"), answer("q1", 1, "correct"), answer("q3", 1, "correct")]))).toBe(true);
   });
 
-  it("missed words: a pairs row without a word stands for the board, a register miss keeps no option", () => {
+  it("missed words: a pairs row without a word stands for the board, a miss on an old register item keeps no option", () => {
     const set = good();
+    set.items[2] = { ...set.items[2], type: "register", skill: null, prompt: null, answer: "fam.", distractors: [] };
     const missed = missedWords(run([answer("q4", 1, "dont_know"), answer("q3", 1, "wrong", { chosen: "arg." })]), set);
     expect(missed.map((m) => m.key)).toEqual(["w-thune", "w-keuf", "w-daron", "w-bouffer", "w-bagnole"]);
     expect(missed.at(-1)?.chosen).toEqual([]);
@@ -1039,6 +1036,23 @@ describe("conjugate items", () => {
   it("an app that does not know an item type leaves the item out", () => {
     const set = { items: [item("q1", "a"), { ...item("q2", "b"), type: "listen" as never }, item("q3", "c")] };
     expect(playableItemIds(set, new Set())).toEqual(["q1", "q3"]);
+  });
+
+  it("an old set's register items are left out of the round, its score, its count and the type variety", () => {
+    const set = { items: [item("q1", "a"), item("q2", "b", "register"), item("q3", "c", "cloze"), item("q4", "d")], new_words: [] };
+    expect(PLAYED_ITEM_TYPES).not.toContain("register");
+    expect(playedItems(set.items).map((i) => i.id)).toEqual(["q1", "q3", "q4"]);
+    expect(playableItemIds(set, new Set())).toEqual(["q1", "q3", "q4"]);
+    expect(ids(buildQueue(set))).toEqual(["q1", "q3", "q4"]);
+    // An old run that listed the register item, and answered it, neither waits for it nor counts it.
+    const old = run([answer("q1", 1, "correct"), answer("q2", 1, "wrong", { chosen: "arg." }), answer("q3", 1, "correct"), answer("q4", 1, "correct")], {
+      item_ids: ["q1", "q2", "q3", "q4"],
+    });
+    expect(runSettled(set, old)).toBe(true);
+    expect(scoreRun(old, set)).toEqual({ total: 3, answered: 3, first_try: 3, accuracy: 100 });
+    expect(scoreRun(run([]), set).total).toBe(3);
+    // choice + cloze + register is two played types.
+    expect(warningsFor({ items: set.items.slice(0, 3), new_words: [] }).map((w) => w.code)).toContain("few_types");
   });
 });
 

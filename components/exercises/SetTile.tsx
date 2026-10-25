@@ -6,7 +6,7 @@ import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { SessionStrip } from "@/components/ui/SessionStrip";
 import { SkeletonBar } from "@/components/ui/Skeleton";
-import { setLevelLabel } from "@/lib/core/exercises";
+import { playedItems, setLevelLabel } from "@/lib/core/exercises";
 import type { ExerciseSet } from "@/lib/types";
 import { EXERCISE_PLAY_HREF } from "./exercise-request";
 import {
@@ -100,7 +100,8 @@ export function SetTile({
   onMenu,
 }: SetTileProps) {
   const longPress = useLongPress(onMenu);
-  const total = set.items.length;
+  // Old register items are not played, so not counted.
+  const total = playedItems(set.items).length;
   // «12 ВОПРОСОВ · B1» (pick L2 A; «≈B1» when the level came from «Авто»).
   const level = setLevelLabel(set);
   const count = level ? `${nQuestions(total)} · ${level}` : nQuestions(total);

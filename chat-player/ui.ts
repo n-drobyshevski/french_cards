@@ -142,7 +142,7 @@ function pairsRows(board: Board, state: PairsState, revealed: boolean, disabled:
         "button",
         {
           type: "button",
-          class: cls("prow", done && "done", current && "on", revealed && "rev", state.flash?.fr === t.key && "miss-flash"),
+          class: cls("prow", done && "found", current && "on", revealed && "rev", state.flash?.fr === t.key && "miss-flash"),
           "data-pair": "fr",
           "aria-pressed": done || revealed ? null : String(current),
           disabled: disabled || done || revealed,
@@ -392,6 +392,8 @@ export interface DoneProps {
   full: { first_try: number; total: number } | null;
   keep: KeepState;
   discussed: boolean;
+  /** The screen's first render: the heading and the strip write in (later renders keep them still). */
+  animate: boolean;
   on: { keep(): void; again(): void; repeat(): void; discuss(): void };
 }
 
@@ -423,14 +425,14 @@ function keepBlock({ round, mode, full, keep, on }: DoneProps): Child[] {
 
 /** The done screen (X-Done-B): «Готово», the result card, «Ошибки» as slips, then keeping and the next round. */
 export function doneView(props: DoneProps): HTMLElement {
-  const { round, mode, discussed, on } = props;
+  const { round, mode, discussed, animate, on } = props;
   const score = round.score();
   const missed = round.missedWords();
   const missedItems = round.missedItemIds();
   const repeat = missedItems.length > 0 ? missed.length || missedItems.length : 0;
   return h(
     "div",
-    { class: "done" },
+    { class: cls("done", animate && "anim") },
     h("h1", { tabindex: "-1", "data-focus": "" }, "Готово"),
     tally(round.set.title, round.marks(), score.total, round.kind === "mistakes" ? "повтор ошибок" : null),
     missed.length > 0 &&

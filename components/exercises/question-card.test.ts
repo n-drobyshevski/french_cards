@@ -14,7 +14,6 @@ describe("cardLabel", () => {
     expect(cardLabel({ type: "choice", skill: "verlan", ask: null })).toEqual({ label: "Верлан", detail: null });
     expect(cardLabel({ type: "choice", skill: null, ask: null }).label).toBe("Значение");
     expect(cardLabel({ type: "cloze", skill: null, ask: null }).label).toBe("Пропуск");
-    expect(cardLabel({ type: "register", skill: null, ask: null }).label).toBe("Регистр");
     expect(cardLabel({ type: "pairs", skill: null, ask: null }).label).toBe("Пары");
     expect(cardLabel({ type: "conjugate", skill: null, ask: null, tense: "passe_compose" })).toEqual({ label: "Спряжение", detail: "Passé composé" });
     expect(cardLabel({ type: "conjugate", skill: null, ask: null, tense: null })).toEqual({ label: "Спряжение", detail: null });
@@ -27,7 +26,6 @@ describe("showsMeter", () => {
     expect(showsMeter({ type: "choice", skill: "verlan", word })).toBe(true);
     expect(showsMeter({ type: "choice", skill: "situation", word })).toBe(false);
     expect(showsMeter({ type: "choice", skill: "neutral", word })).toBe(false);
-    expect(showsMeter({ type: "register", skill: null, word })).toBe(false);
     expect(showsMeter({ type: "cloze", skill: null, word })).toBe(false);
     expect(showsMeter({ type: "choice", skill: "meaning", word: null })).toBe(false);
   });
@@ -48,7 +46,6 @@ describe("stampPlace (phones, X-Player-B)", () => {
     expect(stampPlace(choice("avoir la flemme"))).toBe("head");
     expect(stampPlace(choice("копы"))).toBe("line1");
     expect(stampPlace(choice("Друг спрашивает, кто приехал. Что ответить?"))).toBe("head");
-    expect(stampPlace({ type: "register", prompt: null, word, sentence: null })).toBe("line1");
     expect(stampPlace({ type: "conjugate", prompt: "se casser", word: null, sentence: "je me [[suis cassé]]" })).toBe("line1");
     expect(stampPlace({ type: "pairs", prompt: null, word: null, sentence: null })).toBe("head");
   });

@@ -8,12 +8,14 @@ import { folderOrderOf, planDay } from "@/lib/core/plan";
 import { LEGACY_STUDY_PLAN, parseStudyPlan, type StudyPlan } from "@/lib/core/study-plan";
 import { newReviewState, retrievability } from "@/lib/scheduler";
 import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ProgressDay, ReviewLog, ReviewState, UserPref, Word } from "@/lib/types";
+import { ARTIFACT_SET_SLOT, CHAT_PLAYER_URI, runLine, type ChatPlayerSet } from "@/lib/core/chat-player";
 import { createFakeRepo, type FakeRepo } from "./fake-repo";
 import { planFitLogsFrom } from "./plan-fit";
 import { RepoError } from "./repo";
 import {
   addWords,
   callTool,
+  chatRunId,
   createExerciseSet,
   createField,
   createFolder,
@@ -21,6 +23,7 @@ import {
   deleteField,
   deleteFolder,
   deleteWords,
+  exerciseArtifact,
   exerciseMaterial,
   exerciseSetId,
   focusItemCount,
@@ -29,12 +32,14 @@ import {
   scopeSuggestedItems,
   listFolders,
   moveWords,
+  playExercises,
   resolveFolder,
   restoreExerciseSet,
   restoreField,
   restoreFolder,
   restoreMoves,
   restoreWords,
+  saveExerciseResult,
   searchWords,
   setWordLevels,
   stampAfter,
@@ -1513,6 +1518,8 @@ describe("exercises («Упражнения»)", () => {
   function blankItem(id: string, wordId: string): ExerciseSet["items"][number] {
     return { id, type: "choice", skill: "meaning", ask: "fr", tense: null, person: null, word_id: wordId, new_ref: null, prompt: null, sentence: null, sentence_ru: null, answer: null, distractors: ["a", "b", "c"], pairs: [], tiles: [], explain_ru: null, word: null };
   }
+  /** The dropped «register» type, as older stored sets still carry it. */
+  const REGISTER = "register" as string as ExerciseSet["items"][number]["type"];
   const run = (id: string, startedAt: string, answers: ExerciseRun["answers"], extra: Partial<ExerciseRun> = {}): ExerciseRun => ({
     id,
     set_id: "x-old",
@@ -1706,7 +1713,7 @@ describe("exercises («Упражнения»)", () => {
       id: "x-pairs",
       items: [
         { ...blankItem("p1", "w-meuf"), type: "pairs", skill: null, ask: null, word_id: null, distractors: [], pairs: ["w-meuf", "w-relou", "n1"], tiles: [] },
-        { ...blankItem("q2", "w-relou"), type: "register", skill: null, ask: null, distractors: [] },
+        { ...blankItem("q2", "w-relou"), type: REGISTER, skill: null, ask: null, distractors: [] },
         { ...blankItem("q3", "w-meuf"), word_id: null, new_ref: "n1" },
       ],
       new_words: [{ ref: "n1", fr: "Chelou", ru: "стрёмный", note: null, example_fr: null, example_ru: null, pos: "adj", gender: "none", slang_level: 2, verlan: true, origin: null, source_url: null }],
@@ -1994,6 +2001,123 @@ describe("exercises («Упражнения»)", () => {
         ["x-hard", "difficult"],
         ["x-legacy", null],
       ]);
+    });
+  });
+
+  describe("«Упражнения в чате»", () => {
+    const shownSet = async (fake: FakeRepo, args: unknown) => {
+      const res = await callTool(playExercises, deps(fake), args);
+      if (res.isError) throw new Error(JSON.stringify(res.content));
+      return { set: res.structuredContent as unknown as ChatPlayerSet, text: (res.content[0] as { text: string }).text };
+    };
+
+    it("play_exercises gives the player the set, checked as create_exercise_set does, and writes nothing", async () => {
+      const fake = fakeLib();
+      const { set: shown, text } = await shownSet(fake, set());
+      expect(shown).toMatchObject({ kind: "kartochki-exercise-set", version: 1, client_ref: "fete-1", set_id: exerciseSetId("fete-1"), title: "Вечеринка · сленг", folders: ["f-emotsii", "inbox"], saved: false });
+      expect(shown.items.map((i) => i.id)).toEqual(["q1", "q2", "q3", "q4", "q5", "q6", "q7"]);
+      expect(shown.items[0]).toMatchObject({ prompt: "la meuf", answer: "девушка" });
+      // The model gets a short text: no questions or answers to repeat in the chat.
+      expect(text).toMatch(/player is shown.*7 questions/);
+      expect(text).not.toContain("девушка");
+      expect(playExercises.meta).toMatchObject({ ui: { resourceUri: CHAT_PLAYER_URI } });
+      expect(fake.writes).toEqual([]);
+
+      const items = [...ITEMS];
+      items[1] = { ...items[1], word_id: "w-nope" };
+      expect(await refused(playExercises, fake, set({ items }))).toMatch(/not shown[\s\S]*call play_exercises again[\s\S]*items\[1\]\.word_id: no such word "w-nope"/);
+      expect(await refused(playExercises, fake, { title: "Без вопросов" })).toMatch(/set_id .*or the set itself/);
+      expect(fake.writes).toEqual([]);
+    });
+
+    it("refuses register items everywhere a set is sent", async () => {
+      const fake = fakeLib();
+      const items = [...ITEMS.slice(0, 6), { type: "register", word_id: "w-relou" }];
+      const gone = "items.6.type: register items are no longer used; use choice/cloze/pairs/conjugate";
+      expect(await refused(createExerciseSet, fake, set({ items }))).toBe(gone);
+      expect(await refused(playExercises, fake, set({ items }))).toBe(gone);
+      expect(await refused(exerciseArtifact, fake, set({ items }))).toBe(gone);
+      expect(fake.writes).toEqual([]);
+    });
+
+    it("play_exercises replays a saved set by set_id, without its register items and words paused since", async () => {
+      const old: ExerciseSet = {
+        ...SET,
+        items: [...SET.items, { ...blankItem("q3", "w-relou"), type: REGISTER, skill: null, ask: null, distractors: [] }, blankItem("q4", "w-thune")],
+      };
+      const fake = fakeLib({ exercise_sets: [old] });
+      const { set: shown, text } = await shownSet(fake, { set_id: "x-old" });
+      expect(shown).toMatchObject({ set_id: "x-old", client_ref: "x-old", title: "Эмоции · 7", saved: true });
+      expect(shown.items.map((i) => i.id)).toEqual(["q1", "q2"]);
+      expect(text).toMatch(/2 skipped/);
+      expect(await refused(playExercises, fake, { set_id: "x-nope" })).toMatch(/No exercise set/);
+      // A client_ref whose set is saved is played again by its set_id, so a round always matches the saved questions.
+      const { set: saved } = await ok(createExerciseSet, fake, set());
+      expect(await refused(playExercises, fake, set())).toContain(`set_id "${saved.id}"`);
+    });
+
+    it("exercise_artifact hands over the player page with the set inside, to publish verbatim", async () => {
+      const fake = fakeLib();
+      const res = await callTool(exerciseArtifact, deps(fake), set());
+      expect(res.isError).toBeFalsy();
+      expect(res.structuredContent).toBeUndefined();
+      const [note, page] = res.content as { text: string }[];
+      expect(note.text).toMatch(/verbatim as an HTML artifact titled «Вечеринка · сленг»/);
+      expect(note.text).toMatch(/save_exercise_result/);
+      expect(page.text).not.toContain(ARTIFACT_SET_SLOT);
+      const { set: shown } = await shownSet(fake, set());
+      expect(page.text).toContain(JSON.stringify(shown).replace(/</g, "\\u003c"));
+      expect(fake.writes).toEqual([]);
+    });
+
+    it("save_exercise_result saves the set and the round once, scored here, without answers to other questions", async () => {
+      const fake = fakeLib();
+      const { set: shown } = await shownSet(fake, set());
+      const t = (sec: number) => new Date(NOW.getTime() - 60_000 + sec * 1000).toISOString();
+      const answers = [
+        answer("q1", "correct", "девушка", t(1)),
+        answer("q2", "wrong", "la meuf", t(2)),
+        answer("q3", "correct", "kiffé", t(3)),
+        answer("q2", "correct", "le keuf", t(4), 2),
+        answer("q99", "correct", null, t(5)),
+      ];
+      // What the player sends: its set and its result, side by side.
+      const out = await ok(saveExerciseResult, fake, { ...shown, started_at: t(0), finished_at: t(6), answers });
+      expect(out).toMatchObject({
+        saved: true,
+        already_saved: false,
+        set_id: shown.set_id,
+        set_saved: true,
+        run: { id: chatRunId(shown.set_id, t(0)), first_try: 2, total: 7, missed: [{ word_id: "w-keuf", fr: "le keuf", chosen: ["la meuf"] }] },
+        ignored_answers: 1,
+        undo: { tool: "delete_exercise_set", id: shown.set_id },
+      });
+      expect(fake.tables.exercise_sets.get(shown.set_id)).toMatchObject({ source: "chat", items: shown.items, folders: shown.folders });
+      const [row] = [...fake.tables.exercise_runs.values()];
+      expect(row).toMatchObject({ set_id: shown.set_id, kind: "set", item_ids: [], started_at: t(0), finished_at: t(6), total: 7, first_try: 2, deleted_at: null });
+      expect(row.answers.map((a) => a.item_id)).toEqual(["q1", "q2", "q3", "q2"]);
+
+      // The same round again, as the artifact's pasted line: nothing new is written.
+      const line = runLine({ client_ref: "fete-1", started_at: t(0), finished_at: t(6), answers });
+      expect(await ok(saveExerciseResult, fake, { client_ref: "fete-1", run_line: line })).toMatchObject({ already_saved: true, run: { first_try: 2, total: 7 } });
+      expect(fake.writes.map((w) => w.table)).toEqual(["exercise_sets", "exercise_runs"]);
+      expect((await ok(listExerciseSets, fake, {})).sets[0].last_run).toMatchObject({ finished: true, first_try: 2, total: 7 });
+    });
+
+    it("save_exercise_result adds a pasted round to a saved set, and refuses what is not a result", async () => {
+      const fake = fakeLib({ exercise_sets: [SET] });
+      const line = runLine({ client_ref: "x-old", started_at: "2026-10-22T09:00:00.000Z", finished_at: null, answers: [answer("q1", "correct", "девушка", "2026-10-22T09:00:05.000Z")] });
+      const out = await ok(saveExerciseResult, fake, { set_id: "x-old", run_line: `Вот: ${line}` });
+      expect(out).toMatchObject({ set_saved: false, run: { first_try: 1, total: 2, missed: [] }, undo: null });
+      expect(out.note).toMatch(/can't be undone on its own/);
+      expect(fake.writes.map((w) => w.table)).toEqual(["exercise_runs"]);
+
+      const at = "2026-10-22T09:30:00.000Z";
+      expect(await refused(saveExerciseResult, fake, { set_id: "x-old", started_at: at, answers: [answer("q9", "correct", null, at)] })).toMatch(/no answers to this set's questions/);
+      expect(await refused(saveExerciseResult, fake, { set_id: "x-old", run_line: "что-то другое" })).toMatch(/not a result line/);
+      expect(await refused(saveExerciseResult, fake, { set_id: "x-nope", started_at: at, answers: [answer("q1", "correct", null, at)] })).toMatch(/No exercise set/);
+      expect(await refused(saveExerciseResult, fake, { client_ref: "new-1", started_at: at, answers: [answer("q1", "correct", null, at)] })).toMatch(/not saved yet: send it/);
+      expect(fake.writes).toHaveLength(1);
     });
   });
 

@@ -17,12 +17,10 @@ import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { Kbd } from "@/components/ui/Kbd";
 import { SessionStrip, type StripMark } from "@/components/ui/SessionStrip";
-import { SLANG_NAMES_RU } from "@/components/ui/SlangMeter";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { revealTabBar } from "@/components/ui/TabBar";
 import { haptic } from "@/lib/haptics";
 import {
-  REGISTER_LEVELS,
   buildQueue,
   clozeParts,
   finishRun,
@@ -53,7 +51,6 @@ import { MatchPairs, PairsRows, PairsSlips } from "./MatchPairs";
 import { NewWordCard } from "./NewWordCard";
 import { OptionGrid } from "./OptionGrid";
 import { QuestionCard, stampPlace, type Written } from "./QuestionCard";
-import { RegisterGrid } from "./RegisterGrid";
 import { Stamp } from "./Stamp";
 import { exerciseKeyAction, INPUT_GUARD_MS, isTypingTarget, keepsActivationKeys, RESULT_LOCK_MS } from "./player-keys";
 import {
@@ -493,10 +490,6 @@ function PlayerSession() {
 
   const tone = item ? resultTone(result) : null;
   let answerLabel: string | null = item?.answer ?? null;
-  if (item?.type === "register" && options) {
-    const level = options.correct;
-    answerLabel = level >= 0 ? `${REGISTER_LEVELS[level]} · ${SLANG_NAMES_RU[level]}` : null;
-  }
   // A conjugate answer reads as the whole form, pronouns included («tu as kiffé»).
   if (item?.type === "conjugate" && item.answer) answerLabel = `${clozeParts(item.sentence ?? "")?.before ?? ""}${item.answer}`;
   const announcement = resultAnnouncement(tone, result?.misses ?? 0, item?.type === "pairs" ? null : answerLabel);
@@ -556,10 +549,7 @@ function PlayerSession() {
           question
         )}
         {board && phone && <PairsSlips board={board} state={pairsState} onTap={onPairTap} revealed={revealed} disabled={locked} />}
-        {options && item.type === "register" && (
-          <RegisterGrid options={options.options} correct={options.correct} result={result} onPick={pick} locked={leaving} />
-        )}
-        {options && item.type !== "register" && (
+        {options && (
           <OptionGrid options={options.options} correct={options.correct} result={result} onPick={pick} locked={leaving} />
         )}
         {/* The fixed action zone: «Не знаю», then «Дальше» (from 768 the result line) in the same place (no layout shift). */}
@@ -568,7 +558,7 @@ function PlayerSession() {
             <FeedbackLine
               tone={tone}
               answer={tone === "wrong" && item.type !== "pairs" ? answerLabel : null}
-              answerText={item.type === "register" ? null : item.answer}
+              answerText={item.answer}
               explain={item.explain_ru}
               misses={misses}
               onWord={onWord}

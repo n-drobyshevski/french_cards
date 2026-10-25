@@ -65,7 +65,7 @@ import {
   matchesFocus,
   parseExerciseFocus,
 } from "@/lib/core/exercise-focus";
-import { CHAT_PLAYER_URI, fillArtifact, MCP_APP_MIME, parseRunLine, RUN_LINE_PREFIX, SAVE_RESULT_TOOL, type ChatPlayerSet, type ChatRunResult } from "@/lib/core/chat-player";
+import { CHAT_ITEM_TYPES, CHAT_PLAYER_URI, fillArtifact, MCP_APP_MIME, parseRunLine, RUN_LINE_PREFIX, SAVE_RESULT_TOOL, type ChatPlayerSet, type ChatRunResult } from "@/lib/core/chat-player";
 import { matchesSearch, normalizeLemma, searchHaystack, searchKey } from "@/lib/core/text";
 import { buildWord, cleanText, directionsOf, isMovable, isPaused, pausedFolderIds } from "@/lib/core/words";
 import { cleanConjugation, cleanOrigin, conjugate, ORIGIN_MAX, type ConjData } from "@/lib/core/conjugate";
@@ -2372,7 +2372,7 @@ function newSetArgs(args: ChatSetArgs): SetArgs {
  */
 function chatItemIds(set: Pick<ExerciseSet, "items">, words: readonly Word[]): string[] {
   const blocked = new Set(words.filter((w) => w.deleted_at !== null || w.muted).map((w) => w.id));
-  const made = new Set<string>(ITEM_TYPES);
+  const made = new Set<string>(CHAT_ITEM_TYPES);
   const types = new Map(set.items.map((i) => [i.id, i.type as string]));
   return playableItemIds(set, blocked).filter((id) => made.has(types.get(id) ?? ""));
 }
@@ -2576,6 +2576,7 @@ export const saveExerciseResult = tool({
       set = stored;
       words = await deps.repo.words();
     } else {
+      if (!args.title || !args.items) throw new ToolError("This set is not saved yet: send it as you played it (client_ref, title, items and the rest) with the result.");
       // Built from the set as played and checked again, so a round never saves a set the rules refuse.
       const built = await buildSet(deps, newSetArgs(args), folders, "Nothing was saved", `call ${SAVE_RESULT_TOOL} again with the same client_ref`);
       const now = deps.now().toISOString();
@@ -2599,6 +2600,7 @@ export const saveExerciseResult = tool({
         run: { id: done.id, first_try: done.first_try, total: done.total, missed: missedView(done, set) },
         message: "This round was saved before, so nothing was written.",
         undo: null,
+        note: SYNC_NOTE,
       };
     }
 

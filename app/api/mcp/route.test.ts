@@ -9,6 +9,8 @@ vi.mock("@/lib/mcp/repo", async (importOriginal) => ({
 }));
 
 import { resetRateLimits } from "@/lib/ai/rate-limit";
+import { CHAT_PLAYER_URI, MCP_APP_MIME } from "@/lib/core/chat-player";
+import { CHAT_PLAYER_HTML } from "@/lib/mcp/chat-player-html";
 import { DELETE, GET, OPTIONS, PATCH, POST, PUT } from "./[key]/route";
 
 const SECRET = "test-secret-test-secret-test-secret-42";
@@ -108,7 +110,7 @@ describe("/api/mcp/[key]", () => {
     expect((await rpc(SECRET, "initialize")).status).toBe(404);
   });
 
-  it("initializes and lists the 25 tools with titles and annotations", async () => {
+  it("initializes and lists the 28 tools with titles and annotations", async () => {
     const version = await initialize();
     const res = await rpc(SECRET, "tools/list", {}, { "mcp-protocol-version": version });
     expect(res.headers.get("cache-control")).toBe("no-store");
@@ -123,16 +125,19 @@ describe("/api/mcp/[key]", () => {
         "delete_field",
         "delete_folder",
         "delete_words",
+        "exercise_artifact",
         "exercise_material",
         "list_exercise_sets",
         "list_fields",
         "list_folders",
         "move_words",
+        "play_exercises",
         "restore_exercise_set",
         "restore_field",
         "restore_folder",
         "restore_moves",
         "restore_words",
+        "save_exercise_result",
         "search_words",
         "set_word_levels",
         "study_summary",
@@ -151,6 +156,20 @@ describe("/api/mcp/[key]", () => {
     const byName = new Map(tools.map((t) => [t.name, t]));
     expect(byName.get("search_words")?.annotations?.readOnlyHint).toBe(true);
     expect(byName.get("delete_words")?.annotations).toMatchObject({ readOnlyHint: false, destructiveHint: true });
+  });
+
+  it("serves the chat exercise player as an MCP App that play_exercises points at", async () => {
+    const version = await initialize();
+    const h = { "mcp-protocol-version": version };
+    const tools = (await message(await rpc(SECRET, "tools/list", {}, h))).result?.tools as { name: string; _meta?: Record<string, unknown> }[];
+    const byName = new Map(tools.map((t) => [t.name, t]));
+    expect(byName.get("play_exercises")?._meta).toMatchObject({ ui: { resourceUri: CHAT_PLAYER_URI } });
+    expect(byName.get("save_exercise_result")?._meta).toEqual({ ui: { visibility: ["model", "app"] } });
+    expect(byName.get("create_exercise_set")?._meta).toBeUndefined();
+    const listed = (await message(await rpc(SECRET, "resources/list", {}, h))).result?.resources;
+    expect(listed).toEqual([expect.objectContaining({ uri: CHAT_PLAYER_URI, mimeType: MCP_APP_MIME })]);
+    const read = (await message(await rpc(SECRET, "resources/read", { uri: CHAT_PLAYER_URI }, h))).result?.contents as unknown[];
+    expect(read).toEqual([{ uri: CHAT_PLAYER_URI, mimeType: MCP_APP_MIME, text: CHAT_PLAYER_HTML }]);
   });
 
   it("refuses subscriptions/listen at once instead of holding a stream open", async () => {
