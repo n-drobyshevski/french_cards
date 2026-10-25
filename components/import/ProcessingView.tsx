@@ -1,6 +1,6 @@
 "use client";
 
-import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { bottomBarRef } from "@/components/ui/bottom-clearance";
 import { Button } from "@/components/ui/Button";
 import { Header } from "@/components/ui/Header";
@@ -13,7 +13,7 @@ import type { VocabItem } from "@/lib/ai/schemas";
 import { arrivalStyle, useArrivals, useCountdown } from "@/lib/stream-motion";
 import { formatElapsed } from "@/lib/use-delayed-flag";
 import type { ExtractError, ExtractPhase } from "@/lib/use-extract";
-import { fragmentsRu, screenshotsRu, wordsRu } from "./rows";
+import { wordsRu } from "./rows";
 import { StackedLabels } from "./SwapLabel";
 
 export const IMPORT_FOOTNOTE = "Скриншот не сохраняется — только слова.";
@@ -188,35 +188,6 @@ export function SkeletonStack({
   );
 }
 
-const STEP_NOTE: Partial<Record<StepState, { text: string; className: string }>> = {
-  active: { text: "ИДЁТ", className: "text-red" },
-  failed: { text: "НЕ УДАЛОСЬ", className: "text-again" },
-  stopped: { text: "СТОП", className: "text-muted" },
-  waiting: { text: "ЖДЁМ", className: "text-muted" },
-};
-
-function Step({ n, label, state, last }: { n: string; label: string; state: StepState; last?: boolean }) {
-  const note = STEP_NOTE[state];
-  const current = state !== "done" && state !== "pending";
-  return (
-    <li aria-current={state === "active" ? "step" : undefined} className={cx("flex h-7 items-center gap-2 border-t border-rule", last && "border-b")}>
-      <span className={cx("w-5 font-mono text-[11px] tracking-[.06em]", current ? "text-ink" : "text-muted")}>{n}</span>
-      <span
-        className={cx(
-          "min-w-0 flex-1 truncate text-[13px] leading-5",
-          current && "font-medium text-ink",
-          state === "done" && "text-ink",
-          state === "pending" && "text-muted",
-        )}
-      >
-        {label}
-      </span>
-      {state === "done" && <Icon name="check" size={14} strokeWidth={2} label="готово" />}
-      {note && <span className={cx("font-mono text-[11px] tracking-[.06em] whitespace-nowrap", note.className)}>{note.text}</span>}
-    </li>
-  );
-}
-
 /**
  * The red scan line with the paper veil below it (the part not yet read). While the first row is
  * awaited it travels top↔bottom (the screen's one loop); otherwise, and under reduced motion, it
@@ -251,101 +222,94 @@ export function ScanLine({
   );
 }
 
-/** The 1px determinate bar with its 5px tick; muted and still once the work stopped or failed. */
-export function ImportBar({ progress, frozen, className }: { progress: number; frozen: boolean; className?: string }) {
-  const percent = Math.round(progress * 100);
-  return (
-    <div
-      role="progressbar"
-      aria-label="Прогресс распознавания"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={percent}
-      className={cx("relative h-[5px]", className)}
-    >
-      <div className="absolute inset-x-0 top-0.5 h-px bg-rule" />
-      <div
-        className={cx(
-          "absolute top-0.5 left-0 h-px w-full origin-left transition-[transform,background-color] duration-(--dur-move) ease-standard",
-          frozen ? "bg-muted" : "bg-ink",
-        )}
-        style={{ transform: `scaleX(${progress})` }}
-      />
-      <div
-        className={cx("absolute top-0 h-[5px] w-px transition-[left] duration-(--dur-move) ease-standard", frozen ? "bg-muted" : "bg-ink")}
-        style={{ left: `${percent}%` }}
-      />
-    </div>
-  );
+/** Phones: the status line says the step (in place of the step list, Import-Processing B). */
+export function stageStatus(stage: ImportStage): string {
+  return stage.kind === "checking" ? "Проверка повторов" : stage.status;
 }
 
 /**
- * Thumbnail, title, the bar and the three steps: the top of the import screen, the same block in
- * processing and in the review (so the list below keeps its place, I3). With `onThumb` the
- * thumbnail opens the screenshots.
+ * Phones: a 72×128 thumbnail with the scan line (the progress: it stands at the work's %), and beside
+ * it only the title and `children` (the status line). No bar, no step list, no «Скриншот · 2
+ * фрагмента»: the % stays in a visually hidden progressbar. The review folds it into ShotStrip.
  */
 export function ShotSummary({
   stage,
   thumbs,
   images,
-  tiles,
-  onThumb,
-  thumbOpen,
+  children,
 }: {
   stage: ImportStage;
   thumbs: readonly string[];
   images: number;
-  tiles: number;
-  onThumb?: () => void;
-  thumbOpen?: boolean;
+  children?: ReactNode;
 }) {
-  const sub = tiles > 0 ? `${screenshotsRu(images)} · ${fragmentsRu(tiles)}` : screenshotsRu(images);
   const percent = Math.round(stage.progress * 100);
-  const thumbInner = (
-    <>
-      {thumbs[0] && (
-        // Local object URL; next/image does not apply.
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={thumbs[0]} alt="" className="size-full object-cover object-top" />
-      )}
-      <ScanLine percent={percent} travel={stage.waitingFirst} veil={stage.kind !== "complete"} muted={stage.frozen} />
-      {images > 1 && (
-        <span className="absolute top-1.5 right-1.5 rounded-[2px] bg-ink px-1 font-mono text-[10px] leading-[14px] text-on-ink">
-          1/{images}
-        </span>
-      )}
-    </>
-  );
-  const thumbClass = "relative h-[220px] w-[120px] shrink-0 overflow-hidden rounded-chip border border-rule bg-surface p-0";
   return (
     <section aria-label="Обработка скриншота" className="flex gap-4">
-      {onThumb ? (
-        <button
-          type="button"
-          aria-expanded={thumbOpen}
-          aria-label={thumbs.length > 1 ? "Скриншоты" : "Скриншот"}
-          onClick={onThumb}
-          className={cx(thumbClass, "press")}
-        >
-          {thumbInner}
-        </button>
-      ) : (
-        <div aria-hidden="true" className={thumbClass}>
-          {thumbInner}
-        </div>
-      )}
-
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div aria-hidden="true" className="relative h-32 w-[72px] shrink-0 overflow-hidden rounded-chip border border-rule bg-surface">
+        {thumbs[0] && (
+          // Local object URL; next/image does not apply.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={thumbs[0]} alt="" className="size-full object-cover object-top" />
+        )}
+        <ScanLine percent={percent} travel={stage.waitingFirst} veil={stage.kind !== "complete"} muted={stage.frozen} />
+        {images > 1 && (
+          <span className="absolute top-1 right-1 rounded-[2px] bg-ink px-1 font-mono text-[10px] leading-[14px] text-on-ink">1/{images}</span>
+        )}
+      </div>
+      <div className="flex min-w-0 flex-1 flex-col pt-1">
         <p className="m-0 text-[17px] leading-6 font-medium text-ink">{stage.title}</p>
-        <p className="m-0 mt-1 text-[13px] leading-5 text-muted">{sub}</p>
-        <ImportBar progress={stage.progress} frozen={stage.frozen} className="mt-4" />
-        <ol aria-label="Этапы" className="m-0 mt-auto flex list-none flex-col p-0 pt-4">
-          {IMPORT_STEPS.map((label, i) => (
-            <Step key={label} n={`0${i + 1}`} label={label} state={stage.steps[i]} last={i === IMPORT_STEPS.length - 1} />
-          ))}
-        </ol>
+        <div className="mt-1">{children}</div>
+        <div role="progressbar" aria-label="Прогресс распознавания" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} className="sr-only" />
       </div>
     </section>
+  );
+}
+
+/**
+ * Phones, the review: the finished summary folded into a 44px strip (24×36 thumbnail + «Скриншот ⌄»)
+ * that opens the screenshots in place. It mounts at the summary's height and folds at once over
+ * --dur-move: the done hold has already played on the processing screen (I3). Reduced motion: at once.
+ */
+export function ShotStrip({ thumbs, open, onToggle }: { thumbs: readonly string[]; open: boolean; onToggle: () => void }) {
+  const [folded, setFolded] = useState(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setFolded(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      onClick={onToggle}
+      className={cx(
+        "press-tint flex w-full shrink-0 items-center gap-3 overflow-hidden bg-transparent p-0 text-left text-ink",
+        "transition-[height] duration-(--dur-move) ease-standard motion-reduce:transition-none",
+        folded ? "h-11" : "h-32",
+      )}
+    >
+      <span
+        aria-hidden="true"
+        className={cx(
+          "relative shrink-0 overflow-hidden rounded-[2px] border border-rule bg-surface",
+          "transition-[width,height] duration-(--dur-move) ease-standard motion-reduce:transition-none",
+          folded ? "h-9 w-6" : "h-32 w-[72px]",
+        )}
+      >
+        {thumbs[0] && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={thumbs[0]} alt="" className="size-full object-cover object-top" />
+        )}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-[14px] leading-5 font-medium">
+        {thumbs.length > 1 ? `Скриншоты · ${thumbs.length}` : "Скриншот"}
+      </span>
+      <Icon
+        name="chevron"
+        size={14}
+        className={cx("shrink-0 text-muted transition-transform duration-(--dur-move) ease-standard", open && "rotate-180")}
+      />
+    </button>
   );
 }
 
@@ -475,8 +439,10 @@ export function continueLabel(rows: number): string {
 }
 
 /**
- * Screenshot being read: thumbnail with a scan line, steps, rows as they stream in, «Стоп». Stop,
- * failure and the finished hold are states of this same screen, never a cut to another layout.
+ * Screenshot being read (phones, Import-Processing B): a small thumbnail with the scan line, the title
+ * and one status line beside it, rows as they stream in, «Стоп». Stop, failure and the finished hold
+ * are states of this same screen, never a cut to another layout. The privacy line stays on the pick
+ * screen only.
  */
 export function ProcessingView({
   phase,
@@ -518,29 +484,24 @@ export function ProcessingView({
 
   return (
     <>
-      <Header title="Импорт со скриншота" fallbackHref="/library" />
+      <Header large title="Импорт со скриншота" fallbackHref="/library" />
       <main className="flex flex-1 flex-col px-4 pt-2">
-        <ShotSummary stage={stage} thumbs={thumbs} images={images} tiles={tiles} />
-
-        {/* No ink run: the scan line over the thumbnail is the screen's one loop. */}
-        <StatusLine
-          className="mt-3"
-          text={stage.status}
-          count={kind === "waiting" ? (left === null ? undefined : formatElapsed(left)) : stage.count}
-          active={stage.active}
-          announce={stage.announce}
-          noRun
-        />
+        <ShotSummary stage={stage} thumbs={thumbs} images={images}>
+          {/* No ink run: the scan line over the thumbnail is the screen's one loop. */}
+          <StatusLine
+            text={stageStatus(stage)}
+            count={kind === "waiting" ? (left === null ? undefined : formatElapsed(left)) : stage.count}
+            active={stage.active}
+            announce={stage.announce}
+            noRun
+          />
+        </ShotSummary>
 
         {notice && items.length === 0 ? (
           <ImportNotice {...notice} className="mt-4" />
         ) : (
           <>
-            <div className="mt-4 flex items-baseline justify-between border-b border-ink pb-2">
-              <h2 className="meta m-0 leading-4 font-medium">Найдено</h2>
-              <span className="meta leading-4">По мере распознавания</span>
-            </div>
-            <ul aria-label="Распознанные слова" aria-busy={kind === "running"} className="m-0 list-none p-0">
+            <ul aria-label="Распознанные слова" aria-busy={kind === "running"} className="m-0 mt-4 list-none border-t border-rule p-0">
               {items.map((it, i) => (
                 <li key={i} className="flex h-14 items-center justify-between gap-4 border-b border-rule" style={arrivalStyle(i, base)}>
                   <span className="flex min-w-0 items-baseline gap-2">
@@ -549,7 +510,7 @@ export function ProcessingView({
                     </span>
                     <span className={cx("truncate text-[14px] leading-5 text-muted", it.ru_suggested && "italic")}>{it.ru}</span>
                   </span>
-                  <SlangMeter level={it.slang_level} verlan={it.verlan} />
+                  <SlangMeter level={it.slang_level} verlan={it.verlan} row />
                 </li>
               ))}
               <SkeletonStack rows={items.length} rowHeight={ROW_HEIGHT} leaving={kind !== "running"}>
@@ -573,7 +534,6 @@ export function ProcessingView({
         <Button variant={slot.variant} block icon={SLOT_ICONS[slot.label]} onClick={slot.onClick} disabled={slot.disabled}>
           {SWAP_LABELS.includes(slot.label) ? <StackedLabels labels={SWAP_LABELS} current={slot.label} /> : slot.label}
         </Button>
-        <p className="m-0 mt-2 text-center text-[12px] leading-4 text-muted">{IMPORT_FOOTNOTE}</p>
       </footer>
     </>
   );

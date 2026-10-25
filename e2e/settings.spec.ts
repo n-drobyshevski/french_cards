@@ -88,14 +88,15 @@ test("«Чаще в упражнениях» saves to the synced row at once; «
     (await dbRows<{ id: string; value: unknown; deleted_at: string | null }>(page, "user_prefs")).find((r) => r.id === "exercise_focus");
 
   await page.goto("/settings");
-  const section = page.getByRole("region", { name: "Упражнения" });
+  const section = page.getByRole("region", { name: "Чаще в упражнениях" });
   await expect(section).toBeVisible();
   // Right after «Повторение».
   const headings = page.getByRole("heading", { level: 2 });
   await expect(headings.nth(0)).toHaveText("Повторение");
-  await expect(headings.nth(1)).toHaveText("Упражнения");
+  await expect(headings.nth(1)).toHaveText("Чаще в упражнениях");
   await expect(headings.nth(2)).toHaveText("Оформление");
-  await expect(section.getByText("Claude будет брать такие слова в упражнения — и когда просите в чате. Настройка общая для всех устройств.")).toBeVisible();
+  // That it is shared is said once, in «Данные».
+  await expect(page.getByText("План повторения и упражнения общие для всех устройств — Claude их тоже видит.")).toBeVisible();
 
   const target = section.getByRole("radiogroup", { name: "Чаще в упражнениях" });
   const share = section.getByRole("radiogroup", { name: "Сколько в наборе" });

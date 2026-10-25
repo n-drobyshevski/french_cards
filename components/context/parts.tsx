@@ -2,9 +2,11 @@
 
 import { Fragment, useId, type MouseEvent, type ReactNode, type Ref } from "react";
 import { posAbbr } from "@/components/add/match";
+import { pluralRu } from "@/components/review/format";
 import { AbbrHint } from "@/components/ui/AbbrHint";
 import { Button } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
+import { BlankCard } from "@/components/ui/BlankCard";
 import { Collapse } from "@/components/ui/Collapse";
 import { cx } from "@/components/ui/cx";
 import {
@@ -16,6 +18,7 @@ import {
   useConjugationView,
   type ConjSentence,
 } from "@/components/conjugation/ConjugationViews";
+import { FoldRow } from "@/components/ui/FoldRow";
 import { Icon } from "@/components/ui/Icons";
 import { SkeletonRows } from "@/components/ui/Skeleton";
 import { SlangMeter } from "@/components/ui/SlangMeter";
@@ -134,7 +137,8 @@ export function SearchField({
           </button>
         )}
       </div>
-      {offline && <p className="m-0 mt-2 text-[13px] leading-[18px] text-muted">Открываются прошлые запросы — они сохранены на телефоне.</p>}
+      {/* Phones: the placeholder says it; the history below still opens (no second offline line). */}
+      {offline && wide && <p className="m-0 mt-2 text-[13px] leading-[18px] text-muted">Открываются прошлые запросы — они сохранены на телефоне.</p>}
     </form>
   );
 }
@@ -163,19 +167,19 @@ export function MetaLine({ lookup }: { lookup: LookupResponse }) {
   );
 }
 
-/** Translations ranked by share, each with a bar against the most frequent one. */
+/** Phones: translations ranked by share, each with a bar against the most frequent one (the % only in aria). */
 export function Translations({ lookup }: { lookup: LookupResponse }) {
   const list = lookup.translations;
   if (list.length === 0) return null;
   return (
     <ul aria-label="Переводы по частоте" className="m-0 mt-3.5 flex list-none flex-col gap-1.5 p-0">
       {list.map((t) => (
-        <li key={t.ru} className="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)_2.5rem] items-center gap-2.5">
+        <li key={t.ru} className="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)] items-center gap-2.5">
           <span className="text-[16px] leading-[22px] break-words">{t.ru}</span>
           <span aria-hidden="true" className="relative h-[3px] bg-surface-2">
             <span className="absolute inset-y-0 left-0 bg-ink" style={{ width: `${shareWidth(t.share, list)}%` }} />
           </span>
-          <span className="text-right font-mono text-[11px] leading-4 text-muted tabular-nums">{t.share}%</span>
+          <span className="sr-only">{t.share}%</span>
         </li>
       ))}
     </ul>
@@ -201,11 +205,10 @@ export function WordMakeup({
   const family = morpho?.family ?? [];
   if (!origin && !parts && family.length === 0) return null;
   const word = "font-serif text-[17px] leading-6 text-ink";
-  return (
-    <section aria-label="Слово по частям" className={cx(wide ? "mt-3.5" : "mt-4 border-t border-rule pt-3")}>
-      <p className="meta m-0">Слово по частям</p>
+  const body = (
+    <>
       {parts && (
-        <p className="m-0 mt-1.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-1">
+        <p className={cx("m-0 flex flex-wrap items-baseline gap-x-1.5 gap-y-1", wide && "mt-1.5")}>
           {parts.map((p, i) => (
             <Fragment key={`${i}${p.text}`}>
               {i > 0 && (
@@ -254,6 +257,23 @@ export function WordMakeup({
           </ul>
         </div>
       )}
+    </>
+  );
+  if (!wide) {
+    // Phones: one row in the card, «Слово по частям · volonté + -aire ⌄», opened in place.
+    const summary = parts ? parts.map((p) => p.text).join(" + ") : family.length > 0 ? "однокоренные" : "происхождение";
+    return (
+      <section aria-label="Слово по частям" className="-mx-4 mt-4">
+        <FoldRow label="Слово по частям" summary={summary} rule="y" buttonClassName="px-4" bodyClassName="px-4">
+          <div className="pb-3">{body}</div>
+        </FoldRow>
+      </section>
+    );
+  }
+  return (
+    <section aria-label="Слово по частям" className="mt-3.5">
+      <p className="meta m-0">Слово по частям</p>
+      {body}
     </section>
   );
 }
@@ -337,15 +357,15 @@ export function LookupError({ error, online, onRetry }: { error: string | null; 
   );
 }
 
-/** lookup.found = false: the query is not a word we can look up. */
-export function NotFound({ q }: { q: string }) {
+/** lookup.found = false: the query is not a word we can look up. Phones: one hint line. */
+export function NotFound({ q, wide = false }: { q: string; wide?: boolean }) {
   return (
     <div className="mt-6 flex flex-col gap-2 border-t border-ink pt-4">
       <p role="status" className="m-0 font-serif text-[22px] leading-7 font-medium">
         Не нашли такого слова
       </p>
       <p className="m-0 text-[14px] leading-5 text-muted">
-        «{q}» не похоже на французское или русское слово. Проверьте написание — или поищите по-русски.
+        {wide ? `«${q}» не похоже на французское или русское слово. Проверьте написание — или поищите по-русски.` : "Проверьте написание или поищите по-русски."}
       </p>
     </div>
   );
@@ -460,25 +480,36 @@ function ExampleTag({ example }: { example: ShownExample }) {
   return example.meaning ? <span className="meta">≈ {example.meaning}</span> : null;
 }
 
-/** Phone row: sense tag, the sentence, its translation, the source and «+ В карточку». */
-export function ExampleItem({ example, inCard, onOpen }: { example: ShownExample; inCard: boolean; onOpen: () => void }) {
+/**
+ * Phone row: the sentence and its translation; the whole row opens the example sheet (source, «В
+ * карточку слова»). A ✓ only when the example is already in the card. The ≈ sense tag only under
+ * «Все» (`tag`): with a meaning picked, the chip says it.
+ */
+export function ExampleItem({ example, inCard, onOpen, tag = true }: { example: ShownExample; inCard: boolean; onOpen: () => void; tag?: boolean }) {
   return (
-    <li className="flex flex-col gap-1 border-b border-rule py-3.5">
-      <ExampleTag example={example} />
-      <p lang="fr" className="m-0 font-serif text-[18px] leading-6 text-ink">
-        <Hit fr={example.fr} hit={example.hit} />
-      </p>
-      {example.ru && <p className="m-0 text-[14px] leading-5 text-muted">{example.ru}</p>}
-      <div className="mt-1 flex min-h-8 items-center justify-between gap-3">
-        {example.invented ? <span className="meta">подобран по смыслу</span> : <SourceLink example={example} />}
-        <AddExampleButton example={example} inCard={inCard} onOpen={onOpen} wide={false} />
-      </div>
+    <li className="border-b border-rule">
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-label={`${inCard ? "В карточке" : "В карточку"}: ${example.fr}`}
+        onClick={onOpen}
+        className="press-tint flex w-full items-start gap-3 bg-transparent py-3.5 text-left"
+      >
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          {(tag || example.invented) && <ExampleTag example={example} />}
+          <span lang="fr" className="font-serif text-[18px] leading-6 text-ink">
+            <Hit fr={example.fr} hit={example.hit} />
+          </span>
+          {example.ru && <span className="text-[14px] leading-5 text-muted">{example.ru}</span>}
+        </span>
+        {inCard && <Icon name="check" size={18} className="mt-0.5 shrink-0 text-good" />}
+      </button>
     </li>
   );
 }
 
 /** Desktop row of the bilingual table: FR (with its source) | RU | «+». */
-export function ExampleTableRow({ example, inCard, onOpen }: { example: ShownExample; inCard: boolean; onOpen: () => void }) {
+export function ExampleTableRow({ example, inCard, onOpen }: { example: ShownExample; inCard: boolean; onOpen: () => void; tag?: boolean }) {
   return (
     <li className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_44px] items-start gap-x-5 border-b border-rule py-3.5">
       <div className="flex min-w-0 flex-col gap-1">
@@ -515,9 +546,6 @@ export function ExamplesWait({
     <div aria-busy="true" className="mt-3 flex flex-col">
       <StatusLine text={web ? "Ищем примеры в вебе" : "Ищем примеры"} active count={retryIn ? `повтор через ${retryIn} с` : undefined} />
       <SkeletonRows count={web ? 3 : 2} height={wide ? 76 : 96} lines={3} />
-      {!wide && web && (
-        <p className="m-0 mt-4 text-[13px] leading-[18px] text-muted">Перевод и синонимы уже готовы — можно смотреть, пока ищем живые примеры.</p>
-      )}
       <Button variant="tertiary" size="sm" className="mt-2 self-start text-[14px]" onClick={onStop}>
         Остановить поиск
       </Button>
@@ -528,6 +556,24 @@ export function ExamplesWait({
 /** Under Tatoeba's sentences: the paid web search, only on request. */
 export function WebMore({ online, onSearch, wide = false }: { online: boolean; onSearch: () => void; wide?: boolean }) {
   if (!online) return null;
+  if (!wide) {
+    return (
+      <button
+        type="button"
+        aria-label="Искать ещё в вебе"
+        aria-describedby="ctx-web-more"
+        onClick={onSearch}
+        className="press-tint mt-1 flex min-h-11 w-full items-center gap-2 border-b border-rule bg-transparent py-2 text-left text-[14px] leading-5 font-medium text-ink"
+      >
+        <Icon name="spark" size={16} strokeWidth={1.5} className="shrink-0" />
+        <span className="min-w-0 flex-1">Искать ещё в вебе</span>
+        <span id="ctx-web-more" className="meta shrink-0">
+          10–20 с
+        </span>
+        <Icon name="chevron-right" size={14} strokeWidth={2} className="shrink-0 text-muted" />
+      </button>
+    );
+  }
   return (
     <div className="mt-4 flex flex-col items-start gap-1.5">
       <Button variant="secondary" size={wide ? "md" : "lg"} block={!wide} icon="spark" onClick={onSearch}>
@@ -601,6 +647,41 @@ export function ExamplesEmpty({
   /** Set while the web search has not run yet: offered first, before a made-up example. */
   onWeb?: () => void;
 }) {
+  if (!wide) {
+    // Phones (Context-States B): a blank slip, the shape a found sentence takes; the buttons say the rest.
+    return (
+      <div className="mt-4 flex flex-col gap-2">
+        <BlankCard title="Живых фраз пока нет" />
+        {onWeb && (
+          <Button className="mt-2" size="lg" block icon="spark" disabled={!online} onClick={onWeb}>
+            Искать в вебе
+          </Button>
+        )}
+        <Button
+          className={onWeb ? "mt-1" : "mt-2"}
+          variant={onWeb ? "secondary" : undefined}
+          size="lg"
+          block
+          icon="spark"
+          pending={inventing}
+          pendingLabel="Подбираем пример…"
+          disabled={!online}
+          aria-describedby="ctx-invent-note"
+          onClick={onInvent}
+        >
+          Подобрать пример
+        </Button>
+        <p id="ctx-invent-note" className="m-0 text-center text-[12px] leading-4 text-muted">
+          помечен как придуманный
+        </p>
+        {error && (
+          <p role="status" className="m-0 text-[13px] leading-[18px] text-muted">
+            {error}
+          </p>
+        )}
+      </div>
+    );
+  }
   return (
     <div className="mt-4 flex flex-col gap-2 rounded-card border border-dashed border-rule bg-surface px-4 py-5">
       <p className="m-0 font-serif text-[20px] leading-[26px] font-medium">{onWeb ? "В Tatoeba примеров нет" : "Живых примеров не нашлось"}</p>
@@ -706,7 +787,6 @@ export function SynonymScale({
           </div>
         ))}
       </div>
-      <p className="m-0 mt-2.5 text-[13px] leading-[18px] text-muted">Нажми на слово — откроется в Контексте. «+» — сразу в карточки.</p>
     </section>
   );
 }
@@ -850,7 +930,14 @@ export function SectionHead({ id, title, aside }: { id?: string; title: string; 
   );
 }
 
-/** «Недавние»: the device-local history; a row reopens its query from the saved results. */
+/** Phones: the recent queries shown at once; the rest open in place under «Ещё». */
+const HISTORY_SHOWN = 5;
+
+/**
+ * «Недавние»: the device-local history; a row reopens its query from the saved results. Phones
+ * (Context-Home B): one-line 48px rows (FR, first translation, meter), five of them with the rest
+ * under «Ещё · N ⌄», «Очистить историю» at the end; the heading is for screen readers only.
+ */
 export function HistoryList({
   rows,
   onOpen,
@@ -866,6 +953,83 @@ export function HistoryList({
   wide?: boolean;
 }) {
   const headingId = useId();
+  const row = (r: LookupEntry) => {
+    const found = r.lookup.found;
+    const name = found ? r.lookup.fr : r.q;
+    return (
+      <li key={r.key} className={cx("group flex items-center border-b border-rule", wide && "hover-fade -mx-2 hoverable:bg-hover")}>
+        <a
+          href={contextHref(r.q)}
+          onClick={routeClick(() => onOpen(r.q))}
+          className={cx(
+            "flex min-w-0 flex-1 items-center gap-2.5 text-ink no-underline",
+            wide ? "min-h-[60px] py-2 pl-2" : "min-h-12 active:bg-surface-2",
+          )}
+        >
+          {wide ? (
+            <>
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="flex min-w-0 items-center gap-2">
+                  <span lang="fr" className="truncate font-serif text-[19px] leading-6">
+                    {name}
+                  </span>
+                  {found && <SlangMeter level={r.lookup.slang_level} size="sm" showLabel={false} />}
+                </span>
+                <span className="truncate text-[14px] leading-5 text-muted">{found ? translationLine(r.lookup.translations, 2) : r.q}</span>
+              </span>
+              <span className="meta shrink-0 text-right">{historyMeta(r)}</span>
+            </>
+          ) : (
+            <>
+              <span lang="fr" className="max-w-[55%] shrink-0 truncate font-serif text-[19px] leading-6">
+                {name}
+              </span>
+              <span className="min-w-0 flex-1 truncate text-[14px] leading-5 text-muted">{found ? translationLine(r.lookup.translations, 1) : ""}</span>
+              {found && <SlangMeter level={r.lookup.slang_level} verlan={r.lookup.verlan} row />}
+            </>
+          )}
+        </a>
+        <button
+          type="button"
+          onClick={() => onDelete(r)}
+          aria-label={`Убрать «${name}» из истории`}
+          className={cx(
+            "flex size-11 shrink-0 items-center justify-center rounded-btn bg-transparent text-muted hoverable:text-ink",
+            wide ? "opacity-0 group-hover:opacity-100 focus-visible:opacity-100" : "-mr-3",
+          )}
+        >
+          <Icon name="close" size={16} />
+        </button>
+      </li>
+    );
+  };
+
+  if (!wide) {
+    const first = rows.slice(0, HISTORY_SHOWN);
+    const rest = rows.slice(HISTORY_SHOWN);
+    const clear = (
+      <button type="button" onClick={onClear} className="press-tint flex h-11 w-full items-center bg-transparent p-0 text-left text-[14px] leading-5 text-muted">
+        Очистить историю
+      </button>
+    );
+    return (
+      <section aria-labelledby={headingId} className="mt-4">
+        <h2 id={headingId} className="sr-only">
+          Недавние
+        </h2>
+        <ul className="m-0 list-none border-t border-rule p-0">{first.map(row)}</ul>
+        {rest.length > 0 ? (
+          <FoldRow summary={`${rest.length} ${pluralRu(rest.length, ["запрос", "запроса", "запросов"])}`} rule="bottom">
+            <ul className="m-0 list-none p-0">{rest.map(row)}</ul>
+            {clear}
+          </FoldRow>
+        ) : (
+          clear
+        )}
+      </section>
+    );
+  }
+
   return (
     <section aria-labelledby={headingId} className="mt-6">
       <div className="flex h-8 items-center justify-between border-b border-ink">
@@ -880,59 +1044,17 @@ export function HistoryList({
           Очистить
         </button>
       </div>
-      <ul className="m-0 list-none p-0">
-        {rows.map((r) => {
-          const found = r.lookup.found;
-          const name = found ? r.lookup.fr : r.q;
-          return (
-            <li
-              key={r.key}
-              className={cx("group flex items-center border-b border-rule", wide && "hover-fade -mx-2 hoverable:bg-hover")}
-            >
-              <a
-                href={contextHref(r.q)}
-                onClick={routeClick(() => onOpen(r.q))}
-                className={cx(
-                  "flex min-h-[60px] min-w-0 flex-1 items-center gap-2.5 py-2 text-ink no-underline",
-                  wide ? "pl-2" : "active:bg-surface-2",
-                )}
-              >
-                <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span lang="fr" className="truncate font-serif text-[19px] leading-6">
-                      {found ? r.lookup.fr : r.q}
-                    </span>
-                    {found && <SlangMeter level={r.lookup.slang_level} size="sm" showLabel={false} />}
-                  </span>
-                  <span className="truncate text-[14px] leading-5 text-muted">{found ? translationLine(r.lookup.translations, 2) : r.q}</span>
-                </span>
-                <span className="meta shrink-0 text-right">{historyMeta(r)}</span>
-              </a>
-              <button
-                type="button"
-                onClick={() => onDelete(r)}
-                aria-label={`Убрать «${name}» из истории`}
-                className={cx(
-                  "flex size-11 shrink-0 items-center justify-center rounded-btn bg-transparent text-muted hoverable:text-ink",
-                  wide ? "opacity-0 group-hover:opacity-100 focus-visible:opacity-100" : "-mr-3",
-                )}
-              >
-                <Icon name="close" size={16} />
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+      <ul className="m-0 list-none p-0">{rows.map(row)}</ul>
     </section>
   );
 }
 
-/** «Из твоих карточек без примеров»: saved words to look up. */
-export function NoExampleChips({ words, onOpen }: { words: readonly { id: string; fr: string }[]; onOpen: (fr: string) => void }) {
+/** «Ваши слова без примеров» («Из твоих карточек…» on desktop): saved words to look up. */
+export function NoExampleChips({ words, onOpen, wide = false }: { words: readonly { id: string; fr: string }[]; onOpen: (fr: string) => void; wide?: boolean }) {
   if (words.length === 0) return null;
   return (
     <div className="mt-6">
-      <p className="meta m-0 mb-2">Из твоих карточек без примеров</p>
+      <p className="meta m-0 mb-2">{wide ? "Из твоих карточек без примеров" : "Ваши слова без примеров"}</p>
       <ul className="m-0 flex list-none flex-wrap gap-x-1.5 gap-y-2 p-0">
         {words.map((w) => (
           <li key={w.id}>

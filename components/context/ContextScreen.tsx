@@ -1,14 +1,14 @@
 "use client";
 
 import { useLiveQuery } from "dexie-react-hooks";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { loadDuplicate } from "@/components/add/data";
 import { useUndoSnackbar } from "@/components/library/undo";
 import { WordDetailSheet } from "@/components/library/WordDetailSheet";
 import { useAddSheetActions } from "@/components/providers/AddSheetContext";
 import { FOCUS_SEARCH_EVENT } from "@/components/shell/keys";
-import { Header } from "@/components/ui/Header";
+import { Icon } from "@/components/ui/Icons";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import type { LookupResponse } from "@/lib/ai/schemas";
@@ -195,7 +195,7 @@ function ContextView({ q }: { q: string }) {
   const home = (
     <>
       {history && history.length > 0 && <HistoryList rows={history} onOpen={go} onDelete={(r) => void remove(r)} onClear={() => void clear()} wide={wide} />}
-      {online && <NoExampleChips words={noExample ?? []} onOpen={go} />}
+      {online && <NoExampleChips words={noExample ?? []} onOpen={go} wide={wide} />}
     </>
   );
 
@@ -254,18 +254,19 @@ function ContextView({ q }: { q: string }) {
     );
   }
 
+  // Phones (Context-Home B): the field is the header, next to the back arrow; no eyebrow, no
+  // title (the screen's name is the h1 for screen readers), the intro only while nothing was looked up.
   return (
     <>
       {/* Phones open Контекст from the Library header (no tab since 2026-10-23). Back steps through
           the queries, then home, then the Library; opened from a link, it lands in the Library. */}
-      {q ? (
-        <Header eyebrow="Контекст" fallbackHref="/library" />
-      ) : (
-        <Header eyebrow="Библиотека" backLabel="Назад в библиотеку" fallbackHref="/library" />
-      )}
+      <header className="mt-4 flex shrink-0 items-start gap-1 pr-4 pl-1">
+        <BackButton label={q ? "Назад" : "Назад в библиотеку"} fallbackHref="/library" className={q ? undefined : "mt-0.5"} />
+        <div className="min-w-0 flex-1">{field}</div>
+      </header>
       <main className="flex flex-1 flex-col px-4 pt-1 pb-10">
-        {!q && <Intro />}
-        <div className={cx(!q && "mt-4")}>{field}</div>
+        {!q && <h1 className="sr-only">Контекст</h1>}
+        {!q && history?.length === 0 && <Intro />}
         {q ? results : home}
       </main>
       {layers}
@@ -273,11 +274,35 @@ function ContextView({ q }: { q: string }) {
   );
 }
 
+/** The sub-screen back arrow (as Header's): history back, or `fallbackHref` when opened from a link. */
+function BackButton({ label, fallbackHref, className }: { label: string; fallbackHref: string; className?: string }) {
+  const router = useRouter();
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={() => {
+        if (window.history.length > 1) router.back();
+        else router.replace(fallbackHref);
+      }}
+      className={cx(
+        "press-sm inline-flex size-11 shrink-0 items-center justify-center rounded-chip bg-transparent text-ink active:bg-surface-2",
+        className,
+      )}
+    >
+      <Icon name="back" size={20} />
+    </button>
+  );
+}
+
+/** Desktop: the title and what the screen is for. Phones: only the line, while the history is empty. */
 function Intro({ wide = false }: { wide?: boolean }) {
+  const line = "Как слово звучит в живой речи — примеры, синонимы, спряжение.";
+  if (!wide) return <p className="m-0 mt-3 text-[14px] leading-5 text-muted">{line}</p>;
   return (
     <div>
-      <h1 className={cx("m-0 font-serif font-medium tracking-[-0.015em]", wide ? "text-[28px] leading-9" : "text-[32px] leading-10")}>Контекст</h1>
-      <p className="m-0 mt-0.5 text-[14px] leading-5 text-muted">Как слово звучит в живой речи — примеры, синонимы, спряжение.</p>
+      <h1 className="m-0 font-serif text-[28px] leading-9 font-medium tracking-[-0.015em]">Контекст</h1>
+      <p className="m-0 mt-0.5 text-[14px] leading-5 text-muted">{line}</p>
     </div>
   );
 }
@@ -315,7 +340,7 @@ function Results(props: ResultsProps) {
   if (!current || state.lookupPhase === "loading" || state.lookupPhase === "idle") return <LookupWait retryIn={current ? state.retryIn : null} wide={wide} />;
   if (state.lookupPhase === "error" || !state.lookup) return <LookupError error={state.error} online={online} onRetry={props.onRetry} />;
   const lookup = state.lookup;
-  if (!lookup.found) return <NotFound q={q} />;
+  if (!lookup.found) return <NotFound q={q} wide={wide} />;
 
   const all = state.context?.examples ?? [];
   const examples: ShownExample[] = all.length === 0 && props.invented ? [props.invented] : all;
@@ -360,7 +385,7 @@ function Results(props: ResultsProps) {
       <>
         <ul aria-label="Примеры" className="m-0 list-none p-0">
           {shown.map((e) => (
-            <Row key={`${e.url}\u0001${e.fr}`} example={e} inCard={inCard(e.fr)} onOpen={() => props.onOpenExample(e)} />
+            <Row key={`${e.url}\u0001${e.fr}`} example={e} inCard={inCard(e.fr)} onOpen={() => props.onOpenExample(e)} tag={wide || props.meaning === null} />
           ))}
         </ul>
         {all.some((e) => e.kind === "tatoeba") && <TatoebaCredit />}

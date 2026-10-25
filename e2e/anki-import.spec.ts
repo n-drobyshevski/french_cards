@@ -122,7 +122,7 @@ test("import an Anki deck: known words stay out, missing data is filled, progres
   );
 
   await page.goto("/import");
-  await page.getByRole("button", { name: /Колода Anki/ }).waitFor();
+  await page.getByRole("button", { name: /колода Anki/i }).waitFor();
   await page.locator("input[type=file][accept='.apkg,.colpkg,.txt,.csv,.tsv']").setInputFiles({
     name: "argot.apkg",
     mimeType: "application/octet-stream",

@@ -90,10 +90,15 @@ function RowCheckbox({
   );
 }
 
+/** The row's theme: the name alone (no «Тема:» on every row), a chevron when it can be changed. */
 function FolderLine({ label, onPick, disabled }: { label: string; onPick?: () => void; disabled?: boolean }) {
   const text = `Тема: ${label}`;
   if (!onPick || disabled) {
-    return <span className="max-w-[150px] truncate font-mono text-[11px] leading-5 tracking-[.06em] text-muted uppercase">{text}</span>;
+    return (
+      <span aria-label={text} className="max-w-[150px] truncate font-mono text-[11px] leading-5 tracking-[.06em] text-muted uppercase">
+        {label}
+      </span>
+    );
   }
   return (
     <button
@@ -103,7 +108,7 @@ function FolderLine({ label, onPick, disabled }: { label: string; onPick?: () =>
       onClick={onPick}
       className="relative -mr-1 inline-flex max-w-[160px] items-center gap-0.5 rounded-chip bg-transparent pr-1 pl-1 font-mono text-[11px] leading-5 tracking-[.06em] text-muted uppercase before:absolute before:-inset-y-3 before:inset-x-0 before:content-[''] active:bg-surface-2 active:text-ink"
     >
-      <span className="truncate">{text}</span>
+      <span className="truncate">{label}</span>
       <Icon name="chevron" size={12} className="shrink-0" />
     </button>
   );
@@ -117,7 +122,7 @@ export interface ImportRowItemProps {
   onPickFolder: () => void;
 }
 
-/** One extracted word: checkbox, FR/RU (tap to edit), slang meter and theme. */
+/** One extracted word: checkbox, FR/RU (tap to edit), slang meter and theme (2 lines; the example is in the editor). */
 export function ImportRowItem({ row, folders, onToggle, onEdit, onPickFolder }: ImportRowItemProps) {
   const dup = row.duplicate;
   const addable = canAdd(row);
@@ -145,12 +150,8 @@ export function ImportRowItem({ row, folders, onToggle, onEdit, onPickFolder }: 
         {row.fr.trim() || "—"}
       </span>
       {ru}
-      {row.exampleFr && !dup && (
-        <span lang="fr" className="truncate font-serif text-[14px] leading-5 text-muted italic">
-          {row.exampleFr}
-        </span>
-      )}
-      {!dup && row.customFields?.length ? <span className="text-[12px] leading-4 text-muted">{moreFieldsRu(row.customFields.length)}</span> : null}
+      {/* The example and the extra fields are for editing: the row editor shows the example. */}
+      {!dup && row.customFields?.length ? <span className="sr-only">{moreFieldsRu(row.customFields.length)}</span> : null}
     </>
   );
 
@@ -173,7 +174,7 @@ export function ImportRowItem({ row, folders, onToggle, onEdit, onPickFolder }: 
             </span>
           </button>
           <span className="mt-2 flex min-w-0 items-center justify-between gap-2">
-            <SlangMeter level={row.slang_level} verlan={row.verlan} />
+            <SlangMeter level={row.slang_level} verlan={row.verlan} row />
             <FolderLine label={choiceName(row.folder, folders)} onPick={onPickFolder} disabled={!addable} />
           </span>
         </span>
@@ -213,7 +214,7 @@ export function ImportRowItem({ row, folders, onToggle, onEdit, onPickFolder }: 
           </span>
         ) : (
           <span className="inline-flex h-6 items-center">
-            <SlangMeter level={row.slang_level} verlan={row.verlan} />
+            <SlangMeter level={row.slang_level} verlan={row.verlan} row />
           </span>
         )}
         {dup ? (

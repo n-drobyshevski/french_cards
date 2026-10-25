@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { bottomBarRef } from "@/components/ui/bottom-clearance";
 import { Button } from "@/components/ui/Button";
+import { Collapse } from "@/components/ui/Collapse";
 import { Header } from "@/components/ui/Header";
 import { Icon } from "@/components/ui/Icons";
 import { StatusLine } from "@/components/ui/StatusLine";
@@ -12,7 +13,7 @@ import { findDuplicate } from "@/lib/text";
 import type { Folder } from "@/lib/types";
 import { FolderPicker } from "./FolderPicker";
 import { ImportRowItem, RowEditor } from "./ImportRowItem";
-import { importStage, ShotSummary } from "./ProcessingView";
+import { importStage, ShotStrip } from "./ProcessingView";
 import {
   allAddableChecked,
   applyFolderToChecked,
@@ -47,10 +48,10 @@ export interface ReviewViewProps {
   deck?: { title: string; line: string };
 }
 
-/** The screenshots at full width under the summary, opened from its thumbnail. */
+/** The screenshots at full width under the strip, opened from it in place. */
 function ScreenshotGallery({ thumbs }: { thumbs: readonly string[] }) {
   return (
-    <div className="-mx-4 mt-3 flex gap-2 overflow-x-auto px-4 pb-1">
+    <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pt-1 pb-3">
       {thumbs.map((src, i) => (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -98,7 +99,6 @@ export function ReviewView({
   folders,
   proposals,
   thumbs,
-  images,
   tiles,
   incomplete,
   saving,
@@ -143,6 +143,7 @@ export function ReviewView({
   return (
     <>
       <Header
+        large
         title={`Найдено ${wordsRu(rows.length)}`}
         fallbackHref="/library"
         actions={
@@ -158,20 +159,25 @@ export function ReviewView({
         }
       />
 
-      {/* The same top as while the words were read (I3): the list below keeps its place. */}
-      <main className="flex flex-1 flex-col px-4 pt-2 pb-4">
+      {/* The finished summary folds into a 44px strip (I3, then the fold): the list gets the room. */}
+      <main className="flex flex-1 flex-col px-4 pb-4">
         {deck ? (
-          <AnkiReviewSummary title={deck.title} line={incompleteNotice(incomplete, true) ?? deck.line} />
+          <div className="pt-2">
+            <AnkiReviewSummary title={deck.title} line={incompleteNotice(incomplete, true) ?? deck.line} />
+          </div>
         ) : (
           <>
-            <ShotSummary stage={stage} thumbs={thumbs} images={images} tiles={tiles} onThumb={() => setGallery((v) => !v)} thumbOpen={gallery} />
-            {gallery && <ScreenshotGallery thumbs={thumbs} />}
+            <ShotStrip thumbs={thumbs} open={gallery} onToggle={() => setGallery((v) => !v)} />
+            <Collapse open={gallery}>
+              <ScreenshotGallery thumbs={thumbs} />
+            </Collapse>
           </>
         )}
 
-        <div className="relative mt-3">
-          <StatusLine text={deck ? `Готово · ${wordsRu(rows.length)}` : stage.status} active={false} announce={deck ? undefined : stage.announce} />
-          {incomplete && (
+        {/* «Найдено N слов» is the title: the status line stays only for a cut or stopped read. */}
+        {incomplete && (
+          <div className="relative mt-3">
+            <StatusLine text={deck ? `Готово · ${wordsRu(rows.length)}` : stage.status} active={false} announce={deck ? undefined : stage.announce} />
             <button
               type="button"
               onClick={onRestart}
@@ -180,17 +186,15 @@ export function ReviewView({
               <Icon name="spark" size={14} strokeWidth={1.5} className="shrink-0" />
               {deck ? "Дополнить заново" : "Распознать заново"}
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
-        <div className="meta mt-4 flex items-baseline justify-between border-b border-ink pb-2 leading-4">
-          <span aria-live="polite">
-            ОТМЕЧЕНО <span className="font-medium text-ink">{selected}</span> ИЗ {rows.length}
-          </span>
-          <span aria-hidden="true">УРОВЕНЬ · ТЕМА</span>
-        </div>
+        {/* The count is on «Добавить N слов»; screen readers hear it here as it changes. */}
+        <p aria-live="polite" className="sr-only">
+          Отмечено {selected} из {rows.length}
+        </p>
 
-        <ul aria-label="Найденные слова" className="m-0 flex list-none flex-col p-0">
+        <ul aria-label="Найденные слова" className="m-0 mt-4 flex list-none flex-col border-t border-rule p-0">
           {rows.map((row) =>
             editing === row.key ? (
               <RowEditor

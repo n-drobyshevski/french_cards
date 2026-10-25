@@ -2,17 +2,18 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { cx } from "@/components/ui/cx";
 
 /**
- * Section label with the ink rule under it; rows are separated by hairlines. `anchor`: the section's
- * id, a link target («/settings#set-data» from the library's sync mark, T7).
+ * Section label over a hairline; rows are separated by hairlines too (one ink rule per screen is the
+ * header's, not every section's). `anchor`: the section's id, a link target («/settings#set-data»
+ * from the library's sync mark, T7); it lands below the sticky large-title header row.
  */
 export function SettingsSection({ title, children, footer, anchor }: { title: string; children: ReactNode; footer?: ReactNode; anchor?: string }) {
   // No spaces: aria-labelledby takes a space-separated list of ids («Свои поля»).
   const id = `settings-${title.replace(/\s+/g, "-")}`;
   return (
-    <section id={anchor} aria-labelledby={id} className="mt-4 shrink-0">
+    <section id={anchor} aria-labelledby={id} className="mt-6 shrink-0 scroll-mt-[calc(68px+var(--safe-top))]">
       <h2
         id={id}
-        className="m-0 border-b border-ink pb-2 font-mono text-[11px] leading-4 font-medium tracking-[.06em] text-muted uppercase"
+        className="m-0 border-b border-rule pb-2 font-mono text-[11px] leading-4 font-medium tracking-[.06em] text-muted uppercase"
       >
         {title}
       </h2>

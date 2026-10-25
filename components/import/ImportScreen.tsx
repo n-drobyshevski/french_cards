@@ -289,8 +289,9 @@ export function ImportScreen() {
       message: `Добавлено ${wordsRu(result.words.length)}`,
       actionLabel: "Отменить",
       onAction: () => {
+        // Phones: the words leaving the library are the answer; no second bar narrates the undo.
         undoImport(result)
-          .then(() => snackbar.show({ message: "Импорт отменён" }))
+          .then(() => desk && snackbar.show({ message: "Импорт отменён" }))
           .catch(() => snackbar.show({ message: "Не удалось отменить" }));
       },
     });

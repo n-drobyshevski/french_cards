@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useUndoSnackbar } from "@/components/library/undo";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icons";
@@ -12,8 +12,17 @@ import type { Word } from "@/lib/types";
 import { updateWord } from "@/lib/words";
 import { hasExample, KIND_LABELS, placeExample, plural } from "./data";
 import { Hit, type ShownExample } from "./parts";
+import { StackedLabels } from "@/components/import/SwapLabel";
 
 const EXAMPLE_FORMS = ["пример", "примера", "примеров"] as const;
+
+const COPY_LABELS = ["Скопировать", "Скопировано"] as const;
+
+/** Phones: «Скопировать» ↔ «Скопировано», stacked so the button keeps its width (I6). Desktop: the snackbar answers. */
+function CopyLabel({ copied, wide }: { copied: boolean; wide: boolean }) {
+  if (wide) return <>Скопировать</>;
+  return <StackedLabels labels={COPY_LABELS} current={copied ? "Скопировано" : "Скопировать"} />;
+}
 
 export interface ExampleSheetProps {
   /** The example to act on; null closes the sheet. */
@@ -38,6 +47,13 @@ export function ExampleSheet({ example, word, wide, onClose, onAddWord }: Exampl
   const [busy, setBusy] = useState<"add" | "main" | null>(null);
   const showUndo = useUndoSnackbar();
   const snackbar = useSnackbar();
+  // Phones: «Скопировать» answers on itself for 1.2 s («Скопировано»), not with a bar.
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = window.setTimeout(() => setCopied(false), 1200);
+    return () => window.clearTimeout(t);
+  }, [copied]);
 
   const ex = shown;
   const count = word ? wordExamples(word).length : 0;
@@ -65,7 +81,8 @@ export function ExampleSheet({ example, word, wide, onClose, onAddWord }: Exampl
     const id = word.id;
     afterClose(() =>
       showUndo({
-        message: main ? `Главный пример · ${word.fr}` : `Пример добавлен · ${word.fr}`,
+        // Phones: verb + object only; the word is the screen's own headword.
+        message: wide ? (main ? `Главный пример · ${word.fr}` : `Пример добавлен · ${word.fr}`) : main ? "Пример стал главным" : "Пример добавлен",
         undo: () => void updateWord(id, before),
       }),
     );
@@ -75,7 +92,8 @@ export function ExampleSheet({ example, word, wide, onClose, onAddWord }: Exampl
     if (!ex) return;
     try {
       await navigator.clipboard.writeText(ex.ru ? `${ex.fr}\n${ex.ru}` : ex.fr);
-      snackbar.show({ message: "Пример скопирован" });
+      if (wide) snackbar.show({ message: "Пример скопирован" });
+      else setCopied(true);
     } catch {
       snackbar.show({ message: "Не получилось скопировать" });
     }
@@ -146,7 +164,7 @@ export function ExampleSheet({ example, word, wide, onClose, onAddWord }: Exampl
                   Сделать главным
                 </Button>
                 <Button variant="secondary" size="md" className="border-rule" onClick={() => void copy()}>
-                  Скопировать
+                  <CopyLabel copied={copied} wide={wide} />
                 </Button>
               </div>
             </>
@@ -156,7 +174,7 @@ export function ExampleSheet({ example, word, wide, onClose, onAddWord }: Exampl
                 Добавить слово с этим примером
               </Button>
               <Button variant="secondary" size="md" block className="mt-2 border-rule" onClick={() => void copy()}>
-                Скопировать
+                <CopyLabel copied={copied} wide={wide} />
               </Button>
             </>
           )}
