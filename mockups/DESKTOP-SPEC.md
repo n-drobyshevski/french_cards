@@ -1095,7 +1095,7 @@ Everything phones can do, desktop can do too. Where the boards above differ, thi
   the layout is §10. Differences from the phone: two calendar months instead of one, the selected day in a
   pane instead of in place, mistakes open the word in Библиотека instead of the word sheet, and no slang meter
   on mistake rows.
-- **«План и прогресс»** (added 2026-10-25; SPEC.md «План и прогресс», picks R34 D1 A, D2 A; board `D-Plan-Fit-A`):
+- **«План и прогресс»** (added 2026-10-25; SPEC.md «План и прогресс», picks R36 D1 A, D2 A; board `D-Plan-Fit-A`):
   the same `planFit` numbers, fit line, suggestion, copy rules N1–N6 and undo snackbar as on phones; the layout
   is §11. Differences from the phone: a 120×24 sparkline of new words a day beside the fit line, the suggestion's
   forecast and «Не сейчас» in the row instead of behind a fold, and the ledger's plan as a second line in

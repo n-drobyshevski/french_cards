@@ -1565,9 +1565,153 @@
    "title": "D1 · C — десктоп, листы месяцев",
    "is_interactive": true
   },
+  "X-List-A.dc.html": {
+   "x": 0,
+   "y": 42416,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения — A Подчистить",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-List-B.dc.html": {
+   "x": 470,
+   "y": 42416,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения — B Картотека",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-List-C.dc.html": {
+   "x": 940,
+   "y": 42416,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения — C Обложки",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-List-B-Empty.dc.html": {
+   "x": 1410,
+   "y": 42416,
+   "w": 390,
+   "h": 844,
+   "title": "Упражнения — B пусто",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Request-A.dc.html": {
+   "x": 1880,
+   "y": 42416,
+   "w": 390,
+   "h": 844,
+   "title": "Попросить набор — A «Подчистить»",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Request-B.dc.html": {
+   "x": 2350,
+   "y": 42416,
+   "w": 390,
+   "h": 844,
+   "title": "Попросить набор — B «Одна фраза»",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Request-C.dc.html": {
+   "x": 2820,
+   "y": 42416,
+   "w": 390,
+   "h": 844,
+   "title": "Попросить набор — C «Карточка запроса»",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Player-A.dc.html": {
+   "x": 0,
+   "y": 43580,
+   "w": 390,
+   "h": 844,
+   "title": "Плеер — A Подчистить",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Player-B.dc.html": {
+   "x": 470,
+   "y": 43580,
+   "w": 390,
+   "h": 844,
+   "title": "Плеер — B Карточка с пропуском",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Player-C.dc.html": {
+   "x": 940,
+   "y": 43580,
+   "w": 390,
+   "h": 844,
+   "title": "Плеер — C Слип в слот",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Player-B-Right.dc.html": {
+   "x": 1410,
+   "y": 43580,
+   "w": 390,
+   "h": 844,
+   "title": "Плеер — B Верно",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Player-B-Wrong.dc.html": {
+   "x": 1880,
+   "y": 43580,
+   "w": 390,
+   "h": 844,
+   "title": "Плеер — B Неверно",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Player-B-Types.dc.html": {
+   "x": 2350,
+   "y": 43580,
+   "w": 390,
+   "h": 844,
+   "title": "Плеер — B Типы вопросов",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Done-A.dc.html": {
+   "x": 2820,
+   "y": 43580,
+   "w": 390,
+   "h": 844,
+   "title": "Итог набора — A Подчистить",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Done-B.dc.html": {
+   "x": 3290,
+   "y": 43580,
+   "w": 390,
+   "h": 844,
+   "title": "Итог набора — B Карточка итога",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "X-Done-C.dc.html": {
+   "x": 3760,
+   "y": 43580,
+   "w": 390,
+   "h": 844,
+   "title": "Итог набора — C Разложенные карточки",
+   "is_interactive": true,
+   "radius": 28
+  },
   "Plan-Fit-A-Progress.dc.html": {
    "x": 0,
-   "y": 42536,
+   "y": 44744,
    "w": 390,
    "h": 844,
    "title": "D1 · A — строка в ведомости",
@@ -1576,7 +1720,7 @@
   },
   "Plan-Fit-A-Settings.dc.html": {
    "x": 470,
-   "y": 42536,
+   "y": 44744,
    "w": 390,
    "h": 844,
    "title": "D2 · A — тихая строка в настройках",
@@ -1585,7 +1729,7 @@
   },
   "Plan-Fit-B-Progress.dc.html": {
    "x": 940,
-   "y": 42536,
+   "y": 44744,
    "w": 390,
    "h": 844,
    "title": "D1 · B — темп на шкалах",
@@ -1594,7 +1738,7 @@
   },
   "Plan-Fit-B-Settings.dc.html": {
    "x": 1410,
-   "y": 42536,
+   "y": 44744,
    "w": 390,
    "h": 844,
    "title": "D2 · B — предложенное значение в шаге",
@@ -1603,7 +1747,7 @@
   },
   "Plan-Fit-C-Progress.dc.html": {
    "x": 1880,
-   "y": 42536,
+   "y": 44744,
    "w": 390,
    "h": 844,
    "title": "D1 · C — полоса двух недель",
@@ -1612,7 +1756,7 @@
   },
   "Plan-Fit-C-Settings.dc.html": {
    "x": 2350,
-   "y": 42536,
+   "y": 44744,
    "w": 390,
    "h": 844,
    "title": "D2 · C — карточка-предложение",
@@ -1621,7 +1765,7 @@
   },
   "Plan-Fit-States.dc.html": {
    "x": 2820,
-   "y": 42536,
+   "y": 44744,
    "w": 1730,
    "h": 844,
    "title": "План и прогресс — состояния",
@@ -1630,7 +1774,7 @@
   },
   "D-Plan-Fit-A.dc.html": {
    "x": 0,
-   "y": 43700,
+   "y": 45908,
    "w": 1440,
    "h": 800,
    "title": "D1 · A — десктоп, темп и ведомость",
@@ -1638,7 +1782,7 @@
   },
   "D-Plan-Fit-B.dc.html": {
    "x": 1520,
-   "y": 43700,
+   "y": 45908,
    "w": 1440,
    "h": 800,
    "title": "D1 · B — десктоп, панель «Темп»",
@@ -1646,7 +1790,7 @@
   },
   "D-Plan-Fit-C.dc.html": {
    "x": 3040,
-   "y": 43700,
+   "y": 45908,
    "w": 1440,
    "h": 800,
    "title": "D1 · C — десктоп, полоса и карточка",
@@ -1833,6 +1977,22 @@
   "D-Progress-A.dc.html",
   "D-Progress-B.dc.html",
   "D-Progress-C.dc.html",
+  "X-List-A.dc.html",
+  "X-List-B.dc.html",
+  "X-List-C.dc.html",
+  "X-List-B-Empty.dc.html",
+  "X-Request-A.dc.html",
+  "X-Request-B.dc.html",
+  "X-Request-C.dc.html",
+  "X-Player-A.dc.html",
+  "X-Player-B.dc.html",
+  "X-Player-C.dc.html",
+  "X-Player-B-Right.dc.html",
+  "X-Player-B-Wrong.dc.html",
+  "X-Player-B-Types.dc.html",
+  "X-Done-A.dc.html",
+  "X-Done-B.dc.html",
+  "X-Done-C.dc.html",
   "Plan-Fit-A-Progress.dc.html",
   "Plan-Fit-A-Settings.dc.html",
   "Plan-Fit-B-Progress.dc.html",
@@ -2078,15 +2238,29 @@
   },
   "row34": {
    "x": 0,
-   "y": 42416,
-   "text": "34 · Прогресс и план — варианты (D1 вид, D2 предложение) и состояния",
+   "y": 42296,
+   "text": "34 · Упражнения · главная и запрос",
    "kind": "title1",
-   "maxW": 4550
+   "maxW": 1800
   },
   "row35": {
    "x": 0,
-   "y": 43580,
-   "text": "35 · Прогресс и план — десктоп",
+   "y": 43460,
+   "text": "35 · Упражнения · плеер и итог",
+   "kind": "title1",
+   "maxW": 1800
+  },
+  "row36": {
+   "x": 0,
+   "y": 44624,
+   "text": "36 · Прогресс и план — варианты (D1 вид, D2 предложение) и состояния",
+   "kind": "title1",
+   "maxW": 4550
+  },
+  "row37": {
+   "x": 0,
+   "y": 45788,
+   "text": "37 · Прогресс и план — десктоп",
    "kind": "title1",
    "maxW": 4480
   }

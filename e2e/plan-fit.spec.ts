@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { openReview } from "./fixtures";
 
 // «План и прогресс» (Plan-Fit-A-Settings): with two weeks of using the whole plan, light load and
 // good answers, «План повторения» offers more new words; «Поставить 15» applies it, «Вернуть» undoes.
@@ -17,7 +18,6 @@ async function seedSurplus(page: Page) {
         q.onsuccess = () => resolve(q.result as T[]);
       });
     const words = await all<Record<string, unknown> & { id: string }>("words");
-    const states = await all<Record<string, unknown> & { word_id: string; direction: string }>("review_state");
     const w0 = words[0];
     const now = Date.now();
     const iso = (t: number) => new Date(t).toISOString();
@@ -25,9 +25,12 @@ async function seedSurplus(page: Page) {
     for (let i = 0; i < 500; i++) {
       const id = `seedw-${i}`;
       tx.objectStore("words").put({ ...w0, id, fr: `mot${i}`, ru: `слово${i}`, created_at: iso(now - 40 * 864e5), updated_at: iso(now - 40 * 864e5) });
+      // Two New cards of its own (the first-run seed's states may not be written yet).
       for (const dir of ["fr_ru", "ru_fr"]) {
-        const s = states.find((x) => x.word_id === w0.id && x.direction === dir)!;
-        tx.objectStore("review_state").put({ ...s, id: `${id}:${dir}`, word_id: id, direction: dir });
+        tx.objectStore("review_state").put({
+          id: `${id}:${dir}`, word_id: id, direction: dir, due: iso(now - 40 * 864e5), stability: 0, difficulty: 0, elapsed_days: 0,
+          scheduled_days: 0, learning_steps: 0, reps: 0, lapses: 0, state: 0, last_review: null, updated_at: iso(now - 40 * 864e5), deleted_at: null,
+        });
       }
     }
     let n = 0;
@@ -59,10 +62,11 @@ async function seedSurplus(page: Page) {
 }
 
 test("«План повторения» offers more new words after two full weeks; «Поставить 15», then «Вернуть»", async ({ page }) => {
+  // The first-run seed is in (its cards are in the review queue) before the history goes in.
+  await openReview(page);
+  await seedSurplus(page);
   await page.goto("/settings/plan");
   await expect(page.getByRole("heading", { name: "План повторения" })).toBeVisible();
-  await seedSurplus(page);
-  await page.reload();
 
   await expect(page.getByText(/^За 2 недели обычно: все 10 новых/)).toBeVisible();
   await expect(page.getByText("Можно брать 15 в день")).toBeVisible();

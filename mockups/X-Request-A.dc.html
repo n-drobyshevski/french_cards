@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Попросить набор — A «Подчистить»</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#111111}a:hover{color:#c8331f}
+button{font:inherit}
+input{font:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #f1f1ee; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif; display: flex; flex-direction: column">
+  <div aria-hidden="true" style="position: absolute; inset: 0; padding: 16px 16px 0; box-sizing: border-box; display: flex; flex-direction: column">
+    <header style="height: 44px; flex-shrink: 0; display: flex; align-items: center; gap: 12px">
+      <h1 style="margin: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 28px; line-height: 36px; letter-spacing: -0.01em">Упражнения</h1>
+      <div style="flex: 1"></div>
+      <span style="height: 36px; padding: 0 12px; display: inline-flex; align-items: center; box-sizing: border-box; border: 1px solid #111111; border-radius: 6px; background: #ffffff; font-size: 13px; font-weight: 500">Попросить набор</span>
+    </header>
+    <div style="flex-shrink: 0; margin-top: 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+      <div style="height: 152px; position: relative; display: flex; flex-direction: column; padding: 15px 12px 12px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden">
+        <span style="position: absolute; left: 0; right: 0; top: 0; height: 3px; background: #c8331f"></span>
+        <span style="font-family: Newsreader, Georgia, serif; font-size: 19px; line-height: 24px; font-weight: 500">Сленг на каждый день</span>
+        <span style="margin-top: auto; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #c8331f; font-weight: 500">Новый</span>
+      </div>
+      <div style="height: 152px; position: relative; display: flex; flex-direction: column; padding: 15px 12px 12px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden">
+        <span style="font-family: Newsreader, Georgia, serif; font-size: 19px; line-height: 24px; font-weight: 500">Верлан: основы</span>
+        <span style="margin-top: auto; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #111111; font-weight: 500">Прервано 5/8</span>
+      </div>
+      <div style="height: 152px; position: relative; display: flex; flex-direction: column; padding: 15px 12px 12px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden">
+        <span style="font-family: Newsreader, Georgia, serif; font-size: 19px; line-height: 24px; font-weight: 500">Деньги и работа</span>
+      </div>
+      <div style="height: 152px; position: relative; display: flex; flex-direction: column; padding: 15px 12px 12px; box-sizing: border-box; background: #ffffff; border: 1px solid #d6d6d1; border-radius: 6px; overflow: hidden">
+        <span style="font-family: Newsreader, Georgia, serif; font-size: 19px; line-height: 24px; font-weight: 500">Работа над ошибками</span>
+      </div>
+    </div>
+  </div>
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; bottom: 0; height: 88px; background: #ffffff; border-top: 1px solid #d6d6d1"></div>
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(17,17,17,.4)"></div>
+  <section role="dialog" aria-modal="true" aria-label="Попросить набор" style="position: absolute; left: 0; right: 0; bottom: 0; background: #f1f1ee; border-top: 1px solid #111111; border-radius: 12px 12px 0 0; display: flex; flex-direction: column; padding: 0 16px 28px; box-sizing: border-box">
+    <div aria-hidden="true" style="height: 20px; flex-shrink: 0; display: flex; align-items: center; justify-content: center"><span style="width: 36px; height: 4px; border-radius: 2px; background: #d6d6d1"></span></div>
+    <a href="Exercise-List-B.dc.html" aria-label="Закрыть" style="position: absolute; top: 0; left: 0; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap">Закрыть</a>
+    <div style="height: 44px; flex-shrink: 0; display: flex; align-items: center">
+      <h2 style="margin: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 24px">Попросить набор</h2>
+    </div>
+    <span id="ra-from" style="margin-top: 2px; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; line-height: 16px; letter-spacing: .06em; text-transform: uppercase; color: #5a5a57">Из каких слов</span>
+    <div role="group" aria-labelledby="ra-from" style="margin-top: 4px; display: flex; flex-wrap: wrap; column-gap: 6px; align-items: center">
+      <button type="button" aria-pressed="false" aria-label="Только трудные слова из всех тем: 9" style="height: 44px; padding: 4px 0; border: 0; background: transparent; display: inline-flex; cursor: pointer; color: inherit"><span style="height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; border-radius: 4px; font-size: 13px; white-space: nowrap; border: 1px solid #d6d6d1; background: #ffffff; color: #111111">Трудные<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; color: #5a5a57">9</span></span></button>
+      <button type="button" aria-pressed="false" aria-label="Только слова к повторению: 23" style="height: 44px; padding: 4px 0; border: 0; background: transparent; display: inline-flex; cursor: pointer; color: inherit"><span style="height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; border-radius: 4px; font-size: 13px; white-space: nowrap; border: 1px solid #d6d6d1; background: #ffffff; color: #111111">К повторению<span style="font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 11px; color: #5a5a57">23</span></span></button>
+      <span aria-hidden="true" style="flex-basis: 100%; height: 0"></span>
+      <button type="button" aria-pressed="false" style="height: 44px; padding: 4px 0; border: 0; background: transparent; display: inline-flex; cursor: pointer; color: inherit"><span style="height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; border-radius: 4px; font-size: 13px; white-space: nowrap; border: 1px solid #d6d6d1; background: #ffffff; color: #111111">Повседневное</span></button>
+      <button type="button" aria-pressed="false" style="height: 44px; padding: 4px 0; border: 0; background: transparent; display: inline-flex; cursor: pointer; color: inherit"><span style="height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; border-radius: 4px; font-size: 13px; white-space: nowrap; border: 1px solid #d6d6d1; background: #ffffff; color: #111111">Деньги</span></button>
+      <button type="button" aria-pressed="true" style="height: 44px; padding: 4px 0; border: 0; background: transparent; display: inline-flex; cursor: pointer; color: inherit"><span style="height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; border-radius: 4px; font-size: 13px; white-space: nowrap; border: 1px solid #111111; background: #111111; color: #ffffff; font-weight: 500"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17 19 7"></path></svg>Еда</span></button>
+      <button type="button" aria-pressed="true" style="height: 44px; padding: 4px 0; border: 0; background: transparent; display: inline-flex; cursor: pointer; color: inherit"><span style="height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; border-radius: 4px; font-size: 13px; white-space: nowrap; border: 1px solid #111111; background: #111111; color: #ffffff; font-weight: 500"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5 10 17 19 7"></path></svg>Полиция</span></button>
+      <button type="button" aria-pressed="false" style="height: 44px; padding: 4px 0; border: 0; background: transparent; display: inline-flex; cursor: pointer; color: inherit"><span style="height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; border-radius: 4px; font-size: 13px; white-space: nowrap; border: 1px solid #d6d6d1; background: #ffffff; color: #111111">Тусовка</span></button>
+      <button type="button" aria-pressed="false" style="height: 44px; padding: 4px 0; border: 0; background: transparent; display: inline-flex; cursor: pointer; color: inherit"><span style="height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; border-radius: 4px; font-size: 13px; white-space: nowrap; border: 1px solid #d6d6d1; background: #ffffff; color: #111111">Эмоции</span></button>
+      <button type="button" aria-pressed="false" style="height: 44px; padding: 4px 0; border: 0; background: transparent; display: inline-flex; cursor: pointer; color: inherit"><span style="height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; border-radius: 4px; font-size: 13px; white-space: nowrap; border: 1px solid #d6d6d1; background: #ffffff; color: #111111">Люди</span></button>
+      <button type="button" aria-pressed="false" style="height: 44px; padding: 4px 0; border: 0; background: transparent; display: inline-flex; cursor: pointer; color: inherit"><span style="height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; border-radius: 4px; font-size: 13px; white-space: nowrap; border: 1px solid #d6d6d1; background: #ffffff; color: #111111">Входящие</span></button>
+      <button type="button" aria-pressed="false" style="height: 44px; padding: 4px 0; border: 0; background: transparent; display: inline-flex; cursor: pointer; color: inherit"><span style="height: 36px; padding: 0 12px; display: inline-flex; align-items: center; gap: 6px; box-sizing: border-box; border-radius: 4px; font-size: 13px; white-space: nowrap; border: 1px dashed #8a8a85; background: transparent; color: #111111">+ своя тема</span></button>
+    </div>
+
+    <div style="margin-top: 10px; display: flex; flex-direction: column; border-top: 1px solid #d6d6d1">
+      <div style="height: 52px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #d6d6d1">
+        <span id="ra-verbs" style="flex: 1; font-size: 15px; line-height: 20px">Спряжение глаголов</span>
+        <button type="button" role="switch" aria-checked="false" aria-labelledby="ra-verbs" style="width: 52px; height: 44px; margin-right: -4px; padding: 0; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; flex-shrink: 0; cursor: pointer"><span style="width: 44px; height: 24px; box-sizing: border-box; padding: 2px; display: flex; align-items: center; border-radius: 4px; border: 1px solid #5a5a57; background: #ffffff; justify-content: flex-start"><span style="width: 18px; height: 18px; border-radius: 2px; background: #5a5a57"></span></span></button>
+      </div>
+      <div style="height: 52px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #d6d6d1">
+        <span id="ra-size" style="flex: 1; font-size: 15px; line-height: 20px">Вопросов</span>
+        <span role="radiogroup" aria-labelledby="ra-size" style="display: flex; flex-shrink: 0"><button type="button" role="radio" aria-checked="false" style="height: 44px; padding: 4px 0; border: 0; background: transparent; display: flex; cursor: pointer"><span style="width: 52px; height: 36px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid #111111; border-right: 0; border-radius: 4px 0 0 4px; background: #ffffff; color: #111111; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; ">8</span></button><button type="button" role="radio" aria-checked="true" style="height: 44px; padding: 4px 0; border: 0; background: transparent; display: flex; cursor: pointer"><span style="width: 52px; height: 36px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid #111111; border-right: 0; border-radius: 0; background: #111111; color: #ffffff; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; font-weight: 500">12</span></button><button type="button" role="radio" aria-checked="false" style="height: 44px; padding: 4px 0; border: 0; background: transparent; display: flex; cursor: pointer"><span style="width: 52px; height: 36px; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border: 1px solid #111111; border-radius: 0 4px 4px 0; background: #ffffff; color: #111111; font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; ">16</span></button></span>
+      </div>
+      <div style="height: 60px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid #d6d6d1">
+        <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+          <span id="ra-new" style="font-size: 15px; line-height: 20px">Можно новые слова</span>
+          <span style="font-size: 12px; line-height: 16px; color: #5a5a57">Claude найдёт их в вебе, до 8 в наборе</span>
+        </span>
+        <button type="button" role="switch" aria-checked="true" aria-labelledby="ra-new" style="width: 52px; height: 44px; margin-right: -4px; padding: 0; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; flex-shrink: 0; cursor: pointer"><span style="width: 44px; height: 24px; box-sizing: border-box; padding: 2px; display: flex; align-items: center; border-radius: 4px; border: 1px solid #111111; background: #111111; justify-content: flex-end"><span style="width: 18px; height: 18px; border-radius: 2px; background: #ffffff"></span></span></button>
+      </div>
+      <button type="button" aria-expanded="false" style="width: 100%; height: 44px; padding: 0; display: flex; align-items: center; gap: 6px; border: 0; border-bottom: 1px solid #d6d6d1; background: transparent; color: #111111; font-size: 14px; text-align: left; cursor: pointer; white-space: nowrap">
+        <span style="font-weight: 500">Ещё</span><span style="color: #5a5a57">· текст запроса</span><span style="flex: 1"></span><span style="display: inline-flex; color: #5a5a57"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"></path></svg></span>
+      </button>
+    </div>
+
+    <div style="margin-top: 20px; display: flex; flex-direction: column">
+      <a href="Exercise-S-Waiting.dc.html" aria-label="Скопировать запрос и открыть Claude" style="height: 52px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; gap: 10px; border-radius: 6px; background: #111111; color: #ffffff; text-decoration: none; font-size: 15px; font-weight: 500"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 3c.5 4.4 2.6 6.5 7 7-4.4.5-6.5 2.6-7 7-.5-4.4-2.6-6.5-7-7 4.4-.5 6.5-2.6 7-7Z"></path><path d="M19 16c.2 1.6.9 2.3 2.5 2.5-1.6.2-2.3.9-2.5 2.5-.2-1.6-.9-2.3-2.5-2.5 1.6-.2 2.3-.9 2.5-2.5Z"></path></svg><span>Скопировать и открыть Claude</span><span style="display: inline-flex; opacity: .7"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7"></path><path d="M8 7h9v9"></path></svg></span></a>
+      <a href="Exercise-S-Connector-Help.dc.html" style="height: 44px; margin-top: 4px; align-self: center; display: inline-flex; align-items: center; gap: 2px; color: #5a5a57; text-decoration: none; font-size: 13px">Нет коннектора? <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg></a>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

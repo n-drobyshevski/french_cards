@@ -12,7 +12,7 @@ export interface FeedbackLineProps {
   answer?: ReactNode;
   /** Plain text of the answer, for its language. */
   answerText?: string | null;
-  /** explain_ru: on phones its own line under the answer (two lines at most); from 768 one muted line, cut with an ellipsis. */
+  /** explain_ru: from 768 one muted line, cut with an ellipsis (phones write it on the card). */
   explain?: string | null;
   /** Mismatches on a pairs board. */
   misses?: number;
@@ -25,12 +25,13 @@ const nextButton =
   "press shrink-0 items-center justify-center gap-2.5 rounded-btn border border-ink bg-ink font-medium text-on-ink active:border-ink-press active:bg-ink-press";
 
 /**
- * The one result line under the grid (pick D5 C), inside the player's fixed action zone, so nothing
- * moves when the answer lands. Wrong / «Не знаю»: mono «ОТВЕТ» + the right answer in the good tone,
+ * Phones (X-Player-B): only the full-width black «Дальше» — the stamp, the answer and explain_ru
+ * are written on the card, and the headword opens the word sheet. From 768: the one result line
+ * under the grid (pick D5 C), inside the player's fixed action zone, so nothing moves when the
+ * answer lands. Wrong / «Не знаю»: mono «ОТВЕТ» + the right answer in the good tone,
  * `explain_ru`, «Слово ›», and the black «Дальше». Right: `explain_ru` + «Слово ›», and the same
- * «Дальше» — nothing moves on by itself (changed from the 1 s auto-advance on 2026-10-23). On
- * phones `explain_ru` takes its own line under the answer. From 768: one 64px row ruled at the
- * bottom, «Дальше ↵» at its right.
+ * «Дальше» — nothing moves on by itself (changed from the 1 s auto-advance on 2026-10-23). One
+ * 64px row ruled at the bottom, «Дальше ↵» at its right.
  */
 export function FeedbackLine({ tone, answer, answerText, explain, misses = 0, onWord, onNext }: FeedbackLineProps) {
   const lang = answerText && !isRussian(answerText) ? "fr" : "ru";
@@ -45,8 +46,8 @@ export function FeedbackLine({ tone, answer, answerText, explain, misses = 0, on
     >
       {/* For reading the page; the player's live region announces it. */}
       <span className="sr-only">{resultAnnouncement(tone, misses)}</span>
-      {/* Phones: the answer row (dropped when it would be empty: a right answer with no «Слово ›»). */}
-      <div className={cx("flex h-11 min-w-0 shrink-0 items-center gap-2 md:h-auto md:flex-1 md:gap-3", tone === "right" && !onWord && "max-md:hidden")}>
+      {/* From 768: the answer row. Phones write the answer and explain_ru on the card (X-Player-B). */}
+      <div className="flex h-11 min-w-0 shrink-0 items-center gap-2 max-md:hidden md:h-auto md:flex-1 md:gap-3">
         {tone === "wrong" && answer != null && (
           <>
             <span className="meta shrink-0">ответ</span>
@@ -80,10 +81,7 @@ export function FeedbackLine({ tone, answer, answerText, explain, misses = 0, on
         )}
       </div>
 
-      {/* Phones: the explanation in full (it teaches the word), under the answer. */}
-      {explain && <p className="m-0 line-clamp-2 shrink-0 text-[13px] leading-5 whitespace-normal text-muted md:hidden [@media(max-height:740px)]:line-clamp-1">{explain}</p>}
-
-      {/* Phones: the bottom of the zone. */}
+      {/* Phones: «Дальше» is the only action after answering (X-Player-B). */}
       <div className="flex min-h-0 flex-1 flex-col justify-end md:hidden">
         <button type="button" data-advance="" onClick={onNext} className={cx(nextButton, "inline-flex h-[52px] w-full text-[15px]")}>
           Дальше
