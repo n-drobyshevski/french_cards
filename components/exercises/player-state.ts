@@ -3,6 +3,7 @@
 // file adds what the screen needs on top: the answer shown on the current card, the counter
 // «07 / 12 +1», the option tiles' verdicts, a stable random per attempt, and the pairs board.
 // Nothing here writes: the player saves each answer with recordAnswer.
+import type { StripMark } from "@/components/ui/SessionStrip";
 import { requeue, seededRandom, type QueueEntry } from "@/lib/core/exercises";
 import type { ExerciseAnswer, ExerciseItem, ExerciseOutcome, ExerciseSet } from "@/lib/types";
 
@@ -89,6 +90,45 @@ export function progressOf(state: Pick<PlayerState, "queue" | "total">): PlayerP
     repeats,
     ratio: total === 0 ? 0 : met / total,
   };
+}
+
+/**
+ * One mark per attempt answered, in the order they were answered (the run's answer rows): right on
+ * the first attempt = first, an attempt with a miss in it (wrong, «Не знаю», a pairs board with a
+ * mismatch) = miss, right on a later attempt = requeued. A pairs board writes a row per mismatch and
+ * one at its end, so rows are grouped by item and attempt. `skip`: attempts not finished yet (still
+ * in the queue), left out. The Done strip and the left part of the player's tick row.
+ */
+export function attemptMarks(
+  answers: readonly Pick<ExerciseAnswer, "item_id" | "attempt" | "outcome">[],
+  skip?: ReadonlySet<string>,
+): StripMark[] {
+  const order: string[] = [];
+  const missed = new Map<string, boolean>();
+  for (const a of answers) {
+    const key = `${a.item_id}:${a.attempt}`;
+    if (skip?.has(key)) continue;
+    if (!missed.has(key)) order.push(key);
+    missed.set(key, (missed.get(key) ?? false) || a.outcome !== "correct");
+  }
+  return order.map((key) => (missed.get(key) ? "miss" : key.endsWith(":1") ? "first" : "requeued"));
+}
+
+/**
+ * The player's tick row (phones, L-ExPlayer-B): the attempts answered so far, then the queue — its
+ * first question is the current tick (taller ink; while its answer shows it stays current until
+ * «Дальше»), fresh questions are hairline, a missed question waiting to come back is a hollow tick
+ * where it will come back (behind 3 others, so often at the end).
+ */
+export function playerMarks(
+  answers: readonly Pick<ExerciseAnswer, "item_id" | "attempt" | "outcome">[],
+  queue: readonly QueueEntry[],
+): StripMark[] {
+  const items = queue.filter((e): e is Extract<QueueEntry, { kind: "item" }> => e.kind === "item");
+  const open = new Set(items.map((e) => `${e.item_id}:${e.attempt}`));
+  const marks = attemptMarks(answers, open);
+  items.forEach((e, i) => marks.push(i === 0 ? "current" : e.attempt > 1 ? "requeued" : "future"));
+  return marks;
 }
 
 /** «07 / 12» with two-digit padding, as the review counter. */

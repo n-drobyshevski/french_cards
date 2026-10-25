@@ -28,6 +28,8 @@ const tile = (page: Page, title: string) => page.getByRole("link", { name: new R
 /** Text the phone and desktop layouts both carry (one of them hidden). */
 const shown = (page: Page, text: string) => page.getByText(text, { exact: true }).filter({ visible: true });
 const pair = (page: Page, side: "fr" | "ru", text: string) => page.locator(`button[data-pair="${side}"]`, { hasText: text });
+/** The phone player's tick row: a button named with the exact count («Вопрос 2 из 5, плюс 1 повтор»). */
+const progressTicks = (page: Page) => page.getByRole("button", { name: /^Вопрос \d+ из \d+/ });
 
 /** First-run seed, the set, then the list (a fresh load: the live queries do not see raw IndexedDB writes). */
 async function openList(page: Page) {
@@ -63,22 +65,26 @@ test("the list: tiles with «Новый», the «Упражнения» tab is a
   await expect(bar.getByRole("link")).toHaveText(["Повторение", "Упражнения", "Библиотека"]);
   await expect(bar.getByRole("link", { name: "Упражнения" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("heading", { level: 1, name: "Упражнения" })).toBeVisible();
-  await expect(shown(page, "1 набор · составлены в чате")).toBeVisible();
+  // Phones (list B): no set count over the grid; the schedule note is said here once.
+  await expect(shown(page, "Не влияют на расписание повторений")).toBeVisible();
   const t = tile(page, SLANG_SET.title);
-  await expect(t).toContainText("5 вопросов");
-  await expect(t).toContainText("Новый");
+  // Phones (list B): «5 · Повседневное» on the tile; the count and «Новый» stay in its name.
+  await expect(t).toContainText("5 · Повседневное");
+  await expect(t).toHaveAccessibleName(/5 вопросов.*\. Новый$/);
   await expect(page.getByRole("button", { name: /Попросить набор/ }).last()).toBeVisible();
 
   await t.click();
   await expect(page).toHaveURL(/\/exercises\/play$/);
   await expect(exerciseCard(page)).toBeVisible();
   await expect(tabBar(page)).toHaveCount(0);
-  await expect(shown(page, "Упражнение · не влияет на расписание")).toBeVisible();
+  // L-ExPlayer-B: × and the tick row only; the schedule line is gone from the player on phones.
+  await expect(progressTicks(page)).toHaveAccessibleName("Вопрос 1 из 5");
+  await expect(shown(page, "Упражнение · не влияет на расписание")).toHaveCount(0);
 });
 
 test("a round: wrong → «ПОВТОР», right waits for «Дальше» too, «Не знаю», the new word's intro, the receipt", async ({ page }) => {
   await startSet(page);
-  await expect(shown(page, "01 / 05")).toBeVisible();
+  await expect(progressTicks(page)).toHaveAccessibleName("Вопрос 1 из 5");
 
   // q1 wrong: the НЕВЕРНО stamp, the right answer and explain_ru on the line; it waits for «Дальше».
   await wrongOption(page, "копы").click();
@@ -92,8 +98,11 @@ test("a round: wrong → «ПОВТОР», right waits for «Дальше» too,
 
   // q2 cloze, right: ВЕРНО, and the card stays until «Дальше» (nothing moves on by itself).
   await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "cloze");
-  await expect(shown(page, "02 / 05")).toBeVisible();
-  await expect(shown(page, "+1")).toBeVisible();
+  await expect(progressTicks(page)).toHaveAccessibleName("Вопрос 2 из 5, плюс 1 повтор");
+  // The miss is outlined in the row, the current question taller, its repeat a hollow tick ahead.
+  await expect(progressTicks(page).locator("[data-mark]")).toHaveCount(6);
+  await expect(progressTicks(page).locator('[data-mark="miss"]')).toHaveCount(1);
+  await expect(progressTicks(page).locator('[data-mark="requeued"]')).toHaveCount(1);
   await optionTile(page, "vas-y").click();
   await expect(stamp(page, "right")).toHaveText("ВЕРНО");
   await expect(next(page)).toBeVisible();
@@ -117,7 +126,6 @@ test("a round: wrong → «ПОВТОР», right waits for «Дальше» too,
   // q1 again (after 3 others): «ПОВТОР».
   await expect(exerciseCard(page)).toContainText("les flics");
   await expect(exerciseCard(page)).toContainText("ПОВТОР");
-  await expect(exerciseCard(page)).toContainText("Ошиблись раньше — ещё раз");
   await optionTile(page, "копы").click();
   await expect(stamp(page, "right")).toBeVisible();
   await goOn(page);
@@ -144,7 +152,10 @@ test("a round: wrong → «ПОВТОР», right waits for «Дальше» too,
 
   // Done: the receipt, the misses, the new word.
   await expect(page.getByRole("heading", { level: 1, name: "Готово" })).toBeVisible({ timeout: 4000 });
-  await expect(page.getByRole("region", { name: "Итоги упражнения" })).toHaveText(/Вопросов\s*5\s*С первого раза\s*3\s*Точность\s*60\s%/);
+  // Phones: the session strip, one cell per answer, and its line counted from the same marks.
+  const tally = page.getByRole("region", { name: "Итоги упражнения" });
+  await expect(tally).toHaveText(/5\s*вопросов\s*·\s*3\s*с первого раза\s*·\s*2\s*повтора/);
+  await expect(tally.getByRole("img", { name: "5 вопросов: 3 с первого раза, 2 ошибки, 2 повтора" })).toBeVisible();
   // «Не знаю» on the pairs board counts every pair still open as a miss, each under «Ошибки».
   const mistakes = page.getByRole("region", { name: "Ошибки" });
   await expect(mistakes).toContainText("les flics");
@@ -189,8 +200,8 @@ test("a new word's question comes right after its intro card, even when a miss c
   await goOn(page);
   const intro = page.getByRole("article", { name: "Новое слово" });
   await expect(intro).toBeVisible({ timeout: 4000 });
-  // The card promises it: «вопрос — следующим».
-  await expect(page.getByText("вопрос — следующим")).toBeVisible();
+  // Phones carry no set footer during play (L-ExPlayer-B): «вопрос — следующим» is desktop only.
+  await expect(page.getByText("вопрос — следующим")).toBeHidden();
   await page.getByRole("button", { name: "Понятно" }).click();
   await expect(intro).toHaveCount(0);
   await expect(exerciseCard(page)).toContainText("avoir la flemme");
@@ -215,7 +226,7 @@ test("done: add the new word to the library, then undo", async ({ page }) => {
     await goOn(page);
   }
   await expect(done).toBeVisible();
-  await expect(page.getByRole("region", { name: "Итоги упражнения" })).toHaveText(/С первого раза\s*0/);
+  await expect(page.getByRole("region", { name: "Итоги упражнения" })).toHaveText(/\b0\s*с первого раза/);
 
   const fresh = page.getByRole("region", { name: "Новые слова" });
   await expect(fresh).toContainText("Новые слова (1)");
@@ -266,7 +277,7 @@ test("× mid-round saves and leaves; «Продолжить» picks the run up",
   await go.click();
   await expect(page).toHaveURL(/\/exercises\/play$/);
   await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "cloze");
-  await expect(shown(page, "02 / 05")).toBeVisible();
+  await expect(progressTicks(page)).toHaveAccessibleName("Вопрос 2 из 5");
   const runs = await dbRows<{ answers: unknown[]; finished_at: string | null }>(page, "exercise_runs");
   expect(runs).toHaveLength(1);
   expect(runs[0].answers).toHaveLength(1);
@@ -305,29 +316,32 @@ test("the empty state builds the request and copies it", async ({ page, context 
   await openReview(page);
   await page.goto("/exercises");
   await expect(tabBar(page).getByRole("link", { name: "Упражнения" })).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("heading", { name: "Упражнений пока нет" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Упражнений пока нет" })).toBeAttached();
 
+  // Phones (proposals «Empty» B): the chips and «Вопросов» on the page, the rest under «Ещё».
   const card = page.getByRole("region", { name: "Запрос для Claude" });
   const text = card.locator("p", { hasText: /^Сделай упражнение/ });
   await expect(text).toHaveText("Сделай упражнение в Карточках по всем темам, 12 вопросов, можно новые слова.");
   await card.getByRole("button", { name: /^Полиция/ }).click();
   await expect(text).toHaveText("Сделай упражнение в Карточках по теме «Полиция», 12 вопросов, можно новые слова.");
   await card.getByRole("radio", { name: "8" }).click();
+  await card.getByRole("button", { name: /^Ещё/ }).click();
   await card.getByRole("switch", { name: "Можно новые слова" }).click();
   await expect(text).toHaveText("Сделай упражнение в Карточках по теме «Полиция», 8 вопросов.");
 
-  await card.getByRole("button", { name: "Скопировать запрос" }).click();
-  await expect(card.getByRole("button", { name: "Скопировано" })).toBeVisible();
+  await expect(card.getByRole("link", { name: "Скопировать и открыть Claude" })).toBeVisible();
+  await card.getByRole("button", { name: "только скопировать" }).click();
+  await expect(card.getByRole("link", { name: "Скопировано" })).toBeVisible();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("Сделай упражнение в Карточках по теме «Полиция», 8 вопросов.");
-  // Now we wait for the set from the chat.
-  await expect(page.getByText("Ждём набор из чата").first()).toBeVisible();
+  // Now we wait for the set from the chat: on phones the waiting tile is the whole state (list B).
+  await expect(page.getByRole("button", { name: "Ждём набор из чата. Обновить" })).toBeVisible();
 });
 
 test("«Чаще в упражнениях» on: the request builder says so and links to Settings; the request text stays", async ({ page }) => {
   await openReview(page);
   await page.goto("/exercises");
   const card = page.getByRole("region", { name: "Запрос для Claude" });
-  await expect(card.locator("p", { hasText: /^Сделай упражнение/ })).toBeVisible();
+  await expect(card.locator("p", { hasText: /^Сделай упражнение/ })).toBeAttached();
   // Off by default: no line.
   await expect(card.getByText(/^Чаще /)).toHaveCount(0);
 
@@ -337,6 +351,8 @@ test("«Чаще в упражнениях» on: the request builder says so and
   await expect(page.getByRole("radiogroup", { name: "Сколько в наборе" }).getByRole("radio", { name: "Почти все" })).toBeChecked();
 
   await page.goto("/exercises");
+  // Phones: the line sits with the request text under «Ещё».
+  await card.getByRole("button", { name: /^Ещё/ }).click();
   await expect(card.getByText("Чаще трудные · почти весь набор", { exact: true })).toBeVisible();
   await expect(card.locator("p", { hasText: /^Сделай упражнение/ })).toHaveText("Сделай упражнение в Карточках по всем темам, 12 вопросов, можно новые слова.");
   const link = card.getByRole("link", { name: "Настройки ›" });
@@ -369,7 +385,7 @@ test.describe("offline", () => {
     try {
       await page.reload();
       await expect(exerciseCard(page)).toHaveAttribute("data-exercise-card", "cloze");
-      await expect(shown(page, "Упражнение · не влияет на расписание")).toBeVisible();
+      await expect(progressTicks(page)).toBeVisible();
       await optionTile(page, "vas-y").click();
       await expect(stamp(page, "right")).toBeVisible();
     } finally {

@@ -5,12 +5,14 @@ import {
   EMPTY_PAIRS,
   EMPTY_PLAYER,
   answerRow,
+  attemptMarks,
   attemptRandom,
   counterLabel,
   formatCounter,
   hashString,
   isRussian,
   pairsTap,
+  playerMarks,
   playerReducer,
   progressOf,
   resultAnnouncement,
@@ -250,5 +252,26 @@ describe("counterLabel", () => {
     expect(counterLabel({ position: 7, total: 12, repeats: 1 })).toBe("Вопрос 7 из 12, плюс 1 повтор");
     expect(counterLabel({ position: 7, total: 12, repeats: 3 })).toBe("Вопрос 7 из 12, плюс 3 повтора");
     expect(counterLabel({ position: 7, total: 12, repeats: 5 })).toBe("Вопрос 7 из 12, плюс 5 повторов");
+  });
+});
+
+describe("strip marks", () => {
+  const row = (item_id: string, attempt: number, outcome: "correct" | "wrong" | "dont_know") => ({ item_id, attempt, outcome });
+
+  it("one mark per attempt in answer order; a pairs board's rows make one attempt", () => {
+    const answers = [row("q1", 1, "wrong"), row("q2", 1, "correct"), row("p", 1, "wrong"), row("p", 1, "correct"), row("q1", 2, "correct")];
+    expect(attemptMarks(answers)).toEqual(["miss", "first", "miss", "requeued"]);
+  });
+
+  it("the tick row: answered attempts, the current question, fresh ones, a repeat still to come", () => {
+    const queue: QueueEntry[] = [
+      { kind: "item", item_id: "q2", attempt: 1 },
+      { kind: "intro", new_ref: "n1" },
+      { kind: "item", item_id: "q3", attempt: 1 },
+      { kind: "item", item_id: "q1", attempt: 2 },
+    ];
+    expect(playerMarks([row("q1", 1, "wrong")], queue)).toEqual(["miss", "current", "future", "requeued"]);
+    // Answered but not moved on: the head stays current, its row is not counted twice.
+    expect(playerMarks([row("q1", 1, "wrong"), row("q2", 1, "correct")], queue)).toEqual(["miss", "current", "future", "requeued"]);
   });
 });

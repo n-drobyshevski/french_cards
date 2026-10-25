@@ -16,6 +16,7 @@ import { OPEN_LAYER_SELECTOR } from "@/components/shell/keys";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { Kbd } from "@/components/ui/Kbd";
+import { SessionStrip, type StripMark } from "@/components/ui/SessionStrip";
 import { SLANG_NAMES_RU } from "@/components/ui/SlangMeter";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { revealTabBar } from "@/components/ui/TabBar";
@@ -60,12 +61,14 @@ import {
   counterLabel,
   formatCounter,
   pairsTap,
+  playerMarks,
   playerReducer,
   progressOf,
   resultAnnouncement,
   resultTone,
   tileWord,
   type PairsState,
+  type PlayerProgress,
 } from "./player-state";
 
 /**
@@ -188,6 +191,8 @@ function PlayerSession() {
   const booted = useRef(false);
   const writes = useRef<Promise<unknown>>(Promise.resolve());
   const answers = useRef<ExerciseAnswer[]>([]);
+  /** The answers for render (the phone tick row); `answers` is the same list for the handlers. */
+  const [answerLog, setAnswerLog] = useState<readonly ExerciseAnswer[]>([]);
   const finishing = useRef(false);
   const shownAt = useRef(0);
   const answeredStep = useRef(-1);
@@ -222,6 +227,7 @@ function PlayerSession() {
   const begin = (boot: Boot) => {
     setSession({ set: boot.set, run: boot.run, ctx: boot.ctx });
     answers.current = [...boot.run.answers];
+    setAnswerLog(answers.current);
     finishing.current = false;
     refocus.current = null;
     setDoneRun(null);
@@ -257,6 +263,7 @@ function PlayerSession() {
   const save = (answer: ExerciseAnswer) => {
     if (!run) return;
     answers.current = [...answers.current, answer];
+    setAnswerLog(answers.current);
     const id = run.id;
     writes.current = writes.current.then(() => recordAnswer(id, answer)).catch(() => undefined);
   };
@@ -535,7 +542,8 @@ function PlayerSession() {
               onNext={() => next()}
             />
           ) : (
-            <div className="flex h-full flex-col justify-end md:flex-row md:items-center md:justify-start">
+            // Phones: «Не знаю» sits in the middle of the zone (L-ExPlayer-B), clear of the home indicator.
+            <div className="flex h-full flex-col justify-center pb-3 md:flex-row md:items-center md:justify-start md:pb-0">
               <button
                 type="button"
                 aria-keyshortcuts="0"
@@ -585,34 +593,18 @@ function PlayerSession() {
         {announcement}
       </p>
 
-      {/* Phones: ×, the hairline with its red fill, «07 / 12», and the schedule line. */}
-      <div className="shrink-0 md:hidden">
-        <header className="flex h-11 items-center gap-3">
-          <button
-            type="button"
-            aria-label="Выйти"
-            onClick={leave}
-            className="press-sm -ml-3 inline-flex size-11 shrink-0 items-center justify-center rounded-chip text-ink active:bg-surface-2"
-          >
-            <Icon name="close" size={20} strokeWidth={1.5} />
-          </button>
-          <div
-            role="progressbar"
-            aria-label="Пройдено вопросов"
-            aria-valuemin={0}
-            aria-valuemax={progress.total}
-            aria-valuenow={Math.round(progress.ratio * progress.total)}
-            className="relative h-[5px] flex-1 [&>span:last-child]:top-[1.5px]"
-          >
-            <span aria-hidden="true" className="absolute inset-x-0 top-[2px] h-px bg-rule" />
-            {bar}
-          </div>
-          <span className="inline-flex shrink-0 items-baseline font-mono text-[11px] leading-4 font-medium tracking-[.06em] tabular-nums">
-            {counter}
-          </span>
-        </header>
-        <p className="meta m-0 mt-1">Упражнение · не влияет на расписание</p>
-      </div>
+      {/* Phones (L-ExPlayer-B): × and the tick row, nothing else above the card. */}
+      <header className="flex h-11 shrink-0 items-center gap-3 md:hidden">
+        <button
+          type="button"
+          aria-label="Выйти"
+          onClick={leave}
+          className="press-sm -ml-3 inline-flex size-11 shrink-0 items-center justify-center rounded-chip text-ink active:bg-surface-2"
+        >
+          <Icon name="close" size={20} strokeWidth={1.5} />
+        </button>
+        <PhoneTicks marks={playerMarks(answerLog, state.queue)} progress={progress} />
+      </header>
 
       {/* From 768: the running head — ×, the set, the line, «07 / 12», «?» — ruled with the progress fill. */}
       <header className="relative hidden h-14 shrink-0 items-center gap-3 pr-8 pl-6 md:flex">
@@ -679,5 +671,42 @@ function PlayerSession() {
       )}
       {wordSheet}
     </main>
+  );
+}
+
+/** How long the exact count stays under the tick row after a tap. */
+const TICKS_NOTE_MS = 1600;
+
+/**
+ * The phone progress (L-ExPlayer-B): one tick per question as SessionStrip ticks — answered ink, a
+ * miss outlined, the current one taller ink, the rest hairline, a requeued question hollow. The exact
+ * count is the button's accessible name, and a tap shows «7 из 12» under the row for a moment.
+ */
+function PhoneTicks({ marks, progress }: { marks: readonly StripMark[]; progress: PlayerProgress }) {
+  const [note, setNote] = useState(0);
+  useEffect(() => {
+    if (!note) return;
+    const timer = window.setTimeout(() => setNote(0), TICKS_NOTE_MS);
+    return () => window.clearTimeout(timer);
+  }, [note]);
+  const label = counterLabel(progress);
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={() => setNote(Date.now())}
+      className="relative flex h-11 min-w-0 flex-1 items-center bg-transparent p-0"
+    >
+      <SessionStrip size="ticks" marks={marks} label={false} className="flex-1" />
+      {note > 0 && (
+        <span
+          aria-hidden="true"
+          className="absolute top-full right-0 -mt-1.5 font-mono text-[11px] leading-4 tracking-[.06em] text-muted tabular-nums animate-[fade-in_var(--dur-quick)_var(--ease-enter)]"
+        >
+          {progress.position} из {progress.total}
+          {progress.repeats > 0 && ` · +${progress.repeats}`}
+        </span>
+      )}
+    </button>
   );
 }

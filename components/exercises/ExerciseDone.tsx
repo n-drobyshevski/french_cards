@@ -7,6 +7,7 @@ import { OPEN_LAYER_SELECTOR } from "@/components/shell/keys";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import { Kbd } from "@/components/ui/Kbd";
+import { countStrip, SessionStrip, type StripMark } from "@/components/ui/SessionStrip";
 import { SlangMeter } from "@/components/ui/SlangMeter";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import {
@@ -24,6 +25,7 @@ import type { ExerciseRun, ExerciseSet } from "@/lib/types";
 import { copyRequest } from "./clipboard";
 import { nQuestions, plural } from "./list-format";
 import { exerciseKeyAction, INPUT_GUARD_MS, isTypingTarget } from "./player-keys";
+import { attemptMarks } from "./player-state";
 
 const nWords = (n: number) => `${n} ${plural(n, ["слово", "слова", "слов"])}`;
 
@@ -57,6 +59,40 @@ function SectionHead({ title, aside, asideTone = "muted", inline = false }: { ti
 
 const row = "flex h-9 min-w-0 items-center gap-3 border-b border-rule md:h-11";
 
+/** The strip writes in after the heading has landed (as «Готово на сегодня»). */
+const STRIP_AT_MS = 240;
+
+/**
+ * Phones (L-Done-B cells, spec change §5): one cell per answer in the order given (attemptMarks),
+ * and «12 вопросов · 9 с первого раза · 3 повтора» counted from the same marks — 9 is the ink cells,
+ * 3 the hollow ones (a question right on a later attempt). The exact counts are the strip's name.
+ */
+function ResultStrip({ marks, total }: { marks: readonly StripMark[]; total: number }) {
+  const c = countStrip(marks);
+  const parts = [
+    `${c.first} с первого раза`,
+    c.miss > 0 && `${c.miss} ${plural(c.miss, ["ошибка", "ошибки", "ошибок"])}`,
+    c.requeued > 0 && `${c.requeued} ${plural(c.requeued, ["повтор", "повтора", "повторов"])}`,
+  ].filter(Boolean);
+  return (
+    <section aria-label="Итоги упражнения" data-done-tally="" className="mt-6 shrink-0 md:hidden">
+      {marks.length > 0 && (
+        <SessionStrip size="cells" marks={marks} label={`${nQuestions(total)}: ${parts.join(", ")}`} writeIn writeInDelay={STRIP_AT_MS} />
+      )}
+      <p aria-hidden={marks.length > 0 || undefined} className="meta m-0 mt-3 leading-4 tabular-nums">
+        <span className="font-medium text-ink">{total}</span> {plural(total, ["вопрос", "вопроса", "вопросов"])} ·{" "}
+        <span className="font-medium text-ink">{c.first}</span> с первого раза
+        {c.requeued > 0 && (
+          <>
+            {" "}
+            · <span className="font-medium text-ink">{c.requeued}</span> {plural(c.requeued, ["повтор", "повтора", "повторов"])}
+          </>
+        )}
+      </p>
+    </section>
+  );
+}
+
 export interface ExerciseDoneProps {
   set: ExerciseSet;
   /** The finished run. */
@@ -74,9 +110,11 @@ export interface ExerciseDoneProps {
 /**
  * The done screen (Exercise-S-Done, D-Exercise-Done): «Готово», the set's title, the receipt
  * «Вопросов / С первого раза / Точность», «ОШИБКИ» with the slang meters, «НОВЫЕ СЛОВА (N) · ИЗ
- * ВЕБА» with checkboxes → «Добавить в библиотеку (N)» (undo in the snackbar), then «Повторить ошибки
+ * ВЕБА» with checkboxes → «Добавить в библиотеку (N)» (undo in the snackbar), «Повторить ошибки
  * (N)», «Попросить следующий набор» (copies a request naming the set and its misses) and «Готово».
- * From 768 the actions sit under the receipt with their keys (C, Esc); focus lands on «Повторить
+ * Phones (L-Done-B, spec change §5): the session strip replaces the receipt, the actions follow it
+ * («Попросить следующий набор» as a text action, no «Готово»: the tab bar is back), error rows
+ * without meters. From 768 the actions sit under the receipt with their keys (C, Esc); focus lands on «Повторить
  * ошибки». No date stamp, confetti or count-up.
  */
 export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeave, onWord }: ExerciseDoneProps) {
@@ -85,6 +123,8 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
   const score = scoreRun(run, set);
   const missed = missedWords(run, set);
   const missedItems = missedItemIds(run);
+  const itemIds = new Set(set.items.map((i) => i.id));
+  const marks = attemptMarks(run.answers.filter((a) => itemIds.has(a.item_id)));
   // The library rows of the missed words: a link only to a word still there, and the meter for a
   // word met only in pairs (its tile carries no snapshot).
   const library = useLiveWords(missed.flatMap((m) => (m.word_id ? [m.word_id] : [])));
@@ -160,6 +200,8 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
   }, []);
 
   const meta = [set.topic ? "своя тема" : null, run.kind === "mistakes" ? "работа над ошибками" : null, nQuestions(score.total)].filter(Boolean);
+  // Phones: the strip counts the questions, and the schedule note stays at the entry (the list).
+  const phoneMeta = run.kind === "mistakes" ? "работа над ошибками" : null;
 
   return (
     <div
@@ -172,20 +214,23 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
       </h1>
       <div className="mt-0.5 flex min-w-0 items-baseline gap-2">
         <span className="min-w-0 truncate font-serif text-[19px] leading-6 italic">{set.title}</span>
-        <span className="meta shrink-0">
-          · {meta.join(" · ")}
-          <span className="max-md:hidden"> · не влияет на расписание</span>
+        <span className="meta shrink-0 max-md:hidden">
+          · {meta.join(" · ")} · не влияет на расписание
         </span>
+        {phoneMeta && <span className="meta shrink-0 md:hidden">· {phoneMeta}</span>}
       </div>
 
-      <section aria-label="Итоги упражнения" className="mt-3.5 shrink-0 border-y border-ink md:mt-6">
+      <ResultStrip marks={marks} total={score.total} />
+
+      <section aria-label="Итоги упражнения" className="mt-3.5 shrink-0 border-y border-ink max-md:hidden md:mt-6">
         <ReceiptRow label="Вопросов" value={String(score.total)} />
         <ReceiptRow label="С первого раза" value={String(score.first_try)} />
         <ReceiptRow label="Точность" value={`${score.accuracy} %`} />
       </section>
 
-      {/* Actions: after the lists on phones (Exercise-S-Done), under the receipt from 768. */}
-      <div className="order-last mt-5 flex shrink-0 flex-col gap-2 md:order-none md:mt-5 md:flex-row md:items-center md:gap-6">
+      {/* Actions under the result: phones the primary and a text action (the tab bar is back, so no
+          «Готово»); from 768 in one row with their keys. */}
+      <div className="mt-8 flex shrink-0 flex-col gap-1 md:mt-5 md:flex-row md:items-center md:gap-6">
         {missedItems.length > 0 && (
           <Button
             data-done-primary=""
@@ -203,7 +248,7 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
           block
           onClick={() => void followUp()}
           aria-keyshortcuts={letters ? "C" : undefined}
-          className="md:w-auto md:border-0 md:bg-transparent md:px-0"
+          className="max-md:h-11 max-md:self-center max-md:border-0 max-md:bg-transparent max-md:px-2 max-md:underline max-md:decoration-boundary max-md:decoration-1 max-md:underline-offset-4 md:w-auto md:border-0 md:bg-transparent md:px-0"
         >
           Попросить следующий набор
           {letters && (
@@ -216,7 +261,7 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
           type="button"
           onClick={onLeave}
           aria-keyshortcuts="Escape"
-          className="press-sm inline-flex h-11 shrink-0 items-center justify-center gap-2 text-[15px] font-medium text-muted md:ml-auto md:text-ink"
+          className="press-sm hidden h-11 shrink-0 items-center justify-center gap-2 text-[15px] font-medium text-ink md:ml-auto md:inline-flex"
         >
           Готово
           <Kbd aria-hidden="true" className="max-md:hidden">
@@ -226,7 +271,7 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
       </div>
 
       {missed.length > 0 && (
-        <section aria-label="Ошибки" className="mt-5 shrink-0 md:mt-10">
+        <section aria-label="Ошибки" className="mt-8 shrink-0 md:mt-10">
           <SectionHead title="Ошибки" aside={String(missed.length)} asideTone="red" inline />
           <ul className="m-0 mt-1.5 list-none border-t border-rule p-0 md:mt-0 md:border-t-0">
             {missed.map((m) => {
@@ -238,7 +283,7 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
                     {m.fr}
                   </span>
                   <span className="min-w-0 flex-1 truncate text-[14px] text-muted">{m.ru}</span>
-                  {meter && <SlangMeter level={meter.slang_level} verlan={meter.verlan} className="[&>span:last-child]:w-[76px]" />}
+                  {meter && <SlangMeter level={meter.slang_level} verlan={meter.verlan} className="max-md:hidden [&>span:last-child]:w-[76px]" />}
                 </>
               );
               return (

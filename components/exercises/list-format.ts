@@ -62,6 +62,8 @@ export type TileTone = "new" | "ink";
 export interface TileState {
   /** «Новый», «Прервано 5/8», «7/10». */
   label: string;
+  /** Phones (list B): only a played set says anything, «5/8» or «7/10»; a new one has its red band. */
+  short: string | null;
   tone: TileTone;
   /** 0–1, the 2px line at the bottom. */
   progress: number;
@@ -77,19 +79,27 @@ export interface TileState {
  * shows as such but is not resumed here (the tile starts a new run).
  */
 export function tileState(set: Pick<ExerciseSet, "items">, run: ExerciseRun | undefined, own?: ReadonlySet<string>): TileState {
-  if (!run) return { label: "Новый", tone: "new", progress: 0, fresh: true, resumeRunId: null };
+  if (!run) return { label: "Новый", short: null, tone: "new", progress: 0, fresh: true, resumeRunId: null };
   const score = scoreRun(run, set);
   const total = score.total || run.total;
   if (run.finished_at === null && !runSettled(set, run)) {
     return {
       label: `Прервано ${score.answered}/${total}`,
+      short: `${score.answered}/${total}`,
       tone: "ink",
       progress: total ? score.answered / total : 0,
       fresh: false,
       resumeRunId: !own || own.has(run.id) ? run.id : null,
     };
   }
-  return { label: `${score.first_try}/${total}`, tone: "ink", progress: 1, fresh: false, resumeRunId: null };
+  const done = `${score.first_try}/${total}`;
+  return { label: done, short: done, tone: "ink", progress: 1, fresh: false, resumeRunId: null };
+}
+
+/** A tile's one phone meta line (list B): «12 · Люди» — the size and the first theme of the themes line. */
+export function tileMetaLine(total: number, themes: string): string {
+  const first = themes.split(" · ")[0].split(", ")[0];
+  return first ? `${total} · ${first}` : String(total);
 }
 
 /** «Продолжить · 5 из 8»: answered and total of an unfinished run. */

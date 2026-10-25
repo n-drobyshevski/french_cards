@@ -47,6 +47,16 @@ export function showsMeter(item: Pick<ExerciseItem, "type" | "skill" | "word">):
   return skill === "meaning" || skill === "form" || skill === "verlan";
 }
 
+/**
+ * A French word asked for its meaning: on phones the hero word and the Russian tiles say it, so the
+ * question line is left off the screen (L-ExPlayer-B; screen readers keep it); from 768 it shows.
+ */
+function selfEvident(item: Pick<ExerciseItem, "skill" | "ask" | "prompt" | "word">): boolean {
+  const skill = item.skill ?? "meaning";
+  const prompt = item.prompt ?? item.word?.fr ?? "";
+  return (skill === "verlan" || (skill === "meaning" && item.ask !== "ru")) && !isRussian(prompt);
+}
+
 /** The question under a choice prompt, unless the prompt asks it itself. */
 function skillQuestion(item: Pick<ExerciseItem, "skill" | "ask" | "prompt">): string | null {
   if (item.prompt?.trim().endsWith("?")) return null;
@@ -64,11 +74,19 @@ function skillQuestion(item: Pick<ExerciseItem, "skill" | "ask" | "prompt">): st
   }
 }
 
-/** French headword size steps down for long expressions (the review card's steps; 56 from 768). */
+/**
+ * French headword size steps down for long expressions (the review card's steps; 56 from 768). A
+ * short one is the phone hero (L-ExPlayer-B): --prompt-fit, 40–56px with the width, unless one of
+ * its words is too long for the card at that size (it would break mid-word): then 40px as before.
+ */
 function frSize(text: string): string {
-  if (text.length <= 16) return "text-[40px] leading-[1.1] md:text-[56px] md:leading-[64px]";
-  if (text.length <= 28) return "text-[32px] leading-[1.15] md:text-[44px] md:leading-[52px]";
-  return "text-[26px] leading-[1.2] md:text-[30px] md:leading-9";
+  const longest = Math.max(0, ...text.split(/\s+/).map((w) => w.length));
+  if (text.length <= 16) {
+    const phone = longest <= 13 ? "text-prompt-fit leading-[1.05] tracking-[-0.02em]" : "text-[40px] leading-[1.1] tracking-[-0.015em]";
+    return `${phone} max-md:[text-wrap:balance] md:text-[56px] md:leading-[64px] md:tracking-[-0.015em]`;
+  }
+  if (text.length <= 28) return "text-[32px] leading-[1.15] tracking-[-0.015em] md:text-[44px] md:leading-[52px]";
+  return "text-[26px] leading-[1.2] tracking-[-0.015em] md:text-[30px] md:leading-9";
 }
 
 /** A choice prompt: a French or Russian headword, or a Russian situation as a paragraph. */
@@ -86,7 +104,7 @@ function Prompt({ text }: { text: string }) {
     );
   }
   return (
-    <h2 lang="fr" className={cx("m-0 font-serif font-medium tracking-[-0.015em] break-words", frSize(text))}>
+    <h2 lang="fr" className={cx("m-0 font-serif font-medium break-words", frSize(text))}>
       {text}
     </h2>
   );
@@ -114,7 +132,9 @@ export interface QuestionCardProps {
  * The question as the review index card (SPEC.md «Упражнения» → Player): 46px header with the red
  * rule — mono skill label left (ЗНАЧЕНИЕ · FR → RU / ФОРМА · RU → FR / ВЕРЛАН / СИТУАЦИЯ / ПРОПУСК /
  * РЕГИСТР / ПАРЫ), «ПОВТОР» on a requeued item, the slang meter right — the question, the stamp, and
- * the footer «НАБОР: … · ИЗ ЧАТА». Phones: it fills the column above the grid; from 768 a 296px card.
+ * the footer «НАБОР: … · ИЗ ЧАТА». Phones (L-ExPlayer-B): it fills the column above the grid with the
+ * skill word, the meter and the hero prompt — no direction, footer, cloze question or repeat line.
+ * From 768 a 296px card.
  */
 export function QuestionCard({ item, setTitle, attempt, answered, pairsCount, stamp, children }: QuestionCardProps) {
   const { label, detail } = cardLabel(item);
@@ -131,7 +151,7 @@ export function QuestionCard({ item, setTitle, attempt, answered, pairsCount, st
         <>
           <Prompt text={item.prompt ?? word?.fr ?? ""} />
           {(q || showPos) && (
-            <p className={cx(question, "flex items-baseline gap-3")}>
+            <p className={cx(question, "flex items-baseline gap-3", selfEvident(item) && "max-md:sr-only")}>
               {showPos && (
                 <span lang="fr" className="hidden font-serif text-[17px] italic md:inline">
                   {pos}
@@ -149,7 +169,8 @@ export function QuestionCard({ item, setTitle, attempt, answered, pairsCount, st
         <>
           <ClozeLine sentence={item.sentence ?? ""} answered={answered} />
           {item.sentence_ru && <p className="m-0 mt-3 text-[15px] leading-5 text-muted">{item.sentence_ru}</p>}
-          <p className={cx(question, "md:mt-3")}>{item.prompt ?? CLOZE_PROMPT}</p>
+          {/* Phones: the dashed gap asks it on screen (L-ExPlayer-B); screen readers still hear it. */}
+          <p className={cx(question, "max-md:sr-only md:mt-3")}>{item.prompt ?? CLOZE_PROMPT}</p>
         </>
       );
       break;
@@ -193,7 +214,8 @@ export function QuestionCard({ item, setTitle, attempt, answered, pairsCount, st
         label={
           <span className="inline-flex items-center gap-2">
             <span className="font-medium text-ink uppercase">{label}</span>
-            {detail && <span>· {detail}</span>}
+            {/* Phones: the skill word only; the prompt says the direction (L-ExPlayer-B). */}
+            {detail && <span className="max-md:hidden">· {detail}</span>}
             {pairsCount && <span>· {pairsCount.toUpperCase()}</span>}
             {repeat && (
               <span className="inline-flex h-[18px] items-center rounded-[3px] border border-ink px-[5px] text-[10px] font-medium text-ink">
@@ -208,19 +230,21 @@ export function QuestionCard({ item, setTitle, attempt, answered, pairsCount, st
       <div
         className={cx(
           "flex min-h-0 flex-1 flex-col px-6 md:px-10",
-          item.type === "pairs" ? "justify-center py-4 md:justify-start md:pt-6" : "justify-center pb-2 md:justify-start md:pt-8",
+          item.type === "pairs" ? "justify-center py-4 md:justify-start md:pt-6" : "justify-center pb-6 md:justify-start md:pt-8 md:pb-2",
         )}
       >
         {body}
+        {/* From 768 only: on phones the ПОВТОР tag and the hollow tick say it. */}
         {repeat && (
-          <p className="m-0 mt-1.5 flex items-center gap-1.5 text-[13px] leading-5 text-muted">
+          <p className="m-0 mt-1.5 flex items-center gap-1.5 text-[13px] leading-5 text-muted max-md:hidden">
             <Icon name="undo" size={16} strokeWidth={1.5} />
             <span>Ошиблись раньше — ещё раз</span>
           </p>
         )}
       </div>
       {stamp}
-      <div className="mx-5 flex h-11 shrink-0 items-center gap-2 border-t border-rule font-mono text-[11px] tracking-[.06em] text-muted uppercase md:mx-10 md:h-12">
+      {/* The footer from 768 only: phones keep the card for the question (L-ExPlayer-B). */}
+      <div className="mx-10 hidden h-12 shrink-0 items-center gap-2 border-t border-rule font-mono text-[11px] tracking-[.06em] text-muted uppercase md:flex">
         <span className="min-w-0 truncate">
           набор: <span className="text-ink">{setTitle}</span>
         </span>

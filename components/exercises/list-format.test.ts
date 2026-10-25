@@ -137,12 +137,12 @@ describe("setThemesLine", () => {
 
 describe("tileState", () => {
   it("a set never played is new, with the red band and no progress", () => {
-    expect(tileState(set(), undefined)).toEqual({ label: "Новый", tone: "new", progress: 0, fresh: true, resumeRunId: null });
+    expect(tileState(set(), undefined)).toEqual({ label: "Новый", short: null, tone: "new", progress: 0, fresh: true, resumeRunId: null });
   });
 
   it("an unfinished run is «Прервано answered/total» and resumable", () => {
     const r = run([answer("q1", "correct"), answer("q2", "wrong"), answer("q3", "correct"), answer("q4", "dont_know"), answer("q5", "correct")], false);
-    expect(tileState(set(), r)).toEqual({ label: "Прервано 5/8", tone: "ink", progress: 5 / 8, fresh: false, resumeRunId: "r-1" });
+    expect(tileState(set(), r)).toEqual({ label: "Прервано 5/8", short: "5/8", tone: "ink", progress: 5 / 8, fresh: false, resumeRunId: "r-1" });
     expect(resumeProgress(r, set())).toEqual({ answered: 5, total: 8, progress: 5 / 8 });
   });
 
