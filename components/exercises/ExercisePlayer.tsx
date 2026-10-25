@@ -42,15 +42,17 @@ import {
   type QueueEntry,
 } from "@/lib/exercises";
 import { exitMs, prefersReducedMotion } from "@/lib/motion";
+import { MEDIUM_QUERY, useMediaQuery } from "@/lib/use-media";
 import { getSettings } from "@/lib/settings";
 import type { ExerciseAnswer, ExerciseOutcome, ExerciseRun, ExerciseSet } from "@/lib/types";
+import { DeckEdges } from "./DeckEdges";
 import { ExerciseDone } from "./ExerciseDone";
 import { takePendingExercise, type PendingExercise } from "./exercise-request";
 import { FeedbackLine } from "./FeedbackLine";
-import { MatchPairs } from "./MatchPairs";
+import { MatchPairs, PairsRows, PairsSlips } from "./MatchPairs";
 import { NewWordCard } from "./NewWordCard";
 import { OptionGrid } from "./OptionGrid";
-import { QuestionCard } from "./QuestionCard";
+import { QuestionCard, stampPlace, type Written } from "./QuestionCard";
 import { RegisterGrid } from "./RegisterGrid";
 import { Stamp } from "./Stamp";
 import { exerciseKeyAction, INPUT_GUARD_MS, isTypingTarget, keepsActivationKeys, RESULT_LOCK_MS } from "./player-keys";
@@ -177,6 +179,8 @@ function PlayerSession() {
   const snackbar = useSnackbar();
   const { openShortcuts } = useShell();
   const keyHints = useLiveQuery(async () => (await getSettings()).key_hints, [], true);
+  // Phones (X-Player-B) write the answer on the card; from 768 the desktop player, as it was.
+  const phone = !useMediaQuery(MEDIUM_QUERY);
 
   const [session, setSession] = useState<{ set: ExerciseSet; run: ExerciseRun; ctx: PlayContext } | null>(null);
   const [view, setView] = useState<"loading" | "play" | "done">("loading");
@@ -216,7 +220,7 @@ function PlayerSession() {
   const board = item && random && item.type === "pairs" ? pairsBoard(item, random) : null;
   const pairsState = pairs.step === state.step ? pairs.state : EMPTY_PAIRS;
   const progress = progressOf(state);
-  // «Слово ›» only for a word still in the library (a deleted one would open a sheet that closes at once).
+  // The word sheet only for a word still in the library (a deleted one would open a sheet that closes at once).
   const liveWords = useLiveWords(item?.word_id ? [item.word_id] : []);
 
   // SPEC «Упражнения» → Done: the tab bar comes back on the done screen (the route still hides it while playing).
@@ -323,9 +327,11 @@ function PlayerSession() {
     commit("dont_know", null, null, undefined, fromKey, open);
   };
 
-  const onPairTap = (side: "fr" | "ru", key: string) => {
+  /** `row`: phones write a Russian slip into the active row even when none was picked (X-Player-B). */
+  const onPairTap = (side: "fr" | "ru", key: string, row?: string | null) => {
     if (!item || !set || head?.kind !== "item" || state.result || leavingRef.current) return;
-    const step = pairsTap(pairsState, side, key, item.tiles.length);
+    const from = side === "ru" && pairsState.selected === null && row ? { ...pairsState, selected: row } : pairsState;
+    const step = pairsTap(from, side, key, item.tiles.length);
     setPairs({ step: state.step, state: step.state });
     const event = step.event;
     if (event?.type === "miss") {
@@ -501,39 +507,63 @@ function PlayerSession() {
   } else if (item && head.kind === "item") {
     const misses = result?.misses ?? 0;
     const verdict = tone === "right" ? "right" : tone === "wrong" ? "wrong" : null;
+    // The word sheet: «Слово ›» from 768, a tap on the French word on the card on phones.
     const onWord =
       item.type !== "pairs" && item.word_id && liveWords?.has(item.word_id)
         ? () => setWordId(item.word_id)
         : null;
 
+    // Phones: the answer is written on the card — the right option, and the wrong pick struck through.
+    const written: Written | null =
+      options && result
+        ? { right: options.options[options.correct], wrong: result.pick !== null && result.pick !== options.correct ? options.options[result.pick] : null }
+        : null;
+    const revealed = result?.outcome === "dont_know";
+    const locked = result !== null || leaving;
+    const question = (
+      <QuestionCard
+        item={item}
+        setTitle={set.title}
+        attempt={head.attempt}
+        answered={result !== null}
+        pairsCount={item.type === "pairs" ? `${pairsState.matched.length} из ${item.tiles.length}` : undefined}
+        stamp={verdict && <Stamp verdict={verdict} place={stampPlace(item)} />}
+        phone={phone}
+        written={written}
+        explain={item.explain_ru}
+        onWord={onWord}
+      >
+        {board &&
+          (phone ? (
+            <PairsRows board={board} state={pairsState} onTap={onPairTap} revealed={revealed} disabled={locked} />
+          ) : (
+            <MatchPairs board={board} state={pairsState} onTap={onPairTap} revealed={revealed} disabled={locked} />
+          ))}
+      </QuestionCard>
+    );
+
     card = (
       <>
-        <QuestionCard
-          item={item}
-          setTitle={set.title}
-          attempt={head.attempt}
-          answered={result !== null}
-          pairsCount={item.type === "pairs" ? `${pairsState.matched.length} из ${item.tiles.length}` : undefined}
-          stamp={verdict && <Stamp verdict={verdict} />}
-        >
-          {board && (
-            <MatchPairs
-              board={board}
-              state={pairsState}
-              onTap={onPairTap}
-              revealed={result?.outcome === "dont_know"}
-              disabled={result !== null || leaving}
-            />
-          )}
-        </QuestionCard>
+        {phone ? (
+          // Phones (X-Player-B): the card on its small deck, centred over the slips (scrolls on a short screen).
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+            <div className="relative my-auto pb-3">
+              <DeckEdges left={state.queue.filter((e) => e.kind === "item").length} />
+              {question}
+            </div>
+          </div>
+        ) : (
+          question
+        )}
+        {board && phone && <PairsSlips board={board} state={pairsState} onTap={onPairTap} revealed={revealed} disabled={locked} />}
         {options && item.type === "register" && (
           <RegisterGrid options={options.options} correct={options.correct} result={result} onPick={pick} locked={leaving} />
         )}
         {options && item.type !== "register" && (
           <OptionGrid options={options.options} correct={options.correct} result={result} onPick={pick} locked={leaving} />
         )}
-        {/* The fixed action zone: «Не знаю», then the result line in the same place (no layout shift). */}
-        <div className="mt-4 h-[200px] shrink-0 pb-4 max-md:[@media(max-height:740px)]:h-[136px] md:h-16 md:pb-0">
+        {/* The fixed action zone: «Не знаю», then «Дальше» (from 768 the result line) in the same place (no layout shift). */}
+        <div className={phone ? "mt-4 mb-7 h-[52px] shrink-0" : "mt-4 h-[200px] shrink-0 pb-4 max-md:[@media(max-height:740px)]:h-[136px] md:h-16 md:pb-0"}>
           {tone ? (
             <FeedbackLine
               tone={tone}
@@ -545,8 +575,8 @@ function PlayerSession() {
               onNext={() => next()}
             />
           ) : (
-            // Phones: «Не знаю» sits in the middle of the zone (L-ExPlayer-B), clear of the home indicator.
-            <div className="flex h-full flex-col justify-center pb-3 md:flex-row md:items-center md:justify-start md:pb-0">
+            // Phones: «Не знаю», the quiet tertiary, in the place «Дальше» takes after the answer (X-Player-B).
+            <div className="flex h-full flex-col justify-center md:flex-row md:items-center md:justify-start md:pb-0">
               <button
                 type="button"
                 aria-keyshortcuts="0"

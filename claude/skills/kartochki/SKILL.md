@@ -137,7 +137,7 @@ Make write calls one at a time, never in parallel, even for different fields of 
 
 ## Упражнения (exercise sets)
 
-The app's «Упражнения» tab plays Duolingo-style question sets that **you** write and save through the connector; the app plays them offline and they never touch the review schedule. The user asks in the chat («сделай упражнение по теме Еда»), or pastes a request the app built («Сделай упражнение в Карточках по теме «Люди», 12 вопросов.»). Never write the questions into the chat instead, and never call the app's own features for this.
+The app's «Упражнения» tab plays Duolingo-style question sets that **you** write and save through the connector; the app plays them offline and they never touch the review schedule. The user asks in the chat («сделай упражнение по теме Еда»), or pastes a request the app built: on a computer «Сделай упражнение в Карточках по теме «Люди», 12 вопросов.», on a phone one sentence, «Сделай в Карточках 12 вопросов по темам «Еда», «Полиция» — можно новые слова.» («— без новых слов»: no `new_words`). «Сделай в Карточках N вопросов …» always asks for an exercise set of N questions. Never write the questions into the chat instead, and never call the app's own features for this.
 
 - **Tools:** `exercise_material` (read: the words to use, weakest first, with `signals`; `topic_matches` for a free-text topic; `recent_sets`), then **one** `create_exercise_set` call with the whole set. `list_exercise_sets` shows the sets and each one's `last_run` (score, missed words, the wrong options picked). `delete_exercise_set` / `restore_exercise_set` undo.
 - **Item types:** `choice` (4 options; skill `meaning`, `form`, `neutral`, `verlan` or `situation`), `cloze` (a French sentence with one `[[gap]]`, 4 options), `register` (the user picks нейтр. / fam. / arg. / vulg. for the word), `pairs` (match 4–6 words with their translations), `conjugate` (the right form of a verb for a `tense` and `person`, 4 options). For `choice`/`meaning` send only `word_id`, `ask` and the 3 distractors (single equivalents, in the options' language): the server writes the prompt and the answer (the word's first Russian equivalent). For `register` send only the word. For `pairs` send only the ids. For `conjugate` send only the verb's `word_id`, `tense` and `person`: the server writes the infinitive, the gap («tu ___»), the answer and 3 other forms of the verb.
@@ -163,7 +163,7 @@ The app's «Упражнения» tab plays Duolingo-style question sets that *
 
 ### Упражнение по трудным словам / к повторению
 
-The app's request reads «Сделай упражнение в Карточках по трудным словам из всех тем, 12 вопросов.» (or «по словам к повторению», «по трудным словам и словам к повторению»); the user may also just say «упражнение по трудным словам».
+The app's request reads «Сделай упражнение в Карточках по трудным словам из всех тем, 12 вопросов.» (or «по словам к повторению», «по трудным словам и словам к повторению»), on a phone «Сделай в Карточках 12 вопросов по трудным словам из всех тем.» (or «по словам к повторению из всех тем»); the user may also just say «упражнение по трудным словам».
 
 1. `exercise_material` with `only`: `difficult`, `due` or `both` (and no `topic`; `folders` only if the user named themes). It returns only those words, from every theme, weakest first, and `scope: { only, available, suggested_items, note }`.
 2. `available` 0: there is nothing to drill. Don't save a set; tell the user (e.g. «Сейчас нет трудных слов — упражнение не из чего делать»).

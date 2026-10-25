@@ -24,13 +24,31 @@ import { useOnline } from "@/lib/use-online";
 import { copyRequest, copyText, useLastRequest } from "./clipboard";
 import { ConnectorHelpSheet } from "./ConnectorHelpSheet";
 import { EXERCISE_PLAY_HREF, setPendingExercise } from "./exercise-request";
-import { isWaiting, nNew, nQuestions, nSets, resumeProgress, setThemesLine, shortDate, similarRequest, tileState } from "./list-format";
+import {
+  firstTryMarks,
+  isWaiting,
+  nNew,
+  nQuestions,
+  nSets,
+  resumeProgress,
+  setThemesLine,
+  shortDate,
+  similarRequest,
+  tileLines,
+  tileState,
+} from "./list-format";
 import { CopyGlyph, RequestBuilder, useThemeChoices } from "./RequestBuilder";
 import { RequestSheet } from "./RequestSheet";
 import { SetMenuSheet } from "./SetMenuSheet";
 import { useCopyScopeRequest } from "./scope-request";
-import { attemptMarks } from "./player-state";
-import { RequestTile, ScopeTile, SetTile, SetTileSkeleton, WaitingTile } from "./SetTile";
+import {
+  NewSetTile,
+  RequestTile,
+  ScopeTile,
+  SetTile,
+  SetTileSkeleton,
+  WaitingTile,
+} from "./SetTile";
 
 /** From here the request builder sits in a right-hand column next to the tiles (D-Exercise-List). */
 const SIDE_PANEL_QUERY = "(min-width: 1024px)";
@@ -39,10 +57,10 @@ const COPIED_MESSAGE = "Запрос скопирован — вставьте �
 
 /**
  * «Упражнения» (SPEC «Упражнения», boards Exercise-List-B, -Empty-A, -S-Resume, -S-Waiting,
- * -S-Offline, -S-Quick-Tiles, D-Exercise-List): the sets Claude wrote in the chat as two-column tiles
+ * -S-Offline, -S-Quick-Tiles, D-Exercise-List; phones X-List-A): the sets Claude wrote in the chat as two-column tiles
  * (three from 768), ready-made requests for the difficult / due words of every theme, «Продолжить»
  * for an unfinished run, the request builder (inline when there are no sets, a
- * sheet from «Попросить набор», a right-hand column on wide screens), «Ждём набор из чата» after a
+ * sheet from «Попросить набор» — on phones the dashed «Новый набор» tile —, a right-hand column on wide screens), «Ждём набор из чата» after a
  * copy and the offline strip. Sets play offline; nothing here calls Claude, so no spark glyph.
  */
 export function ExercisesScreen() {
@@ -159,20 +177,24 @@ export function ExercisesScreen() {
             <SyncMark />
           )}
         </div>
+        {/* Phones (E1 A): the dashed «Новый набор» tile in the grid asks instead. */}
         {!empty && !loading && (
-          <Button variant="secondary" size="sm" onClick={openRequest} className="h-9 px-3 md:px-3.5 md:text-[14px]">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={openRequest}
+            className="h-9 px-3 max-md:hidden md:px-3.5 md:text-[14px]"
+          >
             Попросить набор
           </Button>
         )}
       </header>
+      {/* Phones (E1 A): no subline — the tiles say what is needed. */}
       {!empty && !loading && (
-        <>
-          {/* Phones: the grid counts the sets; the schedule note is said here, once (L-ExPlayer-B). */}
-          <p className="meta m-0 mt-1 leading-4 md:hidden">Не влияют на расписание повторений</p>
-          <p className="m-0 mt-1 text-[13px] leading-5 text-muted max-md:hidden">
-            {nSets(list.length)} · составлены в чате · не влияют на расписание повторений
-          </p>
-        </>
+        <p className="m-0 mt-1 text-[13px] leading-5 text-muted max-md:hidden">
+          {nSets(list.length)} · составлены в чате · не влияют на расписание
+          повторений
+        </p>
       )}
     </>
   );
@@ -281,10 +303,24 @@ export function ExercisesScreen() {
     content = (
       <>
         {waitingLine}
-        {resume && <ResumeCard run={resume.run} set={resume.set} themes={setThemesLine(resume.set, folderNames)} />}
-        {/* Phones (list B): no section rules; the grid holds sets and nothing else. */}
-        <SectionRule title="Наборы" note={fresh > 0 ? nNew(fresh) : null} className={cx("max-md:hidden", resume ? "mt-6" : waitingLine ? "mt-3" : "mt-5")} />
-        <div className="mt-3 grid grid-cols-2 gap-2 max-md:mt-4 md:grid-cols-3 md:gap-3">
+        {resume && (
+          <ResumeCard
+            run={resume.run}
+            set={resume.set}
+            themes={setThemesLine(resume.set, folderNames)}
+            topic={tileLines(resume.set, folderNames).text}
+          />
+        )}
+        {/* Phones: no section rules; the grid holds the sets and the «Новый набор» tile. */}
+        <SectionRule
+          title="Наборы"
+          note={fresh > 0 ? nNew(fresh) : null}
+          className={cx(
+            "max-md:hidden",
+            resume ? "mt-6" : waitingLine ? "mt-3" : "mt-5",
+          )}
+        />
+        <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-3">
           {waiting && <SetTileSkeleton className="max-md:hidden" />}
           {waitingTile}
           {tiles.map((set) => {
@@ -295,7 +331,15 @@ export function ExercisesScreen() {
                 set={set}
                 state={state}
                 themes={setThemesLine(set, folderNames)}
-                onStart={() => setPendingExercise(state.resumeRunId ? { setId: set.id, runId: state.resumeRunId } : { setId: set.id })}
+                lines={tileLines(set, folderNames)}
+                phone={!wide}
+                onStart={() =>
+                  setPendingExercise(
+                    state.resumeRunId
+                      ? { setId: set.id, runId: state.resumeRunId }
+                      : { setId: set.id },
+                  )
+                }
                 onMenu={() => {
                   setMenu(set);
                   setMenuOpen(true);
@@ -303,12 +347,13 @@ export function ExercisesScreen() {
               />
             );
           })}
-          {/* Phones (list B): one way to ask, the header button; its sheet starts with «Трудные» / «К повторению». */}
+          {/* Phones (E1 A): one way to ask, the «Новый набор» tile; its sheet starts with «Трудные» / «К повторению». */}
           {!!scopeCounts?.difficult && (
             <ScopeTile scope="difficult" count={scopeCounts.difficult} onClick={() => void copyScope("difficult")} className="max-md:hidden" />
           )}
           {!!scopeCounts?.due && <ScopeTile scope="due" count={scopeCounts.due} onClick={() => void copyScope("due")} className="max-md:hidden" />}
           <RequestTile onClick={openRequest} side={side} className="max-md:hidden" />
+          <NewSetTile onClick={openRequest} className="md:hidden" />
         </div>
         {shortcuts && (
           <p className="meta m-0 mt-4 flex flex-wrap items-center gap-x-1.5 leading-4 max-md:hidden">
@@ -395,19 +440,34 @@ function SectionRule({ title, note, className }: { title: string; note: string |
   );
 }
 
-/** The resume card's ticks: each question's first answer (ink, or a miss), then the questions still ahead. */
-function resumeMarks(run: ExerciseRun, set: ExerciseSet, total: number): StripMark[] {
-  const ids = new Set(set.items.map((i) => i.id));
-  const marks = attemptMarks(run.answers.filter((a) => a.attempt === 1 && ids.has(a.item_id)));
-  while (marks.length < total) marks.push("future");
+/** The resume card's ticks: each question's first answer, the next one taller (current), then the rest. */
+function resumeMarks(
+  run: ExerciseRun,
+  set: ExerciseSet,
+  total: number,
+): StripMark[] {
+  const marks = firstTryMarks(run, set, total);
+  const next = marks.indexOf("future");
+  if (next >= 0) marks[next] = "current";
   return marks;
 }
 
 /**
  * «НЕ ЗАКОНЧЕНО» (Exercise-S-Resume): the newest unfinished run with «Продолжить · 5 из 8». Phones
- * (list B): no rule or meta, the tick row, and a plain «Продолжить ›».
+ * (E1 A): no rule or meta; the themes in italics (tileLines), the tick row with «2/5», and a plain
+ * «Продолжить ›».
  */
-function ResumeCard({ run, set, themes }: { run: ExerciseRun; set: ExerciseSet; themes: string }) {
+function ResumeCard({
+  run,
+  set,
+  themes,
+  topic,
+}: {
+  run: ExerciseRun;
+  set: ExerciseSet;
+  themes: string;
+  topic: string;
+}) {
   const { answered, total, progress } = resumeProgress(run, set);
   const meta = `${nQuestions(total)} · ${themes} · прервано ${shortDate(run.updated_at)}`;
   return (
@@ -415,12 +475,33 @@ function ResumeCard({ run, set, themes }: { run: ExerciseRun; set: ExerciseSet; 
       <SectionRule title="Не закончено" note="1" className="mt-5 max-md:hidden" />
       <section
         aria-label="Незаконченный набор"
-        className="mt-3 flex shrink-0 flex-col rounded-card border border-rule bg-surface px-4 pt-3.5 pb-4 max-md:mt-4"
+        className="mt-3 flex shrink-0 flex-col rounded-card border border-rule bg-surface px-4 pt-3.5 pb-4"
       >
-        <span className="truncate font-serif text-[19px] leading-6 font-medium max-md:text-[22px] max-md:leading-[26px]">{set.title}</span>
-        <span className="meta mt-0.5 truncate leading-4 max-md:hidden">{meta}</span>
-        {/* Phones (list B): the player's tick row, one tick per question; the count is in the link's name. */}
-        <SessionStrip size="ticks" marks={resumeMarks(run, set, total)} label={false} className="mt-3 md:hidden" />
+        <span className="truncate font-serif text-[19px] leading-6 font-medium max-md:text-[22px] max-md:leading-7 max-md:tracking-[-0.01em]">
+          {set.title}
+        </span>
+        <span className="meta mt-0.5 truncate leading-4 max-md:hidden">
+          {meta}
+        </span>
+        {topic && (
+          <span className="mt-0.5 truncate font-serif text-[15px] leading-5 text-muted italic md:hidden">
+            {topic}
+          </span>
+        )}
+        {/* Phones: the player's tick row, one tick per question (its name has the exact counts), and «2/5». */}
+        <span className="mt-3.5 flex h-4 items-center gap-3 md:hidden">
+          <SessionStrip
+            size="ticks"
+            marks={resumeMarks(run, set, total)}
+            className="flex-1"
+          />
+          <span
+            aria-hidden="true"
+            className="shrink-0 font-mono text-[12px] leading-4 font-medium tracking-[.04em] tabular-nums"
+          >
+            {answered}/{total}
+          </span>
+        </span>
         <div aria-hidden="true" className="relative mt-3 h-[5px] max-md:hidden">
           <div className="absolute inset-x-0 top-0.5 h-px bg-rule" />
           <div className="absolute top-[1.5px] left-0 h-0.5 bg-red" style={{ width: `${Math.round(progress * 100)}%` }} />
@@ -441,7 +522,7 @@ function ResumeCard({ run, set, themes }: { run: ExerciseRun; set: ExerciseSet; 
           <span aria-hidden="true" className="text-on-ink/60 max-md:hidden">
             ·
           </span>
-          <span className="font-mono text-[13px] tracking-[.02em] max-md:sr-only">
+          <span className="font-mono text-[13px] tracking-[.02em] max-md:hidden">
             {answered} из {total}
           </span>
           <span className="flex-1" />

@@ -1,6 +1,8 @@
 // Pure helpers for the «Упражнения» list (tiles, resume card, waiting line, request summaries).
 import { buildRequestText, isVerbSet, parseScope, runSettled, scoreRun } from "@/lib/core/exercises";
-import type { ExerciseRun, ExerciseScope, ExerciseSet } from "@/lib/types";
+import type { StripMark } from "@/components/ui/SessionStrip";
+import type { ExerciseItem, ExerciseItemType, ExerciseRun, ExerciseScope, ExerciseSet } from "@/lib/types";
+import { attemptMarks } from "./player-state";
 
 /** Russian plural: [1, 2–4, 5+]. */
 export function plural(n: number, forms: readonly [string, string, string]): string {
@@ -57,12 +59,90 @@ export function setThemesLine(
   return fresh > 0 ? `${base} · +${nWords(fresh)}` : base;
 }
 
+/** Phones (E1 A): what a set drills when one kind of question makes it up — the verb test, or more than half one type. */
+const KIND_NAMES: readonly (readonly [ExerciseItemType, string])[] = [
+  ["cloze", "пропуски"],
+  ["pairs", "пары"],
+  ["register", "регистр"],
+];
+
+/** «спряжение», «пропуски», «пары», «регистр»; null for a mixed set (or mostly «choice»). */
+export function setKind(items: readonly Pick<ExerciseItem, "type">[]): string | null {
+  if (items.length === 0) return null;
+  if (isVerbSet(items)) return "спряжение";
+  for (const [type, name] of KIND_NAMES) if (items.filter((i) => i.type === type).length * 2 > items.length) return name;
+  return null;
+}
+
+const normal = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[«»"'.,:;!?…()–—-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/** «Полиция» under the title «Полиция» (or «Еда» under «Еда и кафе») says nothing new. */
+export function repeatsTitle(title: string, text: string): boolean {
+  const a = normal(title);
+  const b = normal(text);
+  return !!a && !!b && (a.includes(b) || b.includes(a));
+}
+
+/** «3 новых слова из веба». */
+export const nWebWords = (n: number) => `${n} ${plural(n, ["новое слово", "новых слова", "новых слов"])} из веба`;
+
+export interface TileLines {
+  /** The italic line: «спряжение, Повседневное», «+ 3 новых слова из веба»; "" when the title says it all. */
+  text: string;
+  /** The accessible name's middle: «спряжение, Повседневное, 8 вопросов, 3 новых слова из веба». */
+  spoken: string;
+}
+
+/**
+ * Phones (E1 A): a set's italic line under the title — the kind, then the themes or the own topic
+ * unless the title already says them («все темы» when it has neither), a scoped set's words, and
+ * the web words.
+ */
+export function tileLines(
+  set: Pick<ExerciseSet, "title" | "folders" | "topic" | "items" | "new_words"> & Partial<Pick<ExerciseSet, "scope">>,
+  names: ReadonlyMap<string, string>,
+): TileLines {
+  const scope = parseScope(set.scope);
+  let place: string[];
+  if (scope) place = [SCOPE_LINES[scope]];
+  else {
+    const folders = setFolderNames(set, names);
+    const topic = set.topic?.replace(/\s+/g, " ").trim() ?? "";
+    place = [...folders, ...(topic ? [topic] : [])].filter((s) => !repeatsTitle(set.title, s));
+    if (folders.length === 0 && !topic) place = ["все темы"];
+  }
+  const kind = setKind(set.items);
+  const head = [...(kind ? [kind] : []), ...place].join(", ");
+  const fresh = set.new_words.length;
+  const web = fresh > 0 ? nWebWords(fresh) : "";
+  return {
+    text: [head, web && `+ ${web}`].filter(Boolean).join(" · "),
+    spoken: [head, nQuestions(set.items.length), web].filter(Boolean).join(", "),
+  };
+}
+
+/**
+ * Each question's first answer in a run (ink, or a miss), then the questions not answered yet —
+ * the phone tile's and the resume card's ticks.
+ */
+export function firstTryMarks(run: Pick<ExerciseRun, "answers">, set: Pick<ExerciseSet, "items">, total: number): StripMark[] {
+  const ids = new Set(set.items.map((i) => i.id));
+  const marks = attemptMarks(run.answers.filter((a) => a.attempt === 1 && ids.has(a.item_id)));
+  while (marks.length < total) marks.push("future");
+  return marks;
+}
+
 export type TileTone = "new" | "ink";
 
 export interface TileState {
   /** «Новый», «Прервано 5/8», «7/10». */
   label: string;
-  /** Phones (list B): only a played set says anything, «5/8» or «7/10»; a new one has its red band. */
+  /** Phones: only a played set shows a score, «5/8» or «7/10», by its ticks; a new one has its red band. */
   short: string | null;
   tone: TileTone;
   /** 0–1, the 2px line at the bottom. */
@@ -71,6 +151,10 @@ export interface TileState {
   fresh: boolean;
   /** An unfinished whole-set run to resume. */
   resumeRunId: string | null;
+  /** Phones (E1 A): the run's ticks (none before the first play). */
+  marks: StripMark[];
+  /** Phones (E1 A): the state in the tile's name — «Ещё не играли», «В прошлый раз 7 из 8 с первого раза, ошибка 1». */
+  said: string;
 }
 
 /**
@@ -79,9 +163,10 @@ export interface TileState {
  * shows as such but is not resumed here (the tile starts a new run).
  */
 export function tileState(set: Pick<ExerciseSet, "items">, run: ExerciseRun | undefined, own?: ReadonlySet<string>): TileState {
-  if (!run) return { label: "Новый", short: null, tone: "new", progress: 0, fresh: true, resumeRunId: null };
+  if (!run) return { label: "Новый", short: null, tone: "new", progress: 0, fresh: true, resumeRunId: null, marks: [], said: "Ещё не играли" };
   const score = scoreRun(run, set);
   const total = score.total || run.total;
+  const marks = firstTryMarks(run, set, total);
   if (run.finished_at === null && !runSettled(set, run)) {
     return {
       label: `Прервано ${score.answered}/${total}`,
@@ -90,16 +175,14 @@ export function tileState(set: Pick<ExerciseSet, "items">, run: ExerciseRun | un
       progress: total ? score.answered / total : 0,
       fresh: false,
       resumeRunId: !own || own.has(run.id) ? run.id : null,
+      marks,
+      said: `Прервано, отвечено ${score.answered} из ${total}`,
     };
   }
   const done = `${score.first_try}/${total}`;
-  return { label: done, short: done, tone: "ink", progress: 1, fresh: false, resumeRunId: null };
-}
-
-/** A tile's one phone meta line (list B): «12 · Люди» — the size and the first theme of the themes line. */
-export function tileMetaLine(total: number, themes: string): string {
-  const first = themes.split(" · ")[0].split(", ")[0];
-  return first ? `${total} · ${first}` : String(total);
+  const misses = marks.filter((m) => m === "miss").length;
+  const said = `В прошлый раз ${score.first_try} из ${total} с первого раза${misses ? `, ${plural(misses, ["ошибка", "ошибки", "ошибок"])} ${misses}` : ""}`;
+  return { label: done, short: done, tone: "ink", progress: 1, fresh: false, resumeRunId: null, marks, said };
 }
 
 /** «Продолжить · 5 из 8»: answered and total of an unfinished run. */
