@@ -1,13 +1,18 @@
 "use client";
 
 import { useLiveQuery } from "dexie-react-hooks";
-import { useEffect, useEffectEvent, useRef, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { useShortcutsEnabled } from "@/components/shell/ShellContext";
 import { OPEN_LAYER_SELECTOR } from "@/components/shell/keys";
 import { Button } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import { Kbd } from "@/components/ui/Kbd";
-import { countStrip, SessionStrip, type StripMark } from "@/components/ui/SessionStrip";
 import { SlangMeter } from "@/components/ui/SlangMeter";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import {
@@ -23,25 +28,58 @@ import {
 } from "@/lib/exercises";
 import type { ExerciseRun, ExerciseSet } from "@/lib/types";
 import { copyRequest } from "./clipboard";
+import {
+  DoneMissSlips,
+  DonePhoneActions,
+  DoneResultCard,
+  DoneWebWords,
+} from "./DonePhone";
 import { nQuestions, plural } from "./list-format";
-import { exerciseKeyAction, INPUT_GUARD_MS, isTypingTarget } from "./player-keys";
+import {
+  exerciseKeyAction,
+  INPUT_GUARD_MS,
+  isTypingTarget,
+} from "./player-keys";
 import { attemptMarks } from "./player-state";
 
 const nWords = (n: number) => `${n} ${plural(n, ["слово", "слова", "слов"])}`;
 
 /** A receipt row (as «Готово на сегодня»): label, dotted leader, mono number. */
-function ReceiptRow({ label, value, style }: { label: string; value: string; style?: CSSProperties }) {
+function ReceiptRow({
+  label,
+  value,
+  style,
+}: {
+  label: string;
+  value: string;
+  style?: CSSProperties;
+}) {
   return (
     <div style={style} className="flex h-8 items-center gap-2 md:h-10 md:gap-3">
       <span className="text-[15px]">{label}</span>
-      <span aria-hidden="true" className="mt-1.5 h-0 flex-1 border-b border-dotted border-muted md:border-rule" />
-      <span className="min-w-12 text-right font-mono text-[15px] font-medium tabular-nums md:font-normal">{value}</span>
+      <span
+        aria-hidden="true"
+        className="mt-1.5 h-0 flex-1 border-b border-dotted border-muted md:border-rule"
+      />
+      <span className="min-w-12 text-right font-mono text-[15px] font-medium tabular-nums md:font-normal">
+        {value}
+      </span>
     </div>
   );
 }
 
 /** A section's head: the label and its aside, at the far right; `inline`: from 768 the aside follows the label (a count, D-Exercise-Done). */
-function SectionHead({ title, aside, asideTone = "muted", inline = false }: { title: string; aside?: string; asideTone?: "muted" | "red"; inline?: boolean }) {
+function SectionHead({
+  title,
+  aside,
+  asideTone = "muted",
+  inline = false,
+}: {
+  title: string;
+  aside?: string;
+  asideTone?: "muted" | "red";
+  inline?: boolean;
+}) {
   return (
     <div
       className={cx(
@@ -52,46 +90,20 @@ function SectionHead({ title, aside, asideTone = "muted", inline = false }: { ti
       <h2 className="m-0 text-[11px] font-normal text-muted md:font-sans md:text-[13px] md:font-medium md:tracking-normal md:text-ink md:normal-case">
         {title}
       </h2>
-      {aside && <span className={asideTone === "red" ? "font-medium text-red" : "text-muted"}>{aside}</span>}
+      {aside && (
+        <span
+          className={
+            asideTone === "red" ? "font-medium text-red" : "text-muted"
+          }
+        >
+          {aside}
+        </span>
+      )}
     </div>
   );
 }
 
 const row = "flex h-9 min-w-0 items-center gap-3 border-b border-rule md:h-11";
-
-/** The strip writes in after the heading has landed (as «Готово на сегодня»). */
-const STRIP_AT_MS = 240;
-
-/**
- * Phones (L-Done-B cells, spec change §5): one cell per answer in the order given (attemptMarks),
- * and «12 вопросов · 9 с первого раза · 3 повтора» counted from the same marks — 9 is the ink cells,
- * 3 the hollow ones (a question right on a later attempt). The exact counts are the strip's name.
- */
-function ResultStrip({ marks, total }: { marks: readonly StripMark[]; total: number }) {
-  const c = countStrip(marks);
-  const parts = [
-    `${c.first} с первого раза`,
-    c.miss > 0 && `${c.miss} ${plural(c.miss, ["ошибка", "ошибки", "ошибок"])}`,
-    c.requeued > 0 && `${c.requeued} ${plural(c.requeued, ["повтор", "повтора", "повторов"])}`,
-  ].filter(Boolean);
-  return (
-    <section aria-label="Итоги упражнения" data-done-tally="" className="mt-6 shrink-0 md:hidden">
-      {marks.length > 0 && (
-        <SessionStrip size="cells" marks={marks} label={`${nQuestions(total)}: ${parts.join(", ")}`} writeIn writeInDelay={STRIP_AT_MS} />
-      )}
-      <p aria-hidden={marks.length > 0 || undefined} className="meta m-0 mt-3 leading-4 tabular-nums">
-        <span className="font-medium text-ink">{total}</span> {plural(total, ["вопрос", "вопроса", "вопросов"])} ·{" "}
-        <span className="font-medium text-ink">{c.first}</span> с первого раза
-        {c.requeued > 0 && (
-          <>
-            {" "}
-            · <span className="font-medium text-ink">{c.requeued}</span> {plural(c.requeued, ["повтор", "повтора", "повторов"])}
-          </>
-        )}
-      </p>
-    </section>
-  );
-}
 
 export interface ExerciseDoneProps {
   set: ExerciseSet;
@@ -112,12 +124,21 @@ export interface ExerciseDoneProps {
  * «Вопросов / С первого раза / Точность», «ОШИБКИ» with the slang meters, «НОВЫЕ СЛОВА (N) · ИЗ
  * ВЕБА» with checkboxes → «Добавить в библиотеку (N)» (undo in the snackbar), «Повторить ошибки
  * (N)», «Попросить следующий набор» (copies a request naming the set and its misses) and «Готово».
- * Phones (L-Done-B, spec change §5): the session strip replaces the receipt, the actions follow it
- * («Попросить следующий набор» as a text action, no «Готово»: the tab bar is back), error rows
- * without meters. From 768 the actions sit under the receipt with their keys (C, Esc); focus lands on «Повторить
- * ошибки». No date stamp, confetti or count-up.
+ * Phones (pick E4 B, `X-Done-B`; DonePhone): the result as an index card (the set's title, the
+ * session strip, «3 из 5 с первого раза»), «Ошибки» as slips that open the word card, each web
+ * word as a dashed card with «Положить в библиотеку» (solid once added, undo in the snackbar),
+ * then «Повторить ошибки (N)» and «К наборам» at the bottom (the tab bar is back). From 768 the
+ * actions sit under the receipt with their keys (C, Esc); focus lands on «Повторить ошибки». No
+ * date stamp, confetti or count-up.
  */
-export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeave, onWord }: ExerciseDoneProps) {
+export function ExerciseDone({
+  set,
+  run,
+  onRepeat,
+  repeatPending = false,
+  onLeave,
+  onWord,
+}: ExerciseDoneProps) {
   const snackbar = useSnackbar();
   const letters = useShortcutsEnabled();
   const score = scoreRun(run, set);
@@ -127,14 +148,19 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
   const marks = attemptMarks(run.answers.filter((a) => itemIds.has(a.item_id)));
   // The library rows of the missed words: a link only to a word still there, and the meter for a
   // word met only in pairs (its tile carries no snapshot).
-  const library = useLiveWords(missed.flatMap((m) => (m.word_id ? [m.word_id] : [])));
+  const library = useLiveWords(
+    missed.flatMap((m) => (m.word_id ? [m.word_id] : [])),
+  );
   // «Повторить ошибки (N)» counts the mistakes listed under «Ошибки» (it replays the questions behind them).
   const repeatCount = missed.length || missedItems.length;
   const saved = useLiveQuery(() => savedNewWords(set), [set]);
   // Read ahead: the copy must start inside the tap (iOS drops the gesture across an IndexedDB await).
   const sets = useExerciseSets();
-  const [unchecked, setUnchecked] = useState<ReadonlySet<string>>(() => new Set());
-  const [adding, setAdding] = useState(false);
+  const [unchecked, setUnchecked] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  // The add in flight: true for the desktop batch, the ref for a phone card.
+  const [adding, setAdding] = useState<boolean | string>(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
   const addable = set.new_words.filter((w) => !saved?.has(w.ref));
@@ -151,11 +177,20 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
     if (adding || checked.length === 0) return;
     setAdding(true);
     try {
-      const result = await addNewWords(set, checked.map((w) => w.ref));
+      const result = await addNewWords(
+        set,
+        checked.map((w) => w.ref),
+      );
       const n = result.added.length;
       snackbar.show({
-        message: n > 0 ? `Добавлено: ${nWords(n)}` : "Эти слова уже есть в библиотеке",
-        ...(n > 0 ? { actionLabel: "Отменить", onAction: () => void undoAddNewWords(result.undo) } : {}),
+        message:
+          n > 0 ? `Добавлено: ${nWords(n)}` : "Эти слова уже есть в библиотеке",
+        ...(n > 0
+          ? {
+              actionLabel: "Отменить",
+              onAction: () => void undoAddNewWords(result.undo),
+            }
+          : {}),
       });
     } catch {
       snackbar.show({ message: "Не удалось добавить слова" });
@@ -164,10 +199,51 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
     }
   };
 
+  // Phones: one web word at a time, from its card.
+  const addOne = async (ref: string) => {
+    if (adding) return;
+    const word = set.new_words.find((w) => w.ref === ref);
+    if (!word) return;
+    setAdding(ref);
+    try {
+      const result = await addNewWords(set, [ref]);
+      snackbar.show({
+        message:
+          result.added.length > 0 ? (
+            <>
+              Добавлено · <span lang="fr">{word.fr}</span>
+            </>
+          ) : (
+            "Это слово уже есть в библиотеке"
+          ),
+        ...(result.added.length > 0
+          ? {
+              actionLabel: "Отменить",
+              onAction: () => void undoAddNewWords(result.undo),
+            }
+          : {}),
+      });
+    } catch {
+      snackbar.show({ message: "Не удалось добавить слово" });
+    } finally {
+      setAdding(false);
+    }
+  };
+
   const followUp = async () => {
     const text = buildFollowUpText(set, missed);
-    const ok = await copyRequest({ text, summary: `после «${set.title}», ${nQuestions(set.items.length)}` }, sets ?? [set]);
-    snackbar.show({ message: ok ? "Запрос скопирован — вставьте его в чат с Claude" : "Не удалось скопировать запрос" });
+    const ok = await copyRequest(
+      {
+        text,
+        summary: `после «${set.title}», ${nQuestions(set.items.length)}`,
+      },
+      sets ?? [set],
+    );
+    snackbar.show({
+      message: ok
+        ? "Запрос скопирован — вставьте его в чат с Claude"
+        : "Не удалось скопировать запрос",
+    });
   };
 
   // Desktop: focus on the primary action (or the heading); a key held from the last card does not
@@ -175,19 +251,35 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
   // fresh press still works).
   useEffect(() => {
     const root = rootRef.current;
-    const target = root?.querySelector<HTMLElement>("[data-done-primary]:not(:disabled)") ?? root?.querySelector<HTMLElement>("h1");
-    if (window.matchMedia("(min-width: 768px)").matches) target?.focus({ preventScroll: true });
+    const target =
+      root?.querySelector<HTMLElement>("[data-done-primary]:not(:disabled)") ??
+      root?.querySelector<HTMLElement>("h1");
+    if (window.matchMedia("(min-width: 768px)").matches)
+      target?.focus({ preventScroll: true });
     const until = performance.now() + INPUT_GUARD_MS;
     const swallow = (event: KeyboardEvent) => {
-      if ((event.repeat || event.timeStamp < until) && (event.key === " " || event.key === "Enter")) event.preventDefault();
+      if (
+        (event.repeat || event.timeStamp < until) &&
+        (event.key === " " || event.key === "Enter")
+      )
+        event.preventDefault();
     };
     window.addEventListener("keydown", swallow, true);
     return () => window.removeEventListener("keydown", swallow, true);
   }, []);
 
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
-    if (event.defaultPrevented || isTypingTarget(event.target) || document.querySelector(OPEN_LAYER_SELECTOR)) return;
-    const action = exerciseKeyAction(event, { phase: "done", options: 0, letters });
+    if (
+      event.defaultPrevented ||
+      isTypingTarget(event.target) ||
+      document.querySelector(OPEN_LAYER_SELECTOR)
+    )
+      return;
+    const action = exerciseKeyAction(event, {
+      phase: "done",
+      options: 0,
+      letters,
+    });
     if (!action) return;
     event.preventDefault();
     if (action.type === "follow-up") void followUp();
@@ -199,9 +291,38 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
     return () => window.removeEventListener("keydown", listener);
   }, []);
 
-  const meta = [set.topic ? "своя тема" : null, run.kind === "mistakes" ? "работа над ошибками" : null, nQuestions(score.total)].filter(Boolean);
+  const meta = [
+    set.topic ? "своя тема" : null,
+    run.kind === "mistakes" ? "работа над ошибками" : null,
+    nQuestions(score.total),
+  ].filter(Boolean);
   // Phones: the strip counts the questions, and the schedule note stays at the entry (the list).
   const phoneMeta = run.kind === "mistakes" ? "работа над ошибками" : null;
+  // A missed word opens its card when it is in the library (a web word too, once added).
+  const slips = missed.map((m) => {
+    const id =
+      m.word_id && library?.has(m.word_id)
+        ? m.word_id
+        : m.new_ref
+          ? saved?.get(m.new_ref)?.id
+          : undefined;
+    const meter = m.word ?? (m.word_id ? library?.get(m.word_id) : undefined);
+    return {
+      key: m.key,
+      fr: m.fr,
+      ru: m.ru,
+      meter: meter ? { level: meter.slang_level, verlan: meter.verlan } : null,
+      onOpen: id ? () => onWord(id) : undefined,
+    };
+  });
+  const webWords = set.new_words.map((w) => ({
+    ref: w.ref,
+    fr: w.fr,
+    ru: w.ru,
+    slang_level: w.slang_level,
+    verlan: w.verlan,
+    inLibrary: saved?.has(w.ref) ?? false,
+  }));
 
   return (
     <div
@@ -209,28 +330,56 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
       data-exercise-done=""
       className="flex flex-1 flex-col px-4 pt-4 pb-4 md:mx-auto md:w-[720px] md:max-w-full md:px-0 md:pt-12 md:pb-12"
     >
-      <h1 tabIndex={-1} className="m-0 mt-1 font-serif text-[34px] leading-10 font-medium tracking-[-0.015em] outline-none md:text-[40px] md:leading-[48px]">
+      <h1
+        tabIndex={-1}
+        className="m-0 mt-1 font-serif text-[34px] leading-10 font-medium tracking-[-0.015em] outline-none md:text-[40px] md:leading-[48px]"
+      >
         Готово
       </h1>
-      <div className="mt-0.5 flex min-w-0 items-baseline gap-2">
-        <span className="min-w-0 truncate font-serif text-[19px] leading-6 italic">{set.title}</span>
-        <span className="meta shrink-0 max-md:hidden">
+      <div className="mt-0.5 flex min-w-0 items-baseline gap-2 max-md:hidden">
+        <span className="min-w-0 truncate font-serif text-[19px] leading-6 italic">
+          {set.title}
+        </span>
+        <span className="meta shrink-0">
           · {meta.join(" · ")} · не влияет на расписание
         </span>
-        {phoneMeta && <span className="meta shrink-0 md:hidden">· {phoneMeta}</span>}
       </div>
 
-      <ResultStrip marks={marks} total={score.total} />
+      <div className="contents md:hidden">
+        <DoneResultCard
+          title={set.title}
+          marks={marks}
+          total={score.total}
+          note={phoneMeta}
+        />
+        {slips.length > 0 && <DoneMissSlips slips={slips} />}
+        {webWords.length > 0 && (
+          <DoneWebWords
+            words={webWords}
+            ready={saved !== undefined}
+            pending={typeof adding === "string" ? adding : null}
+            onAdd={(ref) => void addOne(ref)}
+          />
+        )}
+        <DonePhoneActions
+          repeat={missedItems.length > 0 ? repeatCount : 0}
+          pending={repeatPending}
+          onRepeat={() => onRepeat(missedItems)}
+          onLeave={onLeave}
+        />
+      </div>
 
-      <section aria-label="Итоги упражнения" className="mt-3.5 shrink-0 border-y border-ink max-md:hidden md:mt-6">
+      <section
+        aria-label="Итоги упражнения"
+        className="mt-3.5 shrink-0 border-y border-ink max-md:hidden md:mt-6"
+      >
         <ReceiptRow label="Вопросов" value={String(score.total)} />
         <ReceiptRow label="С первого раза" value={String(score.first_try)} />
         <ReceiptRow label="Точность" value={`${score.accuracy} %`} />
       </section>
 
-      {/* Actions under the result: phones the primary and a text action (the tab bar is back, so no
-          «Готово»); from 768 in one row with their keys. */}
-      <div className="mt-8 flex shrink-0 flex-col gap-1 md:mt-5 md:flex-row md:items-center md:gap-6">
+      {/* Desktop: the actions under the receipt, in one row with their keys. */}
+      <div className="mt-5 flex shrink-0 flex-row items-center gap-6 max-md:hidden">
         {missedItems.length > 0 && (
           <Button
             data-done-primary=""
@@ -248,14 +397,10 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
           block
           onClick={() => void followUp()}
           aria-keyshortcuts={letters ? "C" : undefined}
-          className="max-md:h-11 max-md:self-center max-md:border-0 max-md:bg-transparent max-md:px-2 max-md:underline max-md:decoration-boundary max-md:decoration-1 max-md:underline-offset-4 md:w-auto md:border-0 md:bg-transparent md:px-0"
+          className="md:w-auto md:border-0 md:bg-transparent md:px-0"
         >
           Попросить следующий набор
-          {letters && (
-            <Kbd aria-hidden="true" className="max-md:hidden">
-              C
-            </Kbd>
-          )}
+          {letters && <Kbd aria-hidden="true">C</Kbd>}
         </Button>
         <button
           type="button"
@@ -264,32 +409,53 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
           className="press-sm hidden h-11 shrink-0 items-center justify-center gap-2 text-[15px] font-medium text-ink md:ml-auto md:inline-flex"
         >
           Готово
-          <Kbd aria-hidden="true" className="max-md:hidden">
-            Esc
-          </Kbd>
+          <Kbd aria-hidden="true">Esc</Kbd>
         </button>
       </div>
 
       {missed.length > 0 && (
-        <section aria-label="Ошибки" className="mt-8 shrink-0 md:mt-10">
-          <SectionHead title="Ошибки" aside={String(missed.length)} asideTone="red" inline />
+        <section aria-label="Ошибки" className="mt-10 shrink-0 max-md:hidden">
+          <SectionHead
+            title="Ошибки"
+            aside={String(missed.length)}
+            asideTone="red"
+            inline
+          />
           <ul className="m-0 mt-1.5 list-none border-t border-rule p-0 md:mt-0 md:border-t-0">
             {missed.map((m) => {
               const saved = m.word_id ? library?.get(m.word_id) : undefined;
               const meter = m.word ?? saved;
               const content = (
                 <>
-                  <span lang="fr" className="min-w-0 shrink-0 font-serif text-[19px] leading-6 font-medium max-md:max-w-[60%] max-md:truncate md:w-[232px] md:truncate">
+                  <span
+                    lang="fr"
+                    className="min-w-0 shrink-0 font-serif text-[19px] leading-6 font-medium md:w-[232px] md:truncate"
+                  >
                     {m.fr}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-[14px] text-muted">{m.ru}</span>
-                  {meter && <SlangMeter level={meter.slang_level} verlan={meter.verlan} className="max-md:hidden [&>span:last-child]:w-[76px]" />}
+                  <span className="min-w-0 flex-1 truncate text-[14px] text-muted">
+                    {m.ru}
+                  </span>
+                  {meter && (
+                    <SlangMeter
+                      level={meter.slang_level}
+                      verlan={meter.verlan}
+                      className="[&>span:last-child]:w-[76px]"
+                    />
+                  )}
                 </>
               );
               return (
                 <li key={m.key}>
                   {saved ? (
-                    <button type="button" onClick={() => onWord(m.word_id!)} className={cx(row, "press-tint w-full bg-transparent text-left")}>
+                    <button
+                      type="button"
+                      onClick={() => onWord(m.word_id!)}
+                      className={cx(
+                        row,
+                        "press-tint w-full bg-transparent text-left",
+                      )}
+                    >
                       {content}
                     </button>
                   ) : (
@@ -303,8 +469,14 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
       )}
 
       {set.new_words.length > 0 && (
-        <section aria-label="Новые слова" className="mt-5 shrink-0 md:mt-10">
-          <SectionHead title={`Новые слова (${set.new_words.length})`} aside="из веба" />
+        <section
+          aria-label="Новые слова"
+          className="mt-10 shrink-0 max-md:hidden"
+        >
+          <SectionHead
+            title={`Новые слова (${set.new_words.length})`}
+            aside="из веба"
+          />
           <div className="mt-1.5 border-t border-rule md:mt-0 md:border-t-0">
             {set.new_words.map((w) => {
               const inLibrary = saved?.has(w.ref) ?? false;
@@ -323,24 +495,41 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
                     aria-hidden="true"
                     className={cx(
                       "flex size-5 shrink-0 items-center justify-center rounded-[2px] transition-colors duration-(--dur-instant) ease-press md:size-3.5",
-                      on ? "bg-ink text-on-ink" : "border border-boundary bg-surface",
+                      on
+                        ? "bg-ink text-on-ink"
+                        : "border border-boundary bg-surface",
                       inLibrary && "opacity-40",
                     )}
                   >
                     {on && (
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="md:size-2.5">
+                      <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={2.5}
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="md:size-2.5"
+                      >
                         <path d="M20 6 9 17l-5-5" />
                       </svg>
                     )}
                   </span>
-                  <span lang="fr" className="shrink-0 font-serif text-[19px] leading-6 font-medium md:w-[220px] md:truncate">
+                  <span
+                    lang="fr"
+                    className="shrink-0 font-serif text-[19px] leading-6 font-medium md:w-[220px] md:truncate"
+                  >
                     {w.fr}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-[14px] text-muted">{w.ru}</span>
+                  <span className="min-w-0 flex-1 truncate text-[14px] text-muted">
+                    {w.ru}
+                  </span>
                   {inLibrary ? (
                     <span className="meta shrink-0">в библиотеке</span>
                   ) : (
-                    <SlangMeter level={w.slang_level} verlan={w.verlan} className="max-md:hidden" />
+                    <SlangMeter level={w.slang_level} verlan={w.verlan} />
                   )}
                 </button>
               );
@@ -351,7 +540,7 @@ export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeav
               variant="secondary"
               size="md"
               block
-              pending={adding}
+              pending={adding !== false}
               disabled={checked.length === 0}
               onClick={() => void add()}
               className="mt-2 md:mt-4 md:w-auto"
