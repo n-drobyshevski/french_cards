@@ -5,7 +5,7 @@ import { openReview, tabBar } from "./fixtures";
 // snackbar leaves the way it came, sheets use the motion tokens instead of vaul's 500ms.
 
 test("the toggle thumb slides with a transform and the switch presses in", async ({ page }) => {
-  await page.goto("/settings");
+  await page.goto("/settings/review");
   const toggle = page.getByRole("switch", { name: "Свайпы для оценки" });
   await expect(toggle).toBeVisible();
   const thumb = toggle.locator("[data-toggle-thumb]");

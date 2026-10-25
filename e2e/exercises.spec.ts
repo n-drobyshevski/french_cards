@@ -345,7 +345,7 @@ test("«Чаще в упражнениях» on: the request builder says so and
   // Off by default: no line.
   await expect(card.getByText(/^Чаще /)).toHaveCount(0);
 
-  await page.goto("/settings");
+  await page.goto("/settings/exercises");
   await page.getByRole("radiogroup", { name: "Чаще в упражнениях" }).getByRole("radio", { name: "Трудные", exact: true }).click();
   await page.getByRole("radiogroup", { name: "Сколько в наборе" }).getByRole("radio", { name: "Почти все" }).click();
   await expect(page.getByRole("radiogroup", { name: "Сколько в наборе" }).getByRole("radio", { name: "Почти все" })).toBeChecked();
@@ -356,9 +356,9 @@ test("«Чаще в упражнениях» on: the request builder says so and
   await expect(card.getByText("Чаще трудные · почти весь набор", { exact: true })).toBeVisible();
   await expect(card.locator("p", { hasText: /^Сделай упражнение/ })).toHaveText("Сделай упражнение в Карточках по всем темам, 12 вопросов, можно новые слова.");
   const link = card.getByRole("link", { name: "Настройки ›" });
-  await expect(link).toHaveAttribute("href", "/settings#set-exercises");
+  await expect(link).toHaveAttribute("href", "/settings/exercises");
   await link.click();
-  await expect(page).toHaveURL(/\/settings#set-exercises$/);
+  await expect(page).toHaveURL(/\/settings\/exercises$/);
   await expect(page.getByRole("radiogroup", { name: "Чаще в упражнениях" })).toBeInViewport();
 });
 

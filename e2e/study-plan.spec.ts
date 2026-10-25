@@ -64,8 +64,8 @@ test.describe("«План повторения» in Settings", () => {
     await withoutLegacyPlan(page);
     await page.goto("/settings");
     const row = page.getByRole("link", { name: /^План повторения/ });
-    await expect(row).toContainText("8 слов в день · до 200 повторений");
-    // The old stepper is gone from «Повторение».
+    await expect(row).toContainText("8 новых · до 200 в день");
+    // The old stepper is gone from Settings.
     await expect(page.getByRole("group", { name: "Новых карточек в день" })).toHaveCount(0);
     await row.click();
 
@@ -115,9 +115,9 @@ test.describe("«План повторения» in Settings", () => {
     // Back to Settings: the row shows the new summary; a reload keeps the plan.
     await page.getByRole("button", { name: "Назад к настройкам" }).click();
     await expect(page).toHaveURL(/\/settings$/);
-    await expect(page.getByRole("link", { name: /^План повторения/ })).toContainText("9 карточек в день · до 225 повторений");
+    await expect(page.getByRole("link", { name: /^План повторения/ })).toContainText("9 новых карточек · до 225 в день");
     await page.reload();
-    await expect(page.getByRole("link", { name: /^План повторения/ })).toContainText("9 карточек в день · до 225 повторений");
+    await expect(page.getByRole("link", { name: /^План повторения/ })).toContainText("9 новых карточек · до 225 в день");
   });
 
   test("«Повторений в день» goes past 975 to «без лимита» and back", async ({ page }) => {

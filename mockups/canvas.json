@@ -1397,9 +1397,81 @@
    "is_interactive": true,
    "radius": 28
   },
+  "L-Settings-A.dc.html": {
+   "x": 0,
+   "y": 39088,
+   "w": 390,
+   "h": 844,
+   "title": "A — подрезать ленту",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Settings-B.dc.html": {
+   "x": 470,
+   "y": 39088,
+   "w": 390,
+   "h": 844,
+   "title": "B — индекс из семи строк",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Settings-C.dc.html": {
+   "x": 940,
+   "y": 39088,
+   "w": 390,
+   "h": 844,
+   "title": "C — карточка плана и образцы темы",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Settings-B-Review.dc.html": {
+   "x": 1410,
+   "y": 39088,
+   "w": 390,
+   "h": 844,
+   "title": "B · Повторение",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Settings-B-Exercises.dc.html": {
+   "x": 1880,
+   "y": 39088,
+   "w": 390,
+   "h": 844,
+   "title": "B · Упражнения",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Settings-B-AI.dc.html": {
+   "x": 2350,
+   "y": 39088,
+   "w": 390,
+   "h": 844,
+   "title": "B · ИИ",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Settings-B-Data.dc.html": {
+   "x": 2820,
+   "y": 39088,
+   "w": 390,
+   "h": 844,
+   "title": "B · Данные",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "L-Settings-B-Fields.dc.html": {
+   "x": 3290,
+   "y": 39088,
+   "w": 390,
+   "h": 844,
+   "title": "B · Свои поля",
+   "is_interactive": true,
+   "radius": 28
+  },
   "Progress-Screen-A.dc.html": {
    "x": 0,
-   "y": 39208,
+   "y": 40252,
    "w": 390,
    "h": 844,
    "title": "D1 · A — ведомость со спарклайнами",
@@ -1408,7 +1480,7 @@
   },
   "Progress-Screen-B.dc.html": {
    "x": 470,
-   "y": 39208,
+   "y": 40252,
    "w": 390,
    "h": 844,
    "title": "D1 · B — кривая знаний",
@@ -1417,7 +1489,7 @@
   },
   "Progress-Screen-C.dc.html": {
    "x": 940,
-   "y": 39208,
+   "y": 40252,
    "w": 390,
    "h": 844,
    "title": "D1 · C — лист за месяц",
@@ -1426,7 +1498,7 @@
   },
   "Progress-Streak-A.dc.html": {
    "x": 1410,
-   "y": 39208,
+   "y": 40252,
    "w": 390,
    "h": 844,
    "title": "D2 · A — серия в подстроке",
@@ -1435,7 +1507,7 @@
   },
   "Progress-Streak-B.dc.html": {
    "x": 1880,
-   "y": 39208,
+   "y": 40252,
    "w": 390,
    "h": 844,
    "title": "D2 · B — серия под календарём",
@@ -1444,7 +1516,7 @@
   },
   "Progress-Day.dc.html": {
    "x": 2350,
-   "y": 39208,
+   "y": 40252,
    "w": 390,
    "h": 844,
    "title": "Прогресс — выбранный день",
@@ -1453,7 +1525,7 @@
   },
   "Progress-Empty.dc.html": {
    "x": 2820,
-   "y": 39208,
+   "y": 40252,
    "w": 390,
    "h": 844,
    "title": "Прогресс — пусто",
@@ -1462,7 +1534,7 @@
   },
   "Progress-Entry.dc.html": {
    "x": 3290,
-   "y": 39208,
+   "y": 40252,
    "w": 820,
    "h": 844,
    "title": "Прогресс — где открывается",
@@ -1471,7 +1543,7 @@
   },
   "D-Progress-A.dc.html": {
    "x": 0,
-   "y": 40372,
+   "y": 41416,
    "w": 1440,
    "h": 800,
    "title": "D1 · A — десктоп, ведомость",
@@ -1479,7 +1551,7 @@
   },
   "D-Progress-B.dc.html": {
    "x": 1520,
-   "y": 40372,
+   "y": 41416,
    "w": 1440,
    "h": 800,
    "title": "D1 · B — десктоп, кривая",
@@ -1487,7 +1559,7 @@
   },
   "D-Progress-C.dc.html": {
    "x": 3040,
-   "y": 40372,
+   "y": 41416,
    "w": 1440,
    "h": 800,
    "title": "D1 · C — десктоп, листы месяцев",
@@ -1655,6 +1727,14 @@
   "M-L-Bold.dc.html",
   "L-Kit.dc.html",
   "L-Kit-Dark.dc.html",
+  "L-Settings-A.dc.html",
+  "L-Settings-B.dc.html",
+  "L-Settings-C.dc.html",
+  "L-Settings-B-Review.dc.html",
+  "L-Settings-B-Exercises.dc.html",
+  "L-Settings-B-AI.dc.html",
+  "L-Settings-B-Data.dc.html",
+  "L-Settings-B-Fields.dc.html",
   "Progress-Screen-A.dc.html",
   "Progress-Screen-B.dc.html",
   "Progress-Screen-C.dc.html",
@@ -1880,15 +1960,22 @@
   },
   "row31": {
    "x": 0,
-   "y": 39088,
-   "text": "31 · Прогресс — варианты (D1 вид, D2 серия) и состояния",
+   "y": 38968,
+   "text": "31 · Мобильный минимализм · S1 Настройки",
    "kind": "title1",
-   "maxW": 4110
+   "maxW": 1800
   },
   "row32": {
    "x": 0,
-   "y": 40252,
-   "text": "32 · Прогресс — десктоп",
+   "y": 40132,
+   "text": "32 · Прогресс — варианты (D1 вид, D2 серия) и состояния",
+   "kind": "title1",
+   "maxW": 4110
+  },
+  "row33": {
+   "x": 0,
+   "y": 41296,
+   "text": "33 · Прогресс — десктоп",
    "kind": "title1",
    "maxW": 4480
   }

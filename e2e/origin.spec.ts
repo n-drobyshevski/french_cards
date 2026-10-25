@@ -57,7 +57,7 @@ test("origin shows in the library row and on the answer side, and the setting hi
 
   await expect(await libraryRow(page)).toContainText(`· ${ORIGIN}`);
 
-  await page.goto("/settings");
+  await page.goto("/settings/review");
   const toggle = page.getByRole("switch", { name: "Происхождение слов" });
   await expect(toggle).toHaveAttribute("aria-checked", "true");
   await toggle.click();

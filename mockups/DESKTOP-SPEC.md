@@ -1090,7 +1090,7 @@ Everything phones can do, desktop can do too. Where the boards above differ, thi
     shows it.
   - **«Определить уровень языка»** (not drawn): the phone's quiet row and plan sheet («Уровень языка для 98 слов»), as a 760
     dialog like «Предлагаемые перемещения», with the footer «Отмена Esc» / «Сохранить уровни 90 ⌘↵».
-- **«Прогресс»** (added 2026-10-25; SPEC.md «Прогресс», picks R31 D1 A, D2 A; board `D-Progress-A`): the same
+- **«Прогресс»** (added 2026-10-25; SPEC.md «Прогресс», picks R32 D1 A, D2 A; board `D-Progress-A`): the same
   saved days, numbers, streak rule and copy as on phones, from the sidebar and rail item «Прогресс» or `G P`;
   the layout is §10. Differences from the phone: two calendar months instead of one, the selected day in a
   pane instead of in place, mistakes open the word in Библиотека instead of the word sheet, and no slang meter

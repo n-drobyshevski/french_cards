@@ -2,8 +2,9 @@
 
 // «План повторения» (SPEC «План дня и уровень языка», pick R22 D1 C; boards Review-Settings-C,
 // desktop D-Review-Settings): how many new words a day, the review cap, the order of new words,
-// where new cards go and when the reverse side starts. Settings → «Повторение» shows one row
-// «План повторения ›» with the summary; it opens its own screen (/settings/plan). The plan is the
+// where new cards go and when the reverse side starts. The phone Settings index (pick S1 B) and the
+// desktop «Повторение» show one row «План повторения ›» with the summary; it opens its own screen
+// (/settings/plan). The plan is the
 // synced `user_prefs` row `study_plan` (lib/user-prefs.ts), so every device and the Claude connector
 // plan the same day. Saving is immediate, like the other settings.
 import Link from "next/link";
@@ -68,25 +69,7 @@ const NO_CAP = (
   </>
 );
 
-// --- The row in Settings → «Повторение» ---------------------------------------------------------
-
-/** Phones: the button row «План повторения ›» with the summary as its 12 muted caption. */
-export function PhonePlanRow() {
-  const plan = useStudyPlan();
-  return (
-    <Link
-      href={PLAN_SETTINGS_HREF}
-      data-plan-row=""
-      className="press-tint flex min-h-11 w-full shrink-0 items-center gap-2 py-2 text-left text-ink no-underline"
-    >
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate text-[15px] leading-5">План повторения</span>
-        <span className="min-h-4 truncate text-[12px] leading-4 text-muted">{plan ? planSummary(plan) : ""}</span>
-      </span>
-      <Icon name="chevron-right" size={14} strokeWidth={2} className="shrink-0 text-muted" />
-    </Link>
-  );
-}
+// --- The desktop row in Settings → «Повторение» (phones: the index row, SettingsScreen) ---------------------------------------------------------
 
 /** Desktop: «План повторения» with the summary (13 muted) and a chevron, the whole row a link. */
 export function DeskPlanRow() {
