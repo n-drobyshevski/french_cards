@@ -9,6 +9,7 @@ import { LEGACY_STUDY_PLAN, parseStudyPlan, type StudyPlan } from "@/lib/core/st
 import { newReviewState, retrievability } from "@/lib/scheduler";
 import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ProgressDay, ReviewLog, ReviewState, UserPref, Word } from "@/lib/types";
 import { createFakeRepo, type FakeRepo } from "./fake-repo";
+import { planFitLogsFrom } from "./plan-fit";
 import { RepoError } from "./repo";
 import {
   addWords,
@@ -1014,6 +1015,136 @@ describe("study_summary history_days («Прогресс»)", () => {
   it("refuses a range outside 1–365 days", async () => {
     await refused(studySummary, library(), { history_days: 0 });
     await refused(studySummary, library(), { history_days: 366 });
+  });
+});
+
+describe("study_summary plan_fit («План и прогресс»)", () => {
+  const PLAN10: StudyPlan = { new_words: 10, review_cap: 200, new_order: "added", mix: "mixed", ru_fr: "after" };
+  // 12 study days in the last 3 weeks (days off between them), noon in Paris.
+  const STUDY_DAYS = ["2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09", "2026-10-11", "2026-10-12", "2026-10-13", "2026-10-15", "2026-10-16", "2026-10-18", "2026-10-19", "2026-10-21"];
+  const log = (id: string, wordId: string, day: string, state: ReviewLog["state"], rating: ReviewLog["rating"]): ReviewLog => ({
+    id,
+    word_id: wordId,
+    direction: "fr_ru",
+    rating,
+    state,
+    due: `${day}T10:00:00.000Z`,
+    stability: 30,
+    difficulty: 5,
+    elapsed_days: 3,
+    scheduled_days: 30,
+    review: `${day}T10:00:00.000Z`,
+    prev: null,
+    updated_at: `${day}T10:00:00.000Z`,
+    deleted_at: null,
+  });
+  const progressDay = (id: string, plan: ProgressDay["plan"]): ProgressDay => ({
+    id,
+    known: 10,
+    learning: 5,
+    fresh: 20,
+    difficult: 0,
+    paused: 0,
+    total: 35,
+    memorized: 12,
+    reviews: 20,
+    again: 1,
+    new_introduced: 10,
+    added: 0,
+    source: "live",
+    algo: "6",
+    plan,
+    updated_at: OLD.toISOString(),
+    deleted_at: null,
+  });
+
+  /** The whole plan of 10 FR words on every study day, 10 interday reviews a day (90 % right), 250 new words left. */
+  function surplus(extraPrefs: UserPref[] = []) {
+    const ws = Array.from({ length: 250 }, (_, i) => word(`w${i}`, `mot${i}`, `слово${i}`));
+    const logs = STUDY_DAYS.flatMap((day, d) => [
+      // 16 Oct: the plan held new words back for load (6 of 10).
+      ...Array.from({ length: day === "2026-10-16" ? 6 : 10 }, (_, i) => log(`n${d}-${i}`, `old-n${d}-${i}`, day, 0, 3)),
+      ...Array.from({ length: 10 }, (_, i) => log(`r${d}-${i}`, `old-r${i}`, day, 2, i === 0 ? 1 : 3)),
+    ]);
+    return createFakeRepo({
+      words: ws,
+      review_state: ws.flatMap((w) => cards(w.id)),
+      review_log: logs,
+      user_prefs: [planRow(PLAN10), ...extraPrefs],
+      progress_days: [
+        progressDay("2026-10-16", { ceiling: 10, budget: 6, reason: "load", cap: 200, due: 40, deferred: 0, forecast7: 70, override: false }),
+        progressDay("2026-10-15", null), // before 0017 on that device: unknown
+      ],
+    });
+  }
+
+  it("is there without history_days; not enough data: warming_up, no suggestion, nulls (never NaN)", async () => {
+    const out = await ok(studySummary, createFakeRepo({ words: [word("a", "pote", "друг")], review_state: cards("a"), user_prefs: [planRow(PLAN10)] }), {});
+    expect(out.plan_fit).toEqual({
+      window_days: 14,
+      active_days: 0,
+      plan_since: "2026-10-01",
+      new_words: { plan: 10, unit: "words", typical: null, max: null, full_days: 0, plan_days: 0, held_days: null },
+      reviews: { cap: 200, typical: null, all_answers_typical: null, max: null, forecast_7d: 0, backlog_days: 0, cap_hit_days: 0 },
+      retention: { rate: null, target: 0.9, answers: 0 },
+      fit: "warming_up",
+      suggestion: null,
+      dismissed_until: null,
+    });
+    // Without a saved plan: no plan_since.
+    expect((await ok(studySummary, createFakeRepo(), {})).plan_fit).toMatchObject({ plan_since: null, fit: "warming_up", suggestion: null });
+  });
+
+  it("the whole plan taken on most study days, load low, retention fine: suggests 15 with a forecast", async () => {
+    const out = await ok(studySummary, surplus(), {});
+    const fit = out.plan_fit;
+    expect(fit).toMatchObject({
+      active_days: 12,
+      plan_since: "2026-10-01",
+      new_words: { plan: 10, unit: "words", typical: 10, max: 10, full_days: 11, plan_days: 12, held_days: { load: 1, accuracy: 0, backlog: 0, known: 1 } },
+      reviews: { cap: 200, typical: 10, all_answers_typical: 20, max: 10, forecast_7d: 0, backlog_days: 0, cap_hit_days: 0 },
+      retention: { rate: 0.9, target: 0.9, answers: 120 },
+      fit: "room",
+      suggestion: { kind: "raise_new", new_words: 15, forecast_30d: { now: 0, then: [18, 25] }, why: ["full_days", "low_load", "retention_ok"] },
+      dismissed_until: null,
+    });
+    expect(fit.suggestion).not.toHaveProperty("or_review_cap");
+    // Compact and JSON-safe: a round trip changes nothing.
+    expect(JSON.parse(JSON.stringify(fit))).toEqual(fit);
+    expect(JSON.stringify(fit)).not.toMatch(/missed_days|deficit|compliance/);
+  });
+
+  it("the same with history_days or a «what if» new_per_day: plan_fit always reads the saved plan", async () => {
+    const fake = surplus();
+    const plain = await ok(studySummary, fake, {});
+    expect((await ok(studySummary, fake, { history_days: 90 })).plan_fit).toEqual(plain.plan_fit);
+    expect((await ok(studySummary, fake, { new_per_day: 3 })).plan_fit).toEqual(plain.plan_fit);
+  });
+
+  it("«Не сейчас» in the app (plan_hint) hides the suggestion for 14 days; the connector never writes the hint", async () => {
+    const hint: UserPref = { id: "plan_hint", value: { week: "2026-W43", kind: "raise_new", to: 15, dismissed_at: "2026-10-20T10:00:00.000Z" }, updated_at: OLD.toISOString(), deleted_at: null };
+    const fake = surplus([hint]);
+    const out = await ok(studySummary, fake, {});
+    expect(out.plan_fit).toMatchObject({ fit: "room", suggestion: null, dismissed_until: "2026-11-03" });
+    expect(fake.writes).toEqual([]);
+  });
+
+  it("keys study days by MCP_TIMEZONE at 04:00: 03:30 in Paris still belongs to the day before", async () => {
+    // 20 Oct 01:30Z is 03:30 in Paris (study day 19 Oct); 10:00Z is 20 Oct. UTC dates would make one day.
+    const logs = [log("a1", "a", "2026-10-20", 2, 3), { ...log("a0", "a", "2026-10-20", 2, 3), review: "2026-10-20T01:30:00.000Z" }];
+    const out = await ok(studySummary, createFakeRepo({ words: [word("a", "pote", "друг")], review_state: cards("a"), review_log: logs, user_prefs: [planRow(PLAN10)] }), {});
+    expect(out.plan_fit).toMatchObject({ active_days: 2, reviews: { typical: 1, max: 1 }, retention: { answers: 2 } });
+  });
+
+  it("reads 28 study days of logs, or 56 once the stored rows reach back 60 days (ρ)", () => {
+    const row = (id: string, reviews: number) => ({ ...progressDay(id, null), reviews });
+    expect(planFitLogsFrom(NOW, "Europe/Paris", []).toISOString()).toBe("2026-09-25T02:00:00.000Z");
+    // 59 days of history, or a first row without reviews: still 28.
+    expect(planFitLogsFrom(NOW, "Europe/Paris", [row("2026-08-24", 20)]).toISOString()).toBe("2026-09-25T02:00:00.000Z");
+    expect(planFitLogsFrom(NOW, "Europe/Paris", [row("2026-08-01", 0)]).toISOString()).toBe("2026-09-25T02:00:00.000Z");
+    expect(planFitLogsFrom(NOW, "Europe/Paris", [{ ...row("2026-08-01", 20), deleted_at: OLD.toISOString() }]).toISOString()).toBe("2026-09-25T02:00:00.000Z");
+    // 60 days: 56 study days back, 04:00 in Paris (CEST).
+    expect(planFitLogsFrom(NOW, "Europe/Paris", [row("2026-08-23", 20)]).toISOString()).toBe("2026-08-28T02:00:00.000Z");
   });
 });
 

@@ -16,6 +16,7 @@ import {
   monthSummaryLine,
   monthTitle,
   percent,
+  planSubline,
   signed,
   sparkGeometry,
   squareSize,
@@ -23,6 +24,7 @@ import {
   streakAria,
   streakLine,
   sublinePeriod,
+  usualNewWords,
   weekDelta,
 } from "./format";
 import { parseProgressRange } from "./range";
@@ -42,6 +44,7 @@ function point(day: string, over: Partial<DayPoint> = {}): DayPoint {
     reviews: 0,
     again: 0,
     new_introduced: 0,
+    new_words: 0,
     added: 0,
     exercises: 0,
     active: false,
@@ -224,13 +227,55 @@ describe("calendar", () => {
 
 describe("the opened day", () => {
   it("leaves out zeros but always says «Знаю»", () => {
-    expect(dayStatParts(point("2026-10-21", { reviews: 104, new_introduced: 12, correct: 0.92, known: 398 }))).toEqual([
+    expect(dayStatParts(point("2026-10-21", { reviews: 104, new_introduced: 12, new_words: 10, correct: 0.92, known: 398 }))).toEqual([
       { label: "Повторено", value: "104" },
-      { label: "Новых", value: "12" },
+      { label: "Новых слов", value: "10" },
+      { label: "Новых карточек", value: "12" },
       { label: "Верно", value: `92${NB}%` },
       { label: "Знаю", value: "398" },
     ]);
     expect(dayStatParts(point("2026-10-25", { known: 412 }))).toEqual([{ label: "Знаю", value: "412" }]);
+  });
+
+  it("says the cards once when they are the words, and only cards in the plan's «together» mode", () => {
+    expect(dayStatParts(point("2026-10-21", { reviews: 40, new_introduced: 10, new_words: 10, known: 398 })).map((s) => s.label)).toEqual([
+      "Повторено",
+      "Новых слов",
+      "Знаю",
+    ]);
+    expect(dayStatParts(point("2026-10-21", { reviews: 40, new_introduced: 14, new_words: 14, known: 398 }), true).map((s) => s.label)).toEqual([
+      "Повторено",
+      "Новых карточек",
+      "Знаю",
+    ]);
+  });
+});
+
+describe("«Новых слов в день» against the plan", () => {
+  const days = [
+    point("2026-10-20", { reviews: 90, new_words: 10 }),
+    point("2026-10-21", { reviews: 0, exercises: 1, new_words: 0 }), // an exercise only: not a study day
+    point("2026-10-22", { reviews: 110, new_words: 6 }),
+    point("2026-10-23", { reviews: 100, new_words: 10 }),
+  ];
+
+  it("is the median over the study days; a day off is never a 0", () => {
+    expect(usualNewWords(days, "2026-10-25", 10)).toBe(10);
+    expect(usualNewWords([...days, point("2026-10-24", { reviews: 80, new_words: 4 })], "2026-10-25", 10)).toBe(8);
+    expect(usualNewWords([], "2026-10-25", 10)).toBeNull();
+  });
+
+  it("counts today only once its new words reached the plan", () => {
+    const early = [point("2026-10-24", { reviews: 80, new_words: 6 }), point("2026-10-25", { reviews: 20, new_words: 2 })];
+    expect(usualNewWords(early, "2026-10-25", 10)).toBe(6);
+    expect(usualNewWords([...early.slice(0, 1), point("2026-10-25", { reviews: 60, new_words: 10 })], "2026-10-25", 10)).toBe(8);
+  });
+
+  it("words the plan as a ceiling, never as a ratio", () => {
+    expect(planSubline(10, 10)).toBe("обычно 10 · до 10 по плану");
+    expect(planSubline(6, 10)).toBe("обычно 6 · до 10 по плану");
+    expect(planSubline(6, null)).toBe("обычно 6");
+    expect(planSubline(null, 10)).toBeNull();
   });
 });
 

@@ -1709,9 +1709,96 @@
    "is_interactive": true,
    "radius": 28
   },
-  "X-Level-A.dc.html": {
+  "Plan-Fit-A-Progress.dc.html": {
    "x": 0,
    "y": 44744,
+   "w": 390,
+   "h": 844,
+   "title": "D1 · A — строка в ведомости",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Plan-Fit-A-Settings.dc.html": {
+   "x": 470,
+   "y": 44744,
+   "w": 390,
+   "h": 844,
+   "title": "D2 · A — тихая строка в настройках",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Plan-Fit-B-Progress.dc.html": {
+   "x": 940,
+   "y": 44744,
+   "w": 390,
+   "h": 844,
+   "title": "D1 · B — темп на шкалах",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Plan-Fit-B-Settings.dc.html": {
+   "x": 1410,
+   "y": 44744,
+   "w": 390,
+   "h": 844,
+   "title": "D2 · B — предложенное значение в шаге",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Plan-Fit-C-Progress.dc.html": {
+   "x": 1880,
+   "y": 44744,
+   "w": 390,
+   "h": 844,
+   "title": "D1 · C — полоса двух недель",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Plan-Fit-C-Settings.dc.html": {
+   "x": 2350,
+   "y": 44744,
+   "w": 390,
+   "h": 844,
+   "title": "D2 · C — карточка-предложение",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Plan-Fit-States.dc.html": {
+   "x": 2820,
+   "y": 44744,
+   "w": 1730,
+   "h": 844,
+   "title": "План и прогресс — состояния",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "D-Plan-Fit-A.dc.html": {
+   "x": 0,
+   "y": 45908,
+   "w": 1440,
+   "h": 800,
+   "title": "D1 · A — десктоп, темп и ведомость",
+   "is_interactive": true
+  },
+  "D-Plan-Fit-B.dc.html": {
+   "x": 1520,
+   "y": 45908,
+   "w": 1440,
+   "h": 800,
+   "title": "D1 · B — десктоп, панель «Темп»",
+   "is_interactive": true
+  },
+  "D-Plan-Fit-C.dc.html": {
+   "x": 3040,
+   "y": 45908,
+   "w": 1440,
+   "h": 800,
+   "title": "D1 · C — десктоп, полоса и карточка",
+   "is_interactive": true
+  },
+  "X-Level-A.dc.html": {
+   "x": 0,
+   "y": 47028,
    "w": 390,
    "h": 844,
    "title": "Уровень набора — A слот во фразе",
@@ -1720,7 +1807,7 @@
   },
   "X-Level-A-Auto.dc.html": {
    "x": 470,
-   "y": 44744,
+   "y": 47028,
    "w": 390,
    "h": 844,
    "title": "Уровень набора — A «Авто»",
@@ -1729,7 +1816,7 @@
   },
   "X-Level-B.dc.html": {
    "x": 940,
-   "y": 44744,
+   "y": 47028,
    "w": 390,
    "h": 844,
    "title": "Уровень набора — B строка под фразой",
@@ -1738,7 +1825,7 @@
   },
   "X-Level-C.dc.html": {
    "x": 1410,
-   "y": 44744,
+   "y": 47028,
    "w": 390,
    "h": 844,
    "title": "Уровень набора — C вместе с числом вопросов",
@@ -1747,7 +1834,7 @@
   },
   "X-Level-Tile-A.dc.html": {
    "x": 1880,
-   "y": 44744,
+   "y": 47028,
    "w": 390,
    "h": 844,
    "title": "Плитки — A уровень на плитке",
@@ -1756,7 +1843,7 @@
   },
   "D-Exercise-Level.dc.html": {
    "x": 2350,
-   "y": 44744,
+   "y": 47028,
    "w": 1440,
    "h": 800,
    "title": "Уровень набора — десктоп",
@@ -1960,6 +2047,16 @@
   "X-Done-A.dc.html",
   "X-Done-B.dc.html",
   "X-Done-C.dc.html",
+  "Plan-Fit-A-Progress.dc.html",
+  "Plan-Fit-A-Settings.dc.html",
+  "Plan-Fit-B-Progress.dc.html",
+  "Plan-Fit-B-Settings.dc.html",
+  "Plan-Fit-C-Progress.dc.html",
+  "Plan-Fit-C-Settings.dc.html",
+  "Plan-Fit-States.dc.html",
+  "D-Plan-Fit-A.dc.html",
+  "D-Plan-Fit-B.dc.html",
+  "D-Plan-Fit-C.dc.html",
   "X-Level-A.dc.html",
   "X-Level-A-Auto.dc.html",
   "X-Level-B.dc.html",
@@ -2216,7 +2313,21 @@
   "row36": {
    "x": 0,
    "y": 44624,
-   "text": "36 · Упражнения · уровень набора (L1 место в запросе, L2 плитка)",
+   "text": "36 · Прогресс и план — варианты (D1 вид, D2 предложение) и состояния",
+   "kind": "title1",
+   "maxW": 4550
+  },
+  "row37": {
+   "x": 0,
+   "y": 45788,
+   "text": "37 · Прогресс и план — десктоп",
+   "kind": "title1",
+   "maxW": 4480
+  },
+  "row38": {
+   "x": 0,
+   "y": 46908,
+   "text": "38 · Упражнения · уровень набора (L1 место в запросе, L2 плитка)",
    "kind": "title1",
    "maxW": 1800
   }

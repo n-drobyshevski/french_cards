@@ -96,6 +96,7 @@ import { PartialWriteError, RepoError, type McpRepo, type Replacement } from "./
 import { lemmaLevel, serverLevels } from "./levels";
 import { HISTORY_DAYS_MAX, historyRange, progressHistory } from "./history";
 import { studyDay, studyDayStartBefore } from "./study-day";
+import { planFitLogsFrom, planFitView, serverPlanFit } from "./plan-fit";
 
 export interface ToolDeps {
   repo: McpRepo;
@@ -760,7 +761,7 @@ export const studySummary = tool({
   name: "study_summary",
   title: "Today's study summary",
   description:
-    "Today's review numbers, planned exactly as the app plans the day (the user's «План повторения», user_prefs `study_plan`): cards due, new cards in today's queue, reviews done today, words by learning status, the themes «на паузе» (`muted_themes`, left out of review), the words due soonest, and `plan`: today's new-word budget (`new_words_today`, at most the `ceiling`; lower when the coming reviews are heavy (`reason` \"load\"), when recent answers are weak (\"accuracy\") or over the review cap (\"backlog\", with `deferred` reviews held for tomorrow)), reverse sides unlocked (`ru_unlocks`), and the mean reviews a day over the next week (`forecast_7d`). The one-day «Всё равно добавить новые» is a device setting this tool can't see. Reviewing happens in the app. update_study_plan changes the plan. With `history_days` («Прогресс», e.g. 30 for «как у меня с прогрессом за месяц?») it adds `history`: the app's saved end-of-day numbers per study day as compact rows (`columns` + `days`: known «знаю», learning «учу», fresh «новых», paused «на паузе», difficult «трудных» (part of learning), memorized «помню ≈», reviews, again, new_introduced, added, source), `today` (now, never stored), `active_days`, `streak` {current, best} and «Верно» (`retention`: true retention for the range and per month, vs `target`). Talk about trends; never push the streak.",
+    "Today's review numbers, planned exactly as the app plans the day (the user's «План повторения», user_prefs `study_plan`): cards due, new cards in today's queue, reviews done today, words by learning status, the themes «на паузе» (`muted_themes`, left out of review), the words due soonest, and `plan`: today's new-word budget (`new_words_today`, at most the `ceiling`; lower when the coming reviews are heavy (`reason` \"load\"), when recent answers are weak (\"accuracy\") or over the review cap (\"backlog\", with `deferred` reviews held for tomorrow)), reverse sides unlocked (`ru_unlocks`), and the mean reviews a day over the next week (`forecast_7d`). The one-day «Всё равно добавить новые» is a device setting this tool can't see. Reviewing happens in the app. update_study_plan changes the plan. With `history_days` («Прогресс», e.g. 30 for «как у меня с прогрессом за месяц?») it adds `history`: the app's saved end-of-day numbers per study day as compact rows (`columns` + `days`: known «знаю», learning «учу», fresh «новых», paused «на паузе», difficult «трудных» (part of learning), memorized «помню ≈», reviews, again, new_introduced, added, source), `today` (now, never stored), `active_days`, `streak` {current, best} and «Верно» (`retention`: true retention for the range and per month, vs `target`). Talk about trends; never push the streak. Always `plan_fit` («План и прогресс», the numbers Settings shows): the saved plan against her last ≤ 14 study days within 3 weeks (`active_days`; days without study are not data, never zeros). `new_words`: the plan's ceiling, the `typical` (median) and `max` new words a study day in plan units (`unit`), `full_days` that took all of them out of `plan_days` under the current plan (since `plan_since`), `held_days` by reason when known; `reviews`: the `cap`, `typical` interday reviews (what the cap counts; `all_answers_typical` counts every answer), `forecast_7d`, `backlog_days`, `cap_hit_days`; `retention` over 28 days vs `target`; `fit`: \"warming_up\" (not enough data yet), \"fits\", \"room\" (the whole plan taken, load low) or \"heavy\"; `suggestion` (null = nothing to offer): `new_words` to propose, maybe `or_review_cap` as the other option, `forecast_30d` {now, then [lo, hi]} reviews a day, `why`, `confidence` (\"low\" = пока мало данных); `dismissed_until` when she tapped «Не сейчас». Taking fewer new words than allowed is never a reason to lower the plan.",
   input: z.object({
     new_per_day: z
       .number()
@@ -787,14 +788,19 @@ export const studySummary = tool({
     // Seven calendar days back, as the device counts them (lib/session.ts `loadSession`).
     const weekAgo = studyDayStartBefore(day.start, 7, deps.timeZone);
     const range = args.history_days === undefined ? null : historyRange(now, args.history_days, deps.timeZone);
-    const logsFrom = range && range.logsFrom < weekAgo ? range.logsFrom : weekAgo;
-    const [folders, words, states, allLogs, prefs, progressRows, runs] = await Promise.all([
+    // The stored «Прогресс» rows first: they tell how far back plan_fit reads the log (28 or 56 days).
+    const rowsAndLogs = deps.repo.progressDays().then(async (rows) => {
+      let logsFrom = planFitLogsFrom(now, deps.timeZone, rows);
+      if (weekAgo < logsFrom) logsFrom = weekAgo;
+      if (range && range.logsFrom < logsFrom) logsFrom = range.logsFrom;
+      return [rows, await deps.repo.logsSince(logsFrom.toISOString())] as const;
+    });
+    const [folders, words, states, [progressRows, allLogs], prefs, runs] = await Promise.all([
       deps.repo.folders(),
       deps.repo.words(),
       deps.repo.states(),
-      deps.repo.logsSince(logsFrom.toISOString()),
+      rowsAndLogs,
       deps.repo.userPrefs(),
-      range ? deps.repo.progressDays() : Promise.resolve([]),
       range ? deps.repo.exerciseRunsSince(new Date(0).toISOString()) : Promise.resolve([]),
     ]);
     const logs = allLogs.filter((l) => Date.parse(l.review) >= weekAgo.getTime());
@@ -812,20 +818,34 @@ export const studySummary = tool({
 
     const { row, plan: saved } = savedStudyPlan(prefs);
     const plan = args.new_per_day === undefined ? saved : { ...saved, new_words: args.new_per_day };
-    const result = planDay({
+    const planWith = (p: StudyPlan) =>
+      planDay({
+        now,
+        dayStart: day.start,
+        dayEnd: day.end,
+        states: cards,
+        words: inReview,
+        todayLogs: dayLogs,
+        logs7d: liveLogs.filter((l) => Date.parse(l.review) < dayStart),
+        plan: p,
+        overrideNewToday: false,
+        r: retrievability,
+        // The same level and frequency signals as the app's (lib/session.ts), so the orders agree.
+        ...(p.new_order === "added" ? {} : levelSignals(serverLevels())),
+        folderOrder: folderOrderOf([...live.values()]),
+      });
+    const result = planWith(plan);
+    // plan_fit always reads the saved plan, never a «what if».
+    const savedDay = plan === saved ? result.day : planWith(saved).day;
+    const fit = serverPlanFit({
       now,
-      dayStart: day.start,
-      dayEnd: day.end,
-      states: cards,
-      words: inReview,
-      todayLogs: dayLogs,
-      logs7d: liveLogs.filter((l) => Date.parse(l.review) < dayStart),
-      plan,
-      overrideNewToday: false,
-      r: retrievability,
-      // The same level and frequency signals as the app's (lib/session.ts), so the orders agree.
-      ...(plan.new_order === "added" ? {} : levelSignals(serverLevels())),
-      folderOrder: folderOrderOf([...live.values()]),
+      timeZone: deps.timeZone,
+      plan: saved,
+      planRow: row,
+      prefs,
+      rows: progressRows,
+      logs: allLogs,
+      today: { forecast7: savedDay.forecast7, backlog: savedDay.backlog, available: savedDay.available, newLeft: savedDay.newLeft },
     });
 
     const statesByWord = new Map<string, ReviewState[]>();
@@ -864,6 +884,7 @@ export const studySummary = tool({
         ...(d.accuracy7 !== null ? { accuracy_7d: Math.round(d.accuracy7 * 100) / 100 } : {}),
         settings: { ...plan, saved: !!row },
       },
+      plan_fit: planFitView(fit),
       ...(range ? { history: progressHistory({ range, timeZone: deps.timeZone, now, rows: progressRows, logs: allLogs, runs, words, states, folders }) } : {}),
       note: "Counts come from the synced copy: reviews not yet synced from the device are missing.",
     };
@@ -2481,6 +2502,7 @@ export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard
 - Cards can carry the user's custom fields («Свои поля»): list_fields shows the shared ones and what to write in each. Set them by name with custom_fields in add_words or update_word (null clears one); search_words shows them. Use a name not in list_fields only when the user asks for a field on that one word. create_field, update_field and delete_field manage the shared fields; ask the user before creating or deleting one.
 - «Уровень языка» (CEFR A1…C2): search_words shows each word's \`level\` and \`level_source\`; most are estimates the app computes from its dictionary (flelex, freq), which you leave alone. To fill the missing ones (search_words level "none"), list the words with the levels you propose and wait for the OK, then save them with set_word_levels in batches of 10–15. Rate a word as a textbook or DELF / TCF list would, against words of known level; skip argot, vulgar words and verlan unless asked. Never change a level the user set (level_source user) unless they ask.
 - «План повторения» (how many new words a day, the review cap, the order of new words, when RU→FR starts): study_summary's \`plan.settings\` shows it; change it with update_study_plan only when the user asks (e.g. «давай 15 новых слов в день», «новые по темам»), then say what changed and what today looks like (study_summary).
+- study_summary's \`plan_fit\` compares the plan with the user's usual study days (days without study are not data). When \`plan_fit.suggestion\` is set and the conversation is about the plan, pace, load or progress, you may propose it once per conversation: name the usual number, the plan, and \`forecast_30d\`, offer it as an option, wait for the OK, then update_study_plan. Never change the plan on your own, never open a conversation with it, never call fewer study days a failure.
 - «Прогресс» («как у меня с прогрессом за месяц?»): study_summary \`history_days\` (30 for a month); summarize the trends (знаю, помню ≈, «Верно») in a few lines; mention the streak at most once and never push it.
 - Before adding more than 5 words, and before any move, delete, or renaming, pausing or deleting a theme (update_folder, delete_folder), list what will change and wait for the user's OK.
 - «На паузе»: a theme (update_folder \`muted\`) or a word (update_word \`muted\`) stays in the library with its progress but never comes up in review or practice; \`false\` brings it back. When list_folders shows many themes with words still \`new\` and some of them look like later steps of a sequence (levels, lessons, chapters, a course or book order) or like topics the user said can wait, suggest pausing those so only the current ones reach review: name the themes to pause and the ones that stay, and wait for the OK. When the user moves on, suggest bringing the next ones back. Never pause or unpause on your own.

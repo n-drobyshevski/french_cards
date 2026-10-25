@@ -1,6 +1,7 @@
 // JSON export of every table, and import that merges by updated_at (newer row wins).
 import { cleanLevels, EXERCISE_ITEM_TYPES, EXERCISE_PERSONS, EXERCISE_SCOPES, EXERCISE_TENSES } from "./core/exercises";
 import { isCefr, isStoredLevelSource } from "./core/level";
+import { parseDayPlanSnapshot } from "./core/plan";
 import { db, legacyReviewSets } from "./db";
 import { DEFAULT_SETTINGS, SYNC_TABLES, type ExerciseItemType, type ExercisePerson, type ExerciseScope, type ExerciseSet, type ExerciseTense, type Settings, type SyncTable, type Syncable, type Word } from "./types";
 
@@ -121,7 +122,7 @@ const DEEP: Partial<Record<SyncTable, (row: Record<string, unknown>) => boolean>
   exercise_sets: (row) =>
     // `scope` came with migration 0013: older backups have none (read as null).
     (row.scope === undefined || row.scope === null || EXERCISE_SCOPES.includes(row.scope as ExerciseScope)) &&
-    // `levels` / `level_auto` came with migration 0017; junk levels are dropped (NORMALIZE).
+    // `levels` / `level_auto` came with migration 0018; junk levels are dropped (NORMALIZE).
     (row.level_auto === undefined || typeof row.level_auto === "boolean") &&
     (row.items as unknown[]).every(isExerciseItem) &&
     (row.new_words as unknown[]).every((w) => isRecord(w) && isText(w.ref) && isText(w.fr) && isText(w.ru)),
@@ -141,6 +142,8 @@ const NORMALIZE: Partial<Record<SyncTable, (row: Syncable) => Record<string, unk
     const levels = cleanLevels(s.levels);
     return { scope: s.scope ?? null, levels, level_auto: levels.length > 0 && s.level_auto === true };
   },
+  // The day's plan (jsonb) came with migration 0017: missing in older backups, and junk is dropped.
+  progress_days: (row) => ({ plan: parseDayPlanSnapshot((row as { plan?: unknown }).plan) }),
 };
 
 function hasFields(table: SyncTable, row: Record<string, unknown>): boolean {

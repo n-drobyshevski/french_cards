@@ -27,7 +27,7 @@ export const REMOTE_COLUMNS: Record<SyncTable, readonly string[]> = {
   user_prefs: ["id", "value", "updated_at", "deleted_at"],
   progress_days: [
     "id", "known", "learning", "fresh", "difficult", "paused", "total", "memorized", "reviews", "again", "new_introduced", "added",
-    "source", "algo", "updated_at", "deleted_at",
+    "source", "algo", "plan", "updated_at", "deleted_at",
   ],
 };
 

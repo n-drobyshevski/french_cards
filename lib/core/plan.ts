@@ -588,3 +588,119 @@ function pickWords(candidates: readonly Word[], n: number, o: PickOptions): Word
   }
   return fillUp();
 }
+
+// --- The day's plan, kept («План и прогресс») -------------------------------------------------------
+// What the plan allowed on a study day can't be rebuilt later (the start-of-day states, the ceiling
+// and the override are gone), so the app keeps it: the synced user_prefs row `plan_day` holds today's
+// snapshot (written by lib/session.ts `loadSession`, rewritten when it changes) and the one before,
+// and lib/progress.ts `ensureProgressDays` copies yesterday's into its progress_days row (`plan`,
+// migration 0017). Done counts are never stored: they come from review_log (lib/core/plan-fit.ts).
+
+/** The synced user_prefs key of today's plan snapshot. */
+export const PLAN_DAY_PREF = "plan_day";
+
+/** One study day's plan as it was: the part of `DayPlan` worth keeping. */
+export interface DayPlanSnapshot {
+  /** `plan.new_words` that day. */
+  ceiling: number;
+  /** New words allowed that day (≤ ceiling; "together": cards). */
+  budget: number;
+  reason: PlanReason;
+  /** The review cap that day; null = no limit. */
+  cap: number | null;
+  /** Review cards due that day (the start-of-day snapshot, after burying). */
+  due: number;
+  /** Reviews held for the next day by the cap. */
+  deferred: number;
+  /** Mean reviews a day over the next 7 days, one decimal. */
+  forecast7: number;
+  /** «Всё равно добавить новые» was on. */
+  override: boolean;
+}
+
+/** `plan_day`: today's snapshot, and the previous study day's (so yesterday's survives until its row is written). */
+export interface PlanDayPref extends DayPlanSnapshot {
+  /** "YYYY-MM-DD" (lib/core/progress.ts `dayKey`). */
+  day: string;
+  prev: (DayPlanSnapshot & { day: string }) | null;
+}
+
+const PLAN_REASONS: readonly PlanReason[] = ["backlog", "load", "accuracy", "limit", "empty"];
+const DAY_KEY = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The snapshot of a planned day. */
+export function daySnapshot(day: DayPlan): DayPlanSnapshot {
+  const whole = (n: number) => (Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0);
+  return {
+    ceiling: whole(day.ceiling),
+    budget: whole(day.budget),
+    reason: day.reason,
+    cap: day.cap === null ? null : whole(day.cap),
+    due: whole(day.dueReviews),
+    deferred: whole(day.deferred),
+    forecast7: Number.isFinite(day.forecast7) ? Math.round(day.forecast7 * 10) / 10 : 0,
+    override: day.override,
+  };
+}
+
+/** A stored snapshot read back safely: null when it is missing or malformed. */
+export function parseDayPlanSnapshot(value: unknown): DayPlanSnapshot | null {
+  if (value === null || typeof value !== "object") return null;
+  const v = value as Record<string, unknown>;
+  const num = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x) && x >= 0;
+  if (!num(v.ceiling) || !num(v.budget) || !num(v.due) || !num(v.deferred) || !num(v.forecast7)) return null;
+  if (!PLAN_REASONS.includes(v.reason as PlanReason) || !(v.cap === null || num(v.cap))) return null;
+  return {
+    ceiling: v.ceiling,
+    budget: v.budget,
+    reason: v.reason as PlanReason,
+    cap: v.cap as number | null,
+    due: v.due,
+    deferred: v.deferred,
+    forecast7: v.forecast7,
+    override: v.override === true,
+  };
+}
+
+export const sameSnapshot = (a: DayPlanSnapshot, b: DayPlanSnapshot) =>
+  a.ceiling === b.ceiling &&
+  a.budget === b.budget &&
+  a.reason === b.reason &&
+  a.cap === b.cap &&
+  a.due === b.due &&
+  a.deferred === b.deferred &&
+  a.forecast7 === b.forecast7 &&
+  a.override === b.override;
+
+const datedSnapshot = (value: unknown): (DayPlanSnapshot & { day: string }) | null => {
+  const snap = parseDayPlanSnapshot(value);
+  const day = (value as { day?: unknown } | null)?.day;
+  return snap && typeof day === "string" && DAY_KEY.test(day) ? { day, ...snap } : null;
+};
+
+/** The stored `plan_day` read back safely; null when missing or malformed. */
+export function parsePlanDayPref(value: unknown): PlanDayPref | null {
+  const today = datedSnapshot(value);
+  if (!today) return null;
+  const prev = datedSnapshot((value as { prev?: unknown }).prev);
+  return { ...today, prev: prev && prev.day < today.day ? prev : null };
+}
+
+/** The snapshot `plan_day` holds for `day` (today's or the previous one), or null. */
+export function snapshotForDay(pref: PlanDayPref | null, day: string): DayPlanSnapshot | null {
+  const hit = pref?.day === day ? pref : pref?.prev?.day === day ? pref.prev : null;
+  return hit
+    ? { ceiling: hit.ceiling, budget: hit.budget, reason: hit.reason, cap: hit.cap, due: hit.due, deferred: hit.deferred, forecast7: hit.forecast7, override: hit.override }
+    : null;
+}
+
+/**
+ * The `plan_day` value after planning `day` with `snap`; null when nothing changes (or `stored`
+ * is for a later day, from a device whose clock runs ahead). A new day moves the stored one to `prev`.
+ */
+export function nextPlanDayPref(stored: PlanDayPref | null, day: string, snap: DayPlanSnapshot): PlanDayPref | null {
+  if (stored && stored.day > day) return null;
+  if (stored && stored.day === day) return sameSnapshot(stored, snap) ? null : { day, ...snap, prev: stored.prev };
+  const prev = stored ? { day: stored.day, ...snapshotForDay(stored, stored.day)! } : null;
+  return { day, ...snap, prev };
+}

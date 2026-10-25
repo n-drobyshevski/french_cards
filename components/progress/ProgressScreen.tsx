@@ -8,6 +8,7 @@ import { cx } from "@/components/ui/cx";
 import { FoldRow } from "@/components/ui/FoldRow";
 import { Header } from "@/components/ui/Header";
 import { useProgress, type DayPoint, type Progress, type ProgressRange } from "@/lib/progress";
+import { useStudyPlan, type StudyPlan } from "@/lib/user-prefs";
 import { useLayoutClass } from "@/lib/use-media";
 import {
   RANGE_OPTIONS,
@@ -18,11 +19,13 @@ import {
   mean,
   monthName,
   percent,
+  planSubline,
   signed,
   stageParts,
   streakAria,
   streakLine,
   sublinePeriod,
+  usualNewWords,
   weekDelta,
   type SparkPoint,
 } from "./format";
@@ -231,14 +234,15 @@ interface LedgerRow {
   floor?: number;
   ceil?: number;
   reference?: number | null;
+  /** The plan's ceiling is dashed ink; an average or the target muted. */
+  referenceTone?: "muted" | "ink";
 }
 
-function ledgerRows(progress: Progress, range: ProgressRange): LedgerRow[] {
+function ledgerRows(progress: Progress, range: ProgressRange, plan: StudyPlan | undefined): LedgerRow[] {
   const { today, series, retention } = progress;
   const { from, to } = axis(progress);
   const when = span(from, to);
   const period = sublinePeriod(range, to, from);
-  const inPeriod = series.filter((p) => p.day >= period.from);
   const studied = series.filter((p) => p.active || p.day === to);
 
   // Помню ≈
@@ -253,10 +257,15 @@ function ledgerRows(progress: Progress, range: ProgressRange): LedgerRow[] {
   const reviewTotal = series.reduce((sum, p) => sum + p.reviews, 0);
   const reviewValues = reviewDays.map((p) => p.reviews);
 
-  // Новых в день
-  const fresh = studied.map((p) => ({ day: p.day, value: p.new_introduced }));
-  const freshSum = inPeriod.reduce((sum, p) => sum + p.new_introduced, 0);
-  const freshValues = series.filter((p) => p.active).map((p) => p.new_introduced);
+  // Новых слов в день: plan units over the study days (a day off, or one with only an exercise, is a
+  // gap; so is today until its first answer, never a drop to 0, N3); the dashed line is the plan's
+  // ceiling; the cards stay in the name and the opened day.
+  const ceiling = plan?.new_words ?? null;
+  const cards = plan?.ru_fr === "together";
+  const fresh = series.filter((p) => p.reviews > 0).map((p) => ({ day: p.day, value: p.new_words }));
+  const usual = usualNewWords(series, to, ceiling);
+  const freshValues = series.filter((p) => p.reviews > 0).map((p) => p.new_words);
+  const cardsToday = !cards && today.new_introduced !== today.new_words ? today.new_introduced : null;
 
   // Верно: the days with reviews; the dashed line is the target.
   const correct = series.filter((p) => p.correct !== null).map((p) => ({ day: p.day, value: p.correct as number }));
@@ -289,15 +298,17 @@ function ledgerRows(progress: Progress, range: ProgressRange): LedgerRow[] {
       ),
     },
     {
-      title: "Новых в день",
-      sub: freshSum > 0 ? `${formatCount(freshSum)} ${period.within}` : null,
+      title: cards ? "Новых карточек в день" : "Новых слов в день",
+      sub: planSubline(usual, ceiling),
       points: fresh,
       floor: 0,
-      value: formatCount(today.new_introduced),
+      reference: ceiling,
+      referenceTone: "ink",
+      value: formatCount(today.new_words),
       label: join(
-        `Новых карточек в день, ${when}: ${range2(freshValues)}`,
-        freshSum > 0 && `${formatCount(freshSum)} ${period.within}`,
-        `сегодня ${formatCount(today.new_introduced)}`,
+        `${cards ? "Новых карточек" : "Новых слов"} в день, ${when}: ${[range2(freshValues), usual !== null && `обычно ${formatCount(usual)}`].filter(Boolean).join(", ")}`,
+        ceiling !== null && `пунктир — план, до ${formatCount(ceiling)} в день`,
+        today.reviews > 0 && `сегодня ${formatCount(today.new_words)}${cardsToday !== null ? `, новых карточек ${formatCount(cardsToday)}` : ""}`,
       ),
     },
     {
@@ -320,17 +331,27 @@ function ledgerRows(progress: Progress, range: ProgressRange): LedgerRow[] {
 /** «Ведомость»: four ruled rows, each a name with its italic subline, a sparkline and today's value. */
 function Ledger({ progress, range }: { progress: Progress; range: ProgressRange }) {
   const { from, to } = axis(progress);
+  const plan = useStudyPlan();
   const rangeName = RANGE_OPTIONS.find((o) => o.value === range)?.long ?? "";
   return (
     <div role="table" aria-label={`Ведомость за ${rangeName}`} className="shrink-0 border-t border-ink">
-      {ledgerRows(progress, range).map((row, i) => (
+      {ledgerRows(progress, range, plan).map((row, i) => (
         <div key={row.title} role="row" className={cx("flex h-[46px] items-center gap-3", i > 0 && "border-t border-rule")}>
           <span role="rowheader" className="flex min-w-0 flex-1 flex-col">
             <span className="truncate text-[15px] leading-5 text-ink">{row.title}</span>
             {row.sub && <span className="abbr truncate text-[14px] leading-[18px]">{row.sub}</span>}
           </span>
           <span role="cell">
-            <Sparkline points={row.points} from={from} to={to} floor={row.floor} ceil={row.ceil} reference={row.reference} label={row.label} />
+            <Sparkline
+              points={row.points}
+              from={from}
+              to={to}
+              floor={row.floor}
+              ceil={row.ceil}
+              reference={row.reference}
+              referenceTone={row.referenceTone}
+              label={row.label}
+            />
           </span>
           <span role="cell" className="w-14 flex-none text-right font-mono text-[16px] leading-5 font-medium whitespace-nowrap text-ink tabular-nums">
             {row.value}

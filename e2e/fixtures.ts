@@ -691,7 +691,7 @@ export interface ExerciseSetSeed {
   new_words?: ExerciseNewWordSeed[];
   /** Only the user's difficult and/or due words, from every theme. */
   scope?: "difficult" | "due" | "both" | null;
-  /** «Уровень набора» (migration 0017), one or several; `level_auto` when they came from «Авто». */
+  /** «Уровень набора» (migration 0018), one or several; `level_auto` when they came from «Авто». */
   levels?: ("A1" | "A2" | "B1" | "B2" | "C1" | "C2")[];
   level_auto?: boolean;
 }

@@ -21,7 +21,7 @@ const byNewest = (a: ExerciseSet, b: ExerciseSet) => b.created_at.localeCompare(
 const runsByNewest = (a: ExerciseRun, b: ExerciseRun) => b.started_at.localeCompare(a.started_at) || b.id.localeCompare(a.id);
 
 /**
- * A set as the app reads it: rows synced before migration 0013 have no `scope`, before 0017 no
+ * A set as the app reads it: rows synced before migration 0013 have no `scope`, before 0018 no
  * `levels` / `level_auto` (an old backup neither).
  */
 const withScope = (set: ExerciseSet): ExerciseSet => {

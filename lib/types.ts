@@ -10,6 +10,7 @@ export const SLANG_LABELS = ["нейтр.", "fam.", "arg.", "vulg."] as const;
 /** «Уровень языка» (CEFR A1…C2) and who stored it; defined with the level rules in lib/core/level.ts. */
 export type { Cefr, StoredLevelSource } from "./core/level";
 import type { Cefr, StoredLevelSource } from "./core/level";
+import type { DayPlanSnapshot } from "./core/plan";
 
 export type PartOfSpeech = "noun" | "verb" | "adj" | "adv" | "expression" | "other";
 export type Gender = "m" | "f" | "mf" | "none";
@@ -385,7 +386,7 @@ export interface ExerciseSet extends Syncable {
   scope: ExerciseScope | null;
   /**
    * The CEFR levels the questions were written for, one or several, in order (the request's
-   * «уровня B1–B2», migration 0017): they shape the sentences, distractors and item mix, not which
+   * «уровня B1–B2», migration 0018): they shape the sentences, distractors and item mix, not which
    * words are asked. Empty for older sets.
    */
   levels: Cefr[];
@@ -484,6 +485,12 @@ export interface ProgressDay extends Syncable {
   source: "live" | "replay";
   /** The FSRS version the numbers came from (lib/scheduler.ts FSRS_ALGO). */
   algo: string;
+  /**
+   * What the plan allowed that day (migration 0017): copied from the synced `plan_day` pref when the
+   * row is written the day after; null when it wasn't kept (replay rows, days before 0017). Missing
+   * on rows from before the column.
+   */
+  plan?: DayPlanSnapshot | null;
 }
 
 export const SYNC_TABLES = [

@@ -6,6 +6,7 @@ import { ensureProgressDays, holdingProgressDays, loadProgress, loadProgressDay,
 import { seedPrototypeWords } from "./seed";
 import { DAY_START_HOUR } from "./session";
 import type { ExerciseRun } from "./types";
+import { DEFAULT_STUDY_PLAN, getPlanDay, recordPlanDay, setStudyPlan } from "./user-prefs";
 import { addWord, gradeCard, softDeleteWord, undoLastReview } from "./words";
 
 /** Local wall-clock time. */
@@ -111,6 +112,38 @@ describe("ensureProgressDays", () => {
     }
   });
 
+  it("copies the kept day plan into yesterday's row; replayed days get none", async () => {
+    await history();
+    const plan = { ceiling: 10, budget: 6, reason: "load" as const, cap: 200, due: 80, deferred: 0, forecast7: 105.4, override: false };
+    expect(await recordPlanDay("2026-10-23", { ...plan, budget: 10, reason: "limit" }, at(10, 23, 9))).toBe(true);
+    expect(await recordPlanDay("2026-10-24", plan, at(10, 24, 9))).toBe(true);
+    expect(await recordPlanDay("2026-10-24", plan, at(10, 24, 10))).toBe(false); // the same plan again: nothing written
+    // Today's first plan moves yesterday's to `prev`, so it is still there when the row is written.
+    await recordPlanDay("2026-10-25", { ...plan, budget: 10, reason: "limit" }, at(10, 25, 9));
+    expect(await getPlanDay()).toMatchObject({ day: "2026-10-25", budget: 10, prev: { day: "2026-10-24", ...plan } });
+    await ensureProgressDays(db, NOW);
+    expect((await row("2026-10-24"))!.plan).toEqual(plan);
+    expect((await row("2026-10-23"))!.plan).toBeNull(); // replay
+    expect((await row("2026-10-21"))!.plan).toBeNull();
+  });
+
+  it("leaves the plan out when the kept one is for another day", async () => {
+    await history();
+    await recordPlanDay("2026-10-22", { ceiling: 10, budget: 10, reason: "limit", cap: 200, due: 5, deferred: 0, forecast7: 3, override: false }, at(10, 22, 9));
+    await ensureProgressDays(db, NOW);
+    expect((await row("2026-10-24"))!.plan).toBeNull();
+  });
+
+  it("keeps the plan of an older missing day when plan_day still holds it (the app wasn't opened the day after)", async () => {
+    await history();
+    const kept = { ceiling: 10, budget: 4, reason: "load" as const, cap: 200, due: 90, deferred: 0, forecast7: 130, override: false };
+    await recordPlanDay("2026-10-23", kept, at(10, 23, 9));
+    await recordPlanDay("2026-10-25", { ...kept, budget: 10, reason: "limit" }, at(10, 25, 9)); // 10-23 moves to `prev`
+    await ensureProgressDays(db, NOW);
+    expect(await row("2026-10-23")).toMatchObject({ source: "replay", plan: kept });
+    expect((await row("2026-10-24"))!.plan).toBeNull();
+  });
+
   it("keeps a deleted word on the days it existed", async () => {
     const { b } = await history();
     await softDeleteWord(b.id, at(10, 23, 12));
@@ -190,6 +223,19 @@ describe("loadProgressDay", () => {
     expect((await loadProgressDay("2026-10-22", NOW))?.ordinal).toBeNull();
     expect(await loadProgressDay("2026-10-26", NOW)).toBeNull();
     expect(await loadProgressDay("2026-10-01", NOW)).toBeNull();
+  });
+
+  it("counts the day's new words in plan units: FR→RU words, or both cards in «together» mode", async () => {
+    const w = await addWord({ fr: "kiffer", ru: "тащиться", both_directions: true }, at(10, 21, 9));
+    await gradeCard(w.id, "fr_ru", 3, at(10, 21, 10));
+    await gradeCard(w.id, "ru_fr", 3, at(10, 21, 10, 5));
+    expect((await loadProgressDay("2026-10-21", NOW))?.point).toMatchObject({ new_introduced: 2, new_words: 1 });
+    await setStudyPlan({ ...DEFAULT_STUDY_PLAN, ru_fr: "together" }, at(10, 21, 8));
+    expect((await loadProgressDay("2026-10-21", NOW))?.point).toMatchObject({ new_introduced: 2, new_words: 2 });
+    const progress = await loadProgress("month", NOW);
+    expect(progress.series.find((p) => p.day === "2026-10-21")).toBeUndefined(); // no row stored yet
+    await ensureProgressDays(db, NOW);
+    expect((await loadProgress("month", NOW)).series.find((p) => p.day === "2026-10-21")).toMatchObject({ new_introduced: 2, new_words: 2 });
   });
 
   it("opens today live and a day without a row by replaying it", async () => {
