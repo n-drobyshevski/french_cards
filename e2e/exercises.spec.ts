@@ -65,13 +65,18 @@ test("the list: tiles with «Новый», the «Упражнения» tab is a
   await expect(bar.getByRole("link")).toHaveText(["Повторение", "Упражнения", "Библиотека"]);
   await expect(bar.getByRole("link", { name: "Упражнения" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("heading", { level: 1, name: "Упражнения" })).toBeVisible();
-  // Phones (list B): no set count over the grid; the schedule note is said here once.
-  await expect(shown(page, "Не влияют на расписание повторений")).toBeVisible();
   const t = tile(page, SLANG_SET.title);
-  // Phones (list B): «5 · Повседневное» on the tile; the count and «Новый» stay in its name.
-  await expect(t).toContainText("5 · Повседневное");
-  await expect(t).toHaveAccessibleName(/5 вопросов.*\. Новый$/);
-  await expect(page.getByRole("button", { name: /Попросить набор/ }).last()).toBeVisible();
+  // Phones (E1 A, X-List-A): the themes in italics, «5 ВОПРОСОВ» and the red band until played; the name has the counts.
+  await expect(shown(page, "Повседневное, Полиция · + 1 новое слово из веба")).toBeVisible();
+  await expect(shown(page, "5 вопросов")).toBeVisible();
+  await expect(t).toHaveAccessibleName(`${SLANG_SET.title}: Повседневное, Полиция, 5 вопросов, 1 новое слово из веба. Ещё не играли`);
+  // One way to ask on phones: the dashed «Новый набор» tile in the grid, no header button.
+  await expect(page.getByRole("button", { name: /Попросить набор/ })).toBeHidden();
+  await page.getByRole("button", { name: "Новый набор: Claude напишет его в чате. Выбрать темы" }).click();
+  const sheet = page.getByRole("dialog");
+  await expect(sheet).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
 
   await t.click();
   await expect(page).toHaveURL(/\/exercises\/play$/);
@@ -150,17 +155,22 @@ test("a round: wrong → «ПОВТОР», right waits for «Дальше» too,
   await expect(stamp(page, "right")).toBeVisible();
   await goOn(page);
 
-  // Done: the receipt, the misses, the new word.
+  // Done (X-Done-B): the result card, the misses as slips, the new word.
   await expect(page.getByRole("heading", { level: 1, name: "Готово" })).toBeVisible({ timeout: 4000 });
-  // Phones: the session strip, one cell per answer, and its line counted from the same marks.
-  const tally = page.getByRole("region", { name: "Итоги упражнения" });
-  await expect(tally).toHaveText(/5\s*вопросов\s*·\s*3\s*с первого раза\s*·\s*2\s*повтора/);
+  // Phones: the set's index card, the session strip (one cell per answer) and «N из M с первого раза» from the same marks.
+  const tally = page.getByRole("article", { name: `Итог набора «${SLANG_SET.title}»` });
+  await expect(tally).toContainText(SLANG_SET.title);
+  await expect(tally).toContainText(/3\s*из\s*5\s*с первого раза/);
   await expect(tally.getByRole("img", { name: "5 вопросов: 3 с первого раза, 2 ошибки, 2 повтора" })).toBeVisible();
-  // «Не знаю» on the pairs board counts every pair still open as a miss, each under «Ошибки».
+  await expect(tally.locator("[data-mark]")).toHaveCount(7);
+  // «Не знаю» on the pairs board counts every pair still open as a miss, each a slip under «Ошибки» with its miss mark.
   const mistakes = page.getByRole("region", { name: "Ошибки" });
   await expect(mistakes).toContainText("les flics");
   for (const fr of ["une blague", "le gras", "arrête", "c'est dur"]) await expect(mistakes).toContainText(fr);
+  await expect(mistakes.locator('[data-mark="miss"]')).toHaveCount(5);
   await expect(page.getByRole("button", { name: "Повторить ошибки (5)" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "К наборам" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Попросить следующий набор" })).toBeHidden();
   // The tab bar is back on the done screen (SPEC «Упражнения» → Done), «Упражнения» active.
   await expect(tabBar(page).getByRole("link", { name: "Упражнения" })).toHaveAttribute("aria-current", "page");
 
@@ -226,25 +236,35 @@ test("done: add the new word to the library, then undo", async ({ page }) => {
     await goOn(page);
   }
   await expect(done).toBeVisible();
-  await expect(page.getByRole("region", { name: "Итоги упражнения" })).toHaveText(/\b0\s*с первого раза/);
+  await expect(page.getByRole("article", { name: /^Итог набора/ })).toContainText(/\b0\s*из\s*5\s*с первого раза/);
 
-  const fresh = page.getByRole("region", { name: "Новые слова" });
-  await expect(fresh).toContainText("Новые слова (1)");
-  const box = fresh.getByRole("checkbox", { name: /avoir la flemme/ });
-  await expect(box).toHaveAttribute("aria-checked", "true");
-  await fresh.getByRole("button", { name: "Добавить в библиотеку (1)" }).click();
-  await expect(page.getByText("Добавлено: 1 слово")).toBeVisible();
-  await expect(fresh).toContainText("в библиотеке");
-  await expect(fresh.getByRole("button", { name: /Добавить в библиотеку/ })).toHaveCount(0);
+  // Phones (X-Done-B): the web word as a card in a dashed frame (not yet on record) with «Положить в библиотеку».
+  const fresh = page.getByRole("region", { name: "Новое слово из веба" });
+  const card = fresh.locator("[data-new-word]");
+  await expect(card).toContainText("avoir la flemme");
+  await expect(card).toHaveAttribute("data-new-word", "web");
+  await expect(card).toHaveCSS("border-top-style", "dashed");
+  await fresh.getByRole("button", { name: "Положить в библиотеку" }).click();
+  await expect(page.locator("[data-snackbar]")).toContainText("Добавлено · avoir la flemme");
+  // Added: the frame turns solid and the action gives way to «В библиотеке».
+  await expect(card).toHaveAttribute("data-new-word", "saved");
+  await expect(card).toHaveCSS("border-top-style", "solid");
+  await expect(card).toContainText("В библиотеке");
+  await expect(fresh.getByRole("button", { name: "Положить в библиотеку" })).toHaveCount(0);
   const added = (await dbRows<{ fr: string; source: string; deleted_at: string | null }>(page, "words")).filter((w) => w.fr === "avoir la flemme");
   expect(added).toHaveLength(1);
   expect(added[0]).toMatchObject({ source: "chat", deleted_at: null });
 
   await page.getByRole("button", { name: "Отменить", exact: true }).click();
-  await expect(fresh.getByRole("button", { name: "Добавить в библиотеку (1)" })).toBeVisible();
-  await expect(fresh).not.toContainText("в библиотеке");
+  await expect(fresh.getByRole("button", { name: "Положить в библиотеку" })).toBeVisible();
+  await expect(card).toHaveAttribute("data-new-word", "web");
+  await expect(card).not.toContainText("В библиотеке");
   const after = (await dbRows<{ fr: string; deleted_at: string | null }>(page, "words")).filter((w) => w.fr === "avoir la flemme");
   expect(after.every((w) => w.deleted_at !== null)).toBe(true);
+
+  // A miss slip opens the word's card.
+  await page.getByRole("region", { name: "Ошибки" }).getByRole("button", { name: /^les flics — копы.*Открыть карточку$/ }).click();
+  await expect(page.getByRole("dialog", { name: "Карточка слова" })).toContainText("les flics");
 });
 
 test("reduced motion: a right answer waits for «Дальше»", async ({ page }) => {
@@ -269,10 +289,12 @@ test("× mid-round saves and leaves; «Продолжить» picks the run up",
   await expect(page).toHaveURL(/\/exercises$/);
   const resume = page.getByRole("region", { name: "Незаконченный набор" });
   await expect(resume).toContainText(SLANG_SET.title);
-  // The set's tile moves into the card.
+  // The set's tile moves into the card: its themes, the tick row (the next question taller) and «1/5».
   await expect(tile(page, SLANG_SET.title)).toHaveCount(0);
-  const go = resume.getByRole("link", { name: /Продолжить/ });
-  await expect(go).toContainText("1 из 5");
+  await expect(resume).toContainText("Повседневное, Полиция");
+  await expect(resume.getByRole("img", { name: "Вопрос 2 из 5. С первого раза 1, ошибок 0" })).toBeVisible();
+  await expect(resume).toContainText("1/5");
+  const go = resume.getByRole("link", { name: "Продолжить" });
 
   await go.click();
   await expect(page).toHaveURL(/\/exercises\/play$/);

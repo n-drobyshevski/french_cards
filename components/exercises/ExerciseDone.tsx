@@ -1,13 +1,7 @@
 "use client";
 
 import { useLiveQuery } from "dexie-react-hooks";
-import {
-  useEffect,
-  useEffectEvent,
-  useRef,
-  useState,
-  type CSSProperties,
-} from "react";
+import { useEffect, useEffectEvent, useRef, useState, type CSSProperties } from "react";
 import { useShortcutsEnabled } from "@/components/shell/ShellContext";
 import { OPEN_LAYER_SELECTOR } from "@/components/shell/keys";
 import { Button } from "@/components/ui/Button";
@@ -35,51 +29,24 @@ import {
   DoneWebWords,
 } from "./DonePhone";
 import { nQuestions, plural } from "./list-format";
-import {
-  exerciseKeyAction,
-  INPUT_GUARD_MS,
-  isTypingTarget,
-} from "./player-keys";
+import { exerciseKeyAction, INPUT_GUARD_MS, isTypingTarget } from "./player-keys";
 import { attemptMarks } from "./player-state";
 
 const nWords = (n: number) => `${n} ${plural(n, ["слово", "слова", "слов"])}`;
 
 /** A receipt row (as «Готово на сегодня»): label, dotted leader, mono number. */
-function ReceiptRow({
-  label,
-  value,
-  style,
-}: {
-  label: string;
-  value: string;
-  style?: CSSProperties;
-}) {
+function ReceiptRow({ label, value, style }: { label: string; value: string; style?: CSSProperties }) {
   return (
     <div style={style} className="flex h-8 items-center gap-2 md:h-10 md:gap-3">
       <span className="text-[15px]">{label}</span>
-      <span
-        aria-hidden="true"
-        className="mt-1.5 h-0 flex-1 border-b border-dotted border-muted md:border-rule"
-      />
-      <span className="min-w-12 text-right font-mono text-[15px] font-medium tabular-nums md:font-normal">
-        {value}
-      </span>
+      <span aria-hidden="true" className="mt-1.5 h-0 flex-1 border-b border-dotted border-muted md:border-rule" />
+      <span className="min-w-12 text-right font-mono text-[15px] font-medium tabular-nums md:font-normal">{value}</span>
     </div>
   );
 }
 
 /** A section's head: the label and its aside, at the far right; `inline`: from 768 the aside follows the label (a count, D-Exercise-Done). */
-function SectionHead({
-  title,
-  aside,
-  asideTone = "muted",
-  inline = false,
-}: {
-  title: string;
-  aside?: string;
-  asideTone?: "muted" | "red";
-  inline?: boolean;
-}) {
+function SectionHead({ title, aside, asideTone = "muted", inline = false }: { title: string; aside?: string; asideTone?: "muted" | "red"; inline?: boolean }) {
   return (
     <div
       className={cx(
@@ -90,15 +57,7 @@ function SectionHead({
       <h2 className="m-0 text-[11px] font-normal text-muted md:font-sans md:text-[13px] md:font-medium md:tracking-normal md:text-ink md:normal-case">
         {title}
       </h2>
-      {aside && (
-        <span
-          className={
-            asideTone === "red" ? "font-medium text-red" : "text-muted"
-          }
-        >
-          {aside}
-        </span>
-      )}
+      {aside && <span className={asideTone === "red" ? "font-medium text-red" : "text-muted"}>{aside}</span>}
     </div>
   );
 }
@@ -131,14 +90,7 @@ export interface ExerciseDoneProps {
  * actions sit under the receipt with their keys (C, Esc); focus lands on «Повторить ошибки». No
  * date stamp, confetti or count-up.
  */
-export function ExerciseDone({
-  set,
-  run,
-  onRepeat,
-  repeatPending = false,
-  onLeave,
-  onWord,
-}: ExerciseDoneProps) {
+export function ExerciseDone({ set, run, onRepeat, repeatPending = false, onLeave, onWord }: ExerciseDoneProps) {
   const snackbar = useSnackbar();
   const letters = useShortcutsEnabled();
   const score = scoreRun(run, set);
@@ -148,9 +100,7 @@ export function ExerciseDone({
   const marks = attemptMarks(run.answers.filter((a) => itemIds.has(a.item_id)));
   // The library rows of the missed words: a link only to a word still there, and the meter for a
   // word met only in pairs (its tile carries no snapshot).
-  const library = useLiveWords(
-    missed.flatMap((m) => (m.word_id ? [m.word_id] : [])),
-  );
+  const library = useLiveWords(missed.flatMap((m) => (m.word_id ? [m.word_id] : [])));
   // «Повторить ошибки (N)» counts the mistakes listed under «Ошибки» (it replays the questions behind them).
   const repeatCount = missed.length || missedItems.length;
   const saved = useLiveQuery(() => savedNewWords(set), [set]);
@@ -177,20 +127,11 @@ export function ExerciseDone({
     if (adding || checked.length === 0) return;
     setAdding(true);
     try {
-      const result = await addNewWords(
-        set,
-        checked.map((w) => w.ref),
-      );
+      const result = await addNewWords(set, checked.map((w) => w.ref));
       const n = result.added.length;
       snackbar.show({
-        message:
-          n > 0 ? `Добавлено: ${nWords(n)}` : "Эти слова уже есть в библиотеке",
-        ...(n > 0
-          ? {
-              actionLabel: "Отменить",
-              onAction: () => void undoAddNewWords(result.undo),
-            }
-          : {}),
+        message: n > 0 ? `Добавлено: ${nWords(n)}` : "Эти слова уже есть в библиотеке",
+        ...(n > 0 ? { actionLabel: "Отменить", onAction: () => void undoAddNewWords(result.undo) } : {}),
       });
     } catch {
       snackbar.show({ message: "Не удалось добавить слова" });
@@ -232,18 +173,8 @@ export function ExerciseDone({
 
   const followUp = async () => {
     const text = buildFollowUpText(set, missed);
-    const ok = await copyRequest(
-      {
-        text,
-        summary: `после «${set.title}», ${nQuestions(set.items.length)}`,
-      },
-      sets ?? [set],
-    );
-    snackbar.show({
-      message: ok
-        ? "Запрос скопирован — вставьте его в чат с Claude"
-        : "Не удалось скопировать запрос",
-    });
+    const ok = await copyRequest({ text, summary: `после «${set.title}», ${nQuestions(set.items.length)}` }, sets ?? [set]);
+    snackbar.show({ message: ok ? "Запрос скопирован — вставьте его в чат с Claude" : "Не удалось скопировать запрос" });
   };
 
   // Desktop: focus on the primary action (or the heading); a key held from the last card does not
@@ -251,35 +182,19 @@ export function ExerciseDone({
   // fresh press still works).
   useEffect(() => {
     const root = rootRef.current;
-    const target =
-      root?.querySelector<HTMLElement>("[data-done-primary]:not(:disabled)") ??
-      root?.querySelector<HTMLElement>("h1");
-    if (window.matchMedia("(min-width: 768px)").matches)
-      target?.focus({ preventScroll: true });
+    const target = root?.querySelector<HTMLElement>("[data-done-primary]:not(:disabled)") ?? root?.querySelector<HTMLElement>("h1");
+    if (window.matchMedia("(min-width: 768px)").matches) target?.focus({ preventScroll: true });
     const until = performance.now() + INPUT_GUARD_MS;
     const swallow = (event: KeyboardEvent) => {
-      if (
-        (event.repeat || event.timeStamp < until) &&
-        (event.key === " " || event.key === "Enter")
-      )
-        event.preventDefault();
+      if ((event.repeat || event.timeStamp < until) && (event.key === " " || event.key === "Enter")) event.preventDefault();
     };
     window.addEventListener("keydown", swallow, true);
     return () => window.removeEventListener("keydown", swallow, true);
   }, []);
 
   const onKeyDown = useEffectEvent((event: KeyboardEvent) => {
-    if (
-      event.defaultPrevented ||
-      isTypingTarget(event.target) ||
-      document.querySelector(OPEN_LAYER_SELECTOR)
-    )
-      return;
-    const action = exerciseKeyAction(event, {
-      phase: "done",
-      options: 0,
-      letters,
-    });
+    if (event.defaultPrevented || isTypingTarget(event.target) || document.querySelector(OPEN_LAYER_SELECTOR)) return;
+    const action = exerciseKeyAction(event, { phase: "done", options: 0, letters });
     if (!action) return;
     event.preventDefault();
     if (action.type === "follow-up") void followUp();
@@ -291,11 +206,7 @@ export function ExerciseDone({
     return () => window.removeEventListener("keydown", listener);
   }, []);
 
-  const meta = [
-    set.topic ? "своя тема" : null,
-    run.kind === "mistakes" ? "работа над ошибками" : null,
-    nQuestions(score.total),
-  ].filter(Boolean);
+  const meta = [set.topic ? "своя тема" : null, run.kind === "mistakes" ? "работа над ошибками" : null, nQuestions(score.total)].filter(Boolean);
   // Phones: the strip counts the questions, and the schedule note stays at the entry (the list).
   const phoneMeta = run.kind === "mistakes" ? "работа над ошибками" : null;
   // A missed word opens its card when it is in the library (a web word too, once added).
@@ -330,10 +241,7 @@ export function ExerciseDone({
       data-exercise-done=""
       className="flex flex-1 flex-col px-4 pt-4 pb-4 md:mx-auto md:w-[720px] md:max-w-full md:px-0 md:pt-12 md:pb-12"
     >
-      <h1
-        tabIndex={-1}
-        className="m-0 mt-1 font-serif text-[34px] leading-10 font-medium tracking-[-0.015em] outline-none md:text-[40px] md:leading-[48px]"
-      >
+      <h1 tabIndex={-1} className="m-0 mt-1 font-serif text-[34px] leading-10 font-medium tracking-[-0.015em] outline-none md:text-[40px] md:leading-[48px]">
         Готово
       </h1>
       <div className="mt-0.5 flex min-w-0 items-baseline gap-2 max-md:hidden">
@@ -369,10 +277,7 @@ export function ExerciseDone({
         />
       </div>
 
-      <section
-        aria-label="Итоги упражнения"
-        className="mt-3.5 shrink-0 border-y border-ink max-md:hidden md:mt-6"
-      >
+      <section aria-label="Итоги упражнения" className="mt-3.5 shrink-0 border-y border-ink max-md:hidden md:mt-6">
         <ReceiptRow label="Вопросов" value={String(score.total)} />
         <ReceiptRow label="С первого раза" value={String(score.first_try)} />
         <ReceiptRow label="Точность" value={`${score.accuracy} %`} />
@@ -448,14 +353,7 @@ export function ExerciseDone({
               return (
                 <li key={m.key}>
                   {saved ? (
-                    <button
-                      type="button"
-                      onClick={() => onWord(m.word_id!)}
-                      className={cx(
-                        row,
-                        "press-tint w-full bg-transparent text-left",
-                      )}
-                    >
+                    <button type="button" onClick={() => onWord(m.word_id!)} className={cx(row, "press-tint w-full bg-transparent text-left")}>
                       {content}
                     </button>
                   ) : (
@@ -495,37 +393,20 @@ export function ExerciseDone({
                     aria-hidden="true"
                     className={cx(
                       "flex size-5 shrink-0 items-center justify-center rounded-[2px] transition-colors duration-(--dur-instant) ease-press md:size-3.5",
-                      on
-                        ? "bg-ink text-on-ink"
-                        : "border border-boundary bg-surface",
+                      on ? "bg-ink text-on-ink" : "border border-boundary bg-surface",
                       inLibrary && "opacity-40",
                     )}
                   >
                     {on && (
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={2.5}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="md:size-2.5"
-                      >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="md:size-2.5">
                         <path d="M20 6 9 17l-5-5" />
                       </svg>
                     )}
                   </span>
-                  <span
-                    lang="fr"
-                    className="shrink-0 font-serif text-[19px] leading-6 font-medium md:w-[220px] md:truncate"
-                  >
+                  <span lang="fr" className="shrink-0 font-serif text-[19px] leading-6 font-medium md:w-[220px] md:truncate">
                     {w.fr}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-[14px] text-muted">
-                    {w.ru}
-                  </span>
+                  <span className="min-w-0 flex-1 truncate text-[14px] text-muted">{w.ru}</span>
                   {inLibrary ? (
                     <span className="meta shrink-0">в библиотеке</span>
                   ) : (

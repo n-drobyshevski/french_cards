@@ -38,12 +38,7 @@ function ProgressLine({
         className,
       )}
     >
-      <span
-        className="block h-0.5 bg-ink"
-        style={{
-          width: `${Math.round(Math.min(1, Math.max(0, progress)) * 100)}%`,
-        }}
-      />
+      <span className="block h-0.5 bg-ink" style={{ width: `${Math.round(Math.min(1, Math.max(0, progress)) * 100)}%` }} />
       {pending && (
         <span className="link-pending absolute inset-0 bg-surface-2">
           <span className="motion-loop absolute inset-y-0 w-8 bg-ink animate-[ink-run_2000ms_linear_infinite]" />
@@ -161,33 +156,18 @@ export function SetTile({
       )}
       <PendingLine className="md:hidden" />
 
-      <span className="line-clamp-2 min-h-12 font-serif text-[19px] leading-6 font-medium max-md:hidden">
-        {set.title}
-      </span>
-      <span className="meta mt-1.5 leading-4 tabular-nums max-md:hidden">
-        {nQuestions(total)}
-      </span>
+      <span className="line-clamp-2 min-h-12 font-serif text-[19px] leading-6 font-medium max-md:hidden">{set.title}</span>
+      <span className="meta mt-1.5 leading-4 tabular-nums max-md:hidden">{nQuestions(total)}</span>
       <span className="meta truncate leading-4 max-md:hidden">{themes}</span>
       <span className="meta mt-auto flex items-baseline justify-between gap-2 leading-4 tabular-nums max-md:hidden">
-        <span
-          className={cx(
-            "font-medium whitespace-nowrap",
-            state.tone === "new" ? "text-red" : "text-ink",
-          )}
-        >
-          {state.label}
-        </span>
-        <span className="md:group-focus-visible:hidden">
-          {shortDate(set.created_at)}
-        </span>
+        <span className={cx("font-medium whitespace-nowrap", state.tone === "new" ? "text-red" : "text-ink")}>{state.label}</span>
+        <span className="md:group-focus-visible:hidden">{shortDate(set.created_at)}</span>
         <span
           aria-hidden="true"
           className="-my-2 hidden h-8 items-center gap-1.5 rounded-btn bg-ink px-2.5 font-sans text-[13px] font-medium tracking-normal text-on-ink normal-case md:group-focus-visible:inline-flex"
         >
           Начать
-          <span className="inline-flex h-[18px] items-center rounded-[3px] border border-on-ink/40 px-1 font-mono text-[11px]">
-            ↵
-          </span>
+          <span className="inline-flex h-[18px] items-center rounded-[3px] border border-on-ink/40 px-1 font-mono text-[11px]">↵</span>
         </span>
       </span>
       <ProgressLine progress={state.progress} className="max-md:hidden" />
@@ -196,29 +176,16 @@ export function SetTile({
 }
 
 /** The dashed last cell: «+ Попросить набор · в чате Claude» (desktop with the panel: «· справа»). */
-export function RequestTile({
-  onClick,
-  side = false,
-  className,
-}: {
-  onClick: () => void;
-  side?: boolean;
-  className?: string;
-}) {
+export function RequestTile({ onClick, side = false, className }: { onClick: () => void; side?: boolean; className?: string }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={cx(
-        className,
-        "flex h-[152px] flex-col items-center justify-center gap-2 rounded-card border border-dashed border-boundary bg-transparent p-3 text-center text-ink active:bg-surface-2 hoverable:bg-hover-surface",
-      )}
+      className={cx(className, "flex h-[152px] flex-col items-center justify-center gap-2 rounded-card border border-dashed border-boundary bg-transparent p-3 text-center text-ink active:bg-surface-2 hoverable:bg-hover-surface")}
     >
       <Icon name="plus" size={20} strokeWidth={1.5} />
       <span className="text-[15px] leading-5 font-medium">Попросить набор</span>
-      <span className="meta leading-4">
-        {side ? "в чате Claude · справа" : "в чате Claude"}
-      </span>
+      <span className="meta leading-4">{side ? "в чате Claude · справа" : "в чате Claude"}</span>
     </button>
   );
 }
@@ -283,18 +250,10 @@ export function ScopeTile({
       onClick={onClick}
       data-scope-tile={scope}
       aria-label={`${title}: ${words} из всех тем. Скопировать запрос для Claude`}
-      className={cx(
-        TILE,
-        "border border-dashed border-boundary bg-transparent text-left active:bg-surface-2 hoverable:bg-hover-surface",
-        className,
-      )}
+      className={cx(TILE, "border border-dashed border-boundary bg-transparent text-left active:bg-surface-2 hoverable:bg-hover-surface", className)}
     >
-      <span className="line-clamp-2 min-h-12 font-serif text-[19px] leading-6 font-medium">
-        {title}
-      </span>
-      <span className="meta mt-1.5 leading-4 font-medium text-ink tabular-nums">
-        {words}
-      </span>
+      <span className="line-clamp-2 min-h-12 font-serif text-[19px] leading-6 font-medium">{title}</span>
+      <span className="meta mt-1.5 leading-4 font-medium text-ink tabular-nums">{words}</span>
       <span className="meta leading-4">из всех тем</span>
       <span className="mt-auto flex h-5 items-center gap-1.5 text-[13px] leading-5 font-medium">
         <CopyGlyph size={16} />
@@ -307,10 +266,7 @@ export function ScopeTile({
 /** A tile's frame with flat bars: the set on its way from the chat, or the first read. */
 export function SetTileSkeleton({ className }: { className?: string }) {
   return (
-    <div
-      aria-hidden="true"
-      className={cx(TILE, "border border-rule bg-surface", className)}
-    >
+    <div aria-hidden="true" className={cx(TILE, "border border-rule bg-surface", className)}>
       <SkeletonBar width="78%" className="mt-2" />
       <SkeletonBar width="52%" className="mt-2.5" />
       <SkeletonBar width="44%" height={6} className="mt-[18px]" />
@@ -344,40 +300,17 @@ export function WaitingTile({
       onClick={onRefresh}
       disabled={!online}
       aria-busy={refreshing || undefined}
-      aria-label={
-        online
-          ? "Ждём набор из чата. Обновить"
-          : "Ждём набор из чата: придёт, когда будет сеть"
-      }
-      className={cx(
-        TILE,
-        "border border-rule bg-surface text-left active:bg-surface-2 disabled:cursor-default disabled:active:bg-surface",
-        className,
-      )}
+      aria-label={online ? "Ждём набор из чата. Обновить" : "Ждём набор из чата: придёт, когда будет сеть"}
+      className={cx(TILE, "border border-rule bg-surface text-left active:bg-surface-2 disabled:cursor-default disabled:active:bg-surface", className)}
     >
-      <span
-        aria-hidden="true"
-        className="absolute inset-x-0 top-0 h-0.5 overflow-hidden bg-rule"
-      >
-        {online && (
-          <span className="motion-loop absolute inset-y-0 w-8 bg-ink animate-[ink-run_2000ms_linear_infinite]" />
-        )}
+      <span aria-hidden="true" className="absolute inset-x-0 top-0 h-0.5 overflow-hidden bg-rule">
+        {online && <span className="motion-loop absolute inset-y-0 w-8 bg-ink animate-[ink-run_2000ms_linear_infinite]" />}
       </span>
-      <span className={cx("meta leading-4", online && "font-medium text-ink")}>
-        {online ? "Ждём из чата" : "Придёт, когда будет сеть"}
-      </span>
+      <span className={cx("meta leading-4", online && "font-medium text-ink")}>{online ? "Ждём из чата" : "Придёт, когда будет сеть"}</span>
       <SkeletonBar width="78%" className="mt-3" />
       <SkeletonBar width="52%" className="mt-2.5" />
       {online && (
-        <Icon
-          name="refresh"
-          size={18}
-          strokeWidth={1.5}
-          className={cx(
-            "mt-auto self-end text-muted",
-            refreshing && "motion-safe:animate-spin",
-          )}
-        />
+        <Icon name="refresh" size={18} strokeWidth={1.5} className={cx("mt-auto self-end text-muted", refreshing && "motion-safe:animate-spin")} />
       )}
     </button>
   );

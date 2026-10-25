@@ -2,20 +2,37 @@
 
 import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { CheckMark } from "@/components/library/Checkbox";
 import { SETTINGS_PAGES } from "@/components/settings/format";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { cx } from "@/components/ui/cx";
-import { FoldRow, foldSummary } from "@/components/ui/FoldRow";
 import { Icon } from "@/components/ui/Icons";
 import { Segmented } from "@/components/ui/Segmented";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { Toggle } from "@/components/ui/Toggle";
 import { focusSummary } from "@/lib/core/exercise-focus";
 import { db, liveRows } from "@/lib/db";
-import { buildRequestText, CONJ_REQUEST_SIZES, NEW_WORDS_MAX, REQUEST_SIZES, SCOPE_LABELS, TOPIC_MAX, useScopeCounts } from "@/lib/exercises";
+import {
+  buildRequestText,
+  CONJ_REQUEST_SIZES,
+  NEW_WORDS_MAX,
+  REQUEST_SIZES,
+  requestSentence,
+  SCOPE_LABELS,
+  TOPIC_MAX,
+  useScopeCounts,
+  type RequestSentence,
+  type ScopeCounts,
+} from "@/lib/exercises";
 import { listFolders } from "@/lib/folders";
 import type { ExerciseScope, ExerciseSet } from "@/lib/types";
 import { useExerciseFocus } from "@/lib/user-prefs";
@@ -95,9 +112,10 @@ export interface RequestBuilderProps {
   /** «Нет коннектора? ›» (sheet and panel; the page puts its own link under the card). */
   onHelp?: () => void;
   /**
-   * Phones, the empty state (proposals «Empty» B): no card frame, one chip flow («Трудные 9»,
-   * «К повторению 23», then the themes), «Вопросов», everything else under «Ещё ⌄», and one primary
-   * «Скопировать и открыть Claude ↗» with «только скопировать» under it.
+   * Phones (X-Request-B, pick E2 B): the request sheet and the empty state (`variant` "sheet" /
+   * "page") show the kind row, the request as one sentence with slots that open in place, and the
+   * two hand-off steps (`RequestComposer`); the copied text is `requestSentence`. Desktop keeps
+   * the builder below and `buildRequestText`.
    */
   compact?: boolean;
   className?: string;
@@ -109,8 +127,9 @@ export interface RequestBuilderProps {
  * free-text «своя тема», «Спряжение глаголов» (a short verb test: 6 / 8 / 10 questions, no new
  * words), 8 / 12 / 16 questions, «Можно новые слова», the request text built live,
  * «Скопировать запрос» and «Открыть Claude ↗» (copies first), and while «Чаще в упражнениях» is on, a
- * muted line saying so («Чаще трудные · половина набора · Настройки ›»). No network call and no
- * spark: Claude writes the set in the chat through the connector.
+ * muted line saying so («Чаще трудные · половина набора · Настройки ›»). No network call: Claude
+ * writes the set in the chat through the connector. Phones (`compact`) get `RequestComposer`
+ * instead, whose hand-off button carries the spark (X-Request-B); this desktop builder has none.
  */
 export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp, compact = false, className }: RequestBuilderProps) {
   const snackbar = useSnackbar();
@@ -123,14 +142,20 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
   // «Спряжение глаголов»: its own sizes (a short test), so switching it off keeps the usual size.
   const [conjugation, setConjugation] = useState(false);
   const [verbSize, setVerbSize] = useState<number>(8);
-  // «Откуда слова»: null = the themes below. A scope whose words are gone (all reviewed, paused)
-  // falls back to the themes.
+  // «Откуда слова» (phones: the kind row): null = the themes below. A scope whose words are gone
+  // (all reviewed, paused) falls back to the themes.
   const [scopePick, setScopePick] = useState<ExerciseScope | null>(null);
   const counts = useScopeCounts();
   const scope = scopePick && counts && counts[scopePick] > 0 ? scopePick : null;
   const [copiedAt, setCopiedAt] = useState(0);
   const topicRef = useRef<HTMLInputElement>(null);
   const focusTopic = useRef(false);
+  const kind: RequestKind =
+    scope === "difficult" || scope === "due"
+      ? scope
+      : conjugation
+        ? "conjugation"
+        : "themes";
 
   useEffect(() => {
     if (!copiedAt) return;
@@ -148,14 +173,15 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
   const chosen = themes.filter((t) => picked.includes(t.key));
   const choice: RequestChoice = {
     folders: chosen.map((t) => t.name),
-    // Compact: the topic field sits under «Ещё» with no chip, so it counts once it has text.
-    topic: compact ? (topic.trim() ? topic : null) : topicOpen ? topic : null,
+    topic: topicOpen ? topic : null,
     size: conjugation ? verbSize : size,
     allowNew: allowNew && !conjugation,
     scope,
     conjugation,
   };
-  const text = buildRequestText(choice);
+  // Phones copy the sentence they read; desktop keeps the classic text.
+  const sentence = compact ? requestSentence(choice) : null;
+  const text = sentence ? sentence.text : buildRequestText(choice);
   // «Чаще в упражнениях» (Settings): the connector reads it itself, so the request text stays as is;
   // the line only tells the user the set will lean that way.
   const focus = useExerciseFocus();
@@ -167,48 +193,51 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
   const copy = async (via: "copy" | "open") => {
     const ok = await copyRequest({ text, summary: requestSummary(choice) }, sets);
     if (ok) setCopiedAt(Date.now());
-    else if (via === "copy") snackbar.show({ message: "Не получилось скопировать — выделите текст запроса" });
+    else if (via === "copy")
+      snackbar.show({
+        message: compact
+          ? "Не получилось скопировать"
+          : "Не получилось скопировать — выделите текст запроса",
+      });
     onCopied?.(ok, via);
   };
 
-  if (compact) {
+  if (sentence) {
     return (
-      <CompactBuilder
+      <RequestComposer
+        framed={variant === "page"}
         className={className}
         themes={themes}
         picked={picked}
-        onTheme={(key) => {
-          setScopePick(null);
-          toggleTheme(key);
-        }}
-        scope={scope}
+        onTheme={toggleTheme}
+        kind={kind}
         counts={counts}
-        onScope={(next) => {
-          setScopePick(next);
-          if (next) setPicked([]);
+        onKind={(next) => {
+          setScopePick(next === "difficult" || next === "due" ? next : null);
+          setConjugation(next === "conjugation");
         }}
-        size={size}
-        onSize={setSize}
-        conjugation={conjugation}
-        onConjugation={setConjugation}
-        verbSize={verbSize}
-        onVerbSize={setVerbSize}
+        size={conjugation ? verbSize : size}
+        sizes={conjugation ? CONJ_REQUEST_SIZES : REQUEST_SIZES}
+        onSize={conjugation ? setVerbSize : setSize}
+        topicOpen={topicOpen}
+        onTopicOpen={setTopicOpen}
         topic={topic}
         onTopic={setTopic}
         allowNew={allowNew}
         onAllowNew={setAllowNew}
-        text={text}
+        sentence={sentence}
         focusLine={focusLine}
         online={online}
         copied={copiedAt > 0}
         onCopy={(via) => void copy(via)}
+        onHelp={onHelp}
       />
     );
   }
 
   const panel = variant === "panel";
   // «Настройки ›» under the request: the desktop page's section, or the phone sub-screen.
-  const wideLayout = panel || (variant === "page" && !compact);
+  const wideLayout = panel || variant === "page";
   const label = "meta flex items-baseline justify-between leading-4";
   const newCaption = variant === "page" ? "Claude поищет их в вебе" : `Claude поищет их в вебе, до ${NEW_WORDS_MAX} в наборе`;
 
@@ -508,7 +537,7 @@ function ScopeChips({
 }: {
   labelledBy: string;
   value: ExerciseScope | null;
-  counts: { difficult: number; due: number; both: number } | undefined;
+  counts: ScopeCounts | undefined;
   onChange: (scope: ExerciseScope | null) => void;
 }) {
   const options: { value: ExerciseScope | null; label: string; count?: number; name: string; disabled: boolean }[] = [
@@ -564,194 +593,564 @@ function ScopeChips({
   );
 }
 
-/** The phone empty state's builder (RequestBuilder `compact`): the same choice, fewer rows. */
-function CompactBuilder({
+/** What the phone request asks for (X-Request-B): the four big choices above the sentence. */
+export type RequestKind = "themes" | "difficult" | "due" | "conjugation";
+
+const NBSP = " ";
+
+/** The kind row's glyphs (24 viewBox, stroke 1.5): theme lines, a hard card, the due calendar, a conjugation table. */
+function KindGlyph({ kind }: { kind: RequestKind }) {
+  return (
+    <svg
+      aria-hidden="true"
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {kind === "themes" && (
+        <>
+          <path d="M5 4.5v4" />
+          <path d="M9 6.5h10" />
+          <path d="M5 10v4" />
+          <path d="M9 12h10" />
+          <path d="M5 15.5v4" />
+          <path d="M9 17.5h10" />
+        </>
+      )}
+      {kind === "difficult" && (
+        <>
+          <rect x="8" y="3.5" width="8" height="17" rx="1" />
+          <path d="M12 8.5v7" strokeWidth={2} />
+        </>
+      )}
+      {kind === "due" && (
+        <>
+          <rect x="4" y="6" width="16" height="13" rx="1.5" />
+          <path d="M4 9.5h16" className="stroke-red" />
+          <rect
+            x="15"
+            y="2"
+            width="5"
+            height="5"
+            stroke="none"
+            className="fill-red"
+          />
+        </>
+      )}
+      {kind === "conjugation" && (
+        <>
+          <rect x="4" y="4" width="16" height="16" rx="1.5" />
+          <path d="M12 4v16" />
+          <path d="M4 9.33h16" />
+          <path d="M4 14.67h16" />
+        </>
+      )}
+    </svg>
+  );
+}
+
+/**
+ * «Что повторить»: «Слова по темам» · «Трудные 9» · «К повторению 23» · «Спряжение», one choice (a
+ * radiogroup with arrow keys). A scope with no words is not drawn; «Оба» is a chat-only choice.
+ */
+function KindRow({
+  value,
+  counts,
+  onChange,
+}: {
+  value: RequestKind;
+  counts: ScopeCounts | undefined;
+  onChange: (kind: RequestKind) => void;
+}) {
+  const options: {
+    value: RequestKind;
+    label: ReactNode;
+    name: string;
+    count?: number;
+  }[] = [
+    {
+      value: "themes",
+      label: (
+        <>
+          Слова
+          <br />
+          по темам
+        </>
+      ),
+      name: "Слова по темам",
+    },
+  ];
+  if (counts?.difficult)
+    options.push({
+      value: "difficult",
+      label: "Трудные",
+      name: `Трудные слова из всех тем: ${counts.difficult}`,
+      count: counts.difficult,
+    });
+  if (counts?.due)
+    options.push({
+      value: "due",
+      label: "К повторению",
+      name: `Слова к повторению на сегодня: ${counts.due}`,
+      count: counts.due,
+    });
+  options.push({
+    value: "conjugation",
+    label: "Спряжение",
+    name: "Спряжение глаголов",
+  });
+
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const step =
+      e.key === "ArrowRight" || e.key === "ArrowDown"
+        ? 1
+        : e.key === "ArrowLeft" || e.key === "ArrowUp"
+          ? -1
+          : 0;
+    if (!step) return;
+    e.preventDefault();
+    const at = options.findIndex((o) => o.value === value);
+    const next = (at + step + options.length) % options.length;
+    onChange(options[next].value);
+    e.currentTarget
+      .querySelectorAll<HTMLButtonElement>("[role='radio']")
+      [next]?.focus();
+  };
+
+  return (
+    <div
+      role="radiogroup"
+      aria-label="Что повторить"
+      onKeyDown={onKeyDown}
+      className="grid gap-1.5"
+      // minmax(0, auto): on a 360px phone the labels wrap (hyphenated) instead of pushing the row wider.
+      style={{ gridTemplateColumns: `repeat(${options.length}, minmax(0, auto))` }}
+    >
+      {options.map((o) => {
+        const on = o.value === value;
+        return (
+          <button
+            key={o.value}
+            type="button"
+            role="radio"
+            aria-checked={on}
+            aria-label={o.name}
+            tabIndex={on ? 0 : -1}
+            data-kind={o.value}
+            onClick={() => onChange(o.value)}
+            className={cx(
+              "press-sm relative flex h-20 min-w-0 flex-col items-start justify-between rounded-card bg-surface text-left text-ink",
+              on
+                ? "border-2 border-ink px-[7px] py-2 max-[374px]:px-[5px]"
+                : "border border-rule px-2 py-[9px] active:bg-surface-2 max-[374px]:px-1.5",
+            )}
+          >
+            <span className={cx("inline-flex", on ? "text-ink" : "text-muted")}>
+              <KindGlyph kind={o.value} />
+            </span>
+            {o.count !== undefined && (
+              <span className="absolute top-2 right-2 font-mono text-[12px] leading-4">
+                {o.count}
+              </span>
+            )}
+            <span
+              lang="ru"
+              className={cx(
+                "max-w-full text-[13px] leading-4 hyphens-auto max-[374px]:text-[12px] max-[374px]:leading-[14px]",
+                on && "font-medium",
+              )}
+            >
+              {o.label}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * A slot in the request sentence: the ink-underlined words that open their choice in place
+ * (the count, the themes) or flip it (new words). The open one sits on a `surface-2` band one line
+ * (38px) tall; a 3px band above and below makes the tap area 44px. (A button lays out as an inline
+ * block even with `display: inline`, so vertical padding would push the lines apart.)
+ */
+function Slot({
+  open,
+  label,
+  controls,
+  onClick,
+  children,
+}: {
+  /** undefined: a toggle, not a disclosure. */
+  open?: boolean;
+  label: string;
+  controls?: string;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-expanded={open}
+      aria-controls={open ? controls : undefined}
+      aria-label={label}
+      onClick={onClick}
+      className={cx(
+        "relative -mx-0.5 inline rounded-[2px] px-0.5 font-medium text-ink underline decoration-ink underline-offset-[5px] active:text-muted",
+        "before:absolute before:-inset-y-[3px] before:inset-x-0 before:content-['']",
+        open ? "bg-surface-2 decoration-2" : "decoration-[1.5px]",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** «1», «2»: the step numbers of the hand-off. */
+function StepNo({ n }: { n: number }) {
+  return (
+    <span
+      aria-hidden="true"
+      className="w-3.5 shrink-0 font-mono text-[13px] font-medium"
+    >
+      {n}
+    </span>
+  );
+}
+
+/**
+ * The phone request (X-Request-B, pick E2 B; RequestBuilder `compact`: the request sheet and the
+ * empty state): the kind row, then the request as one Newsreader sentence whose underlined slots open
+ * in place — «Сделай в Карточках [12 вопросов] по темам [Еда, Полиция] — [можно новые слова].» —
+ * and is the very text copied; then two steps, «1 · Скопировать и открыть Claude» (spark ↗) and
+ * «2 · Вставьте в чат и отправьте», with «Только скопировать» and «Нет коннектора? ›» under them.
+ */
+function RequestComposer({
+  framed,
   className,
   themes,
   picked,
   onTheme,
-  scope,
+  kind,
   counts,
-  onScope,
+  onKind,
   size,
+  sizes,
   onSize,
-  conjugation,
-  onConjugation,
-  verbSize,
-  onVerbSize,
+  topicOpen,
+  onTopicOpen,
   topic,
   onTopic,
   allowNew,
   onAllowNew,
-  text,
+  sentence,
   focusLine,
   online,
   copied,
   onCopy,
+  onHelp,
 }: {
+  /** The empty state: a region named «Запрос для Claude» (the sheet is the dialog itself). */
+  framed: boolean;
   className?: string;
   themes: readonly ThemeChoice[];
   picked: readonly string[];
   onTheme: (key: string) => void;
-  scope: ExerciseScope | null;
-  counts: { difficult: number; due: number; both: number } | undefined;
-  onScope: (scope: ExerciseScope | null) => void;
+  kind: RequestKind;
+  counts: ScopeCounts | undefined;
+  onKind: (kind: RequestKind) => void;
   size: number;
+  sizes: readonly number[];
   onSize: (size: number) => void;
-  conjugation: boolean;
-  onConjugation: (on: boolean) => void;
-  verbSize: number;
-  onVerbSize: (size: number) => void;
+  topicOpen: boolean;
+  onTopicOpen: (open: boolean) => void;
   topic: string;
   onTopic: (topic: string) => void;
   allowNew: boolean;
   onAllowNew: (on: boolean) => void;
-  text: string;
+  sentence: RequestSentence;
   focusLine: string | null;
   online: boolean;
   copied: boolean;
   onCopy: (via: "copy" | "open") => void;
+  onHelp?: () => void;
 }) {
   const ids = useId();
-  // «Оба» stays a chat-only choice; a scope with no words is left out of the flow.
-  const scopes = SCOPE_CHIPS.filter((o) => o.value !== "both" && (counts?.[o.value] ?? 0) > 0);
-  const summary = foldSummary([!scope && "своя тема", !scope && !conjugation && "новые слова", "текст запроса"]);
+  // The themes are open at first: they are the first thing to choose.
+  const [open, setOpen] = useState<"size" | "themes" | null>("themes");
+  const topicRef = useRef<HTMLInputElement>(null);
+  const focusTopic = useRef(false);
+  const themesOpen = open === "themes" && sentence.themes !== null;
+  const toggle = (slot: "size" | "themes") =>
+    setOpen((now) => (now === slot ? null : slot));
+
+  useEffect(() => {
+    if (topicOpen && focusTopic.current) {
+      focusTopic.current = false;
+      topicRef.current?.focus();
+    }
+  }, [topicOpen]);
+
+  // «по темам», «по теме», «на тему» stay with the slot; a scope's longer phrase wraps freely.
+  const where =
+    sentence.where.split(" ").length <= 2
+      ? sentence.where.replace(/ /g, NBSP)
+      : sentence.where;
+  const Root = framed ? "section" : "div";
 
   return (
-    <section aria-label="Запрос для Claude" className={cx("flex flex-col", className)}>
-      <div role="group" aria-label="Из чего составить" className="flex flex-wrap gap-1.5">
-        {scopes.map((o) => {
-          const count = counts?.[o.value] ?? 0;
-          return (
-            <Chip
-              key={o.value}
-              selected={scope === o.value}
-              count={count}
-              aria-label={`${SCOPE_LABELS[o.value]}: ${count}`}
-              data-scope={o.value}
-              onClick={() => onScope(scope === o.value ? null : o.value)}
-              className="!h-9 gap-1.5 px-3"
-            >
-              {o.label}
-            </Chip>
-          );
-        })}
-        {themes.map((t) => {
-          const on = !scope && picked.includes(t.key);
-          return (
-            <Chip key={t.key} selected={on} icon={on ? "check" : undefined} onClick={() => onTheme(t.key)} className="!h-9 gap-1.5 px-3">
-              {t.name}
-            </Chip>
-          );
-        })}
+    <Root
+      aria-label={framed ? "Запрос для Claude" : undefined}
+      className={cx("flex flex-col", className)}
+    >
+      <KindRow value={kind} counts={counts} onChange={onKind} />
+
+      <div
+        role="group"
+        aria-label={`Запрос для Claude: ${sentence.text}`}
+        className="mt-[22px]"
+      >
+        <p
+          data-request-sentence=""
+          className="m-0 font-serif text-[25px] leading-[38px] tracking-[-0.005em] text-pretty text-ink"
+        >
+          Сделай в{NBSP}Карточках{" "}
+          <Slot
+            open={open === "size"}
+            label={`Вопросов: ${size}, изменить`}
+            controls={`${ids}-size`}
+            onClick={() => toggle("size")}
+          >
+            {sentence.size.replace(" ", NBSP)}
+          </Slot>
+          {sentence.what && ` ${sentence.what}`} {where}
+          {sentence.themes !== null && (
+            <>
+              {NBSP}
+              <Slot
+                open={themesOpen}
+                label={`Темы: ${sentence.themes}, изменить`}
+                controls={`${ids}-themes`}
+                onClick={() => toggle("themes")}
+              >
+                {sentence.themes}
+              </Slot>
+            </>
+          )}
+          {sentence.fresh && (
+            <>
+              {NBSP}—{" "}
+              <Slot
+                label={`Новые слова: ${allowNew ? "можно" : "без них"}, изменить`}
+                onClick={() => onAllowNew(!allowNew)}
+              >
+                {sentence.fresh}
+              </Slot>
+            </>
+          )}
+          .
+        </p>
       </div>
 
-      <div className="mt-4 flex h-12 items-center gap-2 border-t border-rule">
-        <span id={`${ids}-verbs`} className="flex-1 text-[15px] leading-5">
-          Спряжение глаголов
-        </span>
-        <Toggle checked={conjugation} onCheckedChange={onConjugation} aria-labelledby={`${ids}-verbs`} />
-      </div>
-      <div className="flex h-12 items-center gap-2 border-y border-rule">
-        <span id={`${ids}-size`} className="flex-1 text-[15px] leading-5">
-          Вопросов
-        </span>
-        <Segmented<number>
-          options={(conjugation ? CONJ_REQUEST_SIZES : REQUEST_SIZES).map((n) => ({ value: n, label: String(n) }))}
-          value={conjugation ? verbSize : size}
-          onChange={conjugation ? onVerbSize : onSize}
-          ariaLabelledby={`${ids}-size`}
-          mono
-        />
-      </div>
-      <FoldRow summary={summary} rule="bottom" bodyClassName="px-px">
-        <div className="flex flex-col pb-3">
-          {scope ? (
-            <p data-scope-caption="" className="m-0 text-[12px] leading-4 text-muted">
-              {SCOPE_CAPTIONS[scope]}
-            </p>
-          ) : (
-            <>
-              <label htmlFor={`${ids}-topic`} className="meta leading-4">
-                Своя тема
-              </label>
+      {open === "size" && (
+        <div
+          id={`${ids}-size`}
+          className="mt-2.5 flex h-14 items-center gap-2 rounded-card bg-surface-2 px-3"
+        >
+          <span
+            id={`${ids}-size-label`}
+            className="flex-1 text-[15px] leading-5"
+          >
+            Вопросов
+          </span>
+          <Segmented<number>
+            options={sizes.map((n) => ({ value: n, label: String(n) }))}
+            value={size}
+            onChange={onSize}
+            ariaLabelledby={`${ids}-size-label`}
+            mono
+          />
+        </div>
+      )}
+
+      {themesOpen && (
+        <div
+          id={`${ids}-themes`}
+          className="mt-2.5 flex flex-col rounded-card bg-surface-2 px-2 py-1"
+        >
+          <div
+            role="group"
+            aria-label="Темы, можно несколько"
+            className="flex flex-wrap gap-x-1.5"
+          >
+            {themes.map((t) => {
+              const on = picked.includes(t.key);
+              return (
+                <Chip
+                  key={t.key}
+                  selected={on}
+                  icon={on ? "check" : undefined}
+                  onClick={() => onTheme(t.key)}
+                  className="my-1 !h-9 gap-1.5 px-3"
+                >
+                  {t.name}
+                </Chip>
+              );
+            })}
+            <Chip
+              dashed
+              aria-pressed={topicOpen}
+              aria-controls={topicOpen ? `${ids}-topic` : undefined}
+              onClick={() => {
+                focusTopic.current = !topicOpen;
+                onTopicOpen(!topicOpen);
+              }}
+              className="my-1 !h-9 bg-transparent px-3 aria-pressed:border-ink aria-pressed:font-medium"
+            >
+              + своя тема
+            </Chip>
+          </div>
+          {topicOpen && (
+            <div className="my-1 flex h-12 items-center gap-1 rounded-chip border-2 border-ink bg-surface pr-1 pl-3">
               <input
+                ref={topicRef}
                 id={`${ids}-topic`}
                 type="text"
+                aria-label="Своя тема"
+                placeholder="Своя тема"
                 value={topic}
                 maxLength={TOPIC_MAX}
                 autoComplete="off"
                 enterKeyHint="done"
                 onChange={(e) => onTopic(e.target.value)}
-                className="mt-1.5 h-11 min-w-0 rounded-chip border border-boundary bg-surface px-3 text-[16px] leading-5 text-ink outline-none focus:border-2 focus:border-ink focus:px-[11px]"
+                className="h-11 min-w-0 flex-1 bg-transparent text-[16px] leading-5 text-ink outline-none placeholder:text-muted"
               />
-              {!conjugation && (
-                <div className="mt-2 flex h-12 items-center gap-2">
-                  <span id={`${ids}-new`} className="flex-1 text-[15px] leading-5">
-                    Можно новые слова
-                  </span>
-                  <Toggle checked={allowNew} onCheckedChange={onAllowNew} aria-labelledby={`${ids}-new`} />
-                </div>
-              )}
-            </>
-          )}
-          <span id={`${ids}-text`} className="meta mt-2.5 leading-4">
-            Запрос
-          </span>
-          <p
-            aria-labelledby={`${ids}-text`}
-            className="m-0 mt-1.5 rounded-chip border border-rule bg-surface px-3 py-2.5 font-mono text-[12px] leading-[18px] text-ink select-all"
-          >
-            {text}
-          </p>
-          {focusLine && (
-            <p data-exercise-focus="" className="m-0 mt-1.5 flex items-center gap-1 text-[12px] leading-4 text-muted">
-              <span className="min-w-0 truncate">{focusLine}</span>
-              <span aria-hidden="true">·</span>
-              <Link
-                href={SETTINGS_PAGES.exercises.href}
-                className="-my-3.5 inline-flex h-11 shrink-0 items-center text-muted underline decoration-rule decoration-1 underline-offset-2 active:text-ink"
+              <button
+                type="button"
+                aria-label="Очистить тему"
+                onClick={() => {
+                  onTopic("");
+                  onTopicOpen(false);
+                }}
+                className="press-sm inline-flex size-10 shrink-0 items-center justify-center rounded-chip text-muted active:bg-surface-2"
               >
-                Настройки ›
-              </Link>
-            </p>
+                <Icon name="close" size={16} strokeWidth={1.5} />
+              </button>
+            </div>
           )}
         </div>
-      </FoldRow>
+      )}
 
-      {online ? (
-        <>
-          <a
-            href={CLAUDE_NEW_CHAT_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={() => onCopy("open")}
-            className={buttonClasses({ variant: "primary", size: "lg", block: true, className: "mt-6 gap-2" })}
+      {focusLine && (
+        <p
+          data-exercise-focus=""
+          className="m-0 mt-2 flex items-center gap-1 text-[12px] leading-4 text-muted"
+        >
+          <span className="min-w-0 truncate">{focusLine}</span>
+          <span aria-hidden="true">·</span>
+          <Link
+            href={SETTINGS_PAGES.exercises.href}
+            className="-my-3.5 inline-flex h-11 shrink-0 items-center text-muted underline decoration-rule decoration-1 underline-offset-2 active:text-ink"
           >
-            {copied && <Icon name="check" size={18} />}
-            {copied ? "Скопировано" : "Скопировать и открыть Claude"}
-            {!copied && <Icon name="external" size={16} strokeWidth={1.5} />}
-          </a>
-          <button
-            type="button"
-            onClick={() => onCopy("copy")}
-            className="mt-1 inline-flex h-11 items-center self-center px-2 text-[14px] text-muted underline decoration-rule decoration-1 underline-offset-4 active:text-ink"
+            Настройки ›
+          </Link>
+        </p>
+      )}
+
+      <ol className="m-0 mt-[22px] flex list-none flex-col border-t border-ink p-0">
+        <li className="flex items-center gap-3 pt-3">
+          <StepNo n={1} />
+          {online ? (
+            <a
+              href={CLAUDE_NEW_CHAT_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => onCopy("open")}
+              className={buttonClasses({
+                variant: "primary",
+                size: "lg",
+                className: "min-w-0 flex-1 gap-2 px-2.5 max-[374px]:text-[14px] min-[375px]:gap-2.5",
+              })}
+            >
+              <Icon
+                name={copied ? "check" : "spark"}
+                size={18}
+                strokeWidth={copied ? 1.75 : 1.5}
+              />
+              <span className="truncate">
+                {copied ? "Скопировано" : "Скопировать и открыть Claude"}
+              </span>
+              {!copied && (
+                <Icon
+                  name="external"
+                  size={16}
+                  strokeWidth={1.5}
+                  className="shrink-0 opacity-70"
+                />
+              )}
+            </a>
+          ) : (
+            <Button className="min-w-0 flex-1" onClick={() => onCopy("copy")}>
+              {copied ? <Icon name="check" size={18} /> : <CopyGlyph />}
+              {copied ? "Скопировано" : "Скопировать запрос"}
+            </Button>
+          )}
+        </li>
+        <li className="flex min-h-14 items-center gap-3">
+          <StepNo n={2} />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="text-[15px] leading-5 font-medium">
+              Вставьте в чат и отправьте
+            </span>
+            <span className="text-[13px] leading-[18px] text-muted">
+              {online
+                ? "Набор сам появится в «Упражнениях»"
+                : "Когда будет сеть — набор сам появится в «Упражнениях»"}
+            </span>
+          </span>
+          <span
+            aria-hidden="true"
+            className="flex h-[38px] w-[30px] shrink-0 flex-col gap-1 rounded-[3px] border border-dashed border-boundary px-[5px] py-[7px]"
           >
-            только скопировать
-          </button>
-        </>
-      ) : (
-        <>
-          <Button block className="mt-6" onClick={() => onCopy("copy")}>
-            {copied ? <Icon name="check" size={18} /> : <CopyGlyph />}
-            {copied ? "Скопировано" : "Скопировать запрос"}
-          </Button>
-          <p className="meta m-0 mt-2 self-center leading-4">Claude откроется, когда будет сеть</p>
-        </>
+            <span className="h-[3px] w-full bg-rule" />
+            <span className="h-[3px] w-[70%] bg-rule" />
+          </span>
+        </li>
+      </ol>
+      {(online || onHelp) && (
+        <div className="mt-0.5 flex items-center justify-between pl-[26px]">
+          {online ? (
+            <button
+              type="button"
+              onClick={() => onCopy("copy")}
+              className="inline-flex h-11 items-center text-[13px] text-muted underline decoration-rule decoration-1 underline-offset-4 active:text-ink"
+            >
+              Только скопировать
+            </button>
+          ) : (
+            <span />
+          )}
+          {onHelp && (
+            <button
+              type="button"
+              onClick={onHelp}
+              className="-mr-1 inline-flex h-11 items-center gap-0.5 px-1 text-[13px] text-muted active:text-ink"
+            >
+              Нет коннектора?
+              <Icon name="chevron-right" size={14} strokeWidth={2} />
+            </button>
+          )}
+        </div>
       )}
       <span role="status" className="sr-only">
         {copied ? "Запрос скопирован. Вставьте его в чат Claude." : ""}
       </span>
-    </section>
+    </Root>
   );
 }

@@ -1034,6 +1034,67 @@ export function buildRequestText({ folders, topic, size, allowNew, scope, conjug
 }
 
 /**
+ * The phone request as one sentence (X-Request-B): «Сделай в Карточках [12 вопросов] по темам
+ * [Еда, Полиция] — [можно новые слова].» The bracketed parts are the slots that open in place;
+ * `text` is what gets copied (theme names in «»).
+ */
+export interface RequestSentence {
+  /** «12 вопросов» (the count slot). */
+  size: string;
+  /** «на спряжение глаголов» for a verb test, else null. */
+  what: string | null;
+  /** The words before the themes slot («по темам», «по теме», «на тему», «по»), or a scope's whole phrase («по трудным словам из всех тем»). */
+  where: string;
+  /** The themes slot as shown («Еда, Полиция», «всем темам», «вечеринка»); null for a scope (no slot). */
+  themes: string | null;
+  /** «можно новые слова» / «без новых слов» (the new-words slot); null for a scope or a verb test. */
+  fresh: string | null;
+  /** The request copied into the chat. */
+  text: string;
+}
+
+/**
+ * «Сделай в Карточках 12 вопросов по темам «Еда», «Полиция» — можно новые слова.»,
+ * «Сделай в Карточках 8 вопросов по теме «Люди» — без новых слов.»,
+ * «Сделай в Карточках 12 вопросов по всем темам — можно новые слова.»,
+ * «Сделай в Карточках 12 вопросов на тему «вечеринка» — можно новые слова.»,
+ * «Сделай в Карточках 12 вопросов по трудным словам из всех тем.» (a scope: never new words),
+ * «Сделай в Карточках 8 вопросов на спряжение глаголов по теме «Люди».» (never new words).
+ * The desktop builder keeps `buildRequestText`.
+ */
+export function requestSentence({ folders, topic, size, allowNew, scope, conjugation }: RequestSpec): RequestSentence {
+  const count = questions(size);
+  const what = conjugation ? "на спряжение глаголов" : null;
+  const lead = `Сделай в Карточках ${count}${what ? ` ${what}` : ""}`;
+  if (scope) {
+    const where = SCOPE_WHERE[scope];
+    return { size: count, what, where, themes: null, fresh: null, text: `${lead} ${where}.` };
+  }
+  const names = [...new Set(folders.map((f) => f.trim()).filter(Boolean))];
+  const custom = topic?.replace(/\s+/g, " ").trim() || null;
+  let where: string;
+  let shown: string;
+  let copied: string;
+  if (names.length === 0) {
+    where = custom ? "на тему" : "по";
+    shown = custom ?? "всем темам";
+    copied = custom ? quoted(custom) : "всем темам";
+  } else {
+    where = names.length === 1 ? "по теме" : "по темам";
+    const extra = custom ? ` и на тему ${quoted(custom)}` : "";
+    shown = names.join(", ") + extra;
+    copied = names.map(quoted).join(", ") + extra;
+  }
+  const fresh = conjugation ? null : allowNew ? "можно новые слова" : "без новых слов";
+  return { size: count, what, where, themes: shown, fresh, text: `${lead} ${where} ${copied}${fresh ? ` — ${fresh}` : ""}.` };
+}
+
+/** The copied text of `requestSentence`. */
+export function buildRequestSentence(spec: RequestSpec): string {
+  return requestSentence(spec).text;
+}
+
+/**
  * «Попросить следующий набор»: «Сделай следующее упражнение в Карточках после «Вечеринка»,
  * 12 вопросов, с упором на ошибки: relou, keuf, ouf.» A scoped set keeps its scope: «… в Карточках
  * по трудным словам из всех тем после «Трудные слова», …». A verb set (mostly conjugate) stays one:

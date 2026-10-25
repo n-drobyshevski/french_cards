@@ -3,6 +3,7 @@ import type { ExerciseAnswer, ExerciseItem, ExerciseRun, ExerciseSet } from "../
 import {
   buildFollowUpText,
   buildQueue,
+  buildRequestSentence,
   buildRequestText,
   clozeParts,
   completeSet,
@@ -27,6 +28,7 @@ import {
   type QueueEntry,
   REGISTER_LEVELS,
   requeue,
+  requestSentence,
   resumeQueue,
   runSettled,
   ruEquivalents,
@@ -639,6 +641,42 @@ describe("request texts", () => {
     expect(buildRequestText({ ...base, size: 8, scope: "due" })).toMatch(/из всех тем, 8 вопросов\.$/);
     expect(buildRequestText({ ...base, scope: null })).toBe("Сделай упражнение в Карточках по теме «Люди» и на тему «вечеринка», 12 вопросов, можно новые слова.");
     expect(SCOPE_LABELS).toEqual({ difficult: "Трудные", due: "К повторению", both: "Трудные и к повторению" });
+  });
+
+  it("builds the phone request as one sentence (X-Request-B)", () => {
+    expect(buildRequestSentence({ folders: ["Еда", "Полиция"], topic: null, size: 12, allowNew: true })).toBe(
+      "Сделай в Карточках 12 вопросов по темам «Еда», «Полиция» — можно новые слова.",
+    );
+    expect(buildRequestSentence({ folders: ["Полиция"], topic: null, size: 8, allowNew: false })).toBe(
+      "Сделай в Карточках 8 вопросов по теме «Полиция» — без новых слов.",
+    );
+    expect(buildRequestSentence({ folders: [], topic: null, size: 12, allowNew: true })).toBe("Сделай в Карточках 12 вопросов по всем темам — можно новые слова.");
+    expect(buildRequestSentence({ folders: [], topic: " вечеринка ", size: 16, allowNew: true })).toBe(
+      "Сделай в Карточках 16 вопросов на тему «вечеринка» — можно новые слова.",
+    );
+    expect(buildRequestSentence({ folders: ["Еда", "Еда"], topic: "рынок", size: 21, allowNew: false })).toBe(
+      "Сделай в Карточках 21 вопрос по теме «Еда» и на тему «рынок» — без новых слов.",
+    );
+  });
+
+  it("the sentence: scopes and verb tests carry no new-words part; the slots read without quotes", () => {
+    const base = { folders: ["Люди"], topic: null, size: 12, allowNew: true };
+    expect(buildRequestSentence({ ...base, scope: "difficult" })).toBe("Сделай в Карточках 12 вопросов по трудным словам из всех тем.");
+    expect(buildRequestSentence({ ...base, scope: "due" })).toBe("Сделай в Карточках 12 вопросов по словам к повторению из всех тем.");
+    expect(buildRequestSentence({ ...base, size: 8, conjugation: true })).toBe("Сделай в Карточках 8 вопросов на спряжение глаголов по теме «Люди».");
+    expect(buildRequestSentence({ folders: [], topic: null, size: 6, allowNew: true, conjugation: true })).toBe(
+      "Сделай в Карточках 6 вопросов на спряжение глаголов по всем темам.",
+    );
+    expect(requestSentence({ folders: ["Еда", "Полиция"], topic: null, size: 12, allowNew: true })).toEqual({
+      size: "12 вопросов",
+      what: null,
+      where: "по темам",
+      themes: "Еда, Полиция",
+      fresh: "можно новые слова",
+      text: "Сделай в Карточках 12 вопросов по темам «Еда», «Полиция» — можно новые слова.",
+    });
+    expect(requestSentence({ ...base, scope: "due" })).toMatchObject({ where: "по словам к повторению из всех тем", themes: null, fresh: null });
+    expect(requestSentence({ folders: [], topic: null, size: 12, allowNew: false })).toMatchObject({ where: "по", themes: "всем темам", fresh: "без новых слов" });
   });
 
   it("keeps a set's scope, its size and a null scope from completeSet", () => {

@@ -8,7 +8,15 @@
 // without a confirm and «Продолжить» picks the run up. Exercises never touch the schedule.
 import { useLiveQuery } from "dexie-react-hooks";
 import { useRouter } from "next/navigation";
-import { Fragment, useEffect, useEffectEvent, useReducer, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useEffect,
+  useEffectEvent,
+  useReducer,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { WordDetailSheet } from "@/components/library/WordDetailSheet";
 import { HINT_LINE_CSS } from "@/components/review/HintLine";
 import { useShell } from "@/components/shell/ShellContext";
@@ -42,18 +50,31 @@ import {
   type QueueEntry,
 } from "@/lib/exercises";
 import { exitMs, prefersReducedMotion } from "@/lib/motion";
+import { MEDIUM_QUERY, useMediaQuery } from "@/lib/use-media";
 import { getSettings } from "@/lib/settings";
-import type { ExerciseAnswer, ExerciseOutcome, ExerciseRun, ExerciseSet } from "@/lib/types";
+import type {
+  ExerciseAnswer,
+  ExerciseOutcome,
+  ExerciseRun,
+  ExerciseSet,
+} from "@/lib/types";
+import { DeckEdges } from "./DeckEdges";
 import { ExerciseDone } from "./ExerciseDone";
 import { takePendingExercise, type PendingExercise } from "./exercise-request";
 import { FeedbackLine } from "./FeedbackLine";
-import { MatchPairs } from "./MatchPairs";
+import { MatchPairs, PairsRows, PairsSlips } from "./MatchPairs";
 import { NewWordCard } from "./NewWordCard";
 import { OptionGrid } from "./OptionGrid";
-import { QuestionCard } from "./QuestionCard";
+import { QuestionCard, stampPlace, type Written } from "./QuestionCard";
 import { RegisterGrid } from "./RegisterGrid";
 import { Stamp } from "./Stamp";
-import { exerciseKeyAction, INPUT_GUARD_MS, isTypingTarget, keepsActivationKeys, RESULT_LOCK_MS } from "./player-keys";
+import {
+  exerciseKeyAction,
+  INPUT_GUARD_MS,
+  isTypingTarget,
+  keepsActivationKeys,
+  RESULT_LOCK_MS,
+} from "./player-keys";
 import {
   EMPTY_PAIRS,
   EMPTY_PLAYER,
@@ -90,7 +111,8 @@ const ENTER = {
   slide: "animate-[ex-enter_var(--dur-enter)_var(--ease-enter)_both]",
   fade: "animate-[fade-in_var(--dur-quick)_var(--ease-enter)_both]",
 } as const;
-const EXIT = "pointer-events-none animate-[ex-exit_var(--dur-exit)_var(--ease-exit)_both]";
+const EXIT =
+  "pointer-events-none animate-[ex-exit_var(--dur-exit)_var(--ease-exit)_both]";
 
 /** The desktop hint line (D-Exercise-Player): «1–4 ВЫБРАТЬ · 0 НЕ ЗНАЮ · ENTER ДАЛЬШЕ · ESC ВЫЙТИ». */
 const QUESTION_HINTS = [
@@ -121,25 +143,52 @@ const NOTHING_TO_PLAY = "blocked" as const;
 
 async function resumeOf(set: ExerciseSet, run: ExerciseRun): Promise<Boot> {
   const ctx = await playContext(set);
-  return { set, run, queue: run.finished_at === null ? resumeQueue(set, run, ctx) : [], ctx };
+  return {
+    set,
+    run,
+    queue: run.finished_at === null ? resumeQueue(set, run, ctx) : [],
+    ctx,
+  };
 }
 
-async function startOf(set: ExerciseSet, kind: "set" | "mistakes", itemIds?: readonly string[], known?: PlayContext): Promise<Boot | typeof NOTHING_TO_PLAY> {
+async function startOf(
+  set: ExerciseSet,
+  kind: "set" | "mistakes",
+  itemIds?: readonly string[],
+  known?: PlayContext,
+): Promise<Boot | typeof NOTHING_TO_PLAY> {
   const ctx = known ?? (await playContext(set));
   const playable = playableItemIds(set, ctx.blocked);
-  const wanted = itemIds ? playable.filter((id) => itemIds.includes(id)) : playable;
+  const wanted = itemIds
+    ? playable.filter((id) => itemIds.includes(id))
+    : playable;
   if (wanted.length === 0) return NOTHING_TO_PLAY;
   // A whole-set run lists its items only when some are left out (item_ids [] = every item).
-  const ids = kind === "mistakes" || wanted.length < set.items.length ? wanted : undefined;
+  const ids =
+    kind === "mistakes" || wanted.length < set.items.length
+      ? wanted
+      : undefined;
   const run = await startRun(set, { kind, itemIds: ids });
-  return { set, run, queue: buildQueue(set, { itemIds: run.item_ids, intros: kind !== "mistakes", ...ctx }), ctx };
+  return {
+    set,
+    run,
+    queue: buildQueue(set, {
+      itemIds: run.item_ids,
+      intros: kind !== "mistakes",
+      ...ctx,
+    }),
+    ctx,
+  };
 }
 
 /**
  * What to play: the hand-over, else ?set=<id> (its unfinished run, or a new one), else the newest
  * unfinished run. Only runs started on this device resume (another device's starts afresh).
  */
-async function bootFrom(pending: PendingExercise | null, search: string): Promise<Boot | typeof NOTHING_TO_PLAY | null> {
+async function bootFrom(
+  pending: PendingExercise | null,
+  search: string,
+): Promise<Boot | typeof NOTHING_TO_PLAY | null> {
   if (pending) {
     const set = await getSet(pending.setId);
     if (set) {
@@ -176,19 +225,34 @@ function PlayerSession() {
   const router = useRouter();
   const snackbar = useSnackbar();
   const { openShortcuts } = useShell();
-  const keyHints = useLiveQuery(async () => (await getSettings()).key_hints, [], true);
+  const keyHints = useLiveQuery(
+    async () => (await getSettings()).key_hints,
+    [],
+    true,
+  );
+  // Phones (X-Player-B) write the answer on the card; from 768 the desktop player, as it was.
+  const phone = !useMediaQuery(MEDIUM_QUERY);
 
-  const [session, setSession] = useState<{ set: ExerciseSet; run: ExerciseRun; ctx: PlayContext } | null>(null);
+  const [session, setSession] = useState<{
+    set: ExerciseSet;
+    run: ExerciseRun;
+    ctx: PlayContext;
+  } | null>(null);
   const [view, setView] = useState<"loading" | "play" | "done">("loading");
   const [state, dispatch] = useReducer(playerReducer, EMPTY_PLAYER);
   const [doneRun, setDoneRun] = useState<ExerciseRun | null>(null);
   const [enter, setEnter] = useState<keyof typeof ENTER>("fade");
   const [leaving, setLeaving] = useState(false);
-  const [pairs, setPairs] = useState<{ step: number; state: PairsState }>({ step: -1, state: EMPTY_PAIRS });
+  const [pairs, setPairs] = useState<{ step: number; state: PairsState }>({
+    step: -1,
+    state: EMPTY_PAIRS,
+  });
   const [wordId, setWordId] = useState<string | null>(null);
   const [repeatPending, setRepeatPending] = useState(false);
 
-  const bootRef = useRef<Promise<Boot | typeof NOTHING_TO_PLAY | null> | null>(null);
+  const bootRef = useRef<Promise<Boot | typeof NOTHING_TO_PLAY | null> | null>(
+    null,
+  );
   const booted = useRef(false);
   const writes = useRef<Promise<unknown>>(Promise.resolve());
   const answers = useRef<ExerciseAnswer[]>([]);
@@ -208,15 +272,26 @@ function PlayerSession() {
   const set = session?.set ?? null;
   const run = session?.run ?? null;
   const head = state.queue[0];
-  const item = head?.kind === "item" && set ? set.items.find((i) => i.id === head.item_id) : undefined;
-  const intro = head?.kind === "intro" && set ? set.new_words.find((w) => w.ref === head.new_ref) : undefined;
+  const item =
+    head?.kind === "item" && set
+      ? set.items.find((i) => i.id === head.item_id)
+      : undefined;
+  const intro =
+    head?.kind === "intro" && set
+      ? set.new_words.find((w) => w.ref === head.new_ref)
+      : undefined;
   const result = state.result;
-  const random = item && run && head?.kind === "item" ? attemptRandom(run.id, item.id, head.attempt) : null;
-  const options = item && random && item.type !== "pairs" ? optionsFor(item, random) : null;
-  const board = item && random && item.type === "pairs" ? pairsBoard(item, random) : null;
+  const random =
+    item && run && head?.kind === "item"
+      ? attemptRandom(run.id, item.id, head.attempt)
+      : null;
+  const options =
+    item && random && item.type !== "pairs" ? optionsFor(item, random) : null;
+  const board =
+    item && random && item.type === "pairs" ? pairsBoard(item, random) : null;
   const pairsState = pairs.step === state.step ? pairs.state : EMPTY_PAIRS;
   const progress = progressOf(state);
-  // «Слово ›» only for a word still in the library (a deleted one would open a sheet that closes at once).
+  // The word sheet only for a word still in the library (a deleted one would open a sheet that closes at once).
   const liveWords = useLiveWords(item?.word_id ? [item.word_id] : []);
 
   // SPEC «Упражнения» → Done: the tab bar comes back on the done screen (the route still hides it while playing).
@@ -238,12 +313,19 @@ function PlayerSession() {
     setView("play");
   };
 
-  const onNothingToPlay = useEffectEvent(() => snackbar.show({ message: "В наборе нечего повторять: его слова удалены или на паузе" }));
+  const onNothingToPlay = useEffectEvent(() =>
+    snackbar.show({
+      message: "В наборе нечего повторять: его слова удалены или на паузе",
+    }),
+  );
 
   useEffect(() => {
     let alive = true;
     // Once per session: the StrictMode re-run and an <Activity> show reuse the first boot.
-    bootRef.current ??= bootFrom(takePendingExercise(), window.location.search).catch(() => null);
+    bootRef.current ??= bootFrom(
+      takePendingExercise(),
+      window.location.search,
+    ).catch(() => null);
     void bootRef.current.then((boot) => {
       if (!alive || booted.current) return;
       booted.current = true;
@@ -266,14 +348,24 @@ function PlayerSession() {
     answers.current = [...answers.current, answer];
     setAnswerLog(answers.current);
     const id = run.id;
-    writes.current = writes.current.then(() => recordAnswer(id, answer)).catch(() => undefined);
+    writes.current = writes.current
+      .then(() => recordAnswer(id, answer))
+      .catch(() => undefined);
   };
 
   const finish = useEffectEvent(async () => {
     if (!run || finishing.current) return;
     finishing.current = true;
-    const done = await writes.current.then(() => finishRun(run.id)).catch(() => undefined);
-    setDoneRun(done ?? { ...run, answers: answers.current, finished_at: new Date().toISOString() });
+    const done = await writes.current
+      .then(() => finishRun(run.id))
+      .catch(() => undefined);
+    setDoneRun(
+      done ?? {
+        ...run,
+        answers: answers.current,
+        finished_at: new Date().toISOString(),
+      },
+    );
     setView("done");
   });
 
@@ -284,7 +376,11 @@ function PlayerSession() {
   /** Focus is on the card (about to be disabled or swapped) or nowhere: it is moved on, so Tab and screen readers keep their place. */
   const focusInStage = () => {
     const active = document.activeElement;
-    return !active || active === document.body || !!stageRef.current?.contains(active);
+    return (
+      !active ||
+      active === document.body ||
+      !!stageRef.current?.contains(active)
+    );
   };
 
   /**
@@ -300,7 +396,8 @@ function PlayerSession() {
     fromKey = false,
     words?: { word_id: string | null; new_ref: string | null }[],
   ) => {
-    if (!item || head?.kind !== "item" || state.result || leavingRef.current) return;
+    if (!item || head?.kind !== "item" || state.result || leavingRef.current)
+      return;
     if (answeredStep.current === state.step) return;
     answeredStep.current = state.step;
     if (focusInStage()) refocus.current = "advance";
@@ -309,29 +406,64 @@ function PlayerSession() {
     if (!fromKey) haptic(outcome === "correct" ? "good" : "again");
     const ms = performance.now() - shownAt.current;
     const at = new Date();
-    if (words?.length) for (const word of words) save(answerRow(item, head.attempt, outcome, chosen, ms, at, word));
+    if (words?.length)
+      for (const word of words)
+        save(answerRow(item, head.attempt, outcome, chosen, ms, at, word));
     else save(answerRow(item, head.attempt, outcome, chosen, ms, at));
   };
 
   const pick = (index: number, fromKey = false) => {
     if (!options || index < 0 || index >= options.options.length) return;
-    commit(index === options.correct ? "correct" : "wrong", index, options.options[index], undefined, fromKey);
+    commit(
+      index === options.correct ? "correct" : "wrong",
+      index,
+      options.options[index],
+      undefined,
+      fromKey,
+    );
   };
 
   const dontKnow = (fromKey = false) => {
-    const open = item?.type === "pairs" && set ? item.tiles.filter((t) => !pairsState.matched.includes(t.key)).map((t) => tileWord(set, t.key)) : undefined;
+    const open =
+      item?.type === "pairs" && set
+        ? item.tiles
+            .filter((t) => !pairsState.matched.includes(t.key))
+            .map((t) => tileWord(set, t.key))
+        : undefined;
     commit("dont_know", null, null, undefined, fromKey, open);
   };
 
-  const onPairTap = (side: "fr" | "ru", key: string) => {
-    if (!item || !set || head?.kind !== "item" || state.result || leavingRef.current) return;
-    const step = pairsTap(pairsState, side, key, item.tiles.length);
+  /** `row`: phones write a Russian slip into the active row even when none was picked (X-Player-B). */
+  const onPairTap = (side: "fr" | "ru", key: string, row?: string | null) => {
+    if (
+      !item ||
+      !set ||
+      head?.kind !== "item" ||
+      state.result ||
+      leavingRef.current
+    )
+      return;
+    const from =
+      side === "ru" && pairsState.selected === null && row
+        ? { ...pairsState, selected: row }
+        : pairsState;
+    const step = pairsTap(from, side, key, item.tiles.length);
     setPairs({ step: state.step, state: step.state });
     const event = step.event;
     if (event?.type === "miss") {
       haptic("again");
       const ru = item.tiles.find((t) => t.key === event.ru)?.ru ?? null;
-      save(answerRow(item, head.attempt, "wrong", ru, performance.now() - shownAt.current, new Date(), tileWord(set, event.fr)));
+      save(
+        answerRow(
+          item,
+          head.attempt,
+          "wrong",
+          ru,
+          performance.now() - shownAt.current,
+          new Date(),
+          tileWord(set, event.fr),
+        ),
+      );
     } else if (event?.type === "match" && event.complete) {
       commit("correct", null, null, step.state.misses);
     }
@@ -365,11 +497,17 @@ function PlayerSession() {
    */
   const leave = () => {
     if (view === "play" && session && !finishing.current) {
-      const left = resumeQueue(session.set, { ...session.run, answers: answers.current }, session.ctx);
+      const left = resumeQueue(
+        session.set,
+        { ...session.run, answers: answers.current },
+        session.ctx,
+      );
       if (left.length === 0) {
         finishing.current = true;
         const id = session.run.id;
-        writes.current = writes.current.then(() => finishRun(id)).catch(() => undefined);
+        writes.current = writes.current
+          .then(() => finishRun(id))
+          .catch(() => undefined);
       }
     }
     router.replace("/exercises");
@@ -380,13 +518,24 @@ function PlayerSession() {
     if (event.defaultPrevented || isTypingTarget(event.target)) return;
     if (wordId !== null || document.querySelector(OPEN_LAYER_SELECTOR)) return;
     if (event.timeStamp < guardUntil.current) return;
-    const phase = head.kind === "intro" ? "intro" : state.result ? "answered" : "question";
-    const action = exerciseKeyAction(event, { phase, options: options?.options.length ?? 0 });
+    const phase =
+      head.kind === "intro" ? "intro" : state.result ? "answered" : "question";
+    const action = exerciseKeyAction(event, {
+      phase,
+      options: options?.options.length ?? 0,
+    });
     if (!action) return;
     // ↵ / Space on a control reached with Tab is that control's own press; ↵ on «Дальше» (where the
     // player puts focus after an answer) stays the key's own «next» (a fade, DESKTOP-SPEC §4).
-    const onAdvance = event.target instanceof Element && !!event.target.closest("[data-advance]");
-    if (action.type === "next" && !onAdvance && keepsActivationKeys(event.target, focusByPointer.current)) return;
+    const onAdvance =
+      event.target instanceof Element &&
+      !!event.target.closest("[data-advance]");
+    if (
+      action.type === "next" &&
+      !onAdvance &&
+      keepsActivationKeys(event.target, focusByPointer.current)
+    )
+      return;
     event.preventDefault();
     if (action.type === "leave") leave();
     else if (action.type === "pick") pick(action.index, true);
@@ -438,7 +587,10 @@ function PlayerSession() {
     if (target === "advance") {
       if (!result) return;
       const line = root.querySelector<HTMLElement>("[data-exercise-result]");
-      el = [...root.querySelectorAll<HTMLElement>("[data-advance]")].find(visible) ?? line;
+      el =
+        [...root.querySelectorAll<HTMLElement>("[data-advance]")].find(
+          visible,
+        ) ?? line;
     } else {
       if (result) return;
       el = root.querySelector<HTMLElement>("[data-exercise-focus]");
@@ -461,11 +613,17 @@ function PlayerSession() {
     }
   };
 
-  const wordSheet = <WordDetailSheet wordId={wordId} onClose={() => setWordId(null)} />;
+  const wordSheet = (
+    <WordDetailSheet wordId={wordId} onClose={() => setWordId(null)} />
+  );
 
   if (view === "done" && set && doneRun) {
     return (
-      <main data-wide="" data-exercise-player="done" className="flex flex-1 flex-col">
+      <main
+        data-wide=""
+        data-exercise-player="done"
+        className="flex flex-1 flex-col"
+      >
         <ExerciseDone
           set={set}
           run={doneRun}
@@ -480,7 +638,14 @@ function PlayerSession() {
   }
 
   if (view !== "play" || !set || !run || !head) {
-    return <main data-wide="" data-exercise-player="loading" aria-busy="true" className="flex flex-1 flex-col" />;
+    return (
+      <main
+        data-wide=""
+        data-exercise-player="loading"
+        aria-busy="true"
+        className="flex flex-1 flex-col"
+      />
+    );
   }
 
   // --- The card --------------------------------------------------------------------------------
@@ -489,34 +654,73 @@ function PlayerSession() {
   let answerLabel: string | null = item?.answer ?? null;
   if (item?.type === "register" && options) {
     const level = options.correct;
-    answerLabel = level >= 0 ? `${REGISTER_LEVELS[level]} · ${SLANG_NAMES_RU[level]}` : null;
+    answerLabel =
+      level >= 0
+        ? `${REGISTER_LEVELS[level]} · ${SLANG_NAMES_RU[level]}`
+        : null;
   }
   // A conjugate answer reads as the whole form, pronouns included («tu as kiffé»).
-  if (item?.type === "conjugate" && item.answer) answerLabel = `${clozeParts(item.sentence ?? "")?.before ?? ""}${item.answer}`;
-  const announcement = resultAnnouncement(tone, result?.misses ?? 0, item?.type === "pairs" ? null : answerLabel);
+  if (item?.type === "conjugate" && item.answer)
+    answerLabel = `${clozeParts(item.sentence ?? "")?.before ?? ""}${item.answer}`;
+  const announcement = resultAnnouncement(
+    tone,
+    result?.misses ?? 0,
+    item?.type === "pairs" ? null : answerLabel,
+  );
 
   let card: ReactNode = null;
   if (head.kind === "intro" && intro) {
-    card = <NewWordCard word={intro} setTitle={set.title} onNext={() => next()} />;
+    card = (
+      <NewWordCard word={intro} setTitle={set.title} onNext={() => next()} />
+    );
   } else if (item && head.kind === "item") {
     const misses = result?.misses ?? 0;
-    const verdict = tone === "right" ? "right" : tone === "wrong" ? "wrong" : null;
+    const verdict =
+      tone === "right" ? "right" : tone === "wrong" ? "wrong" : null;
+    // The word sheet: «Слово ›» from 768, a tap on the French word on the card on phones.
     const onWord =
       item.type !== "pairs" && item.word_id && liveWords?.has(item.word_id)
         ? () => setWordId(item.word_id)
         : null;
 
-    card = (
-      <>
-        <QuestionCard
-          item={item}
-          setTitle={set.title}
-          attempt={head.attempt}
-          answered={result !== null}
-          pairsCount={item.type === "pairs" ? `${pairsState.matched.length} из ${item.tiles.length}` : undefined}
-          stamp={verdict && <Stamp verdict={verdict} />}
-        >
-          {board && (
+    // Phones: the answer is written on the card — the right option, and the wrong pick struck through.
+    const written: Written | null =
+      options && result
+        ? {
+            right: options.options[options.correct],
+            wrong:
+              result.pick !== null && result.pick !== options.correct
+                ? options.options[result.pick]
+                : null,
+          }
+        : null;
+    const question = (
+      <QuestionCard
+        item={item}
+        setTitle={set.title}
+        attempt={head.attempt}
+        answered={result !== null}
+        pairsCount={
+          item.type === "pairs"
+            ? `${pairsState.matched.length} из ${item.tiles.length}`
+            : undefined
+        }
+        stamp={verdict && <Stamp verdict={verdict} place={stampPlace(item)} />}
+        phone={phone}
+        written={written}
+        explain={item.explain_ru}
+        onWord={onWord}
+      >
+        {board &&
+          (phone ? (
+            <PairsRows
+              board={board}
+              state={pairsState}
+              onTap={onPairTap}
+              revealed={result?.outcome === "dont_know"}
+              disabled={result !== null || leaving}
+            />
+          ) : (
             <MatchPairs
               board={board}
               state={pairsState}
@@ -524,20 +728,66 @@ function PlayerSession() {
               revealed={result?.outcome === "dont_know"}
               disabled={result !== null || leaving}
             />
-          )}
-        </QuestionCard>
+          ))}
+      </QuestionCard>
+    );
+
+    card = (
+      <>
+        {phone ? (
+          // Phones (X-Player-B): the card on its small deck, centred over the slips (scrolls on a short screen).
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+            <div className="relative my-auto pb-3">
+              <DeckEdges
+                left={state.queue.filter((e) => e.kind === "item").length}
+              />
+              {question}
+            </div>
+          </div>
+        ) : (
+          question
+        )}
+        {board && phone && (
+          <PairsSlips
+            board={board}
+            state={pairsState}
+            onTap={onPairTap}
+            revealed={result?.outcome === "dont_know"}
+            disabled={result !== null || leaving}
+          />
+        )}
         {options && item.type === "register" && (
-          <RegisterGrid options={options.options} correct={options.correct} result={result} onPick={pick} locked={leaving} />
+          <RegisterGrid
+            options={options.options}
+            correct={options.correct}
+            result={result}
+            onPick={pick}
+            locked={leaving}
+          />
         )}
         {options && item.type !== "register" && (
-          <OptionGrid options={options.options} correct={options.correct} result={result} onPick={pick} locked={leaving} />
+          <OptionGrid
+            options={options.options}
+            correct={options.correct}
+            result={result}
+            onPick={pick}
+            locked={leaving}
+          />
         )}
-        {/* The fixed action zone: «Не знаю», then the result line in the same place (no layout shift). */}
-        <div className="mt-4 h-[200px] shrink-0 pb-4 max-md:[@media(max-height:740px)]:h-[136px] md:h-16 md:pb-0">
+        {/* The fixed action zone: «Не знаю», then «Дальше» (from 768 the result line) in the same place (no layout shift). */}
+        <div
+          className={
+            phone
+              ? "mt-4 mb-7 h-[52px] shrink-0"
+              : "mt-4 h-[200px] shrink-0 pb-4 max-md:[@media(max-height:740px)]:h-[136px] md:h-16 md:pb-0"
+          }
+        >
           {tone ? (
             <FeedbackLine
               tone={tone}
-              answer={tone === "wrong" && item.type !== "pairs" ? answerLabel : null}
+              answer={
+                tone === "wrong" && item.type !== "pairs" ? answerLabel : null
+              }
               answerText={item.type === "register" ? null : item.answer}
               explain={item.explain_ru}
               misses={misses}
@@ -545,8 +795,8 @@ function PlayerSession() {
               onNext={() => next()}
             />
           ) : (
-            // Phones: «Не знаю» sits in the middle of the zone (L-ExPlayer-B), clear of the home indicator.
-            <div className="flex h-full flex-col justify-center pb-3 md:flex-row md:items-center md:justify-start md:pb-0">
+            // Phones: «Не знаю», the quiet tertiary, in the place «Дальше» takes after the answer (X-Player-B).
+            <div className="flex h-full flex-col justify-center md:flex-row md:items-center md:justify-start md:pb-0">
               <button
                 type="button"
                 aria-keyshortcuts="0"
@@ -570,7 +820,9 @@ function PlayerSession() {
   // aria-label on a plain span is not read: the digits are hidden and the sentence is sr-only text.
   const counter = (
     <>
-      <span aria-hidden="true">{formatCounter(progress.position, progress.total)}</span>
+      <span aria-hidden="true">
+        {formatCounter(progress.position, progress.total)}
+      </span>
       {progress.repeats > 0 && (
         <span aria-hidden="true" className="ml-1.5 text-muted">
           +{progress.repeats}
@@ -588,7 +840,11 @@ function PlayerSession() {
   );
 
   return (
-    <main data-wide="" data-exercise-player="play" className="relative flex flex-1 flex-col px-4 pt-4 md:px-0 md:pt-0">
+    <main
+      data-wide=""
+      data-exercise-player="play"
+      className="relative flex flex-1 flex-col px-4 pt-4 md:px-0 md:pt-0"
+    >
       <style>{EXERCISE_CSS + HINT_LINE_CSS}</style>
       <h1 className="sr-only">Упражнение: {set.title}</h1>
       {/* Stays mounted across cards (outside the keyed card), so the verdict is announced. */}
@@ -606,7 +862,10 @@ function PlayerSession() {
         >
           <Icon name="close" size={20} strokeWidth={1.5} />
         </button>
-        <PhoneTicks marks={playerMarks(answerLog, state.queue)} progress={progress} />
+        <PhoneTicks
+          marks={playerMarks(answerLog, state.queue)}
+          progress={progress}
+        />
       </header>
 
       {/* From 768: the running head — ×, the set, the line, «07 / 12», «?» — ruled with the progress fill. */}
@@ -621,10 +880,16 @@ function PlayerSession() {
         >
           <Icon name="close" size={20} strokeWidth={1.5} />
         </button>
-        <span className="min-w-0 truncate font-serif text-[17px] leading-6 font-medium">{set.title}</span>
-        <span className="meta shrink-0 whitespace-nowrap max-lg:hidden">Упражнение · не влияет на расписание</span>
+        <span className="min-w-0 truncate font-serif text-[17px] leading-6 font-medium">
+          {set.title}
+        </span>
+        <span className="meta shrink-0 whitespace-nowrap max-lg:hidden">
+          Упражнение · не влияет на расписание
+        </span>
         <span className="flex-1" />
-        <span className="shrink-0 font-mono text-[13px] font-medium tabular-nums">{counter}</span>
+        <span className="shrink-0 font-mono text-[13px] font-medium tabular-nums">
+          {counter}
+        </span>
         <button
           type="button"
           aria-label="Все клавиши"
@@ -635,7 +900,10 @@ function PlayerSession() {
         >
           ?
         </button>
-        <span aria-hidden="true" className="absolute inset-x-0 bottom-0 h-px bg-rule" />
+        <span
+          aria-hidden="true"
+          className="absolute inset-x-0 bottom-0 h-px bg-rule"
+        />
         <div
           role="progressbar"
           aria-label="Пройдено вопросов"
@@ -652,7 +920,13 @@ function PlayerSession() {
         ref={stageRef}
         className="mt-4 flex min-h-0 flex-1 flex-col md:mx-auto md:mt-0 md:w-[640px] md:max-w-[calc(100%-48px)] md:flex-none md:pt-10 xl:w-[720px]"
       >
-        <div key={state.step} className={cx("flex min-h-0 flex-1 flex-col", leaving ? EXIT : ENTER[enter])}>
+        <div
+          key={state.step}
+          className={cx(
+            "flex min-h-0 flex-1 flex-col",
+            leaving ? EXIT : ENTER[enter],
+          )}
+        >
           {card}
         </div>
       </div>
@@ -663,7 +937,12 @@ function PlayerSession() {
           aria-label="Клавиши"
           className="pointer-events-none m-0 mt-auto box-content h-4 w-[640px] max-w-[calc(100%-48px)] items-center gap-1.5 self-center pb-6 font-mono text-[11px] leading-4 tracking-[.06em] whitespace-nowrap text-muted uppercase xl:w-[720px]"
         >
-          {(head.kind === "intro" ? INTRO_HINTS : item?.type === "pairs" ? PAIRS_HINTS : QUESTION_HINTS).map(([key, label], i) => (
+          {(head.kind === "intro"
+            ? INTRO_HINTS
+            : item?.type === "pairs"
+              ? PAIRS_HINTS
+              : QUESTION_HINTS
+          ).map(([key, label], i) => (
             <Fragment key={key}>
               {i > 0 && <span aria-hidden="true">·</span>}
               <span className="text-ink">{key}</span>
@@ -685,7 +964,13 @@ const TICKS_NOTE_MS = 1600;
  * miss outlined, the current one taller ink, the rest hairline, a requeued question hollow. The exact
  * count is the button's accessible name, and a tap shows «7 из 12» under the row for a moment.
  */
-function PhoneTicks({ marks, progress }: { marks: readonly StripMark[]; progress: PlayerProgress }) {
+function PhoneTicks({
+  marks,
+  progress,
+}: {
+  marks: readonly StripMark[];
+  progress: PlayerProgress;
+}) {
   const [note, setNote] = useState(0);
   useEffect(() => {
     if (!note) return;
@@ -700,7 +985,12 @@ function PhoneTicks({ marks, progress }: { marks: readonly StripMark[]; progress
       onClick={() => setNote(Date.now())}
       className="relative flex h-11 min-w-0 flex-1 items-center bg-transparent p-0"
     >
-      <SessionStrip size="ticks" marks={marks} label={false} className="flex-1" />
+      <SessionStrip
+        size="ticks"
+        marks={marks}
+        label={false}
+        className="flex-1"
+      />
       {note > 0 && (
         <span
           aria-hidden="true"
