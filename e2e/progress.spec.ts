@@ -66,3 +66,14 @@ test("an opened day stays inside the screen with a long mistake", async ({ page 
   const collapse = await page.getByRole("button", { name: /^Свернуть/ }).boundingBox();
   expect(collapse!.x + collapse!.width).toBeLessThanOrEqual(390);
 });
+
+test("the Library subline shows the words reviewed today and opens «Прогресс»", async ({ page }) => {
+  await openReview(page);
+  await gradeKnown(page, 2);
+  await expect(page.getByText("02 / 11", { exact: true })).toBeVisible();
+  await page.goto("/library");
+  const today = page.getByRole("link", { name: "Сегодня повторено 2 слова. Прогресс" });
+  await expect(today).toHaveText("2 сегодня");
+  await today.click();
+  await expect(page).toHaveURL(/\/progress$/);
+});
