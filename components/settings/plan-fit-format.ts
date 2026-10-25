@@ -12,7 +12,7 @@
 // Reviews here are the plan's (interday answers, what the cap counts), «по старым карточкам», so the
 // fit's 58 doesn't read against the Progress ledger's «в среднем 81» (every answer).
 import { pluralRu } from "@/components/review/format";
-import { FIT_MIN_ANSWERS, FIT_TARGET, type PlanFit, type PlanSuggestion } from "@/lib/core/plan-fit";
+import { FIT_FIRM_STUDY_DAYS, FIT_MIN_ANSWERS, FIT_TARGET, type PlanFit, type PlanSuggestion } from "@/lib/core/plan-fit";
 import { DEFAULT_REVIEW_CAP } from "@/lib/core/study-plan";
 
 const NBSP = " ";
@@ -21,6 +21,8 @@ const REVIEWS = ["повторение", "повторения", "повторе
 const DAYS = ["день", "дня", "дней"] as const;
 const DAYS_IN = ["дне", "днях", "днях"] as const;
 const STUDY_DAYS = ["учебный день", "учебных дня", "учебных дней"] as const;
+/** «по 5 учебным дням» (dative after «по»). */
+const STUDY_DAYS_DAT = ["учебному дню", "учебным дням", "учебным дням"] as const;
 const NEW_ADJ = ["новое", "новых", "новых"] as const;
 const NEW_WORDS = ["новое слово", "новых слова", "новых слов"] as const;
 const NEW_CARDS = ["новая карточка", "новых карточки", "новых карточек"] as const;
@@ -168,10 +170,12 @@ export interface SuggestionCopy {
 }
 
 /** The suggestion row's words. `unit` is the plan's (`fit.newWords.unit`). */
-export function suggestionCopy(s: PlanSuggestion, unit: PlanFit["newWords"]["unit"] = "words"): SuggestionCopy {
+export function suggestionCopy(s: PlanSuggestion, unit: PlanFit["newWords"]["unit"] = "words", studyDays: number = FIT_FIRM_STUDY_DAYS): SuggestionCopy {
   const forms = unit === "cards" ? NEW_CARDS : NEW_WORDS;
   const [lo, hi] = s.forecast30.then;
-  const reviews = `${approxRange([lo, hi])} ${pluralRu(Math.max(lo, hi), REVIEWS)} в день через месяц · вернуть можно в любой момент`;
+  // A suggestion from fewer than 7 study days says so (the warm-up is 5 since 2026-10-25).
+  const early = studyDays < FIT_FIRM_STUDY_DAYS ? ` · пока по ${count(studyDays, STUDY_DAYS_DAT)}` : "";
+  const reviews = `${approxRange([lo, hi])} ${pluralRu(Math.max(lo, hi), REVIEWS)} в день через месяц${early} · вернуть можно в любой момент`;
   return {
     title: s.kind === "raise_new" ? `Можно брать ${s.to} в день` : `Можно поставить ${s.to} в день — повторений станет меньше`,
     apply: `Поставить ${s.to}`,

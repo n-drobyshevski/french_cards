@@ -26,12 +26,15 @@ export const FIT_LOG_DAYS = 21;
 export const FIT_RETENTION_DAYS = 28;
 /** The scheduler's request_retention (lib/scheduler.ts TARGET_RETENTION; ts-fsrs stays out of here). */
 export const FIT_TARGET = 0.9;
-/** Gates: days since the first study day, study days in the window, days since the plan changed. */
-export const FIT_MIN_HISTORY_DAYS = 14;
-export const FIT_MIN_STUDY_DAYS = 7;
+/** Gates: days since the first study day, study days in the window, days since the plan changed
+ * (shortened to 5 at the user's request on 2026-10-25, from 14 / 7). */
+export const FIT_MIN_HISTORY_DAYS = 5;
+export const FIT_MIN_STUDY_DAYS = 5;
 export const FIT_MIN_PLAN_DAYS = 7;
-/** With 5–6 study days a suggestion goes to the connector only (`confidence: "low"`). */
+/** The fewest study days anything is computed from (a "low" suggestion below FIT_MIN_STUDY_DAYS, connector only). */
 export const FIT_LOW_STUDY_DAYS = 5;
+/** Under this many study days a suggestion is shown as preliminary («пока по 5 учебным дням»). */
+export const FIT_FIRM_STUDY_DAYS = 7;
 /** «Не сейчас» hides a kind of suggestion this long… */
 export const FIT_DISMISS_DAYS = 14;
 /** …unless its `to` moves by this share or more. */

@@ -98,7 +98,7 @@ Always there, whatever `history_days` or `new_per_day` say: `lib/mcp/plan-fit.ts
 - `new_words`: `plan` (the ceiling), `unit` (`words`, or `cards` with `ru_fr` "together"), `typical` (median a study day), `max`, `full_days` (days that took all of them) of `plan_days` (study days under the current plan), `held_days` `{load, accuracy, backlog, known}` (days the plan held new words back, by reason; null when no day's plan was kept).
 - `reviews`: `cap`, `typical` (median interday answers, what the cap counts), `all_answers_typical` (every answer), `max`, `forecast_7d`, `backlog_days`, `cap_hit_days`.
 - `retention`: `rate` (2 decimals), `target` 0.9, `answers`, over 28 days.
-- `fit`: `warming_up` (not enough data: under 14 days since the first study day, under 7 study days, or the plan changed under 7 days ago), `fits`, `room` (the whole plan on most days, low load, retention fine) or `heavy` (backlog with a loaded week, low retention or a heavy forecast).
+- `fit`: `warming_up` (not enough data: under 5 days since the first study day or under 5 study days (shortened from 14 / 7 on 2026-10-25); a plan changed under 7 days ago holds back only `suggestion`), `fits`, `room` (the whole plan on most days, low load, retention fine) or `heavy` (backlog with a loaded week, low retention or a heavy forecast).
 - `suggestion`: null, or `{kind: raise_new | lower_new, new_words, or_review_cap?, forecast_30d: {now, then: [lo, hi]}, why, confidence}`; `confidence: "low"` (5–6 study days) only reaches the connector. Studying less than the plan allows never gives a suggestion, and the cap is never suggested lower.
 - `dismissed_until`: the day «Не сейчас» stops hiding the suggestion.
 
