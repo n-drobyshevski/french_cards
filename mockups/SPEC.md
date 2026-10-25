@@ -134,6 +134,7 @@ Theme colors (muted inks, used only for the tick, the mastery line and the theme
 - Regenerate in word detail: «Обновить перевод и заметку» (removed 2026-10-23: split into the fields' own buttons, see «Раздать по полям»).
 - Folds read «Ещё · <what is inside>» everywhere (added 2026-10-25), never «ещё ↓», «Ещё ›» or «Подробнее».
 - Snackbars carry an undo: verb + object («Удалено · le blé», «Поле удалено») and «Отменить»; a second clause goes to the live-region text, not into the bar (added 2026-10-25, synthesis §2.10).
+- Snackbars on phones (added 2026-10-25): a long message wraps to a second line (the bar grows from 48px; never «…»); every bar can be swiped away — sideways (it follows the finger and fades) or down — and leaves that way. From 768 up the bar stays one line.
 
 ## Cross-screen rules — phones (added 2026-10-25; from `docs/mobile-research/synthesis.md` §1–§2, approved with the «Мобильный минимализм» picks)
 Desktop (from 768, the Desk* screens, sidebar and rail) is unchanged by every rule here: shared components get a phone-only branch.

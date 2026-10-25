@@ -8,6 +8,7 @@ import { ICON_NAMES, Icon } from "./Icons";
 import { Segmented } from "./Segmented";
 import { SessionStrip, sessionStripLabel, type StripMark } from "./SessionStrip";
 import { SlangMeter, slangAbbr, slangAriaLabel } from "./SlangMeter";
+import { snackbarSwipeOutcome } from "./Snackbar";
 import { hidesTabBar, tabForPath } from "./TabBar";
 import { Toggle } from "./Toggle";
 
@@ -192,5 +193,18 @@ describe("TabBar routing", () => {
     expect(hidesTabBar("/library")).toBe(false);
     expect(hidesTabBar("/context")).toBe(false);
     expect(hidesTabBar(null)).toBe(false);
+  });
+});
+
+describe("snackbarSwipeOutcome", () => {
+  it("sends the bar out past a third of its width, or on a flick, or 24px down", () => {
+    expect(snackbarSwipeOutcome(140, 4, 0, 0, 358)).toBe("right");
+    expect(snackbarSwipeOutcome(-140, 4, 0, 0, 358)).toBe("left");
+    expect(snackbarSwipeOutcome(40, 2, 0.9, 0, 358)).toBe("right");
+    expect(snackbarSwipeOutcome(4, 30, 0, 0, 358)).toBe("down");
+  });
+  it("brings a short or upward drag back", () => {
+    expect(snackbarSwipeOutcome(60, 4, 0.1, 0, 358)).toBe("stay");
+    expect(snackbarSwipeOutcome(2, -40, 0, -0.2, 358)).toBe("stay");
   });
 });

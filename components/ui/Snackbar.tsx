@@ -9,10 +9,13 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type CSSProperties,
+  type PointerEvent,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { exitMs } from "@/lib/motion";
+import { thresholdNotifier } from "@/lib/haptics";
+import { exitMs, prefersReducedMotion } from "@/lib/motion";
 import { floatingBottom } from "./bottom-clearance";
 import { Kbd } from "./Kbd";
 import { cx } from "./cx";
@@ -29,7 +32,145 @@ export interface SnackbarViewProps {
   actionKey?: string;
   /** A copy on its way out (snackbar-out): no `data-snackbar` hook, so tests and sheets see only the live bar. */
   ghost?: boolean;
+  /**
+   * Swiped away (left, right or down): called once the bar has left. Without it the bar does not
+   * follow the finger.
+   */
+  onDismiss?: () => void;
   className?: string;
+}
+
+/** Movement before a press becomes a drag (px). */
+const SLOP = 8;
+/** A release faster than this (px/ms) throws the bar out whatever the distance. */
+const FLICK = 0.5;
+/** Share of the bar's width a sideways drag has to cover. */
+const SWIPE_SHARE = 0.35;
+/** Downward drag that dismisses (px). */
+const SWIPE_DOWN = 24;
+
+export type SnackbarSwipe = "left" | "right" | "down" | "stay";
+
+/** Where a released drag sends the bar: out sideways or down, or back into place. */
+export function snackbarSwipeOutcome(dx: number, dy: number, vx: number, vy: number, width: number): SnackbarSwipe {
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    // A flick decides by its direction; a slow drag by how far it went.
+    if (Math.abs(vx) > FLICK) return vx < 0 ? "left" : "right";
+    if (Math.abs(dx) > width * SWIPE_SHARE) return dx < 0 ? "left" : "right";
+    return "stay";
+  }
+  return dy > SWIPE_DOWN || vy > FLICK ? "down" : "stay";
+}
+
+interface SwipeGesture {
+  id: number;
+  x: number;
+  y: number;
+  dragging: boolean;
+  width: number;
+  t: number;
+  lx: number;
+  ly: number;
+  vx: number;
+  vy: number;
+}
+
+/**
+ * The bar follows a finger sideways (1:1, fading with distance) or down (up only with ¼ resistance)
+ * and, past the threshold, leaves that way in --dur-exit before `onDismiss`. A tap that does not
+ * move stays a tap on the action. Reduced motion: no travel, the bar just goes.
+ */
+function useSnackbarSwipe(onDismiss: (() => void) | undefined) {
+  const gesture = useRef<SwipeGesture | null>(null);
+  const [drag, setDrag] = useState<{ x: number; y: number; width: number } | null>(null);
+  const [gone, setGone] = useState<Exclude<SnackbarSwipe, "stay"> | null>(null);
+  const tick = useRef(thresholdNotifier());
+  const goneTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const suppressClick = useRef(false);
+  useEffect(() => () => {
+    if (goneTimer.current) clearTimeout(goneTimer.current);
+  }, []);
+
+  if (!onDismiss) return { style: undefined, handlers: undefined };
+
+  const leave = (way: Exclude<SnackbarSwipe, "stay">) => {
+    tick.current.reset();
+    if (prefersReducedMotion()) {
+      onDismiss();
+      return;
+    }
+    setGone(way);
+    goneTimer.current = setTimeout(onDismiss, exitMs());
+  };
+
+  const handlers = {
+    onPointerDown: (e: PointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0 || gone) return;
+      gesture.current = { id: e.pointerId, x: e.clientX, y: e.clientY, dragging: false, width: e.currentTarget.offsetWidth, t: e.timeStamp, lx: e.clientX, ly: e.clientY, vx: 0, vy: 0 };
+    },
+    onPointerMove: (e: PointerEvent<HTMLDivElement>) => {
+      const g = gesture.current;
+      if (!g || g.id !== e.pointerId) return;
+      const dx = e.clientX - g.x;
+      const dy = e.clientY - g.y;
+      if (!g.dragging) {
+        if (Math.abs(dx) < SLOP && Math.abs(dy) < SLOP) return;
+        g.dragging = true;
+        e.currentTarget.setPointerCapture(e.pointerId);
+      }
+      const dt = e.timeStamp - g.t;
+      if (dt > 0) {
+        g.vx = 0.8 * ((e.clientX - g.lx) / dt) + 0.2 * g.vx;
+        g.vy = 0.8 * ((e.clientY - g.ly) / dt) + 0.2 * g.vy;
+      }
+      g.t = e.timeStamp;
+      g.lx = e.clientX;
+      g.ly = e.clientY;
+      const sideways = Math.abs(dx) >= Math.abs(dy);
+      setDrag(sideways ? { x: dx, y: 0, width: g.width } : { x: 0, y: dy > 0 ? dy : dy / 4, width: g.width });
+      tick.current.update(snackbarSwipeOutcome(dx, dy, 0, 0, g.width) !== "stay", true);
+    },
+    onPointerUp: (e: PointerEvent<HTMLDivElement>) => finish(e, false),
+    onPointerCancel: (e: PointerEvent<HTMLDivElement>) => finish(e, true),
+    // A drag that ends over the action is not a tap on it.
+    onClickCapture: (e: { preventDefault(): void; stopPropagation(): void }) => {
+      if (!suppressClick.current) return;
+      suppressClick.current = false;
+      e.preventDefault();
+      e.stopPropagation();
+    },
+  };
+
+  function finish(e: PointerEvent<HTMLDivElement>, cancelled: boolean) {
+    const g = gesture.current;
+    if (!g || g.id !== e.pointerId) return;
+    gesture.current = null;
+    tick.current.reset();
+    if (!g.dragging) return;
+    suppressClick.current = true;
+    const fresh = e.timeStamp - g.t < 100;
+    const way = cancelled ? "stay" : snackbarSwipeOutcome(e.clientX - g.x, e.clientY - g.y, fresh ? g.vx : 0, fresh ? g.vy : 0, g.width);
+    setDrag(null);
+    if (way !== "stay") leave(way);
+  }
+
+  let style: CSSProperties | undefined;
+  if (gone) {
+    style = {
+      translate: gone === "down" ? "0 120%" : `${gone === "left" ? "-" : ""}110% 0`,
+      opacity: 0,
+      transition: "translate var(--dur-exit) var(--ease-exit), opacity var(--dur-exit) var(--ease-exit)",
+    };
+  } else if (drag) {
+    style = {
+      translate: prefersReducedMotion() ? undefined : `${drag.x}px ${drag.y}px`,
+      opacity: drag.x ? Math.max(0.2, 1 - Math.abs(drag.x) / Math.max(1, drag.width)) : 1,
+      transition: "none",
+    };
+  } else {
+    style = { transition: "translate var(--dur-move) var(--ease-standard), opacity var(--dur-move) var(--ease-standard)" };
+  }
+  return { style: { ...style, touchAction: "none" } as CSSProperties, handlers };
 }
 
 /**
@@ -37,17 +178,21 @@ export interface SnackbarViewProps {
  * useSnackbar(). Phones: full column width, 48 tall. From 768 up (DESKTOP-SPEC §2): 44 tall, as
  * wide as its text up to 480, centred, padding 0 8 0 16, the action with its key cap.
  */
-export function Snackbar({ message, actionLabel, onAction, actionKey, ghost = false, className }: SnackbarViewProps) {
+export function Snackbar({ message, actionLabel, onAction, actionKey, ghost = false, onDismiss, className }: SnackbarViewProps) {
+  const swipe = useSnackbarSwipe(ghost ? undefined : onDismiss);
   return (
     <div
       data-snackbar={ghost ? undefined : ""}
+      style={swipe.style}
+      {...swipe.handlers}
       className={cx(
-        "flex h-12 shrink-0 items-center justify-between gap-2 rounded-card bg-ink pr-1 pl-4 text-on-ink",
-        "md:mx-auto md:h-11 md:w-fit md:max-w-[480px] md:gap-4 md:pr-2",
+        // Phones: a long message wraps to a second line instead of being cut.
+        "flex min-h-12 shrink-0 items-center justify-between gap-2 rounded-card bg-ink py-1.5 pr-1 pl-4 text-on-ink select-none",
+        "md:mx-auto md:h-11 md:min-h-0 md:w-fit md:max-w-[480px] md:gap-4 md:py-0 md:pr-2",
         className,
       )}
     >
-      <span className="min-w-0 truncate text-[14px] leading-5 md:tabular-nums">{message}</span>
+      <span className="line-clamp-2 min-w-0 text-[14px] leading-5 break-words md:block md:truncate md:tabular-nums">{message}</span>
       {actionLabel && onAction && (
         <button
           type="button"
@@ -193,13 +338,14 @@ export function SnackbarProvider({ children }: { children: ReactNode }) {
   const nextId = useRef(1);
 
   const close = useCallback(
-    (reason: SnackbarHideReason, id?: number) => {
+    (reason: SnackbarHideReason, id?: number, swiped = false) => {
       const active = current.current;
       if (!active || (id !== undefined && active.id !== id)) return;
       current.current = null;
       setEntry(null);
       setPaused(false);
-      leave(active);
+      // A swiped bar has already left the screen: no outgoing copy at its old place.
+      if (!swiped) leave(active);
       active.onHide?.(reason);
     },
     [leave],
@@ -257,6 +403,7 @@ export function SnackbarProvider({ children }: { children: ReactNode }) {
               }
             : undefined
         }
+        onDismiss={() => close("dismissed", entry.id, true)}
       />
     </div>
   );

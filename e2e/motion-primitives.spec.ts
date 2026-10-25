@@ -73,3 +73,21 @@ test("sheets open in --dur-sheet and close in --dur-enter", async ({ page }) => 
   await expect(drawer).toHaveCount(0);
   expect(await page.evaluate(() => (window as unknown as { __close: string }).__close)).toBe("0.24s");
 });
+
+test("a snackbar swiped sideways leaves that way and is gone, with no copy left behind", async ({ page }) => {
+  await openReview(page);
+  await page.keyboard.press("Space");
+  await page.keyboard.press("3");
+  await expect(page.getByText("01 / 11", { exact: true })).toBeVisible();
+  await page.keyboard.press("z");
+  const bar = page.locator("[data-snackbar]", { hasText: "Ответ отменён" });
+  await expect(bar).toBeVisible();
+  const box = (await bar.boundingBox())!;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + 24, y);
+  await page.mouse.down();
+  for (let dx = 20; dx <= 200; dx += 20) await page.mouse.move(box.x + 24 + dx, y);
+  await page.mouse.up();
+  await expect(page.locator("[data-snackbar]")).toHaveCount(0);
+  await expect(page.locator(".snackbar-out")).toHaveCount(0);
+});

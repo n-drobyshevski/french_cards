@@ -51,8 +51,9 @@ export function useInlineSnackbar() {
   const current = useRef<Entry | null>(null);
 
   const swap = useCallback(
-    (next: Entry | null) => {
-      if (current.current) leave(current.current);
+    (next: Entry | null, swiped = false) => {
+      // A swiped bar has already left the screen: no outgoing copy at its old place.
+      if (current.current && !swiped) leave(current.current);
       current.current = next;
       setEntry(next);
       setPaused(false);
@@ -103,6 +104,7 @@ export function useInlineSnackbar() {
                       }
                     : undefined
                 }
+                onDismiss={() => swap(null, true)}
               />
             </div>
           )}
