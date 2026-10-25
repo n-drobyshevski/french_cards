@@ -327,10 +327,11 @@ function PhoneLibrary() {
         </div>
       </header>
 
-      {/* One subline (D2 B): the counts that need her are also the quickest filters. A count of 0 is
-          left out (the filter sheet still offers it), and with nothing due or difficult so is the
-          line (reserved until the counts are read); the total lives on «Все слова». */}
-      {(!totals || totals.due > 0 || totals.difficult > 0) && (
+      {/* One subline (D2 B): the counts that need her are also the quickest filters, then the words
+          reviewed today (a link to «Прогресс»). A count of 0 is left out (the filter sheet still
+          offers it), and with all of them 0 so is the line (reserved until the counts are read); the
+          total lives on «Все слова». */}
+      {(!totals || totals.due > 0 || totals.difficult > 0 || totals.reviewedToday > 0) && (
         <div role="group" aria-label="Быстрый фильтр" className="mt-0.5 flex h-5 shrink-0 items-center gap-2 font-mono text-[11px] leading-5 tracking-[.06em] text-muted uppercase">
           {!!totals?.due && (
             <SublineFilter
@@ -351,6 +352,19 @@ function PhoneLibrary() {
               onClick={() => toggleStatus("difficult")}
               onMenu={() => openLedgerMenu("difficult")}
             />
+          )}
+          {/* Words graded since the study day began (not a filter: it opens «Прогресс»). */}
+          {!!totals?.reviewedToday && (
+            <>
+              {(totals.due > 0 || totals.difficult > 0) && <span aria-hidden="true">·</span>}
+              <Link
+                href="/progress"
+                aria-label={`Сегодня повторено ${totals.reviewedToday} ${plural(totals.reviewedToday, ["слово", "слова", "слов"])}. Прогресс`}
+                className="-my-3 inline-flex h-11 min-w-0 items-center text-muted no-underline active:text-ink"
+              >
+                <span className="truncate">{totals.reviewedToday} повторено сегодня</span>
+              </Link>
+            </>
           )}
         </div>
       )}

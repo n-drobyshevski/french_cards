@@ -33,3 +33,47 @@ test("today's reviews show in the ledger and the calendar", async ({ page }) => 
   await today.click();
   await expect(page.getByRole("button", { name: /Свернуть/ })).toBeVisible();
 });
+
+test("an opened day stays inside the screen with a long mistake", async ({ page }) => {
+  await openReview(page);
+  await questionCard(page).click();
+  await page.getByRole("group", { name: "Оценка" }).getByRole("button", { name: /^Не знаю, следующий показ/ }).click();
+  await expect(page.getByText("01 / 11", { exact: true })).toBeVisible();
+  // The missed word gets a long French phrase, written straight into IndexedDB.
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve, reject) => {
+        const open = indexedDB.open("kartochki");
+        open.onsuccess = () => {
+          const db = open.result;
+          const tx = db.transaction(["words", "review_log"], "readwrite");
+          const logs = tx.objectStore("review_log").getAll();
+          logs.onsuccess = () => {
+            const missed = (logs.result as { word_id: string; rating: number }[]).find((l) => l.rating === 1)!;
+            const get = tx.objectStore("words").get(missed.word_id);
+            get.onsuccess = () => tx.objectStore("words").put({ ...get.result, fr: "s'en battre complètement les couilles avec une mandoline" });
+          };
+          tx.oncomplete = () => (db.close(), resolve());
+          tx.onerror = () => reject(tx.error);
+        };
+      }),
+  );
+  await page.goto("/progress");
+  await page.getByRole("button", { name: /1 повторение, сегодня$/ }).click();
+  await expect(page.getByRole("button", { name: /^s'en battre complètement/ })).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+  const collapse = await page.getByRole("button", { name: /^Свернуть/ }).boundingBox();
+  expect(collapse!.x + collapse!.width).toBeLessThanOrEqual(390);
+});
+
+test("the Library subline shows the words reviewed today and opens «Прогресс»", async ({ page }) => {
+  await openReview(page);
+  await gradeKnown(page, 2);
+  await expect(page.getByText("02 / 11", { exact: true })).toBeVisible();
+  await page.goto("/library");
+  const today = page.getByRole("link", { name: "Сегодня повторено 2 слова. Прогресс" });
+  await expect(today).toHaveText("2 повторено сегодня");
+  await today.click();
+  await expect(page).toHaveURL(/\/progress$/);
+});

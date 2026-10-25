@@ -60,7 +60,14 @@ function PhoneProgress() {
 
   return (
     <>
-      <Header large title="Прогресс" back="/library" backLabel="Библиотека" backTransitionTypes={NAV_BACK} />
+      {/* Back and the Newsreader 32 title share one 44px row (no large-title block under it), so the ledger starts higher. */}
+      <Header
+        title="Прогресс"
+        back="/library"
+        backLabel="Библиотека"
+        backTransitionTypes={NAV_BACK}
+        className="[&_h1]:text-[32px] [&_h1]:leading-10 [&_h1]:tracking-[-0.015em]"
+      />
       <main aria-busy={!progress || undefined} className="flex flex-1 flex-col px-4 pb-6">
         {progress &&
           (progress.empty ? (
