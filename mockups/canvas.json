@@ -1849,6 +1849,114 @@
    "title": "Уровень набора — десктоп",
    "is_interactive": true,
    "radius": 12
+  },
+  "Chat-Levels-A.dc.html": {
+   "x": 0,
+   "y": 48192,
+   "w": 390,
+   "h": 844,
+   "title": "Уровни слов — A строки",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Chat-Levels-B.dc.html": {
+   "x": 470,
+   "y": 48192,
+   "w": 390,
+   "h": 844,
+   "title": "Уровни слов — B группы",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Chat-Levels-Saved.dc.html": {
+   "x": 940,
+   "y": 48192,
+   "w": 390,
+   "h": 844,
+   "title": "Уровни слов — сохранено",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Chat-Words-A.dc.html": {
+   "x": 1410,
+   "y": 48192,
+   "w": 390,
+   "h": 844,
+   "title": "Новые слова — A строки",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Chat-Words-B.dc.html": {
+   "x": 1880,
+   "y": 48192,
+   "w": 390,
+   "h": 844,
+   "title": "Новые слова — B карточки",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Chat-Words-Theme.dc.html": {
+   "x": 2350,
+   "y": 48192,
+   "w": 390,
+   "h": 844,
+   "title": "Новые слова — выбор темы",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Chat-Words-Added.dc.html": {
+   "x": 2820,
+   "y": 48192,
+   "w": 390,
+   "h": 844,
+   "title": "Новые слова — добавлено",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Chat-TCF-Start.dc.html": {
+   "x": 3290,
+   "y": 48192,
+   "w": 390,
+   "h": 844,
+   "title": "Мини-TCF — старт",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Chat-TCF-Reading-A.dc.html": {
+   "x": 3760,
+   "y": 48192,
+   "w": 390,
+   "h": 844,
+   "title": "Мини-TCF — A счётчик",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Chat-TCF-Reading-B.dc.html": {
+   "x": 4230,
+   "y": 48192,
+   "w": 390,
+   "h": 844,
+   "title": "Мини-TCF — B тающая линия",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Chat-TCF-Done.dc.html": {
+   "x": 4700,
+   "y": 48192,
+   "w": 390,
+   "h": 844,
+   "title": "Мини-TCF — итог",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Ex-Reading-App.dc.html": {
+   "x": 5170,
+   "y": 48192,
+   "w": 390,
+   "h": 844,
+   "title": "Плеер — текст, неверно",
+   "is_interactive": true,
+   "radius": 28
   }
  },
  "order": [
@@ -2062,7 +2170,19 @@
   "X-Level-B.dc.html",
   "X-Level-C.dc.html",
   "X-Level-Tile-A.dc.html",
-  "D-Exercise-Level.dc.html"
+  "D-Exercise-Level.dc.html",
+  "Chat-Levels-A.dc.html",
+  "Chat-Levels-B.dc.html",
+  "Chat-Levels-Saved.dc.html",
+  "Chat-Words-A.dc.html",
+  "Chat-Words-B.dc.html",
+  "Chat-Words-Theme.dc.html",
+  "Chat-Words-Added.dc.html",
+  "Chat-TCF-Start.dc.html",
+  "Chat-TCF-Reading-A.dc.html",
+  "Chat-TCF-Reading-B.dc.html",
+  "Chat-TCF-Done.dc.html",
+  "Ex-Reading-App.dc.html"
  ],
  "notes": {
   "row1": {
@@ -2328,6 +2448,13 @@
    "x": 0,
    "y": 46908,
    "text": "38 · Упражнения · уровень набора (L1 место в запросе, L2 плитка)",
+   "kind": "title1",
+   "maxW": 1800
+  },
+  "row39": {
+   "x": 0,
+   "y": 48072,
+   "text": "39 · Чат-приложения · уровни слов, новые слова, мини-TCF",
    "kind": "title1",
    "maxW": 1800
   }
