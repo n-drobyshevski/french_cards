@@ -138,9 +138,10 @@ export function SortPlanSheet({ open, onOpenChange }: SortPlanSheetProps) {
             message: `Разложено ${nWords(run.moves.length)}`,
             actionLabel: "Отменить",
             onAction: () => {
-              void undoReorgRun(run.id).then(({ restored }) =>
-                snackbar.show({ message: restored ? "Сортировка отменена" : "Отменять нечего: слова уже перемещены" }),
-              );
+              // Phones: the words going back are the answer; only a failed undo gets a bar.
+              void undoReorgRun(run.id).then(({ restored }) => {
+                if (!restored || desktop) snackbar.show({ message: restored ? "Сортировка отменена" : "Отменять нечего: слова уже перемещены" });
+              });
             },
           }),
         after,
@@ -372,8 +373,12 @@ function PlanHead({
   let announce: string;
   if (phase.status === "ready") {
     const moves = summary ? `${summary.total} ${plural(summary.total, MOVE_FORMS)}` : "";
+    const protectedWords = phase.plan.protectedWords;
     text = empty ? "План готов" : summary && summary.newFolders > 0 ? `${moves} · ${summary.newFolders} ${plural(summary.newFolders, NEW_FOLDER_FORMS)}` : moves;
     announce = `План готов: ${text}`;
+    // Phones: the subline has folded away with the steps; its reassurance is the mono line under
+    // the status line, and is said with the result.
+    if (!desk && protectedWords > 0) announce += `. Слова, разложенные вручную (${nWords(protectedWords)}), не трогаются`;
   } else if (phase.status === "error") {
     text = "Не удалось";
     announce = "Не удалось составить план";
@@ -389,19 +394,37 @@ function PlanHead({
   }
   const plan = phase.status === "ready" ? phase.plan : null;
 
+  const subline = (
+    <p className={cx("m-0 min-h-5 text-[13px] leading-5 text-muted", pad)}>
+      {plan
+        ? `Слова, разложенные вручную, не трогаются${plan.protectedWords > 0 ? ` (${nWords(plan.protectedWords)})` : ""}.`
+        : progress
+          ? `${nWords(progress.words)} без ручной темы`
+          : ""}
+    </p>
+  );
+  const stepList = (
+    <ol aria-label="Этапы" className={cx("m-0 mt-3 list-none p-0", pad)}>
+      <PlanStep n="01" label="Темы" state={steps[0]} desk={desk} />
+      <PlanStep n="02" label={count ? `Слова · ${count}` : "Слова"} state={steps[1]} last desk={desk} />
+    </ol>
+  );
+
   return (
     <div aria-busy={phase.status === "loading"} className={cx("flex flex-col", desk ? "pt-4" : "pt-0")}>
-      <p className={cx("m-0 min-h-5 text-[13px] leading-5 text-muted", pad)}>
-        {plan
-          ? `Слова, разложенные вручную, не трогаются${plan.protectedWords > 0 ? ` (${nWords(plan.protectedWords)})` : ""}.`
-          : progress
-            ? `${nWords(progress.words)} без ручной темы`
-            : ""}
-      </p>
-      <ol aria-label="Этапы" className={cx("m-0 mt-3 list-none p-0", pad)}>
-        <PlanStep n="01" label="Темы" state={steps[0]} desk={desk} />
-        <PlanStep n="02" label={count ? `Слова · ${count}` : "Слова"} state={steps[1]} last desk={desk} />
-      </ol>
+      {desk ? (
+        <>
+          {subline}
+          {stepList}
+        </>
+      ) : (
+        // Phones: the finished scaffolding leaves once the plan is ready (synthesis §1.9): the
+        // subline and the steps fold away (--dur-move); the status line carries the result.
+        <Collapse open={!ready}>
+          {subline}
+          {stepList}
+        </Collapse>
+      )}
       <div className={cx("sticky top-0 z-[1] bg-surface pt-3", desk ? "px-6" : "px-4")}>
         <StatusLine
           text={text}
@@ -409,9 +432,14 @@ function PlanHead({
           announce={announce}
           active={phase.status === "loading" && !waiting}
           frozen={phase.status === "error"}
-          progress={ready ? 1 : assigning && progress ? reorgFraction(progress) : undefined}
+          progress={ready ? (desk ? 1 : undefined) : assigning && progress ? reorgFraction(progress) : undefined}
         />
       </div>
+      {!desk && plan && plan.protectedWords > 0 && (
+        <p aria-hidden="true" className="meta m-0 px-4 pt-1.5 leading-4">
+          {plan.protectedWords} вручную не трогаем
+        </p>
+      )}
     </div>
   );
 }

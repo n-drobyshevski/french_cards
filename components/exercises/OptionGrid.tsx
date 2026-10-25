@@ -37,7 +37,8 @@ export function OptionText({ text }: { text: string }) {
       className={cx(
         // A word longer than the tile breaks (hyphenated where the browser can) instead of running under the ✓ / ✕ or being clipped.
         "line-clamp-2 min-w-0 hyphens-auto [overflow-wrap:anywhere]",
-        ru ? "text-[16px] leading-[22px] font-medium" : "font-serif text-[19px] leading-6 font-medium",
+        // Russian options read as plain text on phones (L-ExPlayer-B), medium from 768.
+        ru ? "text-[16px] leading-[22px] md:font-medium" : "font-serif text-[19px] leading-6 font-medium",
       )}
     >
       {text}
@@ -46,8 +47,8 @@ export function OptionText({ text }: { text: string }) {
 }
 
 /**
- * The answers as a 2×2 grid (pick D6 B), on phones and desktop alike: 88px tiles on phones, 64px
- * from 768 with Kbd caps 1–4. A tap answers at once (pick D4 C). After it the right tile gets a 2px
+ * The answers as a 2×2 grid (pick D6 B), on phones and desktop alike: 88px tiles on phones (no
+ * index), 64px from 768 with Kbd caps 1–4. A tap answers at once (pick D4 C). After it the right tile gets a 2px
  * good border + check, a wrong pick a 1px again border + cross, the rest dim; the tapped tile
  * flashes its tone first (MOTION-SPEC §5.15). Screen readers hear «верный ответ» / «ваш ответ».
  */
@@ -81,13 +82,8 @@ export function OptionGrid({ options, correct, result, onPick, renderOption, loc
                 )}
               />
             )}
-            <span className="relative flex min-w-0 items-baseline gap-3 md:gap-3.5">
-              <span
-                aria-hidden="true"
-                className={cx("w-3 shrink-0 font-mono text-[12px] leading-4 font-medium md:hidden", verdict === "idle" ? "text-muted" : "text-current")}
-              >
-                {i + 1}
-              </span>
+            {/* Phones carry no index (L-ExPlayer-B); from 768 the Kbd cap 1–4. */}
+            <span className="relative flex min-w-0 items-baseline gap-3.5">
               <kbd
                 aria-hidden="true"
                 className={cx(

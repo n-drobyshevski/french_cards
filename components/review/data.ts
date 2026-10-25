@@ -1,17 +1,21 @@
 // Live-query loaders for the review screen. Each runs as one read inside useLiveQuery.
+import type { StripMark } from "@/components/ui/SessionStrip";
 import { isPaused } from "@/lib/core/words";
+import { db } from "@/lib/db";
+import { reviewStateId } from "@/lib/scheduler";
 import {
   endOfStudyDay,
   getDaySummary,
   loadSession,
   loadSessionData,
   matchWords,
+  startOfStudyDay,
   type DaySummary,
   type Session,
   type SessionData,
   type SessionFilter,
 } from "@/lib/session";
-import type { Word } from "@/lib/types";
+import type { ReviewLog, Word } from "@/lib/types";
 
 export interface ReviewScreenData {
   session: Session;
@@ -65,13 +69,40 @@ export interface DoneScreenData {
   nextDue: string | null;
   /** When the data was read (ISO), so the view formats relative to the same instant. */
   at: string;
+  /**
+   * Today's answers in the order they were given (the session strip on phones): one mark per
+   * review log, the same rows as `summary.reviewed`.
+   */
+  marks: StripMark[];
+}
+
+/**
+ * One mark per answer, oldest first: «Не знаю» = miss; otherwise a card already answered earlier
+ * today (a miss or a learning step that came back) = requeued; else first.
+ */
+export function sessionMarks(logs: readonly Pick<ReviewLog, "word_id" | "direction" | "rating" | "review">[]): StripMark[] {
+  const seen = new Set<string>();
+  return [...logs]
+    .sort((a, b) => a.review.localeCompare(b.review))
+    .map((l) => {
+      const card = reviewStateId(l.word_id, l.direction);
+      const again = seen.has(card);
+      seen.add(card);
+      return l.rating === 1 ? "miss" : again ? "requeued" : "first";
+    });
 }
 
 export async function loadDoneScreen(filter: SessionFilter, now: Date = new Date()): Promise<DoneScreenData> {
   const dayEnd = endOfStudyDay(now).toISOString();
   const loading = loadSessionData();
-  const [pre, summary] = await Promise.all([loading, getDaySummary(filter, now, loading)]);
+  const logs = db.review_log.where("review").between(startOfStudyDay(now).toISOString(), dayEnd, true, false).toArray();
+  const [pre, summary, todayLogs] = await Promise.all([loading, getDaySummary(filter, now, loading), logs]);
   const ids = new Set(wordsMatching(filter, pre).filter((w) => !isPaused(w, pre.pausedFolderIds)).map((w) => w.id));
+  // The same words as the summary's (lib/session.ts getDaySummary), so the strip and «30 карточек» agree.
+  const summaryWords = matchWords(pre.words, pre.states, pre.liveFolderIds, filter, pre.pausedFolderIds);
+  const marks = sessionMarks(
+    todayLogs.filter((l) => l.deleted_at === null && summaryWords.has(l.word_id) && (!filter.direction || l.direction === filter.direction)),
+  );
   let nextDue: string | null = null;
   for (const s of pre.states) {
     if (s.state === 0 || (s.due < dayEnd && s.state !== 2)) continue;
@@ -80,5 +111,5 @@ export async function loadDoneScreen(filter: SessionFilter, now: Date = new Date
     const due = s.due < dayEnd ? dayEnd : s.due;
     if (nextDue === null || due < nextDue) nextDue = due;
   }
-  return { summary, nextDue, at: now.toISOString() };
+  return { summary, nextDue, at: now.toISOString(), marks };
 }

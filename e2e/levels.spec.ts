@@ -26,9 +26,11 @@ test("rows and the word card show the estimate as «≈A1», words without one �
   await expect(row(page, "vas-y").locator('[data-level="none"]')).toHaveText("—");
 
   await row(page, "une blague").click();
-  await expect(card(page).getByRole("img", { name: "Уровень языка: примерно A1, оценка" })).toBeVisible();
-  await expect(card(page).getByText("· по словарю FLELex")).toBeVisible();
-  await expect(card(page).getByText(/≈.A1 — оценка по словарю FLELex, точна примерно в половине случаев\./)).toBeVisible();
+  // Phones (L-Word-B): the level is printed once on the grammar line; a tap opens where it comes from.
+  const level = card(page).getByRole("button", { name: /^Уровень языка: примерно A1, оценка, по словарю FLELex\./ });
+  await expect(level).toHaveText("≈A1");
+  await level.click();
+  await expect(card(page).getByText("Оценка по словарю FLELex, точна примерно в половине случаев.")).toBeVisible();
 });
 
 test("the review card shows the level on the answer side only", async ({ page }) => {
@@ -78,6 +80,8 @@ test("a level picked in the edit form is the user's («B1», no «≈»); «Ав
   await openAllWords(page);
   await expect(row(page, "une blague")).toHaveAccessibleName(/≈A1/);
   await row(page, "une blague").click();
+  // Phones: «Изменить» sits in the level's source line, opened from the level on the grammar line.
+  await card(page).getByRole("button", { name: /^Уровень языка: / }).click();
   await card(page).getByRole("button", { name: "Изменить уровень языка" }).click();
 
   const form = card(page).getByRole("form", { name: "Изменить слово" });
@@ -89,18 +93,17 @@ test("a level picked in the edit form is the user's («B1», no «≈»); «Ав
   await options.getByRole("radio", { name: "B1", exact: true }).click();
   await form.getByRole("button", { name: "Сохранить" }).click();
 
-  await expect(card(page).getByRole("img", { name: "Уровень языка: B1, вы указали" })).toHaveText("B1");
-  await expect(card(page).getByText("· вы указали")).toBeVisible();
+  await expect(card(page).getByRole("button", { name: /^Уровень языка: B1, вы указали\./ })).toHaveText("B1");
   await page.keyboard.press("Escape");
   await expect(row(page, "une blague")).toHaveAccessibleName(/, B1,/);
 
   await row(page, "une blague").click();
+  await card(page).getByRole("button", { name: /^Уровень языка: / }).click();
   await card(page).getByRole("button", { name: "Изменить уровень языка" }).click();
   await expect(options.getByRole("radio", { name: "B1", exact: true })).toHaveAttribute("aria-checked", "true");
   await options.getByRole("radio", { name: "Авто" }).click();
   await form.getByRole("button", { name: "Сохранить" }).click();
-  await expect(card(page).getByRole("img", { name: "Уровень языка: примерно A1, оценка" })).toBeVisible();
-  await expect(card(page).getByText("· по словарю FLELex")).toBeVisible();
+  await expect(card(page).getByRole("button", { name: /^Уровень языка: примерно A1, оценка, по словарю FLELex\./ })).toHaveText("≈A1");
 });
 
 test("«Определить уровень языка» proposes levels by group, saves the checked ones «от Claude» and undoes them", async ({ page }) => {
@@ -120,6 +123,7 @@ test("«Определить уровень языка» proposes levels by grou
     await route.fulfill({ json: { levels: body.words.map((w) => ({ id: w.id, cefr: proposed[w.fr] ?? null })) } });
   });
   await page.goto("/library");
+  await page.getByRole("button", { name: /^Уход за карточками/ }).click();
   await expect(page.getByText("6 без уровня")).toBeVisible();
   await page.getByRole("button", { name: "Определить уровень языка" }).click();
   const sheet = page.getByRole("dialog", { name: /Уровень языка/ });
@@ -137,7 +141,8 @@ test("«Определить уровень языка» proposes levels by grou
   await expect(row(page, "c'est dur")).toHaveAccessibleName(/, ≈A2,/);
   await expect(row(page, "être dehors")).toHaveAccessibleName(/, без уровня,/);
   await row(page, "c'est dur").click();
-  await expect(card(page).getByText("· от Claude")).toBeVisible();
+  // Phones: the grammar line prints the level once; its button names the source.
+  await expect(card(page).getByRole("button", { name: /^Уровень языка: примерно A2, от Claude\./ })).toHaveText("≈A2");
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "Отменить", exact: true }).click();

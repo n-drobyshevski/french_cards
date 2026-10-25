@@ -3,6 +3,7 @@ import type { DayPlan } from "@/lib/core/plan";
 import { DEFAULT_STUDY_PLAN, LEGACY_STUDY_PLAN, type StudyPlan } from "@/lib/core/study-plan";
 import { queueSummary, queueSummaryParts } from "./format";
 import {
+  dayStrip,
   newTicks,
   newWordsToday,
   overrideOffered,
@@ -11,11 +12,14 @@ import {
   planSummary,
   queueNew,
   reasonLine,
+  returnAxis,
+  returnGroups,
   reverseToday,
   sublineParts,
   summaryAria,
   waitIn,
   waitingSummary,
+  waitTitle,
 } from "./plan-format";
 
 const plan = (patch: Partial<StudyPlan> = {}): StudyPlan => ({ ...DEFAULT_STUDY_PLAN, ...patch });
@@ -124,6 +128,16 @@ describe("the receipt", () => {
     expect(overrideOffered(day({ canOverride: true, available: { fr: 0, ru: 5 } }), plan())).toBe(false);
     expect(overrideOffered(day({ canOverride: true, available: { fr: 0, ru: 5 } }), legacy())).toBe(true);
   });
+
+  it("draws the phone day strip with the same numbers, zero parts off the line", () => {
+    const held = dayStrip({ due: 27, day: day({ budget: 4, deferred: 140 }), plan: plan() });
+    expect(held).toMatchObject({ due: 27, slots: 10, fresh: 4, reverse: 6, deferred: 140 });
+    expect(held.parts.map((p) => `${p.text} ${p.value}`)).toEqual(["Повт. 27", "Нов. 4/10", "Обр. 6", "Отл. 140"]);
+    expect(held.label).toBe("К повторению 27, новых слов 4 из 10, обратных сторон 6, отложено 140");
+    const quiet = dayStrip({ due: 0, day: day({ available: { fr: 100, ru: 0 } }), plan: plan() });
+    expect(quiet.parts.map((p) => p.key)).toEqual(["new"]);
+    expect(quiet.label).toBe("К повторению 0, новых слов 10 из 10, обратных сторон 0");
+  });
 });
 
 describe("the wait screen", () => {
@@ -137,5 +151,26 @@ describe("the wait screen", () => {
     expect(waitIn(0)).toBe("1 мин");
     expect(waitIn(65 * 60_000)).toBe("1 ч 5 мин");
     expect(waitIn(120 * 60_000)).toBe("2 ч");
+    expect(waitTitle(3)).toBe("ещё 3 карточки");
+  });
+
+  it("puts the waiting cards on the shortest axis that holds them", () => {
+    expect(returnAxis(47 * 60_000)).toEqual({
+      span: 60 * 60_000,
+      marks: [
+        { at: 0.25, label: "15" },
+        { at: 0.5, label: "30" },
+        { at: 0.75, label: "45" },
+        { at: 1, label: "60 мин" },
+      ],
+    });
+    expect(returnAxis(61 * 60_000).marks.map((m) => m.label)).toEqual(["30", "60", "90", "120 мин"]);
+    expect(returnAxis(3 * 3_600_000).marks.map((m) => m.label)).toEqual(["1 ч", "2 ч", "3 ч", "4 ч"]);
+    const min = 60_000;
+    expect(returnGroups([33 * min, 26 * min, 47 * min, 47 * min], 0, 60 * min)).toEqual([
+      { due: 26 * min, at: 26 / 60, count: 1 },
+      { due: 33 * min, at: 33 / 60, count: 1 },
+      { due: 47 * min, at: 47 / 60, count: 2 },
+    ]);
   });
 });

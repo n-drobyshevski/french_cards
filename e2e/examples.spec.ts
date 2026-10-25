@@ -17,15 +17,18 @@ test("in the word sheet: pick an example, add another, swap one, undo", async ({
   await page.getByRole("searchbox", { name: "Поиск по FR и RU" }).fill("flics");
   await page.getByText("les flics", { exact: true }).click();
   const card = page.getByRole("dialog", { name: "Карточка слова" });
-  await expect(card.getByText("Нет примера")).toBeVisible();
-
   await card.getByRole("button", { name: "Подобрать пример" }).click();
   await expect(card.getByText(SENTENCES[0])).toBeVisible();
   await expect(card.getByText("Пример добавлен")).toBeVisible();
 
+  // «Ещё пример» is in the example's form (the sentence is its edit button); the second one sits under «Ещё».
+  await card.getByRole("button", { name: `Изменить пример: ${SENTENCES[0]}` }).click();
   await card.getByRole("button", { name: "Ещё пример" }).click();
-  await expect(card.getByText(SENTENCES[1])).toBeVisible();
+  await expect(card.getByRole("textbox", { name: "Пример 2 по-французски" })).toHaveValue(SENTENCES[1]);
   expect(avoided[1]).toEqual([SENTENCES[0]]);
+  await card.getByRole("button", { name: "Сохранить" }).click();
+  await card.getByRole("button", { name: /^Ещё\s?·/ }).click();
+  await expect(card.getByText(SENTENCES[1])).toBeVisible();
 
   // ↻ on the first one: a third sentence takes its place; the other stays.
   await card.getByRole("button", { name: `Другой пример вместо «${SENTENCES[0]}»` }).click();
@@ -62,5 +65,6 @@ test("in the add form: «+ Ещё пример» adds a second example that is s
   await page.getByText("la caisse", { exact: true }).click();
   const card = page.getByRole("dialog", { name: "Карточка слова" });
   await expect(card.getByText("Il a garé sa caisse devant chez moi.")).toBeVisible();
+  await card.getByRole("button", { name: /^Ещё\s?·/ }).click();
   await expect(card.getByText("Sa caisse est en panne.")).toBeVisible();
 });

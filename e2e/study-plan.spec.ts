@@ -2,7 +2,8 @@ import { expect, test, type Page } from "@playwright/test";
 import { dbRows, openReview, seedCardStates, seedLearningCard, seedStudyPlan, SEED_WORDS, withoutLegacyPlan } from "./fixtures";
 
 // «План дня» on phones (SPEC «План дня и уровень языка»; boards Review-Settings-C, Review-Header-A/B,
-// Review-Plan-Sheet, Review-Wait, Review-Done-Plan-A): the settings screen «План повторения» saving
+// Review-Plan-Sheet, Review-Wait, Review-Done-Plan-A; mobile-research «План на сегодня» B and «Wait
+// screen» B): the settings screen «План повторения» saving
 // the synced `study_plan` row, the review summary opening «План на сегодня», «Всё равно добавить
 // новые», and the wait screen.
 
@@ -70,8 +71,7 @@ test.describe("«План повторения» in Settings", () => {
 
     await expect(page).toHaveURL(/\/settings\/plan$/);
     await expect(page.getByRole("heading", { level: 1, name: "План повторения" })).toBeVisible();
-    await expect(page.getByRole("main").getByText("8 слов в день · до 200 повторений", { exact: true })).toBeVisible();
-    await expect(page.getByText("Настройка общая для всех устройств — Claude тоже её видит.")).toBeVisible();
+    // Phones: no summary line or footnote on the plan screen (the Settings row carries the summary).
 
     const fresh = page.getByRole("group", { name: "Новых слов в день" });
     await expect(fresh.locator("output")).toHaveText("8");
@@ -111,7 +111,6 @@ test.describe("«План повторения» in Settings", () => {
     // «Назавтра» shares one limit counted in cards: the copy says so.
     await sides.getByText("Назавтра").click();
     await expect(page.getByRole("group", { name: "Новых карточек в день" }).locator("output")).toHaveText("9");
-    await expect(page.getByRole("main").getByText("9 карточек в день · до 225 повторений", { exact: true })).toBeVisible();
 
     // Back to Settings: the row shows the new summary; a reload keeps the plan.
     await page.getByRole("button", { name: "Назад к настройкам" }).click();
@@ -129,7 +128,6 @@ test.describe("«План повторения» in Settings", () => {
     await cap.getByRole("button", { name: "Больше" }).click();
     await expect(cap.locator("output")).toHaveText(/без лимита/);
     await expect(cap.getByRole("button", { name: "Больше" })).toBeDisabled();
-    await expect(page.getByText("10 слов в день · без лимита повторений", { exact: true })).toBeVisible();
     await expect.poll(async () => (await studyPlanRow(page))?.value.review_cap).toBeNull();
     await cap.getByRole("button", { name: "Меньше" }).click();
     await expect(cap.locator("output")).toHaveText("975");
@@ -143,7 +141,7 @@ test.describe("«План на сегодня»", () => {
     // 11 new words, 7 themes: 10 today, at most 4 from one theme.
     const summary = page.getByRole("button", { name: "План на сегодня: 10 новых" });
     await expect(summary).toHaveText("10 новых");
-    await expect(page.getByText("10 новых", { exact: true })).toBeVisible();
+    await expect(page.locator("[data-plan-summary]")).toHaveAttribute("aria-label", "План на сегодня: 10 новых"); // phones: the counts are in its name
     await expect(page.getByText("00 / 10", { exact: true })).toBeVisible();
     // No reason subline on a normal day.
     await expect(page.locator("[data-plan-subline]")).toHaveCount(0);
@@ -155,13 +153,12 @@ test.describe("«План на сегодня»", () => {
     await summary.click();
     const sheet = page.getByRole("dialog", { name: "План на сегодня" });
     await expect(sheet).toBeVisible();
-    await expect(sheet.getByText("К повторению")).toBeVisible();
-    await expect(sheet.getByText("Новых слов")).toBeVisible();
-    await expect(sheet.getByText("10 из 10")).toBeVisible();
-    await expect(sheet.getByText("Обратных сторон")).toBeVisible();
-    await expect(sheet.getByText("Отложено")).toBeVisible();
+    // Phones: the day strip, its exact numbers in its name; zero parts and the settings value stay off.
+    await expect(sheet.getByRole("img", { name: "К повторению 0, новых слов 10 из 10, обратных сторон 0" })).toBeVisible();
+    await expect(sheet.locator("[data-slot=on]")).toHaveCount(10);
+    await expect(sheet.locator("[data-plan-strip] p")).toHaveText("Нов. 10/10");
     await expect(sheet.getByRole("button", { name: "Всё равно добавить новые" })).toBeHidden();
-    await expect(sheet.getByText("10 слов · до 200")).toBeVisible();
+    await expect(sheet.getByText("10 слов · до 200")).toHaveCount(0);
 
     await sheet.getByRole("link", { name: /Изменить план/ }).click();
     await expect(page).toHaveURL(/\/settings\/plan$/);
@@ -178,37 +175,41 @@ test.describe("«План на сегодня»", () => {
     const subline = page.locator("[data-plan-subline]");
     await expect(subline).toHaveText(/Новых\s*5 из 10\s*·\s*точность за неделю\s*0\s%/);
     await expect(subline).toHaveAttribute("role", "status");
-    await expect(page.getByText("5 новых", { exact: true })).toBeVisible();
+    await expect(page.locator("[data-plan-summary]")).toHaveAttribute("aria-label", "План на сегодня: 5 новых"); // phones: the counts are in its name
 
     await page.getByRole("button", { name: "План на сегодня: 5 новых" }).click();
     const sheet = page.getByRole("dialog", { name: "План на сегодня" });
-    await expect(sheet.getByText("5 из 10")).toBeVisible();
+    await expect(sheet.getByRole("img", { name: /новых слов 5 из 10/ })).toBeVisible();
+    await expect(sheet.locator("[data-slot=on]")).toHaveCount(5);
     await expect(sheet.getByText(/^Точность за неделю 0\s% — новых сегодня меньше\.$/)).toBeVisible();
-    await expect(sheet.getByText("Только на сегодня. Завтра план снова подстроится.")).toBeVisible();
+    const lift = sheet.getByRole("button", { name: "Всё равно добавить новые" });
+    await expect(lift).toHaveAccessibleDescription("Только на сегодня. Завтра план снова подстроится.");
 
-    await sheet.getByRole("button", { name: "Всё равно добавить новые" }).click();
-    // The day is lifted to the ceiling: the numbers swap, the button, the reason and the subline go.
-    await expect(sheet.getByText("10 из 10")).toBeVisible();
+    await lift.click();
+    // The day is lifted to the ceiling: the empty slots fill, the button, the reason and the subline go.
+    await expect(sheet.getByRole("img", { name: /новых слов 10 из 10/ })).toBeVisible();
+    await expect(sheet.locator("[data-slot=on]")).toHaveCount(10);
     await expect(sheet.getByRole("button", { name: "Всё равно добавить новые" })).toBeHidden();
     await expect(sheet.getByText(/новых сегодня меньше/)).toHaveCount(0);
     await expect(subline).toHaveCount(0);
-    await expect(page.getByText("10 новых", { exact: true })).toBeVisible();
+    await expect(page.locator("[data-plan-summary]")).toHaveAttribute("aria-label", "План на сегодня: 10 новых"); // phones: the counts are in its name
 
     // Device-local, for this study day only: its own settings row, never synced.
     const override = (await dbRows<{ id: string; new_override_day?: string | null }>(page, "settings")).find((r) => r.id === "plan_override");
     expect(override?.new_override_day).toBeTruthy();
     expect((await dbRows<{ id: string }>(page, "outbox")).some((r) => JSON.stringify(r).includes("plan_override"))).toBe(false);
 
-    await sheet.getByRole("button", { name: "Закрыть" }).click();
+    // The ✕ is for keyboards only on a phone auto-height sheet.
+    await page.keyboard.press("Escape");
     await expect(sheet).toBeHidden();
     await page.reload();
-    await expect(page.getByText("10 новых", { exact: true })).toBeVisible();
+    await expect(page.locator("[data-plan-summary]")).toHaveAttribute("aria-label", "План на сегодня: 10 новых"); // phones: the counts are in its name
     await expect(page.locator("[data-plan-subline]")).toHaveCount(0);
   });
 });
 
 test.describe("wait screen", () => {
-  test("a learning card due later today: «Ещё 1 карточка — через 30 мин», then «Готово на сегодня» with the plan row", async ({ page }) => {
+  test("a learning card due later today: «Через 30 мин — ещё 1 карточка» on the return line, then «Готово на сегодня»", async ({ page }) => {
     // Near 04:00 the card would fall into the next study day.
     const minutesToFour = await page.evaluate(() => {
       const d = new Date();
@@ -225,21 +226,26 @@ test.describe("wait screen", () => {
     await page.reload();
 
     await expect(page.getByText("Ждёт 1 карточка", { exact: true })).toBeVisible();
-    await expect(page.getByText("На сейчас всё")).toBeVisible();
-    await expect(page.getByRole("heading", { level: 1, name: /^Ещё 1 карточка — через (29|30) мин$/ })).toBeVisible();
+    const wait = page.locator("[data-review-wait]");
+    await expect(page.getByRole("heading", { level: 1, name: /^Через (29|30) мин — ещё 1 карточка$/ })).toBeVisible();
+    // The card comes back in minutes: neither its answer nor its prompt is on screen, only its time.
+    await expect(page.getByRole("img", { name: /^Карточки вернутся: 1 через (29|30) мин$/ })).toBeVisible();
+    await expect(wait.locator("[data-return-card]")).toHaveCount(1);
+    await expect(wait).not.toContainText("шутка");
+    await expect(wait).not.toContainText("une blague");
+    await expect(wait.getByRole("link", { name: /Упражнения/ })).toHaveCount(0);
+    // «Почему позже?» opens the paragraph in place (first sessions only).
+    const why = page.getByRole("button", { name: "Почему позже?" });
+    await expect(why).toHaveAttribute("aria-expanded", "false");
+    await why.click();
+    await expect(why).toHaveAttribute("aria-expanded", "true");
     await expect(page.getByText("Эти слова вы только что учили.", { exact: false })).toBeVisible();
-    const row = page.locator("[data-review-wait] li", { hasText: "une blague" });
-    await expect(row).toContainText("шутка");
-    await expect(row).toContainText(/через (29|30) мин/i);
-    await expect(page.getByRole("link", { name: /Пока можно:\s*Упражнения/ })).toHaveAttribute("href", "/exercises");
     // No card and no plan summary button while waiting.
     await expect(page.locator("[data-plan-summary]")).toHaveCount(0);
 
     await page.getByRole("button", { name: "Готово на сегодня" }).click();
     await expect(page.getByRole("heading", { name: "Готово на сегодня" })).toBeVisible();
-    const plan = page.locator("[data-done-plan]");
-    await expect(plan).toContainText("План: 20 карточек в день · без лимита повторений");
-    await plan.getByRole("link", { name: "Изменить план повторения" }).click();
-    await expect(page).toHaveURL(/\/settings\/plan$/);
+    // Phones: the plan lives in Settings and the plan sheet, not on the done screen.
+    await expect(page.locator("[data-done-plan]")).toHaveCount(0);
   });
 });

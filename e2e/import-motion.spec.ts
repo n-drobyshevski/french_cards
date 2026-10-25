@@ -61,16 +61,17 @@ async function choose(page: Page) {
 }
 
 const bar = (page: Page) => page.getByRole("progressbar", { name: "Прогресс распознавания" });
+/** Phones (Import-Processing B): no step list; the status line says the step. */
 const steps = (page: Page) => page.getByRole("list", { name: "Этапы" });
+const status = (page: Page, text: RegExp | string) => page.getByRole("status").filter({ hasText: text });
 const scan = (page: Page) => page.locator("[data-scan]");
 
-test("waiting for the first word: step 01 reads, the bar holds at 20 %, the scan line travels; rows move it on", async ({ page }) => {
+test("waiting for the first word: the status reads, the (hidden) bar holds at 20 %, the scan line travels; rows move it on", async ({ page }) => {
   await streamExtract(page);
   await choose(page);
 
-  // Uploaded, nothing found yet: the step says what is happening, not what was found.
-  await expect(steps(page).getByRole("listitem")).toHaveText([/^01Читаем скриншотИДЁТ$/, /^02Слова, перевод и уровень$/, /^03Проверка повторов$/]);
-  await expect(steps(page).locator("[aria-current=step]")).toHaveText(/Читаем скриншот/);
+  // Uploaded, nothing found yet: the status says what is happening, not what was found.
+  await expect(steps(page)).toHaveCount(0);
   await expect(page.getByText("Текст найден")).toHaveCount(0);
   await expect(bar(page)).toHaveAttribute("aria-valuenow", "20");
   await expect(scan(page)).toHaveAttribute("data-scan", "travel");
@@ -87,7 +88,6 @@ test("waiting for the first word: step 01 reads, the bar holds at 20 %, the scan
   await push(page, { type: "item", index: 0, item: ROWS[0] });
   await expect(bar(page)).toHaveAttribute("aria-valuenow", "30");
   await expect(page.getByText("la meuf", { exact: true })).toBeVisible();
-  await expect(steps(page).locator("[aria-current=step]")).toHaveText(/Слова, перевод и уровень/);
   await expect(scan(page)).toHaveAttribute("data-scan", "static");
   await expect(page.getByText(/^Найдено\s*1$/)).toBeVisible();
 
@@ -137,9 +137,8 @@ test("«Стоп» keeps what arrived: «Остановлено · 1 слово�
   const slot = (await stopButton.boundingBox())!;
   await stopButton.click();
 
-  // The same screen, stopped: status, frozen bar, step 02 «СТОП», skeletons gone.
+  // The same screen, stopped: status, frozen bar, skeletons gone.
   await expect(page.getByText("Остановлено · 1 слово", { exact: true }).first()).toBeVisible();
-  await expect(steps(page).getByRole("listitem").nth(1)).toHaveText(/СТОП$/);
   await expect(bar(page)).toHaveAttribute("aria-valuenow", "30");
   await expect(found(page).getByText("la meuf", { exact: true })).toBeVisible();
   await expect.poll(() => page.locator("[data-skeleton-stack]").evaluate((el) => el.getBoundingClientRect().height)).toBe(0);
@@ -158,7 +157,7 @@ test("«Стоп» keeps what arrived: «Остановлено · 1 слово�
   await expect(review(page).getByText("la meuf", { exact: true })).toBeVisible();
 });
 
-test("done holds step 03 ✓ and the full bar, then the review takes over row for row at the same top", async ({ page }) => {
+test("done holds «Готово» and the full bar, then the review takes over row for row; the summary folds into a strip", async ({ page }) => {
   await streamExtract(page);
   await choose(page);
   await push(page, { type: "meta", images: 1 });
@@ -175,17 +174,19 @@ test("done holds step 03 ✓ and the full bar, then the review takes over row fo
   // The finished state, held before the review (--dur-done-hold).
   await expect(page.getByText("Готово", { exact: true })).toBeVisible();
   await expect(bar(page)).toHaveAttribute("aria-valuenow", "100");
-  await expect(steps(page).getByRole("listitem")).toHaveText([/Читаем скриншот$/, /Слова, перевод и уровень$/, /Проверка повторов$/]);
-  await expect(page.getByText("Найдено 3 слова", { exact: true }).first()).toBeVisible();
+  await expect(status(page, "Найдено 3 слова")).toBeAttached();
 
   await expect(page.getByRole("heading", { name: "Найдено 3 слова" })).toBeVisible();
   await motionSettled(page);
   const reviewed = await review(page)
     .getByRole("listitem")
     .evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().top)));
-  expect(reviewed).toEqual(streamed);
-  // The thumbnail and the steps stayed; the footer rose in.
-  await expect(steps(page)).toBeVisible();
+  // Row for row, same order and spacing; the finished summary has folded into the 44px strip above.
+  const shift = streamed[0] - reviewed[0];
+  expect(shift).toBeGreaterThan(0);
+  expect(reviewed.map((top) => top + shift)).toEqual(streamed);
+  await expect(page.getByRole("button", { name: "Скриншот", exact: true })).toHaveAttribute("aria-expanded", "false");
+  await expect(steps(page)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Добавить 3 слова" })).toBeVisible();
   if (process.env.MOTION_SHOTS) await page.screenshot({ path: `${process.env.MOTION_SHOTS}/import-review-same-top.png` });
 });
@@ -220,7 +221,7 @@ test("checkboxes: the tick draws on a toggle, an unchecked row dims, the count c
   await expect.poll(() => row.getByRole("button", { name: /^bouffer/ }).evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
 });
 
-test("a failure takes the rows' place: the steps stay, step 01 «НЕ УДАЛОСЬ», «Повторить»", async ({ page }) => {
+test("a failure takes the rows' place: the summary stays, «Не удалось», «Повторить»", async ({ page }) => {
   let calls = 0;
   await page.route("**/api/ai/extract", async (route) => {
     calls++;
@@ -246,7 +247,6 @@ test("a failure takes the rows' place: the steps stay, step 01 «НЕ УДАЛО
   const notice = page.getByRole("alert").filter({ hasText: "Скриншот не прочитан — попробуйте ещё раз" });
   await expect(notice).toBeVisible();
   await expect(page.getByRole("region", { name: "Обработка скриншота" })).toBeVisible();
-  await expect(steps(page).getByRole("listitem").first()).toHaveText(/НЕ УДАЛОСЬ$/);
   await expect(page.getByText("Не удалось", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Выбрать другой скриншот" })).toBeVisible();
   if (process.env.MOTION_SHOTS) await page.screenshot({ path: `${process.env.MOTION_SHOTS}/import-error.png` });
@@ -284,7 +284,6 @@ test("429: the wait is counted down in the open and retried once by itself", asy
   });
 
   await expect(page.getByText(/^Слишком много запросов · повторим через\s*0:0[12]$/)).toBeVisible();
-  await expect(steps(page).getByRole("listitem").first()).toHaveText(/ЖДЁМ$/);
   await expect(bar(page)).toHaveAttribute("aria-valuenow", "20");
   await expect(page.getByText("Повторим один раз сами")).toBeVisible();
 

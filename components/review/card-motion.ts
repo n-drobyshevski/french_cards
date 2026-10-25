@@ -94,7 +94,7 @@ export function playExit(el: HTMLElement, exit: CardExit): Animation {
 
 /**
  * The arrival of the current card on `el` (its own `translate` / `scale` / `opacity`, so a drag's
- * `transform` composes with it). From the stack (R5): .96 / 8 px (or wherever the drag had grown
+ * `transform` composes with it). From the stack (R5): .97 / 4 px (or wherever the drag had grown
  * it) → 1 / 0 on --spring-settle, continued from `at` so a card that mounts a few frames after the
  * commit picks up where the stack card was. Reduced: already in place, it fades in --dur-quick.
  * Returning after undo (R7): from ±--dist-exit-card (or --dist-sink below), opacity over the first
@@ -129,7 +129,7 @@ export function playArrival(el: HTMLElement, arrive: CardArrival): void {
   el.animate([{ translate: from }, { translate: "0 0" }], { duration, easing: ease.enter(), id: "card-arrive" });
 }
 
-/** Undo (R7): the card that was current drops back into the stack, 1 → .96 / 8 px over --dur-move. */
+/** Undo (R7): the card that was current drops back into the stack, 1 → .97 / 4 px over --dur-move. */
 export function playDropToStack(el: HTMLElement): void {
   if (prefersReducedMotion()) return;
   const pose = stackPose(0);
@@ -141,15 +141,17 @@ export function playDropToStack(el: HTMLElement): void {
 
 /**
  * Reveal (R3): the headword glides `delta` px (from where it stood on the other side) to its place,
- * --dur-move --ease-standard. Reduced motion: it jumps.
+ * --dur-move --ease-standard; on phones, where the answer sets it smaller (D4 Bold), the headword
+ * itself (the block's first child) also scales from `scale` × its size. Reduced motion: it jumps.
  */
-export function playHeadwordGlide(el: HTMLElement, delta: number): void {
+export function playHeadwordGlide(el: HTMLElement, delta: number, scale = 1): void {
   if (prefersReducedMotion() || Math.abs(delta) < 1) return;
-  el.animate([{ translate: `0 ${delta}px` }, { translate: "0 0" }], {
-    duration: tokenMs("--dur-move", 200),
-    easing: ease.standard(),
-    id: "headword-glide",
-  });
+  const timing = { duration: tokenMs("--dur-move", 200), easing: ease.standard() };
+  el.animate([{ translate: `0 ${delta}px` }, { translate: "0 0" }], { ...timing, id: "headword-glide" });
+  const word = el.firstElementChild;
+  if (word && Math.abs(scale - 1) > 0.01) {
+    word.animate([{ scale: String(scale) }, { scale: "1" }], { ...timing, id: "headword-scale" });
+  }
 }
 
 /**

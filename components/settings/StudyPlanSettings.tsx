@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useId, type ReactNode } from "react";
 import { useLiveQuery } from "dexie-react-hooks";
 import { PLAN_SETTINGS_HREF, countsCards, planSummary } from "@/components/review/plan-format";
+import { Collapse } from "@/components/ui/Collapse";
 import { Header } from "@/components/ui/Header";
 import { Icon } from "@/components/ui/Icons";
 import { Segmented } from "@/components/ui/Segmented";
@@ -107,19 +108,22 @@ export function DeskPlanRow() {
 
 // --- Phones ------------------------------------------------------------------------------------------
 
-/** Mono 11 heading over an ink rule («ТЕМП», «НОВЫЕ СЛОВА», «ОБРАТНАЯ СТОРОНА · RU → FR»). */
+/** Mono 11 group label over a hairline («Порядок новых», «Обратная сторона · RU → FR»). */
 function PhoneHeading({ id, children }: { id: string; children: ReactNode }) {
   return (
     <h2
       id={id}
-      className="m-0 mt-3 shrink-0 border-b border-ink pb-2 font-mono text-[11px] leading-4 font-medium tracking-[.06em] text-muted uppercase"
+      className="m-0 mt-6 shrink-0 border-b border-rule pb-2 font-mono text-[11px] leading-4 font-medium tracking-[.06em] text-muted uppercase"
     >
       {children}
     </h2>
   );
 }
 
-/** A radio list of 52px rows indented 12: label 15 (500 when picked), caption 12 muted, 18px check. */
+/**
+ * A radio list of 44px rows: label 15 (500 when picked), 18px check. Only the picked option shows its
+ * 12 muted caption (it opens in place, Collapse); every caption stays the option's description.
+ */
 function PhoneRadioList<T extends string>({
   name,
   labelledBy,
@@ -142,7 +146,7 @@ function PhoneRadioList<T extends string>({
         return (
           <label
             key={option.value}
-            className="press-tint relative ml-3 flex h-[52px] cursor-pointer items-center gap-2 border-b border-rule has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-ink"
+            className="press-tint relative flex min-h-11 cursor-pointer items-center gap-2 border-b border-rule has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-ink"
           >
             <input
               type="radio"
@@ -153,13 +157,15 @@ function PhoneRadioList<T extends string>({
               aria-describedby={`${name}-${option.value}-d`}
               className="absolute top-0 left-0 m-0 size-px opacity-0"
             />
-            <span className="flex min-w-0 flex-1 flex-col">
+            <span className="flex min-w-0 flex-1 flex-col py-3">
               <span id={`${name}-${option.value}-l`} className={cx("truncate text-[15px] leading-5 text-ink", checked && "font-medium")}>
                 {option.label}
               </span>
-              <span id={`${name}-${option.value}-d`} className="truncate text-[12px] leading-4 text-muted">
-                {option.caption}
-              </span>
+              <Collapse open={checked}>
+                <span id={`${name}-${option.value}-d`} className="block truncate text-[12px] leading-4 text-muted">
+                  {option.caption}
+                </span>
+              </Collapse>
             </span>
             <span aria-hidden="true" className="flex w-5 shrink-0 justify-end">
               {checked && <Icon name="check" size={18} />}
@@ -171,7 +177,12 @@ function PhoneRadioList<T extends string>({
   );
 }
 
-/** The phone screen «План повторения» (Review-Settings-C). */
+/**
+ * The phone screen «План повторения» (Review-Settings-C, trimmed): a large title, the two steppers
+ * with nothing above them, «Порядок новых» and «Обратная сторона» with only the picked option
+ * captioned. The summary line, the stepper captions and the shared-settings footnote are gone (the
+ * Settings row carries the summary, «Данные» the footnote).
+ */
 export function PhoneStudyPlan() {
   const { plan, save } = usePlanSetting();
   const ids = useId();
@@ -184,20 +195,12 @@ export function PhoneStudyPlan() {
 
   return (
     <div className="contents md:hidden">
-      <Header title="План повторения" fallbackHref="/settings" backLabel="Назад к настройкам" />
+      <Header large title="План повторения" fallbackHref="/settings" backLabel="Назад к настройкам" />
       <main className="flex flex-1 flex-col px-4 pb-6">
         <Valued known={known}>
-          <p data-value="" className="m-0 min-h-4 shrink-0 font-mono text-[11px] leading-4 tracking-[.06em] text-muted uppercase">
-            {plan ? planSummary(plan) : " "}
-          </p>
-
-          <section aria-labelledby={`${ids}-tempo`} className="flex shrink-0 flex-col">
-            <PhoneHeading id={`${ids}-tempo`}>Темп</PhoneHeading>
-            <div className="flex min-h-11 shrink-0 items-center gap-2 border-b border-rule py-2">
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="text-[15px] leading-5">{newLabel(plan)}</span>
-                <span className="text-[12px] leading-4 text-muted">{NEW_CAPTION}</span>
-              </span>
+          <section aria-label="Темп" className="mt-2 flex shrink-0 flex-col border-t border-rule">
+            <div className="flex h-14 shrink-0 items-center gap-2 border-b border-rule">
+              <span className="min-w-0 flex-1 text-[15px] leading-5">{newLabel(plan)}</span>
               <Stepper
                 label={newLabel(plan)}
                 value={plan?.new_words ?? 0}
@@ -206,11 +209,8 @@ export function PhoneStudyPlan() {
                 onStep={(delta) => plan && save({ new_words: clampNewWords(plan.new_words + delta) })}
               />
             </div>
-            <div className="flex min-h-11 shrink-0 items-center gap-2 border-b border-rule py-2">
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="text-[15px] leading-5">Повторений в день</span>
-                <span className="text-[12px] leading-4 text-muted">Остальные — на следующий день</span>
-              </span>
+            <div className="flex h-14 shrink-0 items-center gap-2 border-b border-rule">
+              <span className="min-w-0 flex-1 text-[15px] leading-5">Повторений в день</span>
               {cap !== null && (
                 <span aria-hidden="true" className="text-[13px] leading-4 whitespace-nowrap text-muted">
                   до
@@ -226,13 +226,8 @@ export function PhoneStudyPlan() {
             </div>
           </section>
 
-          <section aria-labelledby={`${ids}-new`} className="flex shrink-0 flex-col">
-            <PhoneHeading id={`${ids}-new`}>Новые слова</PhoneHeading>
-            <div className="flex h-10 shrink-0 items-center border-b border-rule">
-              <span id={`${ids}-order`} className="min-w-0 flex-1 truncate text-[15px] leading-5">
-                Порядок
-              </span>
-            </div>
+          <section aria-labelledby={`${ids}-order`} className="flex shrink-0 flex-col">
+            <PhoneHeading id={`${ids}-order`}>Порядок новых</PhoneHeading>
             <PhoneRadioList<NewOrder>
               name={`${ids}-order-r`}
               labelledBy={`${ids}-order`}
@@ -240,9 +235,9 @@ export function PhoneStudyPlan() {
               value={plan?.new_order}
               onChange={(new_order) => save({ new_order })}
             />
-            <div className="flex h-11 shrink-0 items-center gap-2">
-              <span id={`${ids}-mix`} className="min-w-0 flex-1 truncate text-[15px] leading-5">
-                Новые
+            <div className="flex shrink-0 flex-col items-start pt-3 pb-1">
+              <span id={`${ids}-mix`} className="text-[15px] leading-5">
+                Новые в сессии
               </span>
               <Segmented
                 ariaLabelledby={`${ids}-mix`}
@@ -263,8 +258,6 @@ export function PhoneStudyPlan() {
               onChange={(ru_fr) => save({ ru_fr })}
             />
           </section>
-
-          <p className="m-0 shrink-0 pt-2 text-[12px] leading-4 text-muted">{FOOTNOTE}</p>
         </Valued>
       </main>
     </div>

@@ -18,6 +18,15 @@ import type { AnkiImportState } from "./use-anki-import";
 
 export const ANKI_TITLE = "Импорт из Anki";
 export const ANKI_FOOTNOTE = "Переводы, примеры, уровень сленга и темы дополним сами — перед добавлением всё можно проверить. Аудио и картинки не переносятся.";
+/** Phones: the one fact of the footnote the screen does not already show. */
+const ANKI_FOOTNOTE_PHONE = "Аудио и картинки не переносятся.";
+
+/** Phones: the file name only when it says more than the deck name under it («argot.apkg» vs «argot»). */
+function phoneSubtitle(fileName: string | null, deckName: string | undefined): string | null {
+  if (!fileName || !deckName) return fileName;
+  const stem = fileName.replace(/\.[^.]+$/, "").trim().toLowerCase();
+  return stem === deckName.trim().toLowerCase() ? null : fileName;
+}
 
 interface FrameProps {
   wide: boolean;
@@ -45,7 +54,7 @@ function Frame({ wide, subtitle, children, actions, onBack }: FrameProps) {
   }
   return (
     <>
-      <Header title={ANKI_TITLE} back={onBack} />
+      <Header large title={ANKI_TITLE} back={onBack} />
       <main className="flex flex-1 flex-col px-4 pt-2 pb-6">
         {subtitle && <p className="meta m-0 truncate">{subtitle}</p>}
         <div className="mt-3 flex flex-col">{children}</div>
@@ -76,6 +85,7 @@ function Alert({ wide, children }: { wide: boolean; children: ReactNode }) {
 function Act({
   wide,
   primary = false,
+  quiet = false,
   disabled,
   onClick,
   icon,
@@ -83,6 +93,8 @@ function Act({
 }: {
   wide: boolean;
   primary?: boolean;
+  /** Phones: a rare action as a tertiary text button, not a second full-width button. */
+  quiet?: boolean;
   disabled?: boolean;
   onClick: () => void;
   icon?: "spark" | "stop" | "refresh" | "cloud-off";
@@ -98,7 +110,7 @@ function Act({
   return (
     <Button
       block
-      variant={primary ? undefined : "secondary"}
+      variant={primary ? undefined : quiet ? "tertiary" : "secondary"}
       icon={icon}
       disabled={disabled}
       className={CANT_CLASS}
@@ -137,7 +149,7 @@ export function AnkiSetupView({ wide, state, onToggleDeck, onCarry, onStart, onP
   return (
     <Frame
       wide={wide}
-      subtitle={state.fileName}
+      subtitle={wide || !deck || deck.decks.length > 1 ? state.fileName : phoneSubtitle(state.fileName, deck.decks[0]?.name)}
       onBack={onBack}
       actions={
         <>
@@ -156,7 +168,7 @@ export function AnkiSetupView({ wide, state, onToggleDeck, onCarry, onStart, onP
                   ? "Нечего дополнять"
                   : `Дополнить ${notesRu(count)}`}
           </Act>
-          <Act wide={wide} onClick={onPickOther}>
+          <Act wide={wide} quiet onClick={onPickOther}>
             Другой файл
           </Act>
         </>
@@ -221,7 +233,7 @@ export function AnkiSetupView({ wide, state, onToggleDeck, onCarry, onStart, onP
       )}
 
       {!online && <p className="m-0 mt-4 text-[13px] leading-5 text-muted">{OFFLINE_REASON}</p>}
-      <p className="m-0 mt-4 text-[13px] leading-5 text-muted">{ANKI_FOOTNOTE}</p>
+      <p className="m-0 mt-4 text-[13px] leading-5 text-muted">{wide ? ANKI_FOOTNOTE : ANKI_FOOTNOTE_PHONE}</p>
     </Frame>
   );
 }
@@ -294,7 +306,8 @@ export function AnkiProgressView({ wide, state, onStop, onRetry, onContinue, onP
           <Alert wide={wide}>{state.error}</Alert>
         </div>
       )}
-      {working && <SkeletonRows className="mt-2" count={5} height={56} meter />}
+      {/* Phones: two rows say «more coming»; the review appears all at once. */}
+      {working && <SkeletonRows className="mt-2" count={wide ? 5 : 2} height={56} meter />}
     </Frame>
   );
 }

@@ -132,7 +132,10 @@ test("a saved field edit in the word sheet is lit with the spotlight (L9)", asyn
   await page.getByRole("searchbox", { name: "Поиск по FR и RU" }).fill("flics");
   await page.getByText("les flics", { exact: true }).click();
   const sheet = page.getByRole("dialog", { name: "Карточка слова" });
-  await sheet.getByRole("button", { name: "Изменить заметку" }).click();
+  // Phones: the empty note has no edit button; «+ Поле» under «Ещё» offers it.
+  await sheet.getByRole("button", { name: /^Ещё\s?·/ }).click();
+  await sheet.getByRole("button", { name: "Поле", exact: true }).click();
+  await page.getByRole("menu", { name: "Какое поле" }).getByRole("menuitem", { name: /^Заметка/ }).click();
   await sheet.getByRole("textbox", { name: "Заметка" }).fill("Тест заметки");
   const field = sheet.locator('[data-edited="note"]');
   const lit = field.evaluate(

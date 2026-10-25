@@ -21,8 +21,8 @@ test("import a screenshot: rows stream in, the user reviews them and adds the ch
   await expect(rows.getByText("ДОГАДКА")).toBeVisible();
   await expect(rows.getByText("На скриншоте «chlou» — похоже на опечатку")).toBeVisible();
   await expect(rows.getByText("УЖЕ ЕСТЬ")).toBeVisible();
-  await expect(rows.getByText("Je kiffe trop ce son.")).toBeVisible();
-  await expect(page.getByText(/Отмечено\s*2\s*из\s*4/i)).toBeVisible();
+  // The example is for editing: it shows in the row editor, not on the row.
+  await expect(rows.getByText("Je kiffe trop ce son.")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Добавить 2 слова" }).click();
   await expect(page).toHaveURL(/\/library$/);

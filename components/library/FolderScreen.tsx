@@ -3,7 +3,7 @@
 import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { createElement, useEffect, useState } from "react";
+import { createElement, useEffect, useState, ViewTransition } from "react";
 import { useAddSheetActions } from "@/components/providers/AddSheetContext";
 import { bottomBarRef } from "@/components/ui/bottom-clearance";
 import { Button, IconButton, buttonClasses } from "@/components/ui/Button";
@@ -20,7 +20,7 @@ import { cachedFolder, rememberLibrary, useRevealClass } from "./first-paint";
 import { FolderFormSheet } from "./FolderFormSheet";
 import { DisbandSheet, disbandMessage } from "./DisbandSheet";
 import { FolderMenuSheet } from "./FolderMenuSheet";
-import { NAV_BACK } from "./FolderTile";
+import { NAV_BACK, THEME_MORPH, themeMorphName } from "./NavSlide";
 import { useLibraryDesk } from "./lazy-desk";
 import { nWords, practiceHref, reviewHref } from "./format";
 import { useThemePause } from "./theme-pause";
@@ -31,7 +31,7 @@ import { WordList } from "./WordList";
 export const INBOX_SEGMENT = "inbox";
 
 /**
- * /library/[id] from the URL. Read on the client, so a tap on a theme tile renders the page in the
+ * /library/[id] from the URL. Read on the client, so a tap on a theme drawer renders the page in the
  * same frame (no server round trip for the param); the server render shows FolderScreen without
  * an id (the frame only).
  */
@@ -73,7 +73,7 @@ function PhoneFolder({ id }: { id: string | null }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [disbandOpen, setDisbandOpen] = useState(false);
-  // The tile that was tapped left its name and numbers here, so the first frame is the page (L6).
+  // The drawer that was tapped left its name and numbers here, so the first frame is the page (L6).
   const [cached] = useState(() => (id !== null ? cachedFolder(id) : undefined));
 
   const meta = useLiveQuery(async () => {
@@ -101,7 +101,7 @@ function PhoneFolder({ id }: { id: string | null }) {
   if (meta?.folder === "missing") {
     return (
       <main className="flex flex-1 flex-col">
-        <Header eyebrow="Библиотека / тема" back="/library" backLabel="Назад в библиотеку" backTransitionTypes={NAV_BACK} />
+        <Header back="/library" backLabel="Назад в библиотеку" backTransitionTypes={NAV_BACK} />
         <div className="flex flex-1 flex-col items-start px-4 pt-6">
           <h1 className="m-0 font-serif text-[28px] leading-9 font-medium">Тема не найдена</h1>
           <p className="m-0 mt-2 text-[15px] leading-[22px] text-muted">Возможно, её удалили на другом устройстве.</p>
@@ -121,7 +121,7 @@ function PhoneFolder({ id }: { id: string | null }) {
   const paused = folder ? !!folder.muted : !!cached?.muted;
   const pct = Math.round((stats?.mastery ?? 0) * 100);
   const items = words?.words;
-  // Until the words are read, expect what the tile showed (or words, when nothing is known).
+  // Until the words are read, expect what the drawer showed (or words, when nothing is known).
   const expectWords = items ? items.length > 0 : stats ? stats.total > 0 : true;
   // «Повторить тему» when something is due or new, otherwise a practice round over the whole theme.
   const reviewable = meta ? meta.cards > 0 : stats ? stats.due + stats.fresh > 0 : true;
@@ -139,69 +139,59 @@ function PhoneFolder({ id }: { id: string | null }) {
 
   return (
     <main className="flex flex-1 flex-col">
+      {/* Large title (D4 Bold): it folds into the row as the words scroll under it. The drawer that
+          was tapped settles into it (name) and into the line below (mastery); «Входящие» has none. */}
       <Header
-        eyebrow="Библиотека / тема"
+        large
+        title={name}
+        titleAside={
+          (locked || paused) && (
+            <span className="flex shrink-0 gap-1.5">
+              {locked && <span className="meta rounded-chip border border-rule px-1.5 leading-5">закреплена</span>}
+              {paused && <span className="meta rounded-chip border border-rule px-1.5 leading-5">на паузе</span>}
+            </span>
+          )
+        }
+        largeTitleTransition={folderId !== null ? { name: themeMorphName("name", folderId), share: THEME_MORPH, default: "none" } : undefined}
         back="/library"
         backLabel="Назад в библиотеку"
         backTransitionTypes={NAV_BACK}
         actions={
           known && folderId !== null ? (
-            // Shown from the first frame; the menu opens once the theme is read.
+            // Shown from the first frame; the menu opens once the theme is read. Also the visible
+            // way to what a held drawer opens in the library.
             <IconButton icon="more" label="Ещё действия с темой" onClick={() => setMenuOpen(true)} />
           ) : undefined
         }
       />
 
       <div className="flex flex-1 flex-col px-4">
-        <div className="mt-2 flex min-h-10 items-center gap-3">
-          <h1 className="m-0 min-w-0 font-serif text-[32px] leading-10 font-medium tracking-[-0.015em] break-words">{name}</h1>
-          {locked && <span className="meta shrink-0 rounded-chip border border-rule px-1.5 leading-5">закреплена</span>}
-          {paused && <span className="meta shrink-0 rounded-chip border border-rule px-1.5 leading-5">на паузе</span>}
-        </div>
-        <p className="meta m-0 mt-2 min-h-4 tabular-nums">
-          {stats && (
-            <>
-              {folderId === null ? `${nWords(stats.total)} без темы` : nWords(stats.total)}
-              {stats.due > 0 && (
+        {/* Counts and mastery, reserved until the numbers are known; an empty theme shows neither (its
+            empty state says so). The line under them is the drawer's hairline, grown up. */}
+        {(!stats || stats.total > 0) && (
+          <>
+            <p className="meta m-0 mt-2 flex min-h-4 items-baseline justify-between gap-3 tabular-nums">
+              {stats && (
                 <>
-                  {" · "}
-                  <span className="font-medium text-red">{stats.due} к повторению</span>
+                  <span className="min-w-0">
+                    {folderId === null ? `${nWords(stats.total)} без темы` : nWords(stats.total)}
+                    {stats.due > 0 && (
+                      <>
+                        {" · "}
+                        <span className="font-medium text-red">{stats.due} к повторению</span>
+                      </>
+                    )}
+                  </span>
+                  <span className="shrink-0 text-ink">{pct} % выучено</span>
                 </>
               )}
-            </>
-          )}
-        </p>
-
-        {/* Progress row: reserved until the numbers are known, gone for an empty theme */}
-        {(!stats || stats.total > 0) && (
-          <div className="mt-3 flex h-4 items-center gap-3">
-            {stats && (
-              <>
-                <span
-                  role="progressbar"
-                  aria-label="Выучено"
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={pct}
-                  className="block h-0.5 flex-1 bg-rule"
-                >
-                  <span className="block h-0.5" style={{ width: `${pct}%`, background: color }} />
-                </span>
-                <span className="meta text-ink tabular-nums">{pct} % выучено</span>
-              </>
-            )}
-          </div>
-        )}
-
-        {expectWords && (
-          <div aria-hidden="true" className="meta mt-6 flex justify-between border-b border-ink pb-2">
-            <span>Слово</span>
-            <span>Сленг · ур. · показ</span>
-          </div>
+            </p>
+            <MasteryLine id={folderId} pct={stats ? pct : 0} color={color} known={!!stats} />
+          </>
         )}
 
         {items && items.length > 0 && words && (
-          <div className={listReveal}>
+          <div className={cx("mt-2", listReveal)}>
             <WordList items={items} folders={words.folders} label={`Слова темы «${name}»`} />
           </div>
         )}
@@ -219,7 +209,7 @@ function PhoneFolder({ id }: { id: string | null }) {
 
         {items === undefined && expectWords && (
           // Reserved rows; skeletons only if the read is still pending at 300 ms.
-          <div aria-hidden="true" className="delayed-in flex flex-col">
+          <div aria-hidden="true" className="delayed-in mt-2 flex flex-col">
             {Array.from({ length: Math.min(8, Math.max(1, stats?.total ?? 5)) }, (_, i) => (
               <SkeletonRow key={i} index={i} height={64} meter fade />
             ))}
@@ -297,5 +287,32 @@ function PhoneFolder({ id }: { id: string | null }) {
         </>
       )}
     </main>
+  );
+}
+
+/**
+ * The theme's mastery as a line (2px in the theme ink over the 1px rule): the same object as the
+ * drawer's hairline in the library, so the drawer morphs into it. Rule only until it is known.
+ */
+function MasteryLine({ id, pct, color, known }: { id: string | null; pct: number; color: string; known: boolean }) {
+  const line = (
+    <span
+      role={known ? "progressbar" : undefined}
+      aria-label={known ? "Выучено" : undefined}
+      aria-valuemin={known ? 0 : undefined}
+      aria-valuemax={known ? 100 : undefined}
+      aria-valuenow={known ? pct : undefined}
+      aria-hidden={known ? undefined : true}
+      className="relative mt-2 block h-0.5 shrink-0"
+    >
+      <span className="absolute inset-x-0 bottom-0 h-px bg-rule" />
+      {pct > 0 && <span className="absolute bottom-0 left-0 h-0.5" style={{ width: `${pct}%`, background: color }} />}
+    </span>
+  );
+  if (id === null) return line;
+  return (
+    <ViewTransition name={themeMorphName("line", id)} share={THEME_MORPH} default="none">
+      {line}
+    </ViewTransition>
   );
 }

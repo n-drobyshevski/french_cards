@@ -116,3 +116,43 @@ export function callNumber(direction: Direction, ordinal: number | undefined): s
   const side = direction === "fr_ru" ? "FR" : "RU";
   return ordinal ? `${side} · ${cardNumber(ordinal)}` : side;
 }
+
+/** Leading articles a headword can carry that its example need not repeat («une blague» → «blague»). */
+const ARTICLES = new Set(["le", "la", "les", "l", "un", "une", "des", "du", "de", "d"]);
+/** Reflexive pronouns a pronominal verb takes in its example («se casser» → «on se casse», «je me casse»). */
+const REFLEXIVE = new Set(["se", "s", "me", "m", "te", "t", "nous", "vous"]);
+
+/** Lowercase, accents folded, one char per char (so indices map back to the original). */
+const foldChar = (c: string) => {
+  const f = c.toLowerCase().normalize("NFD").replace(/\p{M}+/gu, "");
+  return f.length === 1 ? f : c.toLowerCase();
+};
+
+/**
+ * Where the headword stands in its example (the span the answer side underlines in red ink): its
+ * words in order, each matched by its stem so a conjugated or plural form counts («se casser» →
+ * «se casse», «une blague» → «blagues»). A pronominal verb's «se» matches any reflexive pronoun.
+ * Null when the example does not contain it.
+ */
+export function exampleMatch(example: string, headword: string): [start: number, end: number] | null {
+  const tokens: { text: string; start: number; end: number }[] = [];
+  for (const m of example.matchAll(/\p{L}+(?:-\p{L}+)*/gu)) {
+    tokens.push({ text: Array.from(m[0], foldChar).join(""), start: m.index, end: m.index + m[0].length });
+  }
+  let words = (headword.match(/\p{L}+(?:-\p{L}+)*/gu) ?? []).map((w) => Array.from(w, foldChar).join(""));
+  while (words.length > 1 && ARTICLES.has(words[0])) words = words.slice(1);
+  if (words.length === 0) return null;
+  const fits = (word: string, token: string) => {
+    if (REFLEXIVE.has(word)) return REFLEXIVE.has(token);
+    if (word.length <= 4) return token === word || (token.startsWith(word) && token.length <= word.length + 2);
+    return token.startsWith(word.slice(0, Math.max(4, word.length - 2)));
+  };
+  for (let i = 0; i + words.length <= tokens.length; i++) {
+    if (words.every((w, k) => fits(w, tokens[i + k].text))) return [tokens[i].start, tokens[i + words.length - 1].end];
+  }
+  // A pronominal verb used without its pronoun, or a phrase whose last word alone appears: the longest word.
+  const longest = words.reduce((a, b) => (b.length > a.length ? b : a));
+  if (longest.length < 4) return null;
+  const hit = tokens.find((t) => fits(longest, t.text));
+  return hit ? [hit.start, hit.end] : null;
+}

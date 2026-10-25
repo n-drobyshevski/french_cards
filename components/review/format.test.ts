@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { nextDirection, parseReviewFilter, toSessionFilter } from "./filter";
 import {
   callNumber,
+  exampleMatch,
   formatDateStamp,
   formatPercent,
   formatProgress,
@@ -123,5 +124,24 @@ describe("desktop card", () => {
     expect(callNumber("ru_fr", 18)).toBe("RU · № 018");
     expect(callNumber("fr_ru", 1159)).toBe("FR · № 1159");
     expect(callNumber("ru_fr", undefined)).toBe("RU");
+  });
+});
+
+describe("exampleMatch", () => {
+  const cut = (example: string, headword: string) => {
+    const m = exampleMatch(example, headword);
+    return m ? example.slice(m[0], m[1]) : null;
+  };
+
+  it("finds the headword's form in its example", () => {
+    expect(cut("Allez, on se casse d'ici.", "se casser")).toBe("se casse");
+    expect(cut("Je me suis cassé hier.", "se casser")).toBe("cassé");
+    expect(cut("Il m'a raconté une blague nulle.", "une blague")).toBe("blague");
+    expect(cut("J'ai la flemme d'y aller.", "avoir la flemme")).toBe("flemme");
+    expect(cut("Les flics sont là.", "les flics")).toBe("flics");
+    expect(cut("Il a bouffé tout le gâteau.", "bouffer")).toBe("bouffé");
+    expect(cut("C'est chelou, ce truc.", "chelou")).toBe("chelou");
+    expect(cut("Je vais me tuer si ça continue.", "je vais me tuer")).toBe("Je vais me tuer");
+    expect(cut("Rien à voir.", "bouffer")).toBeNull();
   });
 });

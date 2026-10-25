@@ -1,7 +1,7 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { Drawer } from "vaul";
 import { exitMs, sheetCloseMs } from "@/lib/motion";
 import { useLayoutClass } from "@/lib/use-media";
@@ -68,6 +68,15 @@ function useAfterClose(open: boolean, onClosed: (() => void) | undefined, ms: ()
   }, [open, ms]);
 }
 
+/** What a SheetHeader needs to know about the sheet around it. */
+interface SheetFrame {
+  height: SheetHeight;
+  /** The phone bottom sheet (< 768), not the desktop dialog. */
+  drawer: boolean;
+}
+
+const SheetFrameContext = createContext<SheetFrame | null>(null);
+
 /** Keyboard heights under this are browser chrome jitter, not a keyboard. */
 export const KEYBOARD_MIN = 40;
 /** Gap kept above a full-height sheet (mockups: sheet top at 56px). */
@@ -95,6 +104,8 @@ export interface SheetProps {
   dismissible?: boolean;
   /** For a sheet opened from inside another sheet. */
   nested?: boolean;
+  /** Phones: "deep" dims the page behind to paper texture (--scrim-deep), for large/full sheets. Default the standard scrim. */
+  scrim?: "default" | "deep";
   /**
    * Called after the close animation finishes, however the sheet was closed (reset form state
    * here): sheetCloseMs() on phones, exitMs() for the desktop dialog.
@@ -137,6 +148,7 @@ function DrawerSheet({
   footer,
   dismissible = true,
   nested = false,
+  scrim = "default",
   onClosed,
   onOpenAutoFocus,
   className,
@@ -162,58 +174,60 @@ function DrawerSheet({
   useAfterClose(open, onClosed, sheetCloseMs);
 
   return (
-    <Root open={open} onOpenChange={onOpenChange} dismissible={dismissible} repositionInputs={false}>
-      <Drawer.Portal>
-        <Drawer.Overlay className="fixed inset-0 z-40 bg-(--scrim)" />
-        <Drawer.Content
-          {...(description ? {} : { "aria-describedby": undefined })}
-          onOpenAutoFocus={onOpenAutoFocus}
-          onPointerDownOutside={(event) => {
-            // Taps on the snackbar (e.g. «Отменить») must not dismiss the sheet.
-            const target = event.target as Element | null;
-            if (target?.closest?.("[data-snackbar]")) event.preventDefault();
-          }}
-          style={{ ...sizeStyle, bottom: keyboard }}
-          className={cx(
-            "fixed inset-x-0 z-50 mx-auto flex w-full max-w-[440px] flex-col rounded-t-[12px] border-t border-ink bg-surface text-ink outline-none",
-            className,
-          )}
-        >
-          <div aria-hidden="true" className="mx-auto mt-[7px] h-1 w-9 shrink-0 rounded-[2px] bg-rule" />
-          {title && <Drawer.Title className="sr-only">{title}</Drawer.Title>}
-          {description && <Drawer.Description className="sr-only">{description}</Drawer.Description>}
-          {header && <div className="shrink-0">{header}</div>}
-          <div
+    <SheetFrameContext.Provider value={{ height, drawer: true }}>
+      <Root open={open} onOpenChange={onOpenChange} dismissible={dismissible} repositionInputs={false}>
+        <Drawer.Portal>
+          <Drawer.Overlay className={cx("fixed inset-0 z-40", scrim === "deep" ? "bg-(--scrim-deep)" : "bg-(--scrim)")} />
+          <Drawer.Content
+            {...(description ? {} : { "aria-describedby": undefined })}
+            onOpenAutoFocus={onOpenAutoFocus}
+            onPointerDownOutside={(event) => {
+              // Taps on the snackbar (e.g. «Отменить») must not dismiss the sheet.
+              const target = event.target as Element | null;
+              if (target?.closest?.("[data-snackbar]")) event.preventDefault();
+            }}
+            style={{ ...sizeStyle, bottom: keyboard }}
             className={cx(
-              "flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain",
-              !footer && !keyboard && "pb-[env(safe-area-inset-bottom)]",
-              bodyClassName,
+              "fixed inset-x-0 z-50 mx-auto flex w-full max-w-[440px] flex-col rounded-t-[12px] border-t border-ink bg-surface text-ink outline-none",
+              className,
             )}
           >
-            {children}
-          </div>
-          <div className="relative z-10 h-0 shrink-0">
-            <SnackbarSlot
-              active={open}
-              className={cx(
-                "absolute inset-x-4",
-                footer || keyboard ? "bottom-2" : "bottom-[max(16px,env(safe-area-inset-bottom))]",
-              )}
-            />
-          </div>
-          {footer && (
+            <div aria-hidden="true" className="mx-auto mt-[7px] h-1 w-9 shrink-0 rounded-[2px] bg-edge" />
+            {title && <Drawer.Title className="sr-only">{title}</Drawer.Title>}
+            {description && <Drawer.Description className="sr-only">{description}</Drawer.Description>}
+            {header && <div className="shrink-0">{header}</div>}
             <div
               className={cx(
-                "shrink-0 border-t border-rule bg-surface px-4 pt-4",
-                keyboard ? "pb-4" : "pb-[max(16px,env(safe-area-inset-bottom))]",
+                "flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain",
+                !footer && !keyboard && "pb-[env(safe-area-inset-bottom)]",
+                bodyClassName,
               )}
             >
-              {footer}
+              {children}
             </div>
-          )}
-        </Drawer.Content>
-      </Drawer.Portal>
-    </Root>
+            <div className="relative z-10 h-0 shrink-0">
+              <SnackbarSlot
+                active={open}
+                className={cx(
+                  "absolute inset-x-4",
+                  footer || keyboard ? "bottom-2" : "bottom-[max(16px,env(safe-area-inset-bottom))]",
+                )}
+              />
+            </div>
+            {footer && (
+              <div
+                className={cx(
+                  "shrink-0 border-t border-rule bg-surface px-4 pt-4",
+                  keyboard ? "pb-4" : "pb-[max(16px,env(safe-area-inset-bottom))]",
+                )}
+              >
+                {footer}
+              </div>
+            )}
+          </Drawer.Content>
+        </Drawer.Portal>
+      </Root>
+    </SheetFrameContext.Provider>
   );
 }
 
@@ -253,46 +267,48 @@ function DialogSheet({
   };
 
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="dialog-scrim fixed inset-0 z-40 bg-(--scrim-desk)" />
-        <Dialog.Content
-          {...(description ? {} : { "aria-describedby": undefined })}
-          onOpenAutoFocus={onOpenAutoFocus}
-          onEscapeKeyDown={keepOpen}
-          onPointerDownOutside={(event) => {
-            const target = event.target as Element | null;
-            if (target?.closest?.("[data-snackbar]")) event.preventDefault();
-            else keepOpen(event);
-          }}
-          onInteractOutside={keepOpen}
-          style={{
-            top,
-            width: `min(${dialogWidth}px, calc(100vw - 48px))`,
-            maxHeight,
-            height: height === "full" ? maxHeight : undefined,
-          }}
-          className={cx(
-            "dialog-panel fixed left-1/2 z-50 flex -translate-x-1/2 flex-col overflow-hidden rounded-[8px] border border-rule bg-surface text-ink outline-none",
-            className,
-          )}
-        >
-          {title && <Dialog.Title className="sr-only">{title}</Dialog.Title>}
-          {description && <Dialog.Description className="sr-only">{description}</Dialog.Description>}
-          {header && <div className="shrink-0">{header}</div>}
-          {/* Without a pinned header the body keeps the room the drawer handle gave phone layouts. */}
-          <div className={cx("flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain", !header && "pt-3", bodyClassName)}>
-            {children}
-          </div>
-          <div className="relative z-10 h-0 shrink-0">
-            <SnackbarSlot active={open} className={cx("absolute inset-x-6", footer ? "bottom-2" : "bottom-4")} />
-          </div>
-          {footer && (
-            <div className="flex min-h-16 shrink-0 flex-col justify-center border-t border-rule bg-surface px-6 py-3">{footer}</div>
-          )}
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <SheetFrameContext.Provider value={{ height, drawer: false }}>
+      <Dialog.Root open={open} onOpenChange={onOpenChange}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="dialog-scrim fixed inset-0 z-40 bg-(--scrim-desk)" />
+          <Dialog.Content
+            {...(description ? {} : { "aria-describedby": undefined })}
+            onOpenAutoFocus={onOpenAutoFocus}
+            onEscapeKeyDown={keepOpen}
+            onPointerDownOutside={(event) => {
+              const target = event.target as Element | null;
+              if (target?.closest?.("[data-snackbar]")) event.preventDefault();
+              else keepOpen(event);
+            }}
+            onInteractOutside={keepOpen}
+            style={{
+              top,
+              width: `min(${dialogWidth}px, calc(100vw - 48px))`,
+              maxHeight,
+              height: height === "full" ? maxHeight : undefined,
+            }}
+            className={cx(
+              "dialog-panel fixed left-1/2 z-50 flex -translate-x-1/2 flex-col overflow-hidden rounded-[8px] border border-rule bg-surface text-ink outline-none",
+              className,
+            )}
+          >
+            {title && <Dialog.Title className="sr-only">{title}</Dialog.Title>}
+            {description && <Dialog.Description className="sr-only">{description}</Dialog.Description>}
+            {header && <div className="shrink-0">{header}</div>}
+            {/* Without a pinned header the body keeps the room the drawer handle gave phone layouts. */}
+            <div className={cx("flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain", !header && "pt-3", bodyClassName)}>
+              {children}
+            </div>
+            <div className="relative z-10 h-0 shrink-0">
+              <SnackbarSlot active={open} className={cx("absolute inset-x-6", footer ? "bottom-2" : "bottom-4")} />
+            </div>
+            {footer && (
+              <div className="flex min-h-16 shrink-0 flex-col justify-center border-t border-rule bg-surface px-6 py-3">{footer}</div>
+            )}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+    </SheetFrameContext.Provider>
   );
 }
 
@@ -311,6 +327,58 @@ export function SheetCloseButton({ className, label = "Закрыть" }: { clas
     <Dialog.Close asChild>
       <IconButton icon="close" label={label} className={className} />
     </Dialog.Close>
+  );
+}
+
+export interface SheetHeaderProps {
+  /** Visible title (the sheet's accessible name): Newsreader 19 on phones, 22 from 768 as before. */
+  title?: ReactNode;
+  /** A mono label in place of the title («№ 159»); then give the Sheet a `title` for its name. */
+  label?: ReactNode;
+  /** At most one trailing action before the close button. */
+  action?: ReactNode;
+  /**
+   * auto (default): on phones an auto-height sheet keeps ✕ for screen readers and keyboards only
+   * (visible while focused; the grabber, scrim and drag close it); large/full sheets and the desktop
+   * dialog show it. visible: always shown. none: no ✕ (the caller has its own way out).
+   */
+  close?: "auto" | "visible" | "none";
+  /** The 2px red rule under the row, edge to edge. */
+  rule?: boolean;
+  className?: string;
+}
+
+/**
+ * The slim sheet header (synthesis §2.8–2.9): one 44px row — title or label, one action, ✕ — then
+ * optionally the red rule. Replaces the hand-built `div > SheetTitle + SheetCloseButton` rows;
+ * adopt it per sheet (the visible ✕ goes away on phone auto-height sheets).
+ */
+export function SheetHeader({ title, label, action, close = "auto", rule = false, className }: SheetHeaderProps) {
+  const frame = useContext(SheetFrameContext);
+  const quietClose = close === "auto" && frame?.drawer === true && frame.height === "auto";
+  return (
+    <div className={cx("shrink-0", className)}>
+      <div className={cx("flex h-11 items-center gap-1 pl-4", close === "none" && !action ? "pr-4" : "pr-1")}>
+        <div className="flex min-w-0 flex-1 items-center">
+          {title != null ? (
+            <SheetTitle className="min-w-0 truncate max-md:text-[19px] max-md:leading-6">{title}</SheetTitle>
+          ) : (
+            label != null && <span className="font-mono text-[12px] leading-4 tracking-[.06em] whitespace-nowrap text-muted">{label}</span>
+          )}
+        </div>
+        {action && <div className="flex shrink-0 items-center">{action}</div>}
+        {close !== "none" &&
+          (quietClose ? (
+            // Out of sight but focusable; shown while it has keyboard focus.
+            <span className="sr-only has-[:focus-visible]:not-sr-only">
+              <SheetCloseButton />
+            </span>
+          ) : (
+            <SheetCloseButton />
+          ))}
+      </div>
+      {rule && <div aria-hidden="true" className="h-0.5 bg-red" />}
+    </div>
   );
 }
 

@@ -7,8 +7,12 @@ import { openReview } from "./fixtures";
 
 const picker = (page: Page) => page.getByRole("dialog", { name: "Что повторять" });
 
+/** The theme half of the split chip: «Что повторять: все темы» / «Что повторять: Разговорное». */
+const themeChip = (page: Page, current: string) =>
+  page.getByRole("button", { name: `Что повторять: ${current === "Все темы" ? "все темы" : current}`, exact: true });
+
 async function openPicker(page: Page, current = "Все темы") {
-  await page.getByRole("button", { name: current, exact: true }).click();
+  await themeChip(page, current).click();
   await expect(picker(page)).toBeVisible();
 }
 
@@ -51,7 +55,7 @@ test("a schedule set narrows today's queue; editing and deleting it (with undo)"
   await expect(editor.getByText("Сейчас 3 карточки к повторению. Оценки сдвигают интервалы, как обычно.")).toBeVisible();
   await editor.getByRole("button", { name: /^Сохранить/ }).click();
 
-  await expect(page.getByRole("button", { name: "Разговорное", exact: true })).toBeVisible();
+  await expect(themeChip(page, "Разговорное")).toBeVisible();
   await expect(page.getByText("00 / 03", { exact: true })).toBeVisible();
   await expect(page.getByText("Тренировка набора · не влияет на расписание")).toHaveCount(0);
 
@@ -73,7 +77,8 @@ test("a schedule set narrows today's queue; editing and deleting it (with undo)"
   await expect(picker(page).getByRole("radio", { name: /^Все темы/ })).toHaveAttribute("aria-checked", "true");
   await page.getByRole("button", { name: "Отменить", exact: true }).click();
   await expect(picker(page).getByRole("radio", { name: /Разговорное/ })).toBeVisible();
-  await picker(page).getByRole("button", { name: "Закрыть" }).click();
-  await expect(page.getByRole("button", { name: "Все темы", exact: true })).toBeVisible();
+  // Phones: the auto-height sheet's ✕ is for keyboards and screen readers only (the grabber, scrim and drag close it).
+  await picker(page).getByRole("button", { name: "Закрыть" }).press("Enter");
+  await expect(themeChip(page, "Все темы")).toBeVisible();
   await expect(page.getByText("00 / 11", { exact: true })).toBeVisible();
 });

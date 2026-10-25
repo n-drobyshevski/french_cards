@@ -21,6 +21,9 @@ import { describeBackupImport, describeLegacyImport, shortEmail, SYNC_LINE_TEXTS
 import { SettingsButtonRow, SettingsRow, SettingsSection } from "./SettingsList";
 import { useSyncLine } from "./useSyncLine";
 
+/** Said once on phones, here, instead of under «План повторения» and «Чаще в упражнениях». */
+const SHARED_NOTE = "План повторения и упражнения общие для всех устройств — Claude их тоже видит.";
+
 const DOT: Record<SyncLine["tone"], string> = { good: "bg-good", ink: "bg-ink", again: "bg-again", muted: "bg-boundary" };
 
 /**
@@ -130,7 +133,8 @@ export function DataSection({ desktop = false }: { desktop?: boolean }) {
     setBusy("export");
     try {
       const result = await saveBackup();
-      if (result === "saved") toast.show({ message: "Резервная копия сохранена" });
+      // Phones: the share sheet / download is the confirmation; no success bar without an undo.
+      if (result === "saved" && desktop) toast.show({ message: "Резервная копия сохранена" });
     } catch (error) {
       toast.show({ message: message(error, "Не получилось сохранить копию") });
     } finally {
@@ -172,7 +176,7 @@ export function DataSection({ desktop = false }: { desktop?: boolean }) {
               actionLabel: "Отменить",
               onAction: () => {
                 undoBackupImport(result.undo).then(
-                  () => toast.show({ message: "Импорт отменён" }),
+                  () => desktop && toast.show({ message: "Импорт отменён" }),
                   () => toast.show({ message: "Не получилось отменить импорт" }),
                 );
               },
@@ -280,7 +284,11 @@ export function DataSection({ desktop = false }: { desktop?: boolean }) {
   return (
     <>
       {rows ?? (
-        <SettingsSection title="Данные" anchor="set-data">
+        <SettingsSection
+          title="Данные"
+          anchor="set-data"
+          footer={<p className="m-0 border-t border-rule pt-2 text-[12px] leading-4 text-muted">{SHARED_NOTE}</p>}
+        >
           {line.canSync || syncBusy ? (
             <SettingsButtonRow
               label="Синхронизация"

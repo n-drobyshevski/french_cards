@@ -108,7 +108,6 @@ test("kiffer: translations, the meaning chips filter the examples, synonyms, con
   // Free first: Tatoeba's sentence, no paid search until asked.
   await expect(examples(page)).toHaveCount(1);
   await expect(examples(page).first()).toContainText(KIFFER_TATOEBA.fr);
-  await expect(examples(page).first().getByRole("link", { name: /Tatoeba · tatoeba\.org/ })).toHaveAttribute("target", "_blank");
   await expect(page.getByRole("link", { name: "Tatoeba", exact: true })).toBeVisible();
   expect(calls.tatoeba).toEqual(["kiffer"]);
   expect(calls.context).toEqual([]);
@@ -116,7 +115,6 @@ test("kiffer: translations, the meaning chips filter the examples, synonyms, con
   await searchWeb(page);
   await expect(page.getByText("4 примера")).toBeVisible();
   await expect(examples(page)).toHaveCount(4);
-  await expect(examples(page).nth(1).getByRole("link", { name: /Форум · forum\.exemple\.fr/ })).toHaveAttribute("target", "_blank");
   await expect(page.getByRole("button", { name: /^Искать ещё в вебе$/ })).toBeHidden();
   await page.getByRole("group", { name: "Значения" }).getByRole("button", { name: /нравиться/ }).click();
   await expect(examples(page)).toHaveCount(1);
@@ -158,7 +156,7 @@ test("kiffer: translations, the meaning chips filter the examples, synonyms, con
   await expect(page.getByRole("heading", { level: 1, name: "kiffer" })).toBeVisible();
   expect(calls.lookup).toEqual(["kiffer", "triper"]);
 
-  // The header's back arrow steps back the same way: home, then the Library (mono label «Библиотека»).
+  // The header's back arrow steps back the same way: home, then the Library.
   await page.getByRole("button", { name: "Назад", exact: true }).click();
   await expect(page).toHaveURL(/\/context$/);
   await expect(page.getByRole("heading", { level: 1, name: "Контекст" })).toBeVisible();
@@ -172,7 +170,7 @@ test("an example goes into the saved word's card", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1, name: "se casser" })).toBeVisible();
   const saved = page.getByRole("button", { name: "В библиотеке · Повседневное" });
   await expect(saved).toBeVisible();
-  await expect(page.getByText("В Tatoeba примеров нет")).toBeVisible();
+  await expect(page.getByText("Живых фраз пока нет")).toBeVisible();
   await searchWeb(page);
 
   await page.getByRole("button", { name: `В карточку: ${CASSE[0].fr}` }).click();
@@ -181,7 +179,7 @@ test("an example goes into the saved word's card", async ({ page }) => {
   await expect(sheet.getByRole("link", { name: /Soirée qui tourne mal/ })).toHaveAttribute("href", CASSE[0].url);
   await sheet.getByRole("button", { name: "В карточку слова" }).click();
   await expect(sheet).toBeHidden();
-  await expect(page.getByText("Пример добавлен · se casser")).toBeVisible();
+  await expect(page.getByText("Пример добавлен", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: `В карточке: ${CASSE[0].fr}` })).toBeVisible();
 
   await saved.click();
@@ -226,8 +224,7 @@ test("history reopens a query from the device, offline too", async ({ page, cont
   await page.goto("/context");
   const history = page.getByRole("region", { name: "Недавние" });
   const row = history.getByRole("link", { name: /kiffer/ });
-  await expect(row).toContainText("4 прим.");
-  await expect(page.getByText("Из твоих карточек без примеров")).toBeVisible();
+  await expect(page.getByText("Ваши слова без примеров")).toBeVisible();
   await row.click();
   await expect(page.getByRole("heading", { level: 1, name: "kiffer" })).toBeVisible();
   await expect(examples(page)).toHaveCount(4);
@@ -240,7 +237,6 @@ test("history reopens a query from the device, offline too", async ({ page, cont
   await context.setOffline(true);
   await expect(field(page)).toBeDisabled();
   await expect(field(page)).toHaveAttribute("placeholder", "Без сети — искать нельзя");
-  await expect(page.getByText("Открываются прошлые запросы — они сохранены на телефоне.")).toBeVisible();
   await row.click();
   await expect(page.getByRole("heading", { level: 1, name: "kiffer" })).toBeVisible();
   await expect(examples(page)).toHaveCount(4);
@@ -303,6 +299,8 @@ test("«Слово по частям»: the parts from Lexique, the origin line,
   await page.goto("/context?q=volontaire");
   await expect(page.getByRole("heading", { level: 1, name: "volontaire" })).toBeVisible();
   const makeup = page.getByRole("region", { name: "Слово по частям" });
+  // Phones: one row in the card, opened in place.
+  await makeup.getByRole("button", { name: /Слово по частям/ }).click();
   await expect(makeup.getByText("«относящийся к …»")).toBeVisible();
   await expect(makeup.getByText("от volonté „воля“ + -aire")).toBeVisible();
   const family = makeup.getByRole("list", { name: "Однокоренные" });

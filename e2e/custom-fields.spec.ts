@@ -31,11 +31,11 @@ async function openWord(page: Page, fr: string) {
 test("a shared field is filled on the word, shown on the card back and outlives its definition", async ({ page }) => {
   await addSharedField(page, "Синонимы", "2–3 синонима на французском");
 
-  // The word's sheet lists the shared field even when it is empty.
+  // The word's sheet offers the empty shared field in «+ Поле» under «Ещё».
   let sheet = await openWord(page, "une blague");
-  const add = sheet.getByRole("button", { name: "Добавить: Синонимы" });
-  await expect(add).toBeVisible();
-  await add.click();
+  await sheet.getByRole("button", { name: /^Ещё\s?·/ }).click();
+  await sheet.getByRole("button", { name: "Поле", exact: true }).click();
+  await page.getByRole("menu", { name: "Какое поле" }).getByRole("menuitem", { name: /^Синонимы/ }).click();
   const value = sheet.getByRole("textbox", { name: "Синонимы" });
   await expect(value).toBeFocused();
   await expect(value).toHaveAttribute("placeholder", "2–3 синонима на французском");
@@ -59,6 +59,8 @@ test("a shared field is filled on the word, shown on the card back and outlives 
   await expect(page.getByText("une vanne, une connerie")).toHaveCount(0);
   await questionCard(page).click();
   const back = page.locator("[data-review-answer]");
+  // Phones: «Свои поля» are under «Ещё · …» at the card's foot.
+  await back.getByRole("button", { name: /^Ещё/ }).click();
   await expect(back.getByText("Синонимы", { exact: true })).toBeVisible();
   await expect(back.getByText("une vanne, une connerie")).toBeVisible();
   await expect(back.getByText("Произношение", { exact: true })).toBeVisible();
@@ -86,9 +88,9 @@ test("a shared field is filled on the word, shown on the card back and outlives 
   await expect(page.getByText("Поле удалено")).toBeVisible();
 
   sheet = await openWord(page, "une blague");
+  await sheet.getByRole("button", { name: /^Ещё\s?·/ }).click();
   await expect(sheet.getByText("une vanne, une connerie")).toBeVisible();
-  await expect(sheet.getByRole("button", { name: "Добавить: Синонимы" })).toHaveCount(0);
-  await sheet.getByRole("button", { name: "Изменить свои поля" }).click();
+  await sheet.getByRole("button", { name: "Изменить поле «Синонимы»" }).click();
   await expect(sheet.getByRole("button", { name: "Убрать поле «Синонимы»" })).toBeVisible();
   await expect(sheet.getByRole("button", { name: "Убрать поле «Произношение»" })).toBeVisible();
 });
@@ -114,5 +116,6 @@ test("the add form offers the shared fields in a collapsed group", async ({ page
   await expect(sheet).toBeHidden();
 
   const word = await openWord(page, "la thune");
+  await word.getByRole("button", { name: /^Ещё\s?·/ }).click();
   await expect(word.getByText("le pognon, le blé")).toBeVisible();
 });

@@ -50,6 +50,8 @@ test("origin shows in the library row and on the answer side, and the setting hi
   await page.reload();
   await expect(questionCard(page)).toBeVisible();
   await questionCard(page).click();
+  // Phones: the origin is under «Ещё · …» at the card's foot.
+  await page.locator("[data-review-answer]").getByRole("button", { name: /^Ещё/ }).click();
   await expect(page.getByText("Откуда", { exact: true })).toBeVisible();
   await expect(page.getByText(ORIGIN)).toBeVisible();
 
@@ -74,20 +76,22 @@ test("the origin is edited by hand in the word card and shows on the answer side
   await page.getByRole("searchbox", { name: "Поиск по FR и RU" }).fill("blague");
   await page.getByText("une blague", { exact: true }).click();
   const card = page.getByRole("dialog", { name: "Карточка слова" });
-  // Empty, the field is not shown: «+ Поле» offers it (a noun: no «Спряжение»).
+  // Empty, the field is not shown: «+ Поле» under «Ещё» offers it (a noun: no «Спряжение»).
   await expect(card.getByRole("button", { name: "Изменить происхождение" })).toHaveCount(0);
+  await card.getByRole("button", { name: /^Ещё\s?·/ }).click();
   await card.getByRole("button", { name: "Поле", exact: true }).click();
   const menu = page.getByRole("menu", { name: "Какое поле" });
-  await expect(menu.getByRole("menuitem")).toHaveText([/^Происхождение/, /^Своё поле/]);
+  await expect(menu.getByRole("menuitem")).toHaveText([/^Заметка/, /^Происхождение/, /^Своё поле/]);
   await menu.getByRole("menuitem", { name: /^Происхождение/ }).click();
   await card.getByRole("textbox", { name: "Происхождение" }).fill("  от blaguer   „шутить“ ");
   await card.getByRole("button", { name: "Сохранить" }).click();
   await expect(card.getByText(ORIGIN)).toBeVisible();
   await expect(card.getByRole("textbox", { name: "Происхождение" })).toHaveCount(0);
-  // Filled, it is a field with its pencil and no longer in the menu.
+  // Filled, its text is the edit button and it is no longer in the menu.
   await expect(card.getByRole("button", { name: "Изменить происхождение" })).toBeVisible();
   await card.getByRole("button", { name: "Поле", exact: true }).click();
-  await expect(page.getByRole("menu", { name: "Какое поле" })).toHaveCount(0);
+  await expect(page.getByRole("menu", { name: "Какое поле" }).getByRole("menuitem")).toHaveText([/^Заметка/, /^Своё поле/]);
+  await page.getByRole("menu", { name: "Какое поле" }).getByRole("menuitem", { name: /^Своё поле/ }).click();
   await expect(card.getByPlaceholder("Название")).toBeVisible();
   await card.getByRole("button", { name: "Отмена" }).click();
 
@@ -102,6 +106,7 @@ test("the conjugation is edited by hand in the word card and goes back to the di
   await page.getByRole("searchbox", { name: "Поиск по FR и RU" }).fill("casser");
   await page.getByText("se casser", { exact: true }).click();
   const card = page.getByRole("dialog", { name: "Карточка слова" });
+  await card.getByRole("button", { name: /^Ещё\s?·/ }).click();
   await expect(card.getByText("je me casse · tu te casses · il se casse…")).toBeVisible();
   await expect(card.getByText("из словаря · être")).toBeVisible();
   // «Все формы»: a card per tense, the endings apart.
@@ -109,7 +114,7 @@ test("the conjugation is edited by hand in the word card and goes back to the di
   await expect(card.getByRole("article", { name: "Futur" })).toContainText("ils se casseront");
   await card.getByRole("button", { name: "Свернуть" }).click();
   await expect(card.getByRole("article", { name: "Futur" })).toHaveCount(0);
-  // The eye beside the pencil («Проверь себя») opens all the forms behind blanks; «Выйти» shows them.
+  // The eye beside «Изменить» («Проверь себя») opens all the forms behind blanks; «Выйти» shows them.
   await card.getByRole("button", { name: "Проверь себя" }).click();
   await expect(card.getByRole("button", { name: "Проверь себя" })).toHaveAttribute("aria-pressed", "true");
   await expect(card.getByRole("article", { name: "Futur" }).getByRole("button", { name: /^Показать форму/ })).toHaveCount(6);
@@ -155,6 +160,7 @@ test("«Заполнить автоматически» fills the origin and a c
   await page.getByText("pécho", { exact: true }).click();
   const card = page.getByRole("dialog", { name: "Карточка слова" });
 
+  await card.getByRole("button", { name: /^Ещё\s?·/ }).click();
   await card.getByRole("button", { name: "Поле", exact: true }).click();
   await page.getByRole("menu", { name: "Какое поле" }).getByRole("menuitem", { name: /^Происхождение/ }).click();
   await card.getByRole("button", { name: "Заполнить автоматически" }).click();
@@ -179,6 +185,7 @@ test("a verb the dictionary knows has no «Заполнить автоматич
   await page.getByRole("searchbox", { name: "Поиск по FR и RU" }).fill("casser");
   await page.getByText("se casser", { exact: true }).click();
   const card = page.getByRole("dialog", { name: "Карточка слова" });
+  await card.getByRole("button", { name: /^Ещё\s?·/ }).click();
   await card.getByRole("button", { name: "Изменить спряжение" }).click();
   await expect(card.getByRole("textbox", { name: "Présent, je" })).toHaveValue("je me casse");
   await expect(card.getByRole("button", { name: "Заполнить автоматически" })).toHaveCount(0);

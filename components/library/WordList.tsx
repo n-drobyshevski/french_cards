@@ -24,7 +24,8 @@ import { WordDetailSheet } from "./WordDetailSheet";
 const ACTIONS_WIDTH = 160;
 
 /**
- * Row body: status dot, French headword with its abbreviation, Russian, slang meter, «Уровень языка» and «к повт.».
+ * Row body: status dot, French headword with its abbreviation, Russian, slang meter (not for a
+ * neutral word), «Уровень языка» and «к повт.».
  * `struck`: deleted — a 1px ink line draws across the word and its translation (--dur-exit, linear).
  */
 export function WordRowContent({ item, showFolder, struck = false }: { item: LibraryWord; showFolder?: boolean; struck?: boolean }) {
@@ -59,9 +60,10 @@ export function WordRowContent({ item, showFolder, struck = false }: { item: Lib
         </span>
       </span>
       <span className="flex shrink-0 flex-col items-end gap-2">
-        {/* D5 A: the slang meter, then «Уровень языка» (mono, 30px, right-aligned). */}
+        {/* D5 A: the slang meter (the list-row variant: nothing for a neutral word), then «Уровень
+            языка» (mono, 30px, right-aligned). */}
         <span className="inline-flex items-center gap-2">
-          <SlangMeter level={word.slang_level} verlan={word.verlan} showLabel={false} />
+          <SlangMeter level={word.slang_level} verlan={word.verlan} row />
           <LevelMark info={item.level} />
         </span>
         <span

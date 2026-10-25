@@ -43,9 +43,10 @@ const REGISTER_OPTIONS = [
   { value: "neutral", label: "Нейтр.", ariaLabel: "Сначала нейтральное слово" },
 ] as const;
 
-const MODEL_OPTIONS = [
+/** Phones: «Точнее» says what it costs in its name, not in a footer far from the control. */
+const PHONE_MODEL_OPTIONS = [
   { value: "fast", label: "Быстрее" },
-  { value: "accurate", label: "Точнее" },
+  { value: "accurate", label: "Точнее", ariaLabel: "Точнее: медленнее, зато реже ошибается с переводом и уровнем сленга" },
 ] as const;
 
 const GRADE_OPTIONS = [
@@ -95,14 +96,17 @@ interface ScreenProps {
   onDirection: (direction: Direction) => void;
 }
 
-/** The phone list (< 768), unchanged from before the desktop layout. */
+/**
+ * The phone list (< 768): a large title that folds into the header row on scroll, sections over
+ * hairlines, no explanatory captions (each control's name says it; the rest is in aria).
+ */
 function PhoneSettings({ settings, known, save, onTheme, onDirection }: ScreenProps) {
   const [directionOpen, setDirectionOpen] = useState(false);
   const toast = useSnackbar();
 
   return (
     <div className="contents md:hidden">
-      <Header title="Настройки" fallbackHref="/" />
+      <Header large title="Настройки" fallbackHref="/" />
       <main className="flex flex-1 flex-col px-4 pb-6">
         <Valued known={known}>
           <SettingsSection title="Повторение">
@@ -140,7 +144,7 @@ function PhoneSettings({ settings, known, save, onTheme, onDirection }: ScreenPr
               />
             </SettingsRow>
             {/* «Вибрация» covers more than swipes now: grades, toggles, long presses (T8, §5.13). */}
-            <SettingsRow label="Вибрация" labelId="haptics-label" caption="При оценке, свайпах и переключателях">
+            <SettingsRow label="Вибрация" labelId="haptics-label">
               <Button
                 variant="tertiary"
                 size="sm"
@@ -187,10 +191,9 @@ function PhoneSettings({ settings, known, save, onTheme, onDirection }: ScreenPr
           <SettingsSection
             title="ИИ"
             footer={
-              <div className="flex flex-col gap-1 border-t border-rule pt-2 text-[12px] leading-4 text-muted">
-                <p className="m-0">«Точнее» отвечает медленнее, зато реже ошибается с переводом и уровнем сленга.</p>
-                <p className="m-0">Слова и скриншоты отправляются в Anthropic (Claude) для подсказок и не хранятся там.</p>
-              </div>
+              <p className="m-0 border-t border-rule pt-2 text-[12px] leading-4 text-muted">
+                Слова и скриншоты отправляются в Anthropic (Claude) для подсказок и не хранятся там.
+              </p>
             }
           >
             <SettingsRow label="Автоподсказки при вводе" labelId="hints-label">
@@ -251,12 +254,12 @@ function PhoneSettings({ settings, known, save, onTheme, onDirection }: ScreenPr
               />
             </SettingsRow>
             <SettingsRow label="Модель: подсказки" labelId="model-label">
-              <Segmented ariaLabelledby="model-label" options={MODEL_OPTIONS} value={settings.ai_model} onChange={(ai_model) => save({ ai_model })} />
+              <Segmented ariaLabelledby="model-label" options={PHONE_MODEL_OPTIONS} value={settings.ai_model} onChange={(ai_model) => save({ ai_model })} />
             </SettingsRow>
             <SettingsRow label="Модель: скриншоты" labelId="model-extract-label">
               <Segmented
                 ariaLabelledby="model-extract-label"
-                options={MODEL_OPTIONS}
+                options={PHONE_MODEL_OPTIONS}
                 value={settings.ai_model_extract}
                 onChange={(ai_model_extract) => save({ ai_model_extract })}
               />

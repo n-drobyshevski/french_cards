@@ -8,10 +8,13 @@ import { IconButton } from "@/components/ui/Button";
 import { Kbd } from "@/components/ui/Kbd";
 import { SkeletonBar } from "@/components/ui/Skeleton";
 import { SlangMeter } from "@/components/ui/SlangMeter";
+import { FoldRow, foldSummary } from "@/components/ui/FoldRow";
+import { InkUnderline } from "@/components/ui/InkUnderline";
 import { LevelMark } from "@/components/library/LevelMark";
 import { useLevelData } from "@/lib/use-level-data";
-import { REDUCED_MOTION_QUERY, tokenMs } from "@/lib/motion";
-import { useMediaQuery } from "@/lib/use-media";
+import type { LevelInfo } from "@/lib/core/level";
+import { prefersReducedMotion, REDUCED_MOTION_QUERY, tokenMs } from "@/lib/motion";
+import { MEDIUM_QUERY, useMediaQuery } from "@/lib/use-media";
 import { fieldsForDisplay } from "@/lib/core/custom-fields";
 import { SLANG_LABELS, type Direction, type FieldDef, type Word } from "@/lib/types";
 import {
@@ -25,18 +28,24 @@ import {
   type CardArrival,
   type CardExit,
 } from "./card-motion";
-import { headwordStep, posAbbr, type HeadwordStep } from "./format";
-import { flyOut, stackPose, swipeVisual, type SwipeOutcome, type SwipeVisual } from "./swipe";
+import { exampleMatch, headwordStep, posAbbr, type HeadwordStep } from "./format";
+import { deckEdges, flyOut, stackPose, swipeVisual, type SwipeOutcome, type SwipeVisual } from "./swipe";
 import { useSwipe } from "./useSwipe";
 import { useShowOrigin } from "@/lib/use-show-origin";
 import { CardHeader, cardShell } from "./card-parts";
 
-/** The card's place in the column (phone: fills it; from 768: the fixed index card). Shared with the placeholder. */
+/**
+ * The card's place in the column (phone: fills it, 12px clear below for the deck edges; from 768:
+ * the fixed index card). Shared with the placeholder.
+ */
 const cardSlot =
-  "relative mt-4 flex min-h-[280px] flex-1 flex-col md:mt-0 md:h-(--card-h) md:max-h-full md:min-h-0 md:w-(--card-w) md:max-w-full md:flex-none";
+  "relative mt-3 mb-3 flex min-h-[280px] flex-1 flex-col md:mt-0 md:mb-0 md:h-(--card-h) md:max-h-full md:min-h-0 md:w-(--card-w) md:max-w-full md:flex-none";
 
-/** Body of the question side: the prompt centred on phones, on the ruled lines from 768. */
-const questionBody = "relative flex min-h-0 flex-1 flex-col justify-center px-6 pb-6 md:justify-start md:px-10 md:pb-0";
+/**
+ * Body of the question side: the prompt centred on phones (46px under it balances the header, as
+ * there is no footer on phones), on the ruled lines from 768.
+ */
+const questionBody = "relative flex min-h-0 flex-1 flex-col justify-center px-6 pb-[46px] md:justify-start md:px-10 md:pb-0";
 
 /** Content written into a blank that was reserved for it: fade in, no movement (MOTION-SPEC §3.2). */
 export const WRITE_IN = "animate-[fade-in_var(--dur-quick)_var(--ease-enter)]";
@@ -97,11 +106,12 @@ const STEP_POS: Record<HeadwordStep, string> = {
   3: "md:mt-1",
 };
 
-/** «FR» on phones; «FR · № 001» from 768 up. */
-function CallNumber({ side, number }: { side: string; number?: string }) {
+/** «FR» on phones («FR · ПРАКТИКА» in a practice round, spec change §4); «FR · № 001» from 768 up. */
+function CallNumber({ side, number, practice = false }: { side: string; number?: string; practice?: boolean }) {
   return (
     <>
       {side}
+      {practice && <span className="md:hidden"> · ПРАКТИКА</span>}
       {number && <span className="max-md:hidden"> · {number}</span>}
     </>
   );
@@ -114,30 +124,47 @@ function promptSize(text: string): string {
   return "text-[26px] leading-[1.2]";
 }
 
+/** Phone deck edges, deepest first: 5 / 10 / 15px in from the sides, 4 / 8 / 12px lower. */
+const PHONE_EDGES = ["inset-x-[15px] top-3", "inset-x-[10px] top-2", "inset-x-[5px] top-1"] as const;
+
 /**
  * Behind the card from 768 up: one outline per card still to come, up to two (DESKTOP-SPEC §3).
  * They stay put while two or more remain; the deepest fades out --dur-quick when fewer do (D1).
+ * Phones (spec change §2): 1–3 hairline edges under the card by `edges` (`deckEdges`); the deepest
+ * fades out --dur-quick when a threshold is crossed (reduced motion: the fade only, it never moves).
  */
-export function CardStack({ count }: { count: number }) {
+export function CardStack({ count, edges = 0 }: { count: number; edges?: number }) {
   const outline =
     "absolute inset-0 rounded-card border border-rule bg-paper transition-opacity duration-(--dur-quick) ease-standard max-md:hidden";
   return (
     <>
       <div aria-hidden="true" className={cx(outline, "translate-x-2 translate-y-2", count < 2 && "opacity-0")} />
       <div aria-hidden="true" className={cx(outline, "translate-x-1 translate-y-1", count < 1 && "opacity-0")} />
+      {PHONE_EDGES.map((place, i) => (
+        <span
+          key={i}
+          aria-hidden="true"
+          data-deck-edge={edges >= PHONE_EDGES.length - i ? "" : undefined}
+          className={cx(
+            "absolute h-full rounded-card border border-edge bg-surface transition-opacity duration-(--dur-quick) ease-standard md:hidden",
+            place,
+            edges < PHONE_EDGES.length - i && "opacity-0",
+          )}
+        />
+      ))}
     </>
   );
 }
 
 /**
- * The card's place on the screen: the desktop outlines behind, then the cards — the current one,
- * and over it any graded card still on its way out (`LeavingCard`). It stays mounted from card to
- * card, so a card leaving outlives the swap to the next one.
+ * The card's place on the screen: the desktop outlines (phone edges) behind, then the cards — the
+ * current one, and over it any graded card still on its way out (`LeavingCard`). It stays mounted
+ * from card to card, so a card leaving outlives the swap to the next one.
  */
 export function CardDeck({ remaining, children }: { remaining: number; children?: ReactNode }) {
   return (
     <div data-review-focus="" className={cardSlot}>
-      <CardStack count={Math.min(2, remaining)} />
+      <CardStack count={Math.min(2, remaining)} edges={deckEdges(remaining + 1)} />
       {children}
     </div>
   );
@@ -174,6 +201,8 @@ export interface CardFace {
   fieldDefs?: readonly FieldDef[];
   /** A card never reviewed: the question side carries the outlined «НОВОЕ» tag (D3 B). */
   isNew?: boolean;
+  /** A practice round's card (phones): dashed ink header rule, «FR · ПРАКТИКА». */
+  practice?: boolean;
 }
 
 /** «Свои поля» the answer side lists; the rest are counted («+2 поля»). */
@@ -212,7 +241,7 @@ function CardFields({ word, defs }: { word: Word; defs: readonly FieldDef[] }) {
 }
 
 /**
- * Question side: call number, the prompt (with its POS line) and the «перевернуть» footer.
+ * Question side: call number, the prompt (with its POS line) and, from 768, the «перевернуть» footer.
  * Memoised, like AnswerFace: a drag re-renders the card's layers every frame, not its text.
  */
 const QuestionFace = memo(function QuestionFace({
@@ -220,6 +249,7 @@ const QuestionFace = memo(function QuestionFace({
   direction,
   number,
   isNew = false,
+  practice = false,
   newId,
   headRef,
   writeIn,
@@ -241,9 +271,10 @@ const QuestionFace = memo(function QuestionFace({
   return (
     <>
       <CardHeader
+        practice={practice}
         label={
           <span className={cx(writeIn)}>
-            <CallNumber side={fromFr ? "FR" : "RU"} number={number} />
+            <CallNumber side={fromFr ? "FR" : "RU"} number={number} practice={practice} />
           </span>
         }
       >
@@ -269,7 +300,7 @@ const QuestionFace = memo(function QuestionFace({
           <span
             lang={fromFr ? "fr" : undefined}
             className={cx(
-              "relative font-serif font-medium tracking-[-0.015em] break-words md:tracking-[-0.02em]",
+              "relative origin-top-left font-serif font-medium tracking-[-0.015em] break-words md:tracking-[-0.02em]",
               promptSize(prompt),
               STEP_HEADWORD[step],
               writeIn,
@@ -284,30 +315,32 @@ const QuestionFace = memo(function QuestionFace({
           )}
         </span>
       </span>
+      {/* From 768 only: on phones the whole card is the tap target (spec change §1). */}
       <span
         className={cx(
-          "mx-5 flex h-12 shrink-0 items-center gap-2 border-t border-rule text-[12px] text-muted md:mx-10 md:gap-1.5 md:text-[13px] md:leading-5",
+          "mx-10 flex h-12 shrink-0 items-center gap-1.5 border-t border-rule text-[13px] leading-5 text-muted max-md:hidden",
           writeIn || (footerIn && WRITE_IN),
         )}
       >
         <Icon name="flip" size={14} />
-        <span className="md:hidden">тапни, чтобы перевернуть</span>
-        <span className="ml-0.5 max-md:hidden">Щелчок или</span>
-        <Kbd aria-hidden="true" className="max-md:hidden">
-          Пробел
-        </Kbd>
-        <span className="max-md:hidden">— перевернуть</span>
+        <span className="ml-0.5">Щелчок или</span>
+        <Kbd aria-hidden="true">Пробел</Kbd>
+        <span>— перевернуть</span>
       </span>
     </>
   );
 });
 
-/** Answer side: headword and POS, then the answer block (meter, translation, note, examples, «Свои поля», footer). */
+/**
+ * Answer side from 768: headword and POS, then the answer block (meter, translation, note, examples,
+ * «Свои поля», tracings footer). Phones: `PhoneAnswer`.
+ */
 const AnswerFace = memo(function AnswerFace({
   word,
   direction,
   number,
   fieldDefs = [],
+  practice = false,
   folderName,
   headRef,
   write,
@@ -332,6 +365,28 @@ const AnswerFace = memo(function AnswerFace({
   editKey?: boolean;
 }) {
   const [bodyRef, clipped] = useClippedBelow<HTMLDivElement>();
+  const desk = useMediaQuery(MEDIUM_QUERY);
+  const origin = useShowOrigin() ? word.origin : null;
+  // «Уровень языка» on the answer side only (D5 A): «нейтр. · ≈B1».
+  const level = useLevelData().level(word);
+  // Phones (L-Review-Ans-B): the side is mounted only after a tap, so the media query is settled.
+  if (!desk) {
+    return (
+      <PhoneAnswer
+        word={word}
+        direction={direction}
+        practice={practice}
+        fieldDefs={fieldDefs}
+        folderName={folderName}
+        origin={origin}
+        level={level}
+        headRef={headRef}
+        write={write}
+        swipeEnabled={swipeEnabled}
+        onEdit={onEdit}
+      />
+    );
+  }
   // Their own taps: neither a flip back nor the start of a swipe.
   const headerButton = (icon: "mute" | "trash" | "pencil", label: string, run: () => void, extra: { title?: string; keys?: string; last?: boolean } = {}) => (
     <IconButton
@@ -350,9 +405,6 @@ const AnswerFace = memo(function AnswerFace({
   );
   const pos = posAbbr(word);
   const step = headwordStep(direction === "fr_ru" ? word.fr : word.ru, word.fr);
-  const origin = useShowOrigin() ? word.origin : null;
-  // «Уровень языка» on the answer side only (D5 A): «нейтр. · ≈B1».
-  const level = useLevelData().level(word);
   return (
     <>
       <CardHeader label={<CallNumber side={direction === "fr_ru" ? "FR" : "RU"} number={number} />}>
@@ -455,6 +507,182 @@ const AnswerFace = memo(function AnswerFace({
   );
 });
 
+/** Phone answer headword: 32/40 for a short one (L-Review-Ans-B), stepping down for long expressions. */
+function answerSize(text: string): string {
+  if (text.length <= 16) return "text-[32px] leading-10";
+  if (text.length <= 28) return "text-[28px] leading-9";
+  return "text-[24px] leading-[30px]";
+}
+
+/** The answer block's write-in on phones ends this long after the tap: the underline draws then (D4 Bold). */
+const UNDERLINE_AFTER_MS = 360;
+
+/** The example with the headword underlined in red ink (drawn once when the side has just turned). */
+function InkExample({ text, headword, draw }: { text: string; headword: string; draw: boolean }) {
+  const match = exampleMatch(text, headword);
+  if (!match) return <>{text}</>;
+  const [start, end] = match;
+  return (
+    <>
+      {text.slice(0, start)}
+      <InkUnderline animate={draw} delay={draw ? UNDERLINE_AFTER_MS : 0} className="[&>[data-ink-underline]]:bottom-[5px]">
+        {text.slice(start, end)}
+      </InkUnderline>
+      {text.slice(end)}
+    </>
+  );
+}
+
+/** One line in the answer side's fold: the mono label, then the value. */
+function FoldLine({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5">
+      <dt className="meta leading-4">{label}</dt>
+      <dd className="m-0 text-[14px] leading-5 break-words text-muted">{children}</dd>
+    </div>
+  );
+}
+
+/**
+ * The phone answer side (L-Review-Ans-B, spec change §7): headword, POS, the meter and the pencil in
+ * the header, the translation and one example with the headword underlined. Everything else the
+ * word has — note, origin, a second example, «Свои поля», ≈level, theme — opens in place under
+ * «Ещё · …» at the card's foot. «На паузу» and «Удалить слово» are in the word's sheet (the pencil).
+ */
+function PhoneAnswer({
+  word,
+  direction,
+  practice,
+  fieldDefs,
+  folderName,
+  origin,
+  level,
+  headRef,
+  write,
+  swipeEnabled,
+  onEdit,
+}: {
+  word: Word;
+  direction: Direction;
+  practice: boolean;
+  fieldDefs: readonly FieldDef[];
+  folderName: string;
+  origin: string | null | undefined;
+  level: LevelInfo | null;
+  headRef?: Ref<HTMLDivElement>;
+  write?: string | false;
+  swipeEnabled?: boolean;
+  onEdit?: () => void;
+}) {
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const foldRef = useRef<HTMLDivElement>(null);
+  const pos = posAbbr(word);
+  const fields = fieldsForDisplay(word, fieldDefs);
+  const second = word.extra_examples?.[0];
+  const drawn = !!write;
+  const summary =
+    foldSummary([word.note && "заметка", origin && "происхождение", second?.fr && "второй пример", fields.length > 0 && "свои поля"]) ||
+    foldSummary([level && "уровень", "тема"]);
+  // Opened at the card's foot: once it has grown, scroll the card so the fold's text is in view.
+  const onFold = (open: boolean) => {
+    if (!open) return;
+    window.setTimeout(() => {
+      const body = bodyRef.current;
+      const fold = foldRef.current;
+      if (!body || !fold) return;
+      const top = fold.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - 8;
+      body.scrollTo({ top, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    }, tokenMs("--dur-move", 200));
+  };
+  // Their own taps: neither a flip back nor the start of a swipe.
+  const own = {
+    onPointerDown: (e: { stopPropagation: () => void }) => e.stopPropagation(),
+    onClick: (e: { stopPropagation: () => void }) => e.stopPropagation(),
+  };
+  return (
+    <>
+      <CardHeader practice={practice} label={<CallNumber side={direction === "fr_ru" ? "FR" : "RU"} practice={practice} />}>
+        <span className={cx("flex items-center gap-2", write)}>
+          <SlangMeter level={word.slang_level} verlan={word.verlan} hints hintAlign="end" hideNeutral fillIn={drawn} fillDelay={120} />
+          {onEdit && (
+            <IconButton
+              icon="pencil"
+              label="Изменить карточку"
+              iconSize={18}
+              {...own}
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit();
+              }}
+              className="-mr-4 text-muted"
+            />
+          )}
+        </span>
+      </CardHeader>
+
+      {/* The scroller needs pan-y too (see the desktop side). */}
+      <div ref={bodyRef} className={cx("flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain px-6 pt-8", swipeEnabled && "touch-pan-y")}>
+        <div ref={headRef} className="flex flex-col">
+          <h2 lang="fr" className={cx("m-0 origin-top-left font-serif font-medium tracking-[-0.01em] break-words", answerSize(word.fr))}>
+            {word.fr}
+          </h2>
+          {pos && (
+            <span className="mt-0.5 flex">
+              <AbbrHint abbr={pos} className="text-[15px] leading-5" />
+            </span>
+          )}
+        </div>
+        <div className={cx("flex flex-col pb-6", write)}>
+          <p className="mt-6 mb-0 text-[24px] leading-8 font-medium break-words">{word.ru}</p>
+          {(word.example_fr || word.example_ru) && (
+            <div className="mt-8 flex flex-col gap-1">
+              {word.example_fr && (
+                <span lang="fr" className="font-serif text-[19px] leading-7 italic">
+                  <InkExample text={word.example_fr} headword={word.fr} draw={drawn} />
+                </span>
+              )}
+              {word.example_ru && <span className="text-[14px] leading-5 text-muted">{word.example_ru}</span>}
+            </div>
+          )}
+        </div>
+        <div ref={foldRef} {...own} className={cx("mt-auto", write)}>
+          <FoldRow summary={summary} rule="none" onOpenChange={onFold} className="border-t border-rule" buttonClassName="h-12! text-[13px]!">
+            <dl data-card-fold="" className="m-0 flex flex-col gap-3 pt-1 pb-5">
+              {word.note && (
+                <FoldLine label="Заметка">
+                  <span className="whitespace-pre-line">{word.note}</span>
+                </FoldLine>
+              )}
+              {origin && <FoldLine label="Откуда">{origin}</FoldLine>}
+              {second?.fr && (
+                <FoldLine label="Ещё пример">
+                  <span lang="fr" className="block font-serif text-[17px] leading-6 text-ink italic">
+                    {second.fr}
+                  </span>
+                  {second.ru && <span className="block">{second.ru}</span>}
+                </FoldLine>
+              )}
+              {fields.map((f) => (
+                <FoldLine key={f.key} label={f.label}>
+                  <span className="font-serif text-[16px] leading-[22px]">{f.value}</span>
+                </FoldLine>
+              ))}
+              {level && (
+                <FoldLine label="Уровень">
+                  <LevelMark info={level} size="header" />
+                </FoldLine>
+              )}
+              <FoldLine label="Тема">
+                <span className="text-ink">{folderName}</span>
+              </FoldLine>
+            </dl>
+          </FoldRow>
+        </div>
+      </div>
+    </>
+  );
+}
+
 /**
  * Swipe stamps (R4, §5.3), on both sides of the card: «ЗНАЮ» top-left −8°, «НЕ ЗНАЮ» top-right +8°.
  * The opacity follows the drag (0 at 16 px → .6 just before the threshold, falling back in
@@ -492,8 +720,40 @@ function Stamps({ visual }: { visual: Pick<SwipeVisual, "side" | "locked" | "sta
 }
 
 /**
- * The next card behind the current one (R5, phones): its real question side, inert, at .96 / 8 px;
- * it grows with a drag towards .99 / 2 px. When the current card leaves, the next one mounts in its
+ * Edge marks (D4 Bold, phones): while the card is dragged, a 2×24 rule inside each side of the deck
+ * — «Не знаю» (--again) left, «Знаю» (--good) right — at 30 % as the drag starts. The side the card
+ * heads for darkens on the stamp's curve, the other fades out; they leave in --dur-quick on release.
+ * Opacity only, so reduced motion keeps them; the side, not the colour, says which grade it is.
+ */
+function EdgeMarks({ visual, dragging }: { visual: SwipeVisual; dragging: boolean }) {
+  const rest = 0.3;
+  const opacity = (side: SwipeOutcome) =>
+    !dragging ? 0 : visual.side === side ? rest + (1 - rest) * visual.stamp : visual.side ? rest * (1 - visual.progress) : rest;
+  return (
+    <>
+      {(["again", "good"] as const).map((side) => (
+        <span
+          key={side}
+          aria-hidden="true"
+          data-edge-mark={side}
+          style={{ opacity: opacity(side), transition: dragging ? "none" : "opacity var(--dur-quick) var(--ease-standard)" }}
+          className={cx("pointer-events-none absolute top-1/2 z-10 -mt-3 h-6 w-0.5 md:hidden", side === "good" ? "right-1 bg-good" : "left-1 bg-again")}
+        />
+      ))}
+    </>
+  );
+}
+
+/** The headword's font size (px) in a head block (its first child). */
+function fontSize(head: HTMLElement): number | null {
+  const word = head.firstElementChild;
+  const size = word ? parseFloat(getComputedStyle(word).fontSize) : NaN;
+  return Number.isFinite(size) ? size : null;
+}
+
+/**
+ * The next card behind the current one (R5, phones): its real question side, inert, scaled from its
+ * bottom edge to .97 / 4 px — the deck's first edge — growing with a drag towards .985 / 2 px. When the current card leaves, the next one mounts in its
  * place and settles from that pose (`CardArrival` "stack"). After an undo it is the card that was
  * current, dropping back into the stack.
  */
@@ -504,7 +764,7 @@ function StackCard({ face, style, drop }: { face: CardFace; style: CSSProperties
     if (dropOnMount && ref.current) playDropToStack(ref.current);
   }, [dropOnMount]);
   return (
-    <div ref={ref} aria-hidden="true" inert data-review-stack="" style={style} className={cx(cardShell, "absolute inset-0 md:hidden")}>
+    <div ref={ref} aria-hidden="true" inert data-review-stack="" style={style} className={cx(cardShell, "absolute inset-0 origin-bottom md:hidden")}>
       <QuestionFace {...face} />
     </div>
   );
@@ -557,6 +817,7 @@ export function ReviewCard({
   direction,
   fieldDefs,
   isNew = false,
+  practice = false,
   revealed,
   onReveal,
   onHide,
@@ -610,7 +871,9 @@ export function ReviewCard({
   // Reveal (R3) as a FLIP: each side records where its headword block sits; when the side changes,
   // the new headword starts where the old one stood and glides to its own place. From 768 both sides
   // put it on the same ruled line, so it does not move (D2).
+  // Phones set the answer's headword smaller (L-Review-Ans-B), so it also scales from the size it had.
   const headTop = useRef<{ question: number | null; answer: number | null }>({ question: null, answer: null });
+  const headSize = useRef<{ question: number | null; answer: number | null }>({ question: null, answer: null });
   const shownSide = useRef(revealed);
   useLayoutEffect(() => {
     if (shownSide.current === revealed) return;
@@ -619,7 +882,9 @@ export function ReviewCard({
     const face = revealed ? answerRef.current : questionRef.current;
     const from = revealed ? headTop.current.question : headTop.current.answer;
     if (!head || !face || from === null || window.matchMedia("(min-width: 48rem)").matches) return;
-    playHeadwordGlide(head, from - topWithin(head, face));
+    const fromSize = revealed ? headSize.current.question : headSize.current.answer;
+    const toSize = fontSize(head);
+    playHeadwordGlide(head, from - topWithin(head, face), fromSize && toSize ? fromSize / toSize : 1);
   }, [revealed]);
   useLayoutEffect(() => {
     // A drag only moves the layers (transforms), so the headword's place in the face holds: no
@@ -627,7 +892,10 @@ export function ReviewCard({
     if (mode === "dragging") return;
     const head = revealed ? answerHeadRef.current : questionHeadRef.current;
     const face = revealed ? answerRef.current : questionRef.current;
-    if (head && face) headTop.current[revealed ? "answer" : "question"] = topWithin(head, face);
+    if (!head || !face) return;
+    const side = revealed ? "answer" : "question";
+    headTop.current[side] = topWithin(head, face);
+    headSize.current[side] = fontSize(head);
   });
 
   // Reduced motion (§2.7): the card follows the finger without tilting; a cancelled swipe returns in
@@ -654,7 +922,12 @@ export function ReviewCard({
   return (
     <>
       {next && <StackCard face={next} style={stackStyle} drop={arriveOnMount?.kind === "return"} />}
-      <div ref={layerRef} data-review-card="" style={motion} className={cx("absolute inset-0 will-change-transform", mode === "dragging" && "cursor-grabbing select-none [&_*]:cursor-grabbing")}>
+      <div
+        ref={layerRef}
+        data-review-card=""
+        style={motion}
+        className={cx("absolute inset-0 will-change-transform max-md:origin-bottom", mode === "dragging" && "cursor-grabbing select-none [&_*]:cursor-grabbing")}
+      >
         <div data-pressed={pressed ? "" : undefined} className={CARD_PRESS}>
           {!revealed ? (
             <button
@@ -676,6 +949,7 @@ export function ReviewCard({
                 direction={direction}
                 number={number}
                 isNew={isNew}
+                practice={practice}
                 newId={newId}
                 headRef={questionHeadRef}
                 writeIn={writeIn}
@@ -703,6 +977,7 @@ export function ReviewCard({
                 direction={direction}
                 number={number}
                 fieldDefs={fieldDefs}
+                practice={practice}
                 folderName={folderName}
                 headRef={answerHeadRef}
                 write={flip === "up" && ANSWER_WRITE}
@@ -717,6 +992,7 @@ export function ReviewCard({
         </div>
         {swipeEnabled && <Stamps visual={visual} />}
       </div>
+      {swipeEnabled && <EdgeMarks visual={visual} dragging={mode === "dragging"} />}
     </>
   );
 }
@@ -734,7 +1010,7 @@ export interface LeavingCardProps extends CardFace {
  * inert. It takes over from the live card in the frame of the grade — at the release pose of a
  * swipe — and plays its exit independently of the next card's read, then reports `onDone`.
  */
-export function LeavingCard({ word, direction, number, fieldDefs, isNew, revealed, folderName, exit, onDone }: LeavingCardProps) {
+export function LeavingCard({ word, direction, number, fieldDefs, isNew, practice, revealed, folderName, exit, onDone }: LeavingCardProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [start] = useState(() => ({ exit, onDone }));
   useLayoutEffect(() => {
@@ -744,7 +1020,7 @@ export function LeavingCard({ word, direction, number, fieldDefs, isNew, reveale
     animation.finished.then(start.onDone, () => {});
     return () => animation.cancel();
   }, [start]);
-  const face = { word, direction, number, fieldDefs, isNew };
+  const face = { word, direction, number, fieldDefs, isNew, practice };
   return (
     <div
       ref={ref}
@@ -752,7 +1028,7 @@ export function LeavingCard({ word, direction, number, fieldDefs, isNew, reveale
       inert
       data-review-leaving=""
       style={{ transform: exitStart(exit) }}
-      className="pointer-events-none absolute inset-0"
+      className="pointer-events-none absolute inset-0 max-md:origin-bottom"
     >
       <div className={cx(cardShell, "absolute inset-0")}>
         {revealed ? <AnswerFace {...face} folderName={folderName} /> : <QuestionFace {...face} />}
@@ -813,7 +1089,7 @@ export function ReviewCardPlaceholder() {
             <SkeletonBar width="24%" height={6} className="delayed-in" />
           </span>
         </span>
-        <span className="mx-5 h-12 shrink-0 md:mx-10" />
+        <span className="mx-10 h-12 shrink-0 max-md:hidden" />
       </div>
     </div>
   );

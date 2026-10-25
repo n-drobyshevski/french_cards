@@ -7,7 +7,7 @@ import { useAddSheet } from "@/components/providers/AddSheetContext";
 import { useAppReady } from "@/components/providers/AppProviders";
 import { OPEN_LAYER_SELECTOR } from "@/components/shell/keys";
 import { useShortcutsEnabled } from "@/components/shell/ShellContext";
-import { Chip } from "@/components/ui/Chip";
+import { Chip, SplitChip } from "@/components/ui/Chip";
 import { bottomBarRef } from "@/components/ui/bottom-clearance";
 import { Icon } from "@/components/ui/Icons";
 import { useSnackbar } from "@/components/ui/Snackbar";
@@ -22,6 +22,7 @@ import { advancePractice, buildPracticeQueue, sessionFilterKey, startOfStudyDay,
 import { listReviewSets, setIdOf, setSessionFilter } from "@/lib/review-sets";
 import { getSettings } from "@/lib/settings";
 import { useDelayedFlag } from "@/lib/use-delayed-flag";
+import { useFirstRunHint } from "@/lib/first-run";
 import { useLayoutClass } from "@/lib/use-media";
 import { getLastReview, getWord, gradeCard, restoreWords, softDeleteWords, undoLastReview, updateWord } from "@/lib/words";
 import { returnSide, type CardArrival, type CardExit, type ReturnSide } from "./card-motion";
@@ -116,6 +117,13 @@ interface Leaving extends CardFace {
 
 let leavingSeq = 0;
 
+/** A practice round without a word that was paused or deleted, history included; null when nothing is left. */
+function withoutWord(practice: Practice, id: string): Practice | null {
+  const keep = (q: QueueItem[]) => q.filter((i) => i.word.id !== id);
+  const rest = keep(practice.queue);
+  return rest.length ? { ...practice, queue: rest, history: practice.history.map((h) => ({ ...h, queue: keep(h.queue) })) } : null;
+}
+
 function isFresh(data: ReviewScreenData | undefined, awaiting: Awaiting | null): data is ReviewScreenData {
   if (!data) return false;
   if (!awaiting) return true;
@@ -144,6 +152,7 @@ export function ReviewScreen() {
   // «Свои поля» on the answer side (shared fields under their current names).
   const fieldDefs = useFieldDefs();
   const [tick, setTick] = useState(0);
+  const legend = useFirstRunHint("swipe-legend", { countOnMount: false });
   const [pickerOpen, setPickerOpen] = useState(false);
   /** «Изменить карточку»: the word whose sheet is open over the card. */
   const [editId, setEditId] = useState<string | null>(null);
@@ -365,7 +374,14 @@ export function ReviewScreen() {
   const wordOf = (item: QueueItem) => (storedWord?.id === item.word.id ? storedWord : item.word);
   const faceOf = (item: QueueItem): CardFace => {
     const ordinal = ordinals?.get(item.word.id);
-    return { word: wordOf(item), direction: item.direction, number: ordinal ? cardNumber(ordinal) : undefined, fieldDefs, isNew: item.isNew };
+    return {
+      word: wordOf(item),
+      direction: item.direction,
+      number: ordinal ? cardNumber(ordinal) : undefined,
+      fieldDefs,
+      isNew: item.isNew,
+      practice: !!practice,
+    };
   };
   const folderOf = (item: QueueItem) => {
     const word = wordOf(item);
@@ -529,11 +545,7 @@ export function ReviewScreen() {
         else await updateWord(id, { muted: true });
         setPinned(null);
         setInstance((n) => n + 1);
-        if (practice) {
-          const keep = (q: QueueItem[]) => q.filter((i) => i.word.id !== id);
-          const rest = keep(practice.queue);
-          setPractice(rest.length ? { ...practice, queue: rest, history: practice.history.map((h) => ({ ...h, queue: keep(h.queue) })) } : null);
-        }
+        if (practice) setPractice(withoutWord(practice, id));
         snackbar.show({
           message: (
             <>
@@ -553,6 +565,24 @@ export function ReviewScreen() {
       }
     })();
   };
+
+  // Phones pause and delete from the word sheet (the card no longer carries them): a word that
+  // leaves there leaves a practice round too, as `takeOut` does; today's queue drops it with its read.
+  // The last word opened is kept, since the sheet closes itself when its word is deleted.
+  const [sheetWordId, setSheetWordId] = useState<string | null>(null);
+  if (editId && editId !== sheetWordId) setSheetWordId(editId);
+  const sheetWordOut = useLiveQuery(async () => {
+    if (!sheetWordId) return null;
+    const word = await getWord(sheetWordId);
+    return !word || word.muted ? sheetWordId : null;
+  }, [sheetWordId]);
+  if (practice && sheetWordOut && practice.queue.some((i) => i.word.id === sheetWordOut)) {
+    setPractice(withoutWord(practice, sheetWordOut));
+    setPinned(null);
+    setInstance(instance + 1);
+  }
+  // Phones: a word taken out while its answer was up comes back (undo) question side up, as after `takeOut`.
+  if (!desktop && sheetWordOut && pinned?.key.startsWith(`${sheetWordOut}:`)) setPinned(null);
 
   // The flash below commits after --dur-flash, with the screen as it is then.
   const commitLatest = useRef(commitGrade);
@@ -630,6 +660,11 @@ export function ReviewScreen() {
     setPractice(null);
     resetCard();
     snackbar.hide();
+  };
+
+  const switchDirection = () => {
+    setStored({ ...stored, direction: nextDirection(direction) });
+    resetCard();
   };
 
   const setFolder = (value: FolderChoice) => {
@@ -787,6 +822,11 @@ export function ReviewScreen() {
   const deckShown = cardsShown && !placeholderShown;
   if (!deckShown && leaving.length > 0) setLeaving([]);
 
+  // A session has started once a card shows: that counts one of the legend's first sessions.
+  useEffect(() => {
+    if (card) legend.markSeen();
+  });
+
   // R1: the card that replaces the placeholder writes its text in; later cards swap in one frame.
   const [afterPlaceholder, setAfterPlaceholder] = useState(true);
   const [writeInKey, setWriteInKey] = useState<string | null>(null);
@@ -832,14 +872,28 @@ export function ReviewScreen() {
           </Chip>
         ) : (
           <>
+            {/* Phones: one split chip (spec change §1) — the direction toggles, the theme opens «Что повторять». */}
+            <SplitChip
+              className="md:hidden"
+              start={{
+                label: DIRECTION_LABELS[direction],
+                mono: true,
+                "aria-label": `Направление ${DIRECTION_NAMES[direction]}, сменить`,
+                onClick: switchDirection,
+              }}
+              end={{
+                label: <span className="max-w-[44vw] truncate">{folderLabel}</span>,
+                dropdown: true,
+                "aria-haspopup": "dialog",
+                "aria-label": `Что повторять: ${folder === "all" && !set ? "все темы" : folderLabel}`,
+                onClick: () => setPickerOpen(true),
+              }}
+            />
             <Chip
               mono
               aria-label={`Направление ${DIRECTION_NAMES[direction]}, сменить`}
-              onClick={() => {
-                setStored({ ...stored, direction: nextDirection(direction) });
-                resetCard();
-              }}
-              className="md:border-boundary hoverable:bg-hover-surface"
+              onClick={switchDirection}
+              className="max-md:hidden md:border-boundary hoverable:bg-hover-surface"
             >
               <span>{DIRECTION_LABELS[direction]}</span>
               <Icon name="swap" size={14} className="text-muted" />
@@ -848,7 +902,7 @@ export function ReviewScreen() {
               dropdown
               aria-haspopup="dialog"
               onClick={() => setPickerOpen(true)}
-              className="min-w-0 shrink! md:border-boundary hoverable:bg-hover-surface"
+              className="min-w-0 shrink! max-md:hidden md:border-boundary hoverable:bg-hover-surface"
             >
               <span className="min-w-0 truncate">{folderLabel}</span>
             </Chip>
@@ -928,9 +982,12 @@ export function ReviewScreen() {
           )}
           {/* The hint and grade bar keep their space on the question side too (invisible and inert),
               so the card does not change size when it flips. */}
-          {swipeEnabled && (
+          {/* The swipe legend: only for the first sessions on this device (synthesis §1.3). Its row is
+              laid out from the server render on, so hydration does not shrink the card (R1). */}
+          {swipeEnabled && (legend.show || legend.pending) && (
             <p
               aria-hidden="true"
+              data-first-run={legend.pending ? "swipe-legend" : undefined}
               className={cx("meta mt-4 mb-0 flex h-4 shrink-0 justify-between leading-4 md:hidden", card ? WRITE_IN : "invisible")}
             >
               <span>← {GRADE_LABELS[1]}</span>

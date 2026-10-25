@@ -14,6 +14,7 @@ import { fillSavedWords, type EnrichInput } from "@/lib/enrich";
 import { listFolders } from "@/lib/folders";
 import { isLexiqueLoaded, loadLexique, prefixSearch, type LexiqueHit } from "@/lib/lexique";
 import { exitMs, sheetCloseMs, tokenMs } from "@/lib/motion";
+import { useFirstRunHint } from "@/lib/first-run";
 import { getSettings } from "@/lib/settings";
 import { normalizeLemma } from "@/lib/text";
 import type { Folder } from "@/lib/types";
@@ -45,7 +46,7 @@ import { DeskWordForm } from "./DeskWordForm";
 import { ListPanel, type ListDetection, type ListRow } from "./ListPanel";
 import { cardNumber, nWords, plural } from "./match";
 import { parseWordList } from "./parse-list";
-import { AddSheetChrome, DICTIONARY_ROWS, ToolButton, ToolLink, type FieldSpot, type FormDetection, type SpotField } from "./parts";
+import { AddSheetChrome, DICTIONARY_ROWS, VARIANT_ENTER, type FieldSpot, type FormDetection, type SpotField } from "./parts";
 import { saveWordGroups, undoSave, type SaveRequest, type SaveResult } from "./save";
 import { SearchPanel, type QuickFields } from "./SearchPanel";
 import { FORM_ENRICH_DEBOUNCE_MS, LIST_ENRICH_DEBOUNCE_MS, useAutoEnrich } from "./use-auto-enrich";
@@ -69,6 +70,8 @@ type SaveKind = "add" | "more";
 /** What the sheet showed when «Добавить» was pressed: kept on screen while it closes (A8). */
 interface Frozen {
   label: string;
+  /** «№ 159» on the phone chrome. */
+  card: string;
   duplicate: DuplicateInfo | null;
   listRows: ListRow[];
 }
@@ -176,6 +179,13 @@ function AddSession({ open, onOpenChange, initialFr, initialDraft, onOpenWord }:
   const [undoBar, setUndoBar] = useState<{ id: number; message: string; result: SaveResult } | null>(null);
   const undoSeq = useRef(0);
 
+  // «Перевод, заметка… заполнятся сами» under the empty line: on the first phone open only.
+  const helper = useFirstRunHint("add-helper", { limit: 1, countOnMount: false });
+  const { markSeen: markHelperSeen } = helper;
+  useEffect(() => {
+    if (open && !desk) markHelperSeen();
+  }, [open, desk, markHelperSeen]);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const frRef = useRef<HTMLInputElement>(null);
   const ruRef = useRef<HTMLInputElement>(null);
@@ -272,11 +282,10 @@ function AddSession({ open, onOpenChange, initialFr, initialDraft, onOpenWord }:
   }, [parsed, listDuplicates, listToggled, listEnriched, listAuto, folders]);
   const listRows = frozen ? frozen.listRows : liveListRows;
 
-  const liveLabel =
-    mode === "list"
-      ? `Список · ${parsed.length} ${plural(parsed.length, ["строка", "строки", "строк"])}`
-      : `Карточка ${cardNumber((context?.total ?? 0) + 1)}`;
+  const liveCard = cardNumber((context?.total ?? 0) + 1);
+  const liveLabel = mode === "list" ? `Список · ${parsed.length} ${plural(parsed.length, ["строка", "строки", "строк"])}` : `Карточка ${liveCard}`;
   const label = frozen ? frozen.label : liveLabel;
+  const card = frozen ? frozen.card : liveCard;
   const listSelected = listRows.filter((r) => r.checked);
 
   // Slang level, example and theme: for the manual form while both sides are filled, and for
@@ -382,6 +391,8 @@ function AddSession({ open, onOpenChange, initialFr, initialDraft, onOpenWord }:
     if (reopenDraft(variantKey(s))) return;
     // Desktop: at once, focus in the first field (Tab order, ⌘↵).
     if (desk) return openPicked(s);
+    // Phones (Add-Duplicate B): a «Вариант» picked under «Уже есть» is the «Всё равно добавить».
+    if (liveDuplicate) setAckDuplicate(dupKey);
     // Phones: the row ink-fills (--dur-instant) and holds for --dur-flash before the form replaces
     // it (A5); the keyboard goes down at once to show the card.
     if (picked !== null) return;
@@ -481,7 +492,7 @@ function AddSession({ open, onOpenChange, initialFr, initialDraft, onOpenWord }:
     setSaveError(null);
     // «Добавить» closes the sheet: from now on it shows what was submitted, not the saved word
     // coming back as «Уже есть…» or the next card number.
-    if (!andMore) setFrozen({ label, duplicate, listRows });
+    if (!andMore) setFrozen({ label, card, duplicate, listRows });
     let result: SaveResult;
     try {
       result = await saveWordGroups(Array.isArray(request) ? request : [request]);
@@ -684,14 +695,17 @@ function AddSession({ open, onOpenChange, initialFr, initialDraft, onOpenWord }:
         </div>
       </>
     );
-  } else if (mode === "list") {
+  } else if (mode === "list" && (desk || listRows.length > 0)) {
+    // Phones: no dead «Добавить» before anything is pasted; it rises in with the first row.
     footer = (
       <>
         {undoLine}
         {errorLine}
-        <Button block pending={saving !== null} pendingLabel="Добавляем…" disabled={listSelected.length === 0} onClick={saveList}>
-          {listSelected.length > 0 ? `Добавить ${nWords(listSelected.length)}` : "Добавить"}
-        </Button>
+        <div className={cx(!desk && VARIANT_ENTER)}>
+          <Button block pending={saving !== null} pendingLabel="Добавляем…" disabled={listSelected.length === 0} onClick={saveList}>
+            {listSelected.length > 0 ? `Добавить ${nWords(listSelected.length)}` : "Добавить"}
+          </Button>
+        </div>
       </>
     );
   } else if (quickVisible) {
@@ -705,18 +719,6 @@ function AddSession({ open, onOpenChange, initialFr, initialDraft, onOpenWord }:
       </>
     );
   }
-
-  const tools =
-    mode === "list" ? undefined : (
-      <>
-        <ToolLink icon="camera" href="/import" onClick={() => handleOpenChange(false)}>
-          Скриншот
-        </ToolLink>
-        <ToolButton icon="clipboard" onClick={() => openList()}>
-          Список
-        </ToolButton>
-      </>
-    );
 
   if (desk) {
     const status = undoBar && (
@@ -836,6 +838,8 @@ function AddSession({ open, onOpenChange, initialFr, initialDraft, onOpenWord }:
       onOpenChange={handleOpenChange}
       height={mode === "search" ? "large" : "full"}
       dialogWidth={640}
+      // «Несколько слов» shows its title; the card names the sheet «Новое слово» without one (L-Add-B).
+      title={mode === "list" ? undefined : "Новое слово"}
       footer={footer}
       onOpenAutoFocus={(event) => {
         event.preventDefault();
@@ -844,9 +848,13 @@ function AddSession({ open, onOpenChange, initialFr, initialDraft, onOpenWord }:
     >
       <div className="sticky top-0 z-10 bg-surface">
         <AddSheetChrome
-          label={label}
-          title={mode === "list" ? "Несколько слов" : "Новое слово"}
-          tools={tools}
+          label={
+            <>
+              <span className="sr-only">Карточка </span>
+              {card}
+            </>
+          }
+          title={mode === "list" ? "Несколько слов" : undefined}
           onBack={mode === "search" ? undefined : backToSearch}
           backLabel="Назад к поиску"
         />
@@ -881,6 +889,9 @@ function AddSession({ open, onOpenChange, initialFr, initialDraft, onOpenWord }:
           quick={quickVisible ? quick : null}
           onQuickChange={(patch) => setQuick((q) => ({ ...q, ...patch }))}
           onLeave={() => handleOpenChange(false)}
+          onScreenshot={() => handleOpenChange(false)}
+          onList={() => openList()}
+          helper={helper.show}
           freshId={freshId}
         />
       )}

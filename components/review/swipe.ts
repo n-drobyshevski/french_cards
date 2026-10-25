@@ -157,12 +157,20 @@ export function swipeVisual(dx: number, width: number): SwipeVisual {
 }
 
 /**
- * The card behind (MOTION-SPEC R5): scale .96 and 8 px down at rest, growing with the drag to
- * .99 / 2 px at the threshold.
+ * The card behind (MOTION-SPEC R5, D4 Bold, phones): scaled from its bottom edge, .97 and 4 px down
+ * at rest — it is the deck's first edge — growing with the drag to .985 / 2 px at the threshold.
  */
 export function stackPose(progress: number): { scale: number; y: number } {
   const p = Math.max(0, Math.min(1, progress));
-  return { scale: 0.96 + 0.03 * p, y: 8 - 6 * p };
+  return { scale: 0.97 + 0.015 * p, y: 4 - 2 * p };
+}
+
+/**
+ * Hairline deck edges under the phone card (spec change §2, synthesis §2.2): 3 while 10 or more
+ * cards are left (this one included), 2 for 2–9, 1 for the last.
+ */
+export function deckEdges(left: number): 0 | 1 | 2 | 3 {
+  return left >= 10 ? 3 : left >= 2 ? 2 : left >= 1 ? 1 : 0;
 }
 
 /**

@@ -93,7 +93,8 @@ export function NewWordCard({ word, setTitle, onNext, autoFocus = false }: NewWo
         >
           Понятно
         </button>
-        <span className="meta text-center">
+        {/* From 768 only: phones carry no set footer during play (L-ExPlayer-B). */}
+        <span className="meta text-center max-md:hidden">
           набор: <span className="text-ink">{setTitle}</span> · вопрос — следующим
         </span>
       </div>

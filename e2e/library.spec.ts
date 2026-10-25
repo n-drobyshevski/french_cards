@@ -39,7 +39,9 @@ test("an undo snackbar raised inside the word sheet is part of the sheet", async
   const sheet = page.getByRole("dialog", { name: "Карточка слова" });
   await expect(sheet).toBeVisible();
 
-  await sheet.getByRole("button", { name: "Сбросить прогресс" }).click();
+  // Phones (L-Word-B): the rare actions are behind the sheet's «⋯».
+  await sheet.getByRole("button", { name: /^Действия со словом/ }).click();
+  await page.getByRole("button", { name: /^Сбросить прогресс/ }).click();
   await expect(sheet.getByText("Прогресс сброшен")).toBeVisible();
   const undo = sheet.getByRole("button", { name: "Отменить", exact: true });
   await undo.focus();
@@ -49,6 +51,8 @@ test("an undo snackbar raised inside the word sheet is part of the sheet", async
 test("«Дополнить карточки» proposes examples, applies the checked ones and undoes them", async ({ page }) => {
   await mockEnrich(page, (w) => enriched(w));
   await page.goto("/library");
+  // The chores are folded into «Уход за карточками».
+  await page.getByRole("button", { name: /^Уход за карточками/ }).click();
   await page.getByRole("button", { name: /Дополнить карточки/ }).click();
   const sheet = page.getByRole("dialog", { name: "Дополнить карточки" });
   await expect(sheet.getByRole("region", { name: /^Примеры:/ }).or(sheet.locator("section[aria-label^='Примеры:']"))).toBeVisible();
@@ -70,16 +74,15 @@ test("«Дополнить карточки» proposes examples, applies the che
   await expect(page.getByRole("dialog", { name: "Карточка слова" }).getByText("Exemple avec les flics.")).toHaveCount(0);
 });
 
-test("the library shows theme tiles or every word, and remembers the choice", async ({ page }) => {
+test("the library shows theme drawers or every word, and remembers the choice", async ({ page }) => {
   await page.goto("/library");
   const all = page.getByRole("button", { name: "Все слова: 11", exact: true });
-  await expect(all).toHaveAttribute("aria-pressed", "false");
   await expect(page.getByRole("link", { name: /^Эмоции:/ })).toBeVisible();
-  // Theme tiles preview their newest words.
-  await expect(page.getByRole("link", { name: /^Эмоции:/ })).toContainText(/c'est dur|je vais me tuer/);
+  // A drawer is a table-of-contents row: course number, name, count.
+  await expect(page.getByRole("link", { name: /^Эмоции:/ })).toContainText(/^06Эмоции2$/);
 
   await all.click();
-  await expect(all).toHaveAttribute("aria-pressed", "true");
+  await expect(all).toHaveCount(0);
   await expect(page.getByText("Все слова · 11")).toBeVisible();
   const list = page.getByRole("list", { name: "Все слова" });
   await expect(list.getByText("les flics", { exact: true })).toBeVisible();
@@ -98,12 +101,12 @@ test("the library shows theme tiles or every word, and remembers the choice", as
 
   await page.getByRole("button", { name: "К темам" }).click();
   await expect(page.getByRole("link", { name: /^Эмоции:/ })).toBeVisible();
-  // The black «Все слова» tile opens the list too.
-  await page.getByRole("button", { name: "Все слова одним списком: 11" }).click();
+  // The «Все слова» row opens the list again.
+  await page.getByRole("button", { name: "Все слова: 11", exact: true }).click();
   await expect(page.getByText("Все слова · 11")).toBeVisible();
 });
 
-test("the ledger counts filter, the filter sheet narrows and orders the list", async ({ page }) => {
+test("the subline leaves out zero counts, the filter sheet narrows and orders the list", async ({ page }) => {
   await page.goto("/library");
   // The search sits at the bottom, right above the tab bar.
   const search = page.getByRole("searchbox", { name: "Поиск по FR и RU" });
@@ -112,16 +115,11 @@ test("the ledger counts filter, the filter sheet narrows and orders the list", a
   expect(searchBox!.y + searchBox!.height).toBeLessThanOrEqual(tabsBox!.y);
   expect(tabsBox!.y - (searchBox!.y + searchBox!.height)).toBeLessThan(40);
 
-  // The KPI row under the filters: counts only.
-  await expect(page.getByText(/^\d+ повторено$/)).toBeVisible();
-  await expect(page.getByText(/^\d+ сегодня$/)).toBeVisible();
-
-  const due = page.getByRole("button", { name: /^К повторению: \d+$/ });
-  await due.click();
-  await expect(due).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByText("Сегодня повторять нечего.")).toBeVisible();
-  await due.click();
+  // Nothing is due or difficult on a new device: no «0 к повт.», no subline at all (its toggles and
+  // long-press menu: exercise-scope.spec.ts).
   await expect(page.getByRole("link", { name: /^Эмоции:/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^К повторению:/ })).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "Быстрый фильтр" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Фильтр и порядок" }).click();
   const sheet = page.getByRole("dialog", { name: "Фильтр и порядок" });

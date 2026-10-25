@@ -94,7 +94,12 @@ export function CustomFieldsSection() {
       <SettingsSection
         title="Свои поля"
         anchor="set-fields"
-        footer={<p className="m-0 border-t border-rule pt-2 text-[12px] leading-4 text-muted">{full ? FULL_NOTE : FOOTNOTE}</p>}
+        footer={
+          // What a field is: only until the first one exists (it then shows on every card back).
+          full || s.defs.length === 0 ? (
+            <p className="m-0 border-t border-rule pt-2 text-[12px] leading-4 text-muted">{full ? FULL_NOTE : FOOTNOTE}</p>
+          ) : undefined
+        }
       >
         {s.defs.map((def) => (
           <button

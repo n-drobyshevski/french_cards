@@ -33,30 +33,25 @@ function useFocusSetting() {
   return { focus, save };
 }
 
-/** Phones: a radio list of 44px rows (check at the right) and the 3-stop slider. */
+/**
+ * Phones: the section title names the choice («Чаще в упражнениях», no second label row), a radio
+ * list of 44px rows (check at the right) and the 3-stop slider. No footer: that it is shared is
+ * said once, in «Данные».
+ */
 export function PhoneExerciseSection() {
   const { focus, save } = useFocusSetting();
   const ids = useId();
   const known = focus !== undefined;
   return (
-    <SettingsSection
-      title="Упражнения"
-      anchor={EXERCISES_ANCHOR}
-      footer={<p className="m-0 pt-2 text-[12px] leading-4 text-muted">{FOCUS_CAPTION}</p>}
-    >
+    <SettingsSection title="Чаще в упражнениях" anchor={EXERCISES_ANCHOR}>
       <div inert={!known} aria-busy={!known || undefined} className="contents">
-        <div className="flex h-11 items-center border-b border-rule">
-          <span id={`${ids}-target`} className="min-w-0 flex-1 truncate text-[15px] leading-5">
-            Чаще в упражнениях
-          </span>
-        </div>
-        <div role="radiogroup" aria-labelledby={`${ids}-target`} className="flex flex-col">
+        <div role="radiogroup" aria-label="Чаще в упражнениях" className="flex flex-col">
           {FOCUS_TARGETS.map((target) => {
             const checked = focus?.target === target;
             return (
               <label
                 key={target}
-                className="press-tint relative ml-3 flex h-11 cursor-pointer items-center gap-2 border-b border-rule has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-ink"
+                className="press-tint relative flex h-11 cursor-pointer items-center gap-2 border-b border-rule has-[:focus-visible]:outline-2 has-[:focus-visible]:-outline-offset-2 has-[:focus-visible]:outline-ink"
               >
                 <input
                   type="radio"

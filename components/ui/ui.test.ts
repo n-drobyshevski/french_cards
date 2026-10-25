@@ -6,6 +6,7 @@ import { Chip } from "./Chip";
 import { Collapse } from "./Collapse";
 import { ICON_NAMES, Icon } from "./Icons";
 import { Segmented } from "./Segmented";
+import { SessionStrip, sessionStripLabel, type StripMark } from "./SessionStrip";
 import { SlangMeter, slangAbbr, slangAriaLabel } from "./SlangMeter";
 import { hidesTabBar, tabForPath } from "./TabBar";
 import { Toggle } from "./Toggle";
@@ -40,6 +41,37 @@ describe("SlangMeter", () => {
     const html = renderToStaticMarkup(h(SlangMeter, { level: 1, verlan: true, showLabel: false }));
     expect(html).not.toContain("fam.");
     expect(html).toContain('aria-label="Сленг: фамильярный, 2 из 4, верлан"');
+  });
+});
+
+describe("SlangMeter options", () => {
+  it("renders nothing for a neutral word in the row variant", () => {
+    expect(renderToStaticMarkup(h(SlangMeter, { level: 0, row: true }))).toBe("");
+    expect(renderToStaticMarkup(h(SlangMeter, { level: 1, row: true }))).not.toContain("fam.");
+  });
+
+  it("fills the filled segments on reveal over the rule track", () => {
+    const html = renderToStaticMarkup(h(SlangMeter, { level: 2, fillIn: true }));
+    expect(count(html, "seg-fill")).toBe(3);
+  });
+});
+
+describe("SessionStrip", () => {
+  const marks: StripMark[] = ["first", "first", "miss", "first", "current", "future", "future", "requeued"];
+
+  it("states the exact counts", () => {
+    expect(sessionStripLabel(marks, "ticks")).toBe("Вопрос 5 из 7, ещё 1 повтор. С первого раза 3, ошибка 1");
+    expect(sessionStripLabel(["first", "first", "miss", "requeued", "requeued"], "cells")).toBe(
+      "5 карточек: 2 с первого раза, 1 ошибка, 2 повтора",
+    );
+  });
+
+  it("gives a miss a shape cue, not only colour", () => {
+    const html = renderToStaticMarkup(h(SessionStrip, { marks: ["first", "miss"], size: "cells", writeIn: true }));
+    expect(html).toContain('role="img"');
+    expect(count(html, "strip-write")).toBe(2);
+    expect(html).toContain("border-again");
+    expect(count(html, "bg-again")).toBe(1);
   });
 });
 

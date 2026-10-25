@@ -13,6 +13,7 @@ import { Button, buttonClasses } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
 import { FlatKey } from "@/components/ui/Kbd";
+import { SessionStrip, type StripMark } from "@/components/ui/SessionStrip";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { deleteSet, restoreSet, unfinishedRun, useExerciseSets, useLastRunBySet, useOwnRunIds, useScopeCounts } from "@/lib/exercises";
 import { listFolders } from "@/lib/folders";
@@ -28,7 +29,8 @@ import { CopyGlyph, RequestBuilder, useThemeChoices } from "./RequestBuilder";
 import { RequestSheet } from "./RequestSheet";
 import { SetMenuSheet } from "./SetMenuSheet";
 import { useCopyScopeRequest } from "./scope-request";
-import { RequestTile, ScopeTile, SetTile, SetTileSkeleton } from "./SetTile";
+import { attemptMarks } from "./player-state";
+import { RequestTile, ScopeTile, SetTile, SetTileSkeleton, WaitingTile } from "./SetTile";
 
 /** From here the request builder sits in a right-hand column next to the tiles (D-Exercise-List). */
 const SIDE_PANEL_QUERY = "(min-width: 1024px)";
@@ -148,7 +150,14 @@ export function ExercisesScreen() {
       <header className="mt-4 flex h-11 shrink-0 items-center justify-between gap-3 md:mt-1">
         <div className="flex min-w-0 items-baseline gap-2">
           <h1 className="m-0 shrink-0 font-serif text-[28px] leading-9 font-medium tracking-[-0.015em]">Упражнения</h1>
-          <SyncMark />
+          {/* Phones offline: one muted word is the whole offline state (proposals «Waiting» B). */}
+          {!online && !wide ? (
+            <span data-sync-mark="offline" className="meta min-w-0 truncate leading-9">
+              · Офлайн
+            </span>
+          ) : (
+            <SyncMark />
+          )}
         </div>
         {!empty && !loading && (
           <Button variant="secondary" size="sm" onClick={openRequest} className="h-9 px-3 md:px-3.5 md:text-[14px]">
@@ -158,7 +167,8 @@ export function ExercisesScreen() {
       </header>
       {!empty && !loading && (
         <>
-          <p className="meta m-0 mt-1 leading-4 md:hidden">{nSets(list.length)} · составлены в чате</p>
+          {/* Phones: the grid counts the sets; the schedule note is said here, once (L-ExPlayer-B). */}
+          <p className="meta m-0 mt-1 leading-4 md:hidden">Не влияют на расписание повторений</p>
           <p className="m-0 mt-1 text-[13px] leading-5 text-muted max-md:hidden">
             {nSets(list.length)} · составлены в чате · не влияют на расписание повторений
           </p>
@@ -170,7 +180,7 @@ export function ExercisesScreen() {
   const offlineStrip = !online && (
     <div
       role="status"
-      className="mt-3.5 flex h-10 shrink-0 items-center gap-2.5 rounded-chip border border-dashed border-warn-edge bg-warn-bg px-3 text-[13px] leading-5 whitespace-nowrap text-warn"
+      className="mt-3.5 flex h-10 shrink-0 items-center gap-2.5 rounded-chip border border-dashed max-md:hidden border-warn-edge bg-warn-bg px-3 text-[13px] leading-5 whitespace-nowrap text-warn"
     >
       <Icon name="cloud-off" size={18} strokeWidth={1.5} className="shrink-0" />
       <span className="min-w-0 truncate">
@@ -180,7 +190,8 @@ export function ExercisesScreen() {
   );
 
   const waitingLine = waiting && last && (
-    <section aria-label="Ждём набор" aria-busy="true" className="mt-4 flex shrink-0 flex-col">
+    // Phones: the waiting tile in the grid says it instead (WaitingTile).
+    <section aria-label="Ждём набор" aria-busy="true" className="mt-4 flex shrink-0 flex-col max-md:hidden">
       {/* The StatusLine look (mono line on a hairline with the ink run) without its elapsed time:
           this wait lasts until the user is back from the chat. */}
       <div className="meta flex h-5 items-center leading-4 whitespace-nowrap">
@@ -210,6 +221,16 @@ export function ExercisesScreen() {
     </section>
   );
 
+  // Phones: the set's place in the grid is the waiting state; its status line for screen readers.
+  const waitingTile = waiting && (
+    <>
+      <WaitingTile online={online} refreshing={refreshing} onRefresh={refresh} className="md:hidden" />
+      <span role="status" className="sr-only md:hidden">
+        Ждём набор из чата
+      </span>
+    </>
+  );
+
   const helpLink = (
     <button
       type="button"
@@ -234,11 +255,25 @@ export function ExercisesScreen() {
     content = (
       <div className="flex flex-col md:max-w-[560px]">
         {waitingLine}
-        <h2 className="m-0 mt-5 font-serif text-[22px] leading-7 font-medium">Упражнений пока нет</h2>
-        <p className="m-0 mt-1.5 text-[15px] leading-[22px] text-muted">
-          Их составляет Claude в чате через коннектор «Карточки». Выберите темы — мы подготовим запрос.
-        </p>
-        <RequestBuilder variant="page" themes={themes ?? []} sets={list} online={online} className="mt-4" />
+        {wide ? (
+          <>
+            <h2 className="m-0 mt-5 font-serif text-[22px] leading-7 font-medium">Упражнений пока нет</h2>
+            <p className="m-0 mt-1.5 text-[15px] leading-[22px] text-muted">
+              Их составляет Claude в чате через коннектор «Карточки». Выберите темы — мы подготовим запрос.
+            </p>
+            <RequestBuilder variant="page" themes={themes ?? []} sets={list} online={online} className="mt-4" />
+          </>
+        ) : (
+          // Phones (proposals «Empty» B): one line, then the builder's two decisions and the merged CTA.
+          <>
+            {waitingTile && <div className="mt-5 grid grid-cols-2 gap-2">{waitingTile}</div>}
+            <h2 className="sr-only">Упражнений пока нет</h2>
+            <p className="m-0 mt-4 text-[15px] leading-[22px] text-muted">
+              Наборы пишет Claude в чате, на расписание они не влияют. Из чего составить?
+            </p>
+            <RequestBuilder variant="page" compact themes={themes ?? []} sets={list} online={online} className="mt-4" />
+          </>
+        )}
         {helpLink}
       </div>
     );
@@ -247,9 +282,11 @@ export function ExercisesScreen() {
       <>
         {waitingLine}
         {resume && <ResumeCard run={resume.run} set={resume.set} themes={setThemesLine(resume.set, folderNames)} />}
-        <SectionRule title="Наборы" note={fresh > 0 ? nNew(fresh) : null} className={resume ? "mt-6" : waitingLine ? "mt-3" : "mt-5"} />
-        <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-3">
-          {waiting && <SetTileSkeleton />}
+        {/* Phones (list B): no section rules; the grid holds sets and nothing else. */}
+        <SectionRule title="Наборы" note={fresh > 0 ? nNew(fresh) : null} className={cx("max-md:hidden", resume ? "mt-6" : waitingLine ? "mt-3" : "mt-5")} />
+        <div className="mt-3 grid grid-cols-2 gap-2 max-md:mt-4 md:grid-cols-3 md:gap-3">
+          {waiting && <SetTileSkeleton className="max-md:hidden" />}
+          {waitingTile}
           {tiles.map((set) => {
             const state = tileState(set, runs?.get(set.id), ownRuns);
             return (
@@ -266,9 +303,12 @@ export function ExercisesScreen() {
               />
             );
           })}
-          {!!scopeCounts?.difficult && <ScopeTile scope="difficult" count={scopeCounts.difficult} onClick={() => void copyScope("difficult")} />}
-          {!!scopeCounts?.due && <ScopeTile scope="due" count={scopeCounts.due} onClick={() => void copyScope("due")} />}
-          <RequestTile onClick={openRequest} side={side} />
+          {/* Phones (list B): one way to ask, the header button; its sheet starts with «Трудные» / «К повторению». */}
+          {!!scopeCounts?.difficult && (
+            <ScopeTile scope="difficult" count={scopeCounts.difficult} onClick={() => void copyScope("difficult")} className="max-md:hidden" />
+          )}
+          {!!scopeCounts?.due && <ScopeTile scope="due" count={scopeCounts.due} onClick={() => void copyScope("due")} className="max-md:hidden" />}
+          <RequestTile onClick={openRequest} side={side} className="max-md:hidden" />
         </div>
         {shortcuts && (
           <p className="meta m-0 mt-4 flex flex-wrap items-center gap-x-1.5 leading-4 max-md:hidden">
@@ -284,7 +324,8 @@ export function ExercisesScreen() {
             <span>упражнения из любого раздела</span>
           </p>
         )}
-        {!online && last && <OfflineRequestBar text={last.text} summary={last.summary} onCopied={(ok) => snackbar.show({ message: ok ? COPIED_MESSAGE : "Не получилось скопировать" })} />}
+        {/* Phones offline: the header word only; the request sheet says «нужна сеть» itself. */}
+        {!online && last && wide && <OfflineRequestBar text={last.text} summary={last.summary} onCopied={(ok) => snackbar.show({ message: ok ? COPIED_MESSAGE : "Не получилось скопировать" })} />}
       </>
     );
   }
@@ -354,17 +395,33 @@ function SectionRule({ title, note, className }: { title: string; note: string |
   );
 }
 
-/** «НЕ ЗАКОНЧЕНО» (Exercise-S-Resume): the newest unfinished run with «Продолжить · 5 из 8». */
+/** The resume card's ticks: each question's first answer (ink, or a miss), then the questions still ahead. */
+function resumeMarks(run: ExerciseRun, set: ExerciseSet, total: number): StripMark[] {
+  const ids = new Set(set.items.map((i) => i.id));
+  const marks = attemptMarks(run.answers.filter((a) => a.attempt === 1 && ids.has(a.item_id)));
+  while (marks.length < total) marks.push("future");
+  return marks;
+}
+
+/**
+ * «НЕ ЗАКОНЧЕНО» (Exercise-S-Resume): the newest unfinished run with «Продолжить · 5 из 8». Phones
+ * (list B): no rule or meta, the tick row, and a plain «Продолжить ›».
+ */
 function ResumeCard({ run, set, themes }: { run: ExerciseRun; set: ExerciseSet; themes: string }) {
   const { answered, total, progress } = resumeProgress(run, set);
   const meta = `${nQuestions(total)} · ${themes} · прервано ${shortDate(run.updated_at)}`;
   return (
     <>
-      <SectionRule title="Не закончено" note="1" className="mt-5" />
-      <section aria-label="Незаконченный набор" className="mt-3 flex shrink-0 flex-col rounded-card border border-rule bg-surface px-4 pt-3.5 pb-4">
-        <span className="truncate font-serif text-[19px] leading-6 font-medium">{set.title}</span>
-        <span className="meta mt-0.5 truncate leading-4">{meta}</span>
-        <div aria-hidden="true" className="relative mt-3 h-[5px]">
+      <SectionRule title="Не закончено" note="1" className="mt-5 max-md:hidden" />
+      <section
+        aria-label="Незаконченный набор"
+        className="mt-3 flex shrink-0 flex-col rounded-card border border-rule bg-surface px-4 pt-3.5 pb-4 max-md:mt-4"
+      >
+        <span className="truncate font-serif text-[19px] leading-6 font-medium max-md:text-[22px] max-md:leading-[26px]">{set.title}</span>
+        <span className="meta mt-0.5 truncate leading-4 max-md:hidden">{meta}</span>
+        {/* Phones (list B): the player's tick row, one tick per question; the count is in the link's name. */}
+        <SessionStrip size="ticks" marks={resumeMarks(run, set, total)} label={false} className="mt-3 md:hidden" />
+        <div aria-hidden="true" className="relative mt-3 h-[5px] max-md:hidden">
           <div className="absolute inset-x-0 top-0.5 h-px bg-rule" />
           <div className="absolute top-[1.5px] left-0 h-0.5 bg-red" style={{ width: `${Math.round(progress * 100)}%` }} />
         </div>
@@ -381,10 +438,10 @@ function ResumeCard({ run, set, themes }: { run: ExerciseRun; set: ExerciseSet; 
           className={buttonClasses({ variant: "primary", size: "lg", block: true, className: "mt-3.5 justify-start gap-2 px-4" })}
         >
           <span className="font-semibold">Продолжить</span>
-          <span aria-hidden="true" className="text-on-ink/60">
+          <span aria-hidden="true" className="text-on-ink/60 max-md:hidden">
             ·
           </span>
-          <span className="font-mono text-[13px] tracking-[.02em]">
+          <span className="font-mono text-[13px] tracking-[.02em] max-md:sr-only">
             {answered} из {total}
           </span>
           <span className="flex-1" />

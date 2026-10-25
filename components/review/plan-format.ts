@@ -1,6 +1,7 @@
 // Pure copy for «План дня» (SPEC «План дня и уровень языка»): the review summary, the reason
 // subline, the «План на сегодня» receipt and reason line, the plan summaries of Settings and
-// «Готово на сегодня», and the wait screen's minutes. lib/core/plan.ts `planDay` gives the numbers.
+// «Готово на сегодня», the wait screen's minutes and return timeline, and the plan sheet's day
+// strip. lib/core/plan.ts `planDay` gives the numbers.
 import type { DayPlan, PlanItem } from "@/lib/core/plan";
 import type { StudyPlan } from "@/lib/core/study-plan";
 import type { Direction } from "@/lib/types";
@@ -115,6 +116,45 @@ export function overrideOffered(day: DayPlan, plan: Pick<StudyPlan, "ru_fr">): b
   return day.canOverride && availableNew(day, plan) > 0;
 }
 
+/** The phone plan sheet's day strip: its parts in order, the mono labels and the full name. */
+export interface DayStrip {
+  /** К повторению: one ink bar. */
+  due: number;
+  /** New-word (or card, with «Назавтра») slots: the day's ceiling. */
+  slots: number;
+  /** Today's new words in those slots (introduced plus still to come). */
+  fresh: number;
+  /** Обратных сторон, only with «После 3 дней узнавания». */
+  reverse: number;
+  /** Отложено: after the cap rule, only when some are. */
+  deferred: number;
+  /** «ПОВТ. 27», «НОВ. 4/10», «ОБР. 6», «ОТЛ. 140» (shown parts only). */
+  parts: { key: string; text: string; value: string }[];
+  /** «К повторению 27, новых слов 4 из 10, обратных сторон 6, отложено 140». */
+  label: string;
+}
+
+export function dayStrip({ due, day, plan }: { due: number; day: DayPlan; plan: StudyPlan }): DayStrip {
+  const fresh = newWordsToday(day, plan);
+  const reverse = plan.ru_fr === "after" ? reverseToday(day) : 0;
+  // Zero parts are left off the line (the new slots always show: they carry the day's number);
+  // the accessible name keeps every number.
+  const parts = [
+    ...(due > 0 ? [{ key: "due", text: "Повт.", value: String(due) }] : []),
+    { key: "new", text: "Нов.", value: `${fresh}/${day.ceiling}` },
+  ];
+  const label = [`К повторению ${due}`, `${countsCards(plan) ? "новых карточек" : "новых слов"} ${fresh} из ${day.ceiling}`];
+  if (plan.ru_fr === "after") {
+    if (reverse > 0) parts.push({ key: "reverse", text: "Обр.", value: String(reverse) });
+    label.push(`обратных сторон ${reverse}`);
+  }
+  if (day.deferred > 0) {
+    parts.push({ key: "deferred", text: "Отл.", value: String(day.deferred) });
+    label.push(`отложено ${day.deferred}`);
+  }
+  return { due, slots: day.ceiling, fresh, reverse, deferred: day.deferred, parts, label: label.join(", ") };
+}
+
 /** «Ждут 3 карточки» (the wait screen's summary). */
 export function waitingSummary(n: number): string {
   // The verb agrees with the noun's form: «Ждёт 21 карточка», «Ждут 11 карточек».
@@ -123,6 +163,45 @@ export function waitingSummary(n: number): string {
 
 /** «Ещё 3 карточки» (the wait screen's headline, before «— через 12 мин»). */
 export const moreCards = (n: number) => `Ещё ${n} ${pluralRu(n, CARD_FORMS)}`;
+
+/** «ещё 3 карточки» (the phone wait screen's headline, after «Через 12 мин —»). */
+export const waitTitle = (n: number) => `ещё ${n} ${pluralRu(n, CARD_FORMS)}`;
+
+export interface ReturnAxis {
+  /** The axis length in ms: 1, 2, 4, 8, 16 or 24 h. */
+  span: number;
+  /** Four labels at 1/4 … 1 of the span: «15», «30», «45», «60 мин» / «1 ч» … «4 ч». */
+  marks: { at: number; label: string }[];
+}
+
+const AXIS_SPANS_MIN = [60, 120, 240, 480, 960, 1440];
+
+/**
+ * The wait screen's return timeline: the shortest axis that holds the last waiting card (`ms`
+ * from the axis start), labelled in minutes up to 2 h and in hours beyond.
+ */
+export function returnAxis(ms: number): ReturnAxis {
+  const minutes = Math.max(1, Math.ceil(ms / 60_000));
+  const span = AXIS_SPANS_MIN.find((s) => s >= minutes) ?? AXIS_SPANS_MIN[AXIS_SPANS_MIN.length - 1];
+  const marks = [1, 2, 3, 4].map((q) => {
+    const m = (span * q) / 4;
+    const label = span <= 120 ? (q === 4 ? `${m} мин` : String(m)) : `${String(m / 60).replace(".", ",")} ч`;
+    return { at: q / 4, label };
+  });
+  return { span: span * 60_000, marks };
+}
+
+/** Waiting cards on the axis, soonest first: cards due within the same 2 % of the axis share a mark. */
+export function returnGroups(dues: readonly number[], start: number, span: number): { due: number; at: number; count: number }[] {
+  const groups: { due: number; at: number; count: number }[] = [];
+  for (const due of [...dues].sort((a, b) => a - b)) {
+    const at = Math.min(1, Math.max(0, (due - start) / span));
+    const last = groups[groups.length - 1];
+    if (last && at - last.at < 0.02) last.count += 1;
+    else groups.push({ due, at, count: 1 });
+  }
+  return groups;
+}
 
 /** «12 мин», «1 ч 5 мин»: time until a waiting card is due, minutes rounded up (never «0 мин»). */
 export function waitIn(ms: number): string {

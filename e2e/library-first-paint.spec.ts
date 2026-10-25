@@ -5,7 +5,7 @@ import "./fixtures";
 // First paint without flashes (mockups/MOTION-SPEC.md §3.1, L2, T1): stored choices are on screen
 // from the first client frame (localStorage mirror), never the defaults first.
 
-test("after choosing «Все слова», a reload never shows the theme tiles first", async ({ page }) => {
+test("after choosing «Все слова», a reload never shows the theme drawers first", async ({ page }) => {
   await page.goto("/library");
   await page.getByRole("button", { name: "Все слова: 11", exact: true }).click();
   await expect(page.getByText("Все слова · 11")).toBeVisible();
@@ -15,7 +15,7 @@ test("after choosing «Все слова», a reload never shows the theme tiles
     const w = window as unknown as { __themesSeen: boolean };
     w.__themesSeen = false;
     const check = () => {
-      if (document.querySelector('[aria-label^="Все слова одним списком"], a[aria-label^="Эмоции:"]')) w.__themesSeen = true;
+      if (document.querySelector('button[aria-label^="Все слова:"], a[aria-label^="Эмоции:"]')) w.__themesSeen = true;
     };
     new MutationObserver(check).observe(document, { childList: true, subtree: true });
   });

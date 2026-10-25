@@ -12,10 +12,11 @@ import type { LexiqueHit } from "@/lib/lexique";
 import type { Folder, Word } from "@/lib/types";
 import type { SuggestApi } from "@/lib/use-suggest";
 import type { AddContext, DuplicateInfo } from "./data";
-import { choiceName, foldersForSuggestion, type FolderChoice } from "./folder-choice";
+import type { FolderChoice } from "./folder-choice";
 import { posAbbr, splitTypedPrefix } from "./match";
 import { Collapse } from "@/components/ui/Collapse";
 import {
+  AddTools,
   DICTIONARY_ROWS,
   DictionarySlot,
   DuplicateNotice,
@@ -23,7 +24,6 @@ import {
   FIELD_INPUT,
   FieldError,
   FieldRow,
-  FolderSelect,
   HeadwordInput,
   SectionHeader,
   useDictionaryReserved,
@@ -78,6 +78,11 @@ export interface SearchPanelProps {
   onQuickChange: (patch: Partial<QuickFields>) => void;
   /** Closes the sheet when a link leaves it («Как «…» говорят в жизни» → «Контекст»). */
   onLeave?: () => void;
+  /** «Со скриншота» (leaves for /import) and «Списком», under the empty line. */
+  onScreenshot?: () => void;
+  onList?: () => void;
+  /** First run (the first open): the line «… заполнятся сами» under the empty headword. */
+  helper?: boolean;
 }
 
 /** The «Контекст» row shows from this many typed characters. */
@@ -130,7 +135,7 @@ export function SearchPanel(props: SearchPanelProps) {
           {/* Fixed order (A3): «Словарь», «Варианты», then the manual way in. An error stays inside
               «Варианты», and the quick form opens below it, so nothing above moves. */}
           <Dictionary {...props} query={value} hidden={direction === "ru"} />
-          {props.suggestionsEnabled && <Variants {...props} direction={direction} />}
+          {props.suggestionsEnabled && <Variants {...props} />}
           {quick ? <QuickForm {...props} quick={quick} direction={direction} /> : <ManualRow onManual={props.onManual} />}
           {trimmed.length >= CONTEXT_MIN_CHARS && (
             <div className="mx-4">
@@ -143,67 +148,53 @@ export function SearchPanel(props: SearchPanelProps) {
   );
 }
 
-function EmptyState({ context, folders, onOpenWord, suggestionsEnabled, freshId }: SearchPanelProps) {
+function EmptyState({ context, onOpenWord, suggestionsEnabled, freshId, onScreenshot, onList, helper = false }: SearchPanelProps) {
   const recent = context?.recent ?? [];
+  // The helper is a first-run line; «Подсказки выключены» explains a state, so it always shows.
+  const note = !suggestionsEnabled
+    ? "Подсказки выключены в настройках — перевод и тему заполни сам."
+    : helper
+      ? "Перевод, заметка, уровень сленга и тема заполнятся сами — останется только проверить."
+      : null;
   return (
     <>
-      <p className="m-0 mx-4 mt-2 text-[13px] leading-5 text-muted">
-        {suggestionsEnabled
-          ? "Перевод, заметка, уровень сленга и тема заполнятся сами — останется только проверить."
-          : "Подсказки выключены в настройках — перевод и тему заполни сам."}
-      </p>
+      {onScreenshot && onList && <AddTools onScreenshot={onScreenshot} onList={onList} />}
+      {note && <p className="m-0 mx-4 mt-2 text-[13px] leading-5 text-muted">{note}</p>}
       {recent.length > 0 && (
-        <>
-          <SectionHeader
-            title="Недавние"
-            className="mt-8"
-            aside={context && context.today > 0 ? <span className="meta">Сегодня · {context.today}</span> : undefined}
-          />
-          <ul className="m-0 mx-4 flex list-none flex-col p-0">
-            {recent.map((w) => (
-              <li key={w.id} className={cx(w.id === freshId && FRESH_ROW)} style={w.id === freshId ? FRESH_ROW_STYLE : undefined}>
-                <RecentRow word={w} folders={folders} onOpen={() => onOpenWord(w.id)} />
-              </li>
-            ))}
-          </ul>
-        </>
+        <ul aria-label="Недавние" className="m-0 mx-4 mt-3 flex list-none flex-col border-t border-rule p-0">
+          {recent.map((w) => (
+            <li key={w.id} className={cx(w.id === freshId && FRESH_ROW)} style={w.id === freshId ? FRESH_ROW_STYLE : undefined}>
+              <RecentRow word={w} onOpen={() => onOpenWord(w.id)} />
+            </li>
+          ))}
+        </ul>
       )}
-      <p className="m-0 mx-4 mt-6 text-[12px] leading-4 text-muted">
-        Несколько слов сразу — через «Список». Со скриншота — через «Скриншот».
-      </p>
     </>
   );
 }
 
 /** A just-added row opens from 0 (--dur-move) and its paper fades from --surface-2 (--dur-spotlight). */
-const FRESH_ROW = "h-16 overflow-hidden starting:h-0 starting:bg-surface-2";
+const FRESH_ROW = "h-12 overflow-hidden starting:h-0 starting:bg-surface-2";
 const FRESH_ROW_STYLE = {
   transition: "height var(--dur-move) var(--ease-standard), background-color var(--dur-spotlight) linear",
 } as const;
 
-function RecentRow({ word, folders, onOpen }: { word: Word; folders: readonly Folder[]; onOpen: () => void }) {
-  const folder = word.folder_id ? folders.find((f) => f.id === word.folder_id) : undefined;
+/** «Недавние»: one 48px line, FR serif — RU muted. Level and theme live on the card. */
+function RecentRow({ word, onOpen }: { word: Word; onOpen: () => void }) {
   return (
     <button
       type="button"
       onClick={onOpen}
       aria-label={`Открыть: ${word.fr} — ${word.ru}`}
-      className="flex h-16 w-full items-center justify-between gap-4 border-b border-rule bg-transparent p-0 text-left text-ink active:bg-surface-2"
+      className="flex h-12 w-full items-baseline gap-2 overflow-hidden border-b border-rule bg-transparent p-0 text-left leading-[48px] whitespace-nowrap text-ink active:bg-surface-2"
     >
-      <span className="flex min-w-0 flex-col">
-        <span lang="fr" className="truncate font-serif text-[19px] leading-6 font-medium">
-          {word.fr}
-        </span>
-        <span className="truncate text-[14px] leading-5 text-muted">{word.ru}</span>
+      <span lang="fr" className="max-w-[60%] shrink-0 truncate font-serif text-[19px] font-medium">
+        {word.fr}
       </span>
-      <span className="flex shrink-0 flex-col items-end">
-        <span className="flex h-6 items-center">
-          <SlangMeter level={word.slang_level} verlan={word.verlan} />
-        </span>
-        <span className="max-w-[160px] truncate font-mono text-[11px] leading-5 tracking-[.06em] whitespace-nowrap text-muted uppercase">
-          Тема: {folder?.name ?? "Входящие"}
-        </span>
+      <span aria-hidden="true" className="shrink-0 text-[15px] text-muted">
+        —
       </span>
+      <span className="min-w-0 truncate text-[15px] text-muted">{word.ru}</span>
     </button>
   );
 }
@@ -223,8 +214,9 @@ function Dictionary({
   return (
     <Collapse open={dictionaryLoading || dictionary.length > 0}>
       <section aria-labelledby={headingId} aria-busy={dictionaryLoading || undefined} data-dictionary="">
-        <SectionHeader id={headingId} title="Словарь" aside="работает без сети" />
-        <ul className="m-0 mx-4 flex list-none flex-col p-0">
+        {/* No visible header (Add-Suggest B): the typed-vs-rest rows and ↖ say what they are. */}
+        <SectionHeader id={headingId} title="Словарь" className="sr-only" />
+        <ul className="m-0 mx-4 mt-2 flex list-none flex-col p-0">
           {dictionary.map((hit) => (
             <li key={hit.fr}>
               <DictionaryRow hit={hit} query={query} onPick={() => onPickHit(hit)} />
@@ -269,25 +261,17 @@ function DictionaryRow({ hit, query, onPick }: { hit: LexiqueHit; query: string;
 
 function Variants({
   suggest,
-  autoSort = true,
   showSlang = true,
-  folders,
   onPickSuggestion,
   pickedKey = null,
-  direction,
-}: Pick<SearchPanelProps, "suggest" | "autoSort" | "showSlang" | "folders" | "onPickSuggestion" | "pickedKey"> & {
-  direction: "fr" | "ru";
-}) {
+}: Pick<SearchPanelProps, "suggest" | "showSlang" | "onPickSuggestion" | "pickedKey">) {
   const headingId = useId();
   const region = useVariantsRegion(suggest);
   return (
     <section aria-labelledby={headingId} aria-busy={region.busy || undefined} data-variants="">
-      <SectionHeader
-        id={headingId}
-        title="Варианты"
-        aside={`${direction === "ru" ? "по-французски" : "перевод"}${showSlang ? " · уровень" : ""} · тема`}
-      />
-      <div className="mx-4">
+      {/* The status slot («Подбираем варианты» → «3 варианта») stands in for the header (Add-Suggest B). */}
+      <SectionHeader id={headingId} title="Варианты" className="sr-only" />
+      <div className="mx-4 mt-2">
         <VariantsStatusSlot status={region.status} />
         <ul className="m-0 flex list-none flex-col p-0">
           {region.slots.map((slot) =>
@@ -295,8 +279,6 @@ function Variants({
               <li key={slot.key} className={VARIANT_ENTER} style={{ animationDelay: `${slot.delay}ms` }}>
                 <VariantRow
                   suggestion={slot.suggestion}
-                  folders={folders}
-                  autoSort={autoSort}
                   showSlang={showSlang}
                   picked={slot.key === pickedKey}
                   onPick={() => onPickSuggestion(slot.suggestion)}
@@ -326,23 +308,19 @@ function Variants({
   );
 }
 
+/** A «Вариант»: FR + abbr, RU and the meter. The theme is decided in the form; the whole row is the button. */
 function VariantRow({
   suggestion: s,
-  folders,
-  autoSort,
   showSlang,
   picked,
   onPick,
 }: {
   suggestion: Suggestion;
-  folders: readonly Folder[];
-  autoSort: boolean;
   showSlang: boolean;
   picked: boolean;
   onPick: () => void;
 }) {
   const abbr = posAbbr(s);
-  const theme = autoSort ? choiceName(foldersForSuggestion(s, folders).auto, folders) : "Входящие";
   return (
     <button
       type="button"
@@ -370,46 +348,41 @@ function VariantRow({
         </span>
         <span className="truncate text-[15px] leading-5">{s.ru}</span>
       </span>
-      <span className="flex shrink-0 flex-col items-end gap-1">
-        {showSlang && (
-          <span className="flex h-6 items-center">
-            <SlangMeter level={s.slang_level} verlan={s.verlan} />
-          </span>
-        )}
-        <span className="max-w-[156px] truncate font-mono text-[11px] leading-5 tracking-[.06em] whitespace-nowrap text-muted uppercase">
-          Тема: {theme}
+      {showSlang && (
+        <span className="flex h-6 shrink-0 items-center">
+          <SlangMeter level={s.slang_level} verlan={s.verlan} />
         </span>
-      </span>
-      <Icon name="chevron-right" size={16} className="shrink-0" />
+      )}
     </button>
   );
 }
 
+/** «Заполнить вручную»: a muted 44px text action under the last slot. */
 function ManualRow({ onManual }: { onManual: () => void }) {
   return (
     <div className="mx-4">
       <button
         type="button"
         onClick={onManual}
-        className="flex h-11 w-full items-center gap-2 border-b border-rule bg-transparent p-0 text-left text-[14px] leading-5 text-muted active:bg-surface-2"
+        className="flex h-11 items-center bg-transparent p-0 text-left text-[14px] leading-5 text-muted underline-offset-4 active:underline"
       >
-        <Icon name="pencil" size={16} className="shrink-0" />
-        <span className="flex-1">Заполнить вручную</span>
-        <Icon name="chevron-right" size={16} className="shrink-0" />
+        Заполнить вручную
       </button>
     </div>
   );
 }
 
+/**
+ * Suggestions off or failed: the other side on one ruled row, then «Добавить» in the footer. The
+ * theme is «Входящие» (sorted later by detection); «Все поля» opens the full card to pick one.
+ */
 function QuickForm({
   quick,
   direction,
-  folders,
   onQuickChange,
   onManual,
-}: Pick<SearchPanelProps, "folders" | "onQuickChange" | "onManual"> & { quick: QuickFields; direction: "fr" | "ru" }) {
+}: Pick<SearchPanelProps, "onQuickChange" | "onManual"> & { quick: QuickFields; direction: "fr" | "ru" }) {
   const errorId = useId();
-  const themeId = useId();
   return (
     <div className={cx("mx-4 mt-2", VARIANT_ENTER)}>
       <div className="flex flex-col border-t border-rule">
@@ -425,9 +398,6 @@ function QuickForm({
             aria-describedby={quick.error ? errorId : undefined}
             className={FIELD_INPUT}
           />
-        </FieldRow>
-        <FieldRow label={<span id={themeId}>Тема</span>} as="div">
-          <FolderSelect value={quick.folder} folders={folders} labelledBy={themeId} onChange={(folder) => onQuickChange({ folder })} />
         </FieldRow>
       </div>
       <FieldError id={errorId}>{quick.error}</FieldError>

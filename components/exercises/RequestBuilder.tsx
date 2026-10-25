@@ -4,9 +4,10 @@ import { useLiveQuery } from "dexie-react-hooks";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { CheckMark } from "@/components/library/Checkbox";
-import { Button } from "@/components/ui/Button";
+import { Button, buttonClasses } from "@/components/ui/Button";
 import { Chip } from "@/components/ui/Chip";
 import { cx } from "@/components/ui/cx";
+import { FoldRow, foldSummary } from "@/components/ui/FoldRow";
 import { Icon } from "@/components/ui/Icons";
 import { Segmented } from "@/components/ui/Segmented";
 import { useSnackbar } from "@/components/ui/Snackbar";
@@ -92,6 +93,12 @@ export interface RequestBuilderProps {
   onCopied?: (ok: boolean, via: "copy" | "open") => void;
   /** «Нет коннектора? ›» (sheet and panel; the page puts its own link under the card). */
   onHelp?: () => void;
+  /**
+   * Phones, the empty state (proposals «Empty» B): no card frame, one chip flow («Трудные 9»,
+   * «К повторению 23», then the themes), «Вопросов», everything else under «Ещё ⌄», and one primary
+   * «Скопировать и открыть Claude ↗» with «только скопировать» under it.
+   */
+  compact?: boolean;
   className?: string;
 }
 
@@ -104,7 +111,7 @@ export interface RequestBuilderProps {
  * muted line saying so («Чаще трудные · половина набора · Настройки ›»). No network call and no
  * spark: Claude writes the set in the chat through the connector.
  */
-export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp, className }: RequestBuilderProps) {
+export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp, compact = false, className }: RequestBuilderProps) {
   const snackbar = useSnackbar();
   const ids = useId();
   const [picked, setPicked] = useState<readonly string[]>([]);
@@ -140,7 +147,8 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
   const chosen = themes.filter((t) => picked.includes(t.key));
   const choice: RequestChoice = {
     folders: chosen.map((t) => t.name),
-    topic: topicOpen ? topic : null,
+    // Compact: the topic field sits under «Ещё» with no chip, so it counts once it has text.
+    topic: compact ? (topic.trim() ? topic : null) : topicOpen ? topic : null,
     size: conjugation ? verbSize : size,
     allowNew: allowNew && !conjugation,
     scope,
@@ -161,6 +169,41 @@ export function RequestBuilder({ variant, themes, sets, online, onCopied, onHelp
     else if (via === "copy") snackbar.show({ message: "Не получилось скопировать — выделите текст запроса" });
     onCopied?.(ok, via);
   };
+
+  if (compact) {
+    return (
+      <CompactBuilder
+        className={className}
+        themes={themes}
+        picked={picked}
+        onTheme={(key) => {
+          setScopePick(null);
+          toggleTheme(key);
+        }}
+        scope={scope}
+        counts={counts}
+        onScope={(next) => {
+          setScopePick(next);
+          if (next) setPicked([]);
+        }}
+        size={size}
+        onSize={setSize}
+        conjugation={conjugation}
+        onConjugation={setConjugation}
+        verbSize={verbSize}
+        onVerbSize={setVerbSize}
+        topic={topic}
+        onTopic={setTopic}
+        allowNew={allowNew}
+        onAllowNew={setAllowNew}
+        text={text}
+        focusLine={focusLine}
+        online={online}
+        copied={copiedAt > 0}
+        onCopy={(via) => void copy(via)}
+      />
+    );
+  }
 
   const panel = variant === "panel";
   const label = "meta flex items-baseline justify-between leading-4";
@@ -515,5 +558,197 @@ function ScopeChips({
         );
       })}
     </div>
+  );
+}
+
+/** The phone empty state's builder (RequestBuilder `compact`): the same choice, fewer rows. */
+function CompactBuilder({
+  className,
+  themes,
+  picked,
+  onTheme,
+  scope,
+  counts,
+  onScope,
+  size,
+  onSize,
+  conjugation,
+  onConjugation,
+  verbSize,
+  onVerbSize,
+  topic,
+  onTopic,
+  allowNew,
+  onAllowNew,
+  text,
+  focusLine,
+  online,
+  copied,
+  onCopy,
+}: {
+  className?: string;
+  themes: readonly ThemeChoice[];
+  picked: readonly string[];
+  onTheme: (key: string) => void;
+  scope: ExerciseScope | null;
+  counts: { difficult: number; due: number; both: number } | undefined;
+  onScope: (scope: ExerciseScope | null) => void;
+  size: number;
+  onSize: (size: number) => void;
+  conjugation: boolean;
+  onConjugation: (on: boolean) => void;
+  verbSize: number;
+  onVerbSize: (size: number) => void;
+  topic: string;
+  onTopic: (topic: string) => void;
+  allowNew: boolean;
+  onAllowNew: (on: boolean) => void;
+  text: string;
+  focusLine: string | null;
+  online: boolean;
+  copied: boolean;
+  onCopy: (via: "copy" | "open") => void;
+}) {
+  const ids = useId();
+  // «Оба» stays a chat-only choice; a scope with no words is left out of the flow.
+  const scopes = SCOPE_CHIPS.filter((o) => o.value !== "both" && (counts?.[o.value] ?? 0) > 0);
+  const summary = foldSummary([!scope && "своя тема", !scope && !conjugation && "новые слова", "текст запроса"]);
+
+  return (
+    <section aria-label="Запрос для Claude" className={cx("flex flex-col", className)}>
+      <div role="group" aria-label="Из чего составить" className="flex flex-wrap gap-1.5">
+        {scopes.map((o) => {
+          const count = counts?.[o.value] ?? 0;
+          return (
+            <Chip
+              key={o.value}
+              selected={scope === o.value}
+              count={count}
+              aria-label={`${SCOPE_LABELS[o.value]}: ${count}`}
+              data-scope={o.value}
+              onClick={() => onScope(scope === o.value ? null : o.value)}
+              className="!h-9 gap-1.5 px-3"
+            >
+              {o.label}
+            </Chip>
+          );
+        })}
+        {themes.map((t) => {
+          const on = !scope && picked.includes(t.key);
+          return (
+            <Chip key={t.key} selected={on} icon={on ? "check" : undefined} onClick={() => onTheme(t.key)} className="!h-9 gap-1.5 px-3">
+              {t.name}
+            </Chip>
+          );
+        })}
+      </div>
+
+      <div className="mt-4 flex h-12 items-center gap-2 border-t border-rule">
+        <span id={`${ids}-verbs`} className="flex-1 text-[15px] leading-5">
+          Спряжение глаголов
+        </span>
+        <Toggle checked={conjugation} onCheckedChange={onConjugation} aria-labelledby={`${ids}-verbs`} />
+      </div>
+      <div className="flex h-12 items-center gap-2 border-y border-rule">
+        <span id={`${ids}-size`} className="flex-1 text-[15px] leading-5">
+          Вопросов
+        </span>
+        <Segmented<number>
+          options={(conjugation ? CONJ_REQUEST_SIZES : REQUEST_SIZES).map((n) => ({ value: n, label: String(n) }))}
+          value={conjugation ? verbSize : size}
+          onChange={conjugation ? onVerbSize : onSize}
+          ariaLabelledby={`${ids}-size`}
+          mono
+        />
+      </div>
+      <FoldRow summary={summary} rule="bottom" bodyClassName="px-px">
+        <div className="flex flex-col pb-3">
+          {scope ? (
+            <p data-scope-caption="" className="m-0 text-[12px] leading-4 text-muted">
+              {SCOPE_CAPTIONS[scope]}
+            </p>
+          ) : (
+            <>
+              <label htmlFor={`${ids}-topic`} className="meta leading-4">
+                Своя тема
+              </label>
+              <input
+                id={`${ids}-topic`}
+                type="text"
+                value={topic}
+                maxLength={TOPIC_MAX}
+                autoComplete="off"
+                enterKeyHint="done"
+                onChange={(e) => onTopic(e.target.value)}
+                className="mt-1.5 h-11 min-w-0 rounded-chip border border-boundary bg-surface px-3 text-[16px] leading-5 text-ink outline-none focus:border-2 focus:border-ink focus:px-[11px]"
+              />
+              {!conjugation && (
+                <div className="mt-2 flex h-12 items-center gap-2">
+                  <span id={`${ids}-new`} className="flex-1 text-[15px] leading-5">
+                    Можно новые слова
+                  </span>
+                  <Toggle checked={allowNew} onCheckedChange={onAllowNew} aria-labelledby={`${ids}-new`} />
+                </div>
+              )}
+            </>
+          )}
+          <span id={`${ids}-text`} className="meta mt-2.5 leading-4">
+            Запрос
+          </span>
+          <p
+            aria-labelledby={`${ids}-text`}
+            className="m-0 mt-1.5 rounded-chip border border-rule bg-surface px-3 py-2.5 font-mono text-[12px] leading-[18px] text-ink select-all"
+          >
+            {text}
+          </p>
+          {focusLine && (
+            <p data-exercise-focus="" className="m-0 mt-1.5 flex items-center gap-1 text-[12px] leading-4 text-muted">
+              <span className="min-w-0 truncate">{focusLine}</span>
+              <span aria-hidden="true">·</span>
+              <Link
+                href="/settings#set-exercises"
+                className="-my-3.5 inline-flex h-11 shrink-0 items-center text-muted underline decoration-rule decoration-1 underline-offset-2 active:text-ink"
+              >
+                Настройки ›
+              </Link>
+            </p>
+          )}
+        </div>
+      </FoldRow>
+
+      {online ? (
+        <>
+          <a
+            href={CLAUDE_NEW_CHAT_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => onCopy("open")}
+            className={buttonClasses({ variant: "primary", size: "lg", block: true, className: "mt-6 gap-2" })}
+          >
+            {copied && <Icon name="check" size={18} />}
+            {copied ? "Скопировано" : "Скопировать и открыть Claude"}
+            {!copied && <Icon name="external" size={16} strokeWidth={1.5} />}
+          </a>
+          <button
+            type="button"
+            onClick={() => onCopy("copy")}
+            className="mt-1 inline-flex h-11 items-center self-center px-2 text-[14px] text-muted underline decoration-rule decoration-1 underline-offset-4 active:text-ink"
+          >
+            только скопировать
+          </button>
+        </>
+      ) : (
+        <>
+          <Button block className="mt-6" onClick={() => onCopy("copy")}>
+            {copied ? <Icon name="check" size={18} /> : <CopyGlyph />}
+            {copied ? "Скопировано" : "Скопировать запрос"}
+          </Button>
+          <p className="meta m-0 mt-2 self-center leading-4">Claude откроется, когда будет сеть</p>
+        </>
+      )}
+      <span role="status" className="sr-only">
+        {copied ? "Запрос скопирован. Вставьте его в чат Claude." : ""}
+      </span>
+    </section>
   );
 }

@@ -5,7 +5,7 @@ import { useState } from "react";
 import { IconButton } from "@/components/ui/Button";
 import { cx } from "@/components/ui/cx";
 import { Icon } from "@/components/ui/Icons";
-import { Sheet, SheetCloseButton, SheetTitle } from "@/components/ui/Sheet";
+import { Sheet, SheetHeader } from "@/components/ui/Sheet";
 import { useSnackbar } from "@/components/ui/Snackbar";
 import { getLibraryStats, type FolderStats } from "@/lib/folders";
 import {
@@ -106,10 +106,8 @@ export function FolderPickerSheet({ open, onOpenChange, value, onChange, sets = 
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange} height="auto" title="Что повторять">
-      <div className="flex items-center justify-between pt-2 pr-1 pl-4">
-        <SheetTitle>Что повторять</SheetTitle>
-        <SheetCloseButton />
-      </div>
+      {/* Phones: a grabber and a screen-reader-only ✕ (auto-height sheet, synthesis §2.9). */}
+      <SheetHeader title="Что повторять" className="pt-2" />
 
       <h3 className="meta m-0 mx-4 mt-2 border-b border-ink pb-1.5 font-medium">Мои наборы</h3>
       <div role="radiogroup" aria-label="Мои наборы" className="px-4">
