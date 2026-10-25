@@ -302,6 +302,14 @@ function PhoneLibrary() {
         {/* «Контекст» lives here on phones since 2026-10-23 (no tab of its own); ❝, since the
             magnifier is the search at the bottom. */}
         <div className="-mr-3 flex shrink-0 items-center">
+          {/* «Прогресс» (Progress-Entry): the one entry point here, left of ❝ and the gear. */}
+          <Link
+            href="/progress"
+            aria-label="Прогресс"
+            className="inline-flex size-11 items-center justify-center rounded-chip text-ink active:bg-surface-2"
+          >
+            <Icon name="chart" size={20} strokeWidth={1.5} />
+          </Link>
           <Link
             href="/context"
             aria-label="Контекст"

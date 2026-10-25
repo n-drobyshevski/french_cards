@@ -213,6 +213,19 @@ describe("createSupabaseRepo", () => {
     for (const call of calls) expect(call.ops).toContainEqual(["eq", "user_id", "user-1"]);
   });
 
+  it("reads the user's «Прогресс» days, all of them or from a study day on", async () => {
+    const row = { id: "2026-10-21", known: 11, memorized: 12.5, source: "live", algo: "6", updated_at: "2026-10-22T05:00:00+00:00", deleted_at: null, user_id: "user-1", synced_at: "x" };
+    const pages = [[row], [], [row], []];
+    const { client, calls } = fakeClient(() => ({ data: pages.shift() ?? [], error: null }));
+    const repo = createSupabaseRepo(client, "user-1");
+    expect(await repo.progressDays()).toEqual([{ id: "2026-10-21", known: 11, memorized: 12.5, source: "live", algo: "6", updated_at: "2026-10-22T05:00:00.000Z", deleted_at: null }]);
+    await repo.progressDays("2026-10-01");
+    expect(calls.map((c) => c.table)).toEqual(["progress_days", "progress_days", "progress_days", "progress_days"]);
+    for (const call of calls) expect(call.ops).toContainEqual(["eq", "user_id", "user-1"]);
+    expect(calls[0].ops.some(([op]) => op === "gte")).toBe(false);
+    expect(calls[2].ops).toContainEqual(["gte", "id", "2026-10-01"]);
+  });
+
   it("turns Supabase errors into RepoError", async () => {
     const { client } = fakeClient(() => ({ data: null, error: { message: "permission denied" } }));
     await expect(createSupabaseRepo(client, "user-1").folders()).rejects.toThrow(RepoError);

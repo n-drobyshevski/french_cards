@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Прогресс — пусто</title>
+<meta name="description" content="Прогресс · пустое состояние, лёгкая версия («Мобильный минимализм»). Шапка подэкрана: строка 44px со стрелкой назад (aria-label «Библиотека», без подписи), под ней заголовок «Прогресс» Newsreader 32/40, мета-строки нет. Одна пустая каталожная карточка («ещё не записано»): белая, пунктирная рамка, красная линия сверху, бледные линейки; на ней одна строка «Повтори первые карточки — каждый учебный день сохранится здесь сам.» и чернильная ссылка «К повторению ›». Без нулевых счётчиков, без пустых осей графика, без пояснения про «знаю» и без строки синхронизации. Таб-бар как в L-Library-B, активна «Библиотека».">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#111111}a:hover{color:#c8331f}
+button{font:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; box-sizing: border-box; position: relative; overflow: hidden; background: #f1f1ee; color: #111111; font-family: 'IBM Plex Sans', system-ui, sans-serif; display: flex; flex-direction: column">
+  <header style="height: 44px; margin-top: 16px; padding: 0 16px 0 4px; flex-shrink: 0; display: flex; align-items: center; background: #f1f1ee">
+    <a href="L-Library-B.dc.html" aria-label="Библиотека" style="width: 44px; height: 44px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #111111; text-decoration: none"><svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5"></path><path d="m11 18-6-6 6-6"></path></svg></a>
+  </header>
+
+  <main style="flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 4px 16px 104px; box-sizing: border-box; overflow: hidden">
+    <h1 style="margin: 0; flex-shrink: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 32px; line-height: 40px; letter-spacing: -0.015em">Прогресс</h1>
+
+    <section aria-label="Прогресс: учебных дней пока нет" style="position: relative; margin-top: 24px; height: 182px; flex-shrink: 0; box-sizing: border-box; background: #ffffff; border: 1px dashed #d6d6d1; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column">
+      <span aria-hidden="true" style="height: 20px; flex-shrink: 0; border-bottom: 2px solid #c8331f"></span>
+      <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 53px; height: 1px; background: #dfe6f3"></span>
+      <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 85px; height: 1px; background: #dfe6f3"></span>
+      <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 117px; height: 1px; background: #dfe6f3"></span>
+      <span aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 149px; height: 1px; background: #dfe6f3"></span>
+      <div style="position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; padding: 8px 24px 0">
+        <p style="margin: 0; max-width: 300px; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 19px; line-height: 32px; text-align: center; color: #111111; text-wrap: balance">Повтори первые карточки — каждый учебный день сохранится здесь сам.</p>
+        <a href="L-Review-Q-B.dc.html" style="height: 44px; margin-top: 22px; padding: 0 8px; display: inline-flex; align-items: center; gap: 4px; color: #111111; font-size: 14px; font-weight: 500; text-decoration: none">К повторению<svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"></path></svg></a>
+      </div>
+    </section>
+  </main>
+
+  <nav aria-label="Основная навигация" style="position: absolute; left: 0; right: 0; bottom: 0; height: 88px; box-sizing: border-box; padding-bottom: 28px; background: #ffffff; border-top: 1px solid #d6d6d1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr))">
+    <a href="Main.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; font-size: 12px; font-weight: 500; text-decoration: none">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="7.5" width="14" height="13" rx="1"></rect><path d="M3.5 11h14"></path><path d="M7 4.5h12.5a1 1 0 0 1 1 1V17"></path></svg>
+      <span>Повторение</span>
+    </a>
+    <a href="Exercise-List-B.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; font-size: 12px; font-weight: 500; text-decoration: none">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3.5" width="16" height="17" rx="1.5"></rect><path d="m7.5 9 1.5 1.5 3-3"></path><path d="M14 9h3"></path><path d="M7.5 15h2"></path><path d="M14 15h3"></path></svg>
+      <span>Упражнения</span>
+    </a>
+    <a href="Add-Empty.dc.html" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #5a5a57; font-size: 12px; font-weight: 500; text-decoration: none">
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"></path><path d="M5 12h14"></path></svg>
+      <span>Добавить</span>
+    </a>
+    <a href="Library.dc.html" aria-current="page" style="position: relative; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #111111; font-size: 12px; font-weight: 600; text-decoration: none">
+      <span aria-hidden="true" style="position: absolute; top: -1px; left: 0; right: 0; height: 2px; background: #c8331f"></span>
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="4" width="17" height="16" rx="1"></rect><path d="M3.5 12h17"></path><path d="M10 8h4"></path><path d="M10 16h4"></path></svg>
+      <span>Библиотека</span>
+    </a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

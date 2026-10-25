@@ -38,13 +38,16 @@ directions; «д» under 14 days, then «нед», «мес», «г»; there is 
    index-card header rule (cards and dialogs), the «Входящие» count, «Не знаю», and destructive items inside
    menus and the bulk bar. «к повт.» is ink 500 (sorting already surfaces it). Each board lists its red count.
 7. **Nothing AI-looking.** No sparkles, «ИИ», gradients, glows, shadows, pastel pills, hero-metric tiles,
-   identical icon-card grids or numbered «how it works» steps, left-border accent cards, confetti, streaks.
+   identical icon-card grids or numbered «how it works» steps, left-border accent cards, confetti, loud streaks
+   (since 2026-10-25 a quiet streak is allowed, once, as one mono line on «Прогресс» only: §10 and SPEC.md
+   «Прогресс»).
    **Mono is for data only**: numbers, intervals, dates, `FR → RU`, `№ 042`, key names, table column heads and
    real uppercase tags (`ДОГАДКА`, `УЖЕ ЕСТЬ`, `ИДЁТ`, `ВХОД`). Section headings are Plex Sans 500 13px sentence
    case («Темы», «История», «Недавние»). Sentences that contain numbers are Plex Sans with `tabular-nums`.
 8. **Same app, same data.** Desktop rearranges existing features. Anything the app does not have is marked
    **(новое)** here with its reason and appears ONLY where listed below. The UI never shows the word «новое»
-   as a feature badge. Not in this round: command palette, stats/heatmaps, tags, Easy grade, focus mode,
+   as a feature badge. Not in this round: command palette, stats/heatmaps (except «Прогресс», added 2026-10-25:
+   its ledger and progress calendar, §10), tags, Easy grade, focus mode,
    density switch, theme reordering, bulk slang-level edit, image-region highlighting on import.
 
 **Allowed (новое) items**
@@ -299,6 +302,7 @@ selection. Clearing a selection never happens in the same press that dismissed a
 | `?` (key «?» or ⇧ + code Slash) | open «Клавиши» overlay |
 | `G` затем `R` / `L` / `I` (1s window) | Повторение / Библиотека / Импорт |
 | `G` затем `E` / `C` (новое, 2026-10-23) | Упражнения / Контекст |
+| `G` затем `P` (новое, 2026-10-25) | Прогресс (a bare `P` stays «Ещё практика» on the done screen) |
 | `[` | hide / show the sidebar |
 | `F6` / `⇧F6` | next / previous region: sidebar → toolbar → list → detail (Mail/Finder) |
 | `⌘V` with an image in the clipboard (focus not in a text field) | start screenshot import |
@@ -1086,6 +1090,11 @@ Everything phones can do, desktop can do too. Where the boards above differ, thi
     shows it.
   - **«Определить уровень языка»** (not drawn): the phone's quiet row and plan sheet («Уровень языка для 98 слов»), as a 760
     dialog like «Предлагаемые перемещения», with the footer «Отмена Esc» / «Сохранить уровни 90 ⌘↵».
+- **«Прогресс»** (added 2026-10-25; SPEC.md «Прогресс», picks R32 D1 A, D2 A; board `D-Progress-A`): the same
+  saved days, numbers, streak rule and copy as on phones, from the sidebar and rail item «Прогресс» or `G P`;
+  the layout is §10. Differences from the phone: two calendar months instead of one, the selected day in a
+  pane instead of in place, mistakes open the word in Библиотека instead of the word sheet, and no slang meter
+  on mistake rows.
 - «Вибрация при свайпах» stays phone-only (§5 #20); the offline page is 560px wide from 768 and says
   «…не сохранена на устройстве».
 
@@ -1106,3 +1115,32 @@ Everything phones can do, desktop can do too. Where the boards above differ, thi
 - **Add dialog**: a small disclosure «Свои поля · Синонимы, Род ⌄» under «Пример» opens the inputs two to a
   row (name as the 12px label, hint as placeholder).
 
+## 10. Прогресс (added 2026-10-25; see SPEC.md «Прогресс» for the feature, the numbers and the streak rule)
+
+Built from `D-Progress-A` «Ведомость» (`components/progress/ProgressDesk.tsx`, from 768; phones keep
+`ProgressScreen`). Not `D-Progress-B` (the curve), not `D-Progress-C` (month sheets with themes).
+- **Shell**: the sidebar item «Прогресс» (no count) right after «Библиотека». The rail item has the chart
+  glyph at the same place. `/progress` is its own nav key, so «Прогресс» is the active item. `G P` and the
+  «Клавиши» row «Прогресс `G` затем `P`».
+- **Header**: h1 «Прогресс» with the one mono streak line at its right (the phone's line and accessible name).
+  Under it the Plex 13 tabular subline «412 знаю · 350 учу · 500 новых · на паузе 56 · помню ≈ 640 · 88 % верно»
+  (a part at 0 is left out), then one muted line explaining «знаю» and «помню ≈» (the phone's fold text).
+- **Period**: the text filter «Месяц · 3 месяца · Год · Всё», its dates at the right.
+- **Ledger**: the phone's four rows (Помню ≈ / Повторений в день / Новых в день / Верно) at full width. The
+  sparklines fill the column and are 32px tall, with dashed average / target lines. Today's point is ink, not
+  red. The selected day is a thin vertical line with a hollow dot on each sparkline.
+- **Calendar**: last month and this month side by side, ink squares sized by the day's reviews, a 12px muted
+  outlined square for a day without study, today framed 1.5px red; the selected day is a 1px ink frame on white. The legend sits under the grids. The header carries only «7 из
+  7 на этой неделе» (Plex, not mono: the streak is said once, by the title). Studied days are buttons; picking a
+  day further back moves the calendar to its month.
+- **Day pane**: 400px at the right from 1100 (360 at 1200–1439, as the library's detail pane); below 1100 it
+  follows the calendar in the one column. It opens on today once studied, else on the last study day. ‹ ›
+  and ← → step through study days. An index card «Среда, 21 октября» (red header rule) with the receipt
+  «Повторено 104 · Новых 12 · Верно 92 % · Знаю 398», plus «Упражнений N» when the day had one and a quiet line
+  for a day without study. Then «Ошибки»: FR — RU rows without the slang meter; a row opens
+  `/library?word=<id>`.
+- **Empty**: the phone's blank card with «К повторению ›».
+- **Not built**: the save-status footer (saving stays silent, as on phones) and «Весь день ›» (the pane already
+  holds the whole day and scrolls).
+- **Red**: at most 3. The active sidebar bar, the day card's header rule and today's outline (ink once today
+  is the selected day).

@@ -7,6 +7,8 @@ export interface BlankCardAction {
   label: string;
   /** Leading 16px icon, e.g. "plus". */
   icon?: IconName;
+  /** Trailing 16px icon, e.g. "chevron-right" for «К повторению ›» (a link that navigates). */
+  trailingIcon?: IconName;
   /** A link when set, else a button. */
   href?: string;
   onClick?: () => void;
@@ -36,6 +38,7 @@ export function BlankCard({ title, action, as: Line = "p", className }: BlankCar
     <>
       {action.icon && <Icon name={action.icon} size={16} />}
       {action.label}
+      {action.trailingIcon && <Icon name={action.trailingIcon} size={16} />}
     </>
   );
   return (

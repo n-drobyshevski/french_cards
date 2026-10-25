@@ -115,7 +115,7 @@ export function describeBackupImport(result: ImportResult): string {
   const added = result.words.inserted;
   const updated = result.words.updated;
   const other = (
-    ["folders", "review_state", "review_log", "reorg_runs", "review_sets", "field_defs", "exercise_sets", "exercise_runs", "user_prefs"] as const
+    ["folders", "review_state", "review_log", "reorg_runs", "review_sets", "field_defs", "exercise_sets", "exercise_runs", "user_prefs", "progress_days"] as const
   ).reduce(
     (sum, t) => sum + result[t].inserted + result[t].updated,
     0,
@@ -156,6 +156,8 @@ export function describeBackupPreview(result: ImportResult): BackupPreviewLine[]
   if (answers > 0) lines.push({ label: "История", text: `${answers} ${pluralRu(answers, ["ответ", "ответа", "ответов"])}` });
   const exercises = result.exercise_sets.inserted + result.exercise_sets.updated;
   if (exercises > 0) lines.push({ label: "Упражнения", text: `${exercises} ${pluralRu(exercises, ["набор", "набора", "наборов"])}` });
+  const days = result.progress_days.inserted + result.progress_days.updated;
+  if (days > 0) lines.push({ label: "Прогресс по дням", text: `за ${days} ${pluralRu(days, ["день", "дня", "дней"])}` });
   return lines;
 }
 

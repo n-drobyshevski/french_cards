@@ -37,6 +37,7 @@ export const SHORTCUT_COLUMNS: ShortcutGroup[][] = [
         { label: "Повторение", keys: ["G", THEN, "R"] },
         { label: "Упражнения", keys: ["G", THEN, "E"] },
         { label: "Библиотека", keys: ["G", THEN, "L"] },
+        { label: "Прогресс", keys: ["G", THEN, "P"] },
         { label: "Контекст", keys: ["G", THEN, "C"] },
         { label: "Импорт", keys: ["G", THEN, "I"] },
         { label: "Скрыть боковую панель", keys: ["["] },

@@ -1,6 +1,6 @@
 // The only place that talks to ts-fsrs. Everything else works with ReviewState / ReviewLog
 // (ISO-string dates) from lib/types.ts.
-import { createEmptyCard, fsrs, type Card, type Grade, State } from "ts-fsrs";
+import { createEmptyCard, forgetting_curve, fsrs, FSRSVersion, type Card, type Grade, State } from "ts-fsrs";
 import { newId } from "./id";
 import type { Direction, ReviewLog, ReviewState } from "./types";
 
@@ -187,6 +187,22 @@ export function formatStability(state: Pick<ReviewState, "stability" | "state">)
 export function retrievability(state: ReviewState, now: Date = new Date()): number {
   if (state.state === 0) return 0;
   return scheduler.get_retrievability(toCard(state), reviewTime(state, now), false);
+}
+
+/** The retention the scheduler aims for (request_retention): the «цель» of «Верно». */
+export const TARGET_RETENTION: number = scheduler.parameters.request_retention;
+
+/** Which FSRS computed a stored number («v5.4.2 using FSRS-6.0»), kept on progress_days rows. */
+export const FSRS_ALGO: string = FSRSVersion;
+
+/**
+ * The scheduler's forgetting curve R(t, S) with fractional days (`retrievability` above goes
+ * through ts-fsrs's card API instead). 0 for a card without stability; 1 at t ≤ 0.
+ */
+export function forgettingCurve(elapsedDays: number, stability: number): number {
+  if (!(stability > 0)) return 0;
+  if (!(elapsedDays > 0)) return 1;
+  return forgetting_curve(scheduler.parameters.w, elapsedDays, stability);
 }
 
 /** 0..1 — how settled a card is; 0 for new, 1 at MASTERY_STABILITY_DAYS of stability. */

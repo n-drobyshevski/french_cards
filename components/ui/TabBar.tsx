@@ -10,12 +10,13 @@ import { Icon, type IconName } from "./Icons";
 export type TabId = "review" | "exercises" | "library";
 
 /**
- * Which tab a path belongs to. Settings and «Контекст» (opened from the Library header since
- * 2026-10-23) sit under «Библиотека» like in the mockups.
+ * Which tab a path belongs to. Settings, «Контекст» (opened from the Library header since
+ * 2026-10-23) and «Прогресс» (its chart icon there, 2026-10-25) sit under «Библиотека» like in the
+ * mockups.
  */
 export function tabForPath(pathname: string | null): TabId | null {
   if (!pathname) return null;
-  if (pathname.startsWith("/library") || pathname.startsWith("/settings") || pathname.startsWith("/context")) return "library";
+  if (pathname.startsWith("/library") || pathname.startsWith("/settings") || pathname.startsWith("/context") || pathname.startsWith("/progress")) return "library";
   if (pathname === "/" || pathname.startsWith("/done")) return "review";
   if (pathname === "/exercises" || pathname.startsWith("/exercises/")) return "exercises";
   return null;

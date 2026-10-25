@@ -385,16 +385,26 @@ function SessionTally({ data, writeIn, style }: { data: DoneScreenData; writeIn:
   return (
     <section aria-label="Итоги сессии" data-done-tally="" className="mt-8 shrink-0">
       <SessionStrip size="cells" marks={data.marks} writeIn={writeIn} writeInDelay={STRIP_AT_MS} />
-      <p style={style} className="meta m-0 mt-3 leading-4 tabular-nums">
-        <span className="font-medium text-ink">{counts.total}</span> {pluralRu(counts.total, CARD_FORMS)} ·{" "}
-        <span className="font-medium text-ink">{formatPercent((counts.total - counts.miss) / counts.total)}</span>
-        {fresh > 0 && (
-          <>
-            {" "}
-            · <span className="font-medium text-ink">{fresh}</span> {pluralRu(fresh, ["новая", "новых", "новых"])}
-          </>
-        )}
-      </p>
+      {/* «Прогресс ›» (Progress-Entry): a quiet text link at the end of the line, not the strip. */}
+      <div style={style} className="mt-3 flex h-4 items-center gap-3">
+        <p className="meta m-0 min-w-0 flex-1 truncate leading-4 tabular-nums">
+          <span className="font-medium text-ink">{counts.total}</span> {pluralRu(counts.total, CARD_FORMS)} ·{" "}
+          <span className="font-medium text-ink">{formatPercent((counts.total - counts.miss) / counts.total)}</span>
+          {fresh > 0 && (
+            <>
+              {" "}
+              · <span className="font-medium text-ink">{fresh}</span> {pluralRu(fresh, ["новая", "новых", "новых"])}
+            </>
+          )}
+        </p>
+        <Link
+          href="/progress"
+          className="press-sm -my-3.5 -mr-0.5 inline-flex h-11 shrink-0 items-center gap-0.5 rounded-chip text-[14px] leading-5 font-medium text-ink active:bg-surface-2"
+        >
+          Прогресс
+          <Icon name="chevron-right" size={16} className="text-muted" />
+        </Link>
+      </div>
     </section>
   );
 }

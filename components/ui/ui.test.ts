@@ -180,6 +180,7 @@ describe("TabBar routing", () => {
     expect(tabForPath("/settings")).toBe("library");
     // «Контекст» opens from the Library header, so Библиотека stays active there.
     expect(tabForPath("/context")).toBe("library");
+    expect(tabForPath("/progress")).toBe("library");
     expect(tabForPath("/exercises")).toBe("exercises");
     expect(tabForPath("/exercises/play")).toBe("exercises");
     expect(tabForPath("/import")).toBeNull();

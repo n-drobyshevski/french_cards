@@ -95,6 +95,7 @@ const REQUIRED: Record<SyncTable, Record<string, "string" | "number" | "boolean"
   exercise_sets: { title: "string", created_at: "string", folders: "array", items: "array", new_words: "array" },
   exercise_runs: { kind: "string", item_ids: "array", started_at: "string", answers: "array", total: "number" },
   user_prefs: {},
+  progress_days: { known: "number", total: "number", memorized: "number", reviews: "number" },
 };
 
 const isText = (v: unknown) => typeof v === "string";
