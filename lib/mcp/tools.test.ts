@@ -52,6 +52,7 @@ import {
   updateField,
   updateFolder,
   updateWord,
+  updateWords,
   type ToolSpec,
 } from "./tools";
 
@@ -607,6 +608,53 @@ describe("custom fields («Свои поля»)", () => {
     const full = Object.fromEntries(Array.from({ length: 13 }, (_, i) => [`Поле ${i}`, "x"]));
     expect(await refused(addWords, fake, { words: [{ fr: "relou", ru: "напряжный", custom_fields: full }], folder_chosen_by_user: false })).toMatch(/at most 12/);
     expect(fake.tables.words.size).toBe(1);
+  });
+
+  it("update_words edits a batch in one call, all-or-nothing on a bad patch, with an undo that puts it back", async () => {
+    const six = (verb: string) => [`je ${verb}`, `tu ${verb}`, `il ${verb}`, `nous ${verb}`, `vous ${verb}`, `ils ${verb}`];
+    const conj = { auxiliary: "avoir", remark: "неправильный", present: six("bédave"), passe_compose: six("a bédavé"), imparfait: six("bédavait"), futur: six("bédavera") };
+    const fake = createFakeRepo({
+      field_defs: DEFS,
+      words: [
+        word("w1", "bédave", "курить", { pos: "verb" }),
+        word("w2", "la thune", "бабки", { pos: "noun", gender: "f", custom_fields: [{ field_id: "d-syn", label: "Синонимы", value: "le fric" }] }),
+        word("w3", "chelou", "стрёмный", { pos: "adj", origin: "верлан от louche" }),
+      ],
+    });
+    const before = structuredClone([...fake.tables.words.values()]);
+    // One bad patch (a conjugation on a noun) stops the whole batch: nothing is written.
+    const bad = await refused(updateWords, fake, { items: [{ id: "w1", patch: { origin: "из цыганского" } }, { id: "w2", patch: { conjugation: conj } }] });
+    expect(bad).toMatch(/Nothing was changed\. items\[1\] \(la thune\): conjugation is for verbs/);
+    expect([...fake.tables.words.values()]).toEqual(before);
+
+    const out = await ok(updateWords, fake, {
+      items: [
+        { id: "w1", patch: { origin: "из цыганского", conjugation: conj } },
+        { id: "w2", patch: { custom_fields: { Синонимы: "le fric, l'oseille" }, note: "груб." } },
+        { id: "w3", patch: { origin: "верлан от louche" } },
+        { id: "w-gone", patch: { note: "x" } },
+      ],
+    });
+    expect(out).toMatchObject({ updated: 2, unchanged: 1, missing: ["w-gone"] });
+    expect(out.words).toEqual([
+      { id: "w1", fr: "bédave", status: "updated" },
+      { id: "w2", fr: "la thune", status: "updated" },
+      { id: "w3", fr: "chelou", status: "unchanged" },
+    ]);
+    expect(fake.tables.words.get("w1")).toMatchObject({ origin: "из цыганского", conjugation: { auxiliary: "avoir" } });
+    expect(fake.tables.words.get("w2")).toMatchObject({ note: "груб.", custom_fields: [{ label: "Синонимы", value: "le fric, l'oseille" }] });
+    expect(out.undo).toEqual({
+      tool: "update_words",
+      items: [
+        { id: "w1", patch: { origin: null, conjugation: null } },
+        { id: "w2", patch: { custom_fields: { Синонимы: "le fric" }, note: null } },
+      ],
+    });
+    // The undo, passed back, restores the earlier values.
+    await ok(updateWords, fake, { items: out.undo!.items });
+    expect(fake.tables.words.get("w1")).toMatchObject({ origin: null, conjugation: null });
+    expect(fake.tables.words.get("w2")).toMatchObject({ note: null, custom_fields: [{ label: "Синонимы", value: "le fric" }] });
+    expect(await refused(updateWords, fake, { items: [{ id: "w1", patch: {} }, { id: "w1", patch: {} }] })).toMatch(/only once/);
   });
 
   it("update_word sets and clears only the named fields and keeps the others", async () => {
@@ -1275,6 +1323,13 @@ describe("origin and conjugation", () => {
 
     await ok(updateWord, fake, { id: "w1", patch: { origin: null, conjugation: null } });
     expect(fake.tables.words.get("w1")).toMatchObject({ origin: null, conjugation: null });
+  });
+
+  it("search_words narrows each word to the fields asked for", async () => {
+    const fake = createFakeRepo({ words: [word("w1", "chelou", "стрёмный", { pos: "adj", origin: "верлан от louche" })] });
+    const out = await ok(searchWords, fake, { query: "", fields: ["ru", "origin"] });
+    expect(out.words).toEqual([{ id: "w1", fr: "chelou", ru: "стрёмный", origin: "верлан от louche" }]);
+    expect(await refused(searchWords, fake, { fields: ["password"] })).toBeTruthy();
   });
 
   it("refuses a conjugation of five forms or on a noun", async () => {

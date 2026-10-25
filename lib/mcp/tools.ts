@@ -532,11 +532,39 @@ const tool = <S extends z.ZodObject, O extends Record<string, unknown>>(spec: To
 
 const READ: ToolAnnotations = { readOnlyHint: true, openWorldHint: false };
 
+/** The fields search_words can narrow a word to (`fields`); id and fr always come. */
+const WORD_FIELDS = [
+  "ru",
+  "note",
+  "example_fr",
+  "example_ru",
+  "extra_examples",
+  "custom_fields",
+  "origin",
+  "conjugation",
+  "conjugation_builtin",
+  "pos",
+  "gender",
+  "slang_level",
+  "verlan",
+  "level",
+  "level_source",
+  "tags",
+  "folder",
+  "folder_source",
+  "both_directions",
+  "status",
+  "muted",
+  "theme_muted",
+  "due_today",
+  "created_at",
+] as const;
+
 export const searchWords = tool({
   name: "search_words",
   title: "Search words",
   description:
-    "Search the user's saved French words. Every term of `query` must match the French, the Russian, the note, a tag or a custom field's value, ignoring accents and case; an empty query lists words. Filter by theme and learning status. Newest first; `total` counts all matches, and `next_offset` (when not null) fetches the next page. A word's custom fields («Свои поля») come as `custom_fields` (name → value), only when it has any; `origin` when it has one; `muted: true` for a word «на паузе» (kept, but never in review), `theme_muted: true` when its theme is; for verbs, the saved `conjugation`, or `conjugation_builtin` (true when the app builds it on the device, false when it has none); `level` («Уровень языка», A1…C2, null = none) with `level_source`: user (the user picked it: never change it unless asked), chat (set by you), ai (by the app), or an estimate the app computes, flelex (its dictionary) or freq (word frequency). Filter with `level` (some levels, or \"none\" for words with no level at all). Use it before add_words to avoid duplicates, and to find ids for update_word, move_words and delete_words.",
+    "Search the user's saved French words. Every term of `query` must match the French, the Russian, the note, a tag or a custom field's value, ignoring accents and case; an empty query lists words. Filter by theme and learning status. Newest first; `total` counts all matches, and `next_offset` (when not null) fetches the next page. A word's custom fields («Свои поля») come as `custom_fields` (name → value), only when it has any; `origin` when it has one; `muted: true` for a word «на паузе» (kept, but never in review), `theme_muted: true` when its theme is; for verbs, the saved `conjugation`, or `conjugation_builtin` (true when the app builds it on the device, false when it has none); `level` («Уровень языка», A1…C2, null = none) with `level_source`: user (the user picked it: never change it unless asked), chat (set by you), ai (by the app), or an estimate the app computes, flelex (its dictionary) or freq (word frequency). Filter with `level` (some levels, or \"none\" for words with no level at all). `fields` narrows each word to the fields named (id and fr always come): use it for big lookups. Use it before add_words to avoid duplicates, and to find ids for update_word / update_words, move_words and delete_words.",
   input: z.object({
     query: z.string().max(200).optional().describe("Words to look for (French or Russian). Empty = all."),
     folder: folderSelector.optional(),
@@ -547,6 +575,15 @@ export const searchWords = tool({
       .describe('«Уровень языка»: words whose level (stored or estimated) is one of these; "none" = words with no level, the ones to fill with set_word_levels.'),
     limit: z.number().int().min(1).max(100).default(20),
     offset: z.number().int().min(0).default(0).describe("Matches to skip, for paging: pass the previous result's next_offset."),
+    fields: z
+      .array(z.enum(WORD_FIELDS))
+      .min(1)
+      .max(WORD_FIELDS.length)
+      .nullable()
+      .optional()
+      .describe(
+        "Only these fields for each word (id and fr always come): a compact list for big lookups, e.g. [\"ru\"] to pick ids for update_words, [\"ru\", \"origin\"] to see which words lack an origin. Leave it out for the full card.",
+      ),
   }),
   write: false,
   annotations: READ,
@@ -570,10 +607,13 @@ export const searchWords = tool({
       })
       .sort((a, b) => b.created_at.localeCompare(a.created_at) || a.id.localeCompare(b.id));
     const end = args.offset + args.limit;
+    const page = matches.slice(args.offset, end);
+    const keep = args.fields ? new Set<string>(["id", "fr", ...args.fields]) : null;
     return {
       total: matches.length,
       ...(target !== undefined ? { folder: folderRef(target) } : {}),
-      words: matches.slice(args.offset, end),
+      // Narrowed words keep the full card's type for callers: the fields left out just aren't there.
+      words: keep ? (page.map((v) => Object.fromEntries(Object.entries(v).filter(([key]) => keep.has(key)))) as typeof page) : page,
       next_offset: end < matches.length ? end : null,
     };
   },
@@ -1207,6 +1247,85 @@ export const proposeWords = tool({
   reply: (out) => ({ content: [{ type: "text", text: out.message }], structuredContent: out.review as unknown as Record<string, unknown> }),
 });
 
+/** The fields update_word and update_words change; only those given change, null clears note, example or origin. */
+const wordPatchSchema = z
+  .object({
+    fr: z.string().trim().min(1).max(200).optional(),
+    ru: z.string().trim().min(1).max(300).optional(),
+    note: optionalText(500, "Usage note in Russian; null clears it."),
+    example_fr: optionalText(300, "French example; null clears the example."),
+    example_ru: optionalText(300, "Russian translation of the example."),
+    pos: z.enum(POS_VALUES).optional(),
+    gender: z.enum(GENDER_VALUES).optional().describe("Nouns only; other parts of speech always get none."),
+    slang_level: slangLevel.optional(),
+    verlan: z.boolean().optional(),
+    cefr: cefrLevel
+      .nullable()
+      .optional()
+      .describe(`«Уровень языка», saved as set by you (level_source chat); null clears the stored level. Never change a level with level_source user unless the user asks. ${LEVEL_RUBRIC}`),
+    tags: z.array(z.string().trim().min(1).max(40)).max(10).optional().describe("Replaces all tags."),
+    custom_fields: customFieldsInput("Only the named fields change; null or an empty value clears one."),
+    origin: originInput,
+    conjugation: conjugationInput,
+    both_directions: z.boolean().optional(),
+    muted: z
+      .boolean()
+      .optional()
+      .describe("true puts the word «на паузе»: it stays in the library but never comes up in review; false brings it back."),
+  })
+  .describe("Fields to change.");
+
+type WordPatch = z.output<typeof wordPatchSchema>;
+
+/**
+ * A word with a patch applied, as update_word saves it: cleaned text, the level kept as the user's
+ * when it doesn't change, gender only for nouns, an example's translation only with the example,
+ * and columns older rows lack left as they were when the patch gives the same value.
+ */
+function patchWord(current: Word, p: WordPatch, defs: readonly FieldDef[]): { next: Word; newOneOff: string[] } {
+  const next: Word = { ...current };
+  if (p.fr !== undefined) next.fr = cleanText(p.fr) ?? current.fr;
+  if (p.ru !== undefined) next.ru = cleanText(p.ru) ?? current.ru;
+  for (const key of ["note", "example_fr", "example_ru"] as const) if (p[key] !== undefined) next[key] = cleanText(p[key]);
+  if (p.pos !== undefined) next.pos = p.pos;
+  if (p.gender !== undefined) next.gender = p.gender;
+  if (p.slang_level !== undefined) next.slang_level = p.slang_level as Word["slang_level"];
+  if (p.verlan !== undefined) next.verlan = p.verlan;
+  // The same level again keeps who set it (a user's B1 stays the user's).
+  if (p.cefr !== undefined && p.cefr !== (current.cefr ?? null)) {
+    next.cefr = p.cefr;
+    next.cefr_source = p.cefr === null ? null : "chat";
+  }
+  if (p.tags !== undefined) next.tags = [...new Set(p.tags.map((t) => t.trim()).filter(Boolean))];
+  if (p.both_directions !== undefined) next.both_directions = p.both_directions;
+  if (p.muted !== undefined) next.muted = p.muted;
+  if (p.origin !== undefined) next.origin = cleanOrigin(p.origin);
+  const conjugation = conjugationOf(p.conjugation);
+  if (conjugation !== undefined) next.conjugation = conjugation;
+  let newOneOff: string[] = [];
+  if (p.custom_fields !== undefined) {
+    const fields = applyCustomFields(current.custom_fields, p.custom_fields, defs);
+    newOneOff = fields.newOneOff;
+    // Rewritten only when the values really change (a missing column reads as no fields).
+    if (JSON.stringify(fields.values) !== JSON.stringify(cleanCustomFields(current.custom_fields))) next.custom_fields = fields.values;
+  }
+  if (next.pos !== "noun") next.gender = "none";
+  if (!next.example_fr) next.example_ru = null;
+  if (p.conjugation && next.pos !== "verb" && next.pos !== "expression") {
+    throw new ToolError("conjugation is for verbs (pos verb or expression); set pos first or leave conjugation out.");
+  }
+  // Columns missing on older rows read as no value, so «not set» never counts as a change.
+  if ((next.origin ?? null) === (current.origin ?? null)) next.origin = current.origin;
+  if (!!next.muted === !!current.muted) next.muted = current.muted;
+  if ((next.cefr ?? null) === (current.cefr ?? null)) {
+    next.cefr = current.cefr;
+    next.cefr_source = current.cefr_source;
+  }
+  if (JSON.stringify(next.conjugation ?? null) === JSON.stringify(current.conjugation ?? null)) next.conjugation = current.conjugation;
+
+  return { next, newOneOff };
+}
+
 export const updateWord = tool({
   name: "update_word",
   title: "Edit a word",
@@ -1214,32 +1333,7 @@ export const updateWord = tool({
     "Edit one word: French, Russian, note, example, tags, part of speech, gender, slang level, verlan, «Уровень языка» (cefr; null clears a stored level, back to the app's estimate), both_directions, custom fields, origin («Происхождение»), a verb's conjugation, or muted («на паузе»: kept but out of review). Only the fields in `patch` change; null clears note or example. For the levels of several words use set_word_levels. `custom_fields` changes only the fields it names (null clears one) and keeps the others. both_directions false removes the RU→FR card, true brings it back with its progress. Use move_words to change the theme.",
   input: z.object({
     id: z.string().trim().min(1).max(64).describe("Word id from search_words."),
-    patch: z
-      .object({
-        fr: z.string().trim().min(1).max(200).optional(),
-        ru: z.string().trim().min(1).max(300).optional(),
-        note: optionalText(500, "Usage note in Russian; null clears it."),
-        example_fr: optionalText(300, "French example; null clears the example."),
-        example_ru: optionalText(300, "Russian translation of the example."),
-        pos: z.enum(POS_VALUES).optional(),
-        gender: z.enum(GENDER_VALUES).optional().describe("Nouns only; other parts of speech always get none."),
-        slang_level: slangLevel.optional(),
-        verlan: z.boolean().optional(),
-        cefr: cefrLevel
-          .nullable()
-          .optional()
-          .describe(`«Уровень языка», saved as set by you (level_source chat); null clears the stored level. Never change a level with level_source user unless the user asks. ${LEVEL_RUBRIC}`),
-        tags: z.array(z.string().trim().min(1).max(40)).max(10).optional().describe("Replaces all tags."),
-        custom_fields: customFieldsInput("Only the named fields change; null or an empty value clears one."),
-        origin: originInput,
-        conjugation: conjugationInput,
-        both_directions: z.boolean().optional(),
-        muted: z
-          .boolean()
-          .optional()
-          .describe("true puts the word «на паузе»: it stays in the library but never comes up in review; false brings it back."),
-      })
-      .describe("Fields to change."),
+    patch: wordPatchSchema,
   }),
   write: true,
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
@@ -1248,46 +1342,7 @@ export const updateWord = tool({
     if (!current || current.deleted_at !== null) throw new ToolError(`No word with id ${args.id}. Find it with search_words.`);
     const now = deps.now();
     const p = args.patch;
-    const next: Word = { ...current };
-    if (p.fr !== undefined) next.fr = cleanText(p.fr) ?? current.fr;
-    if (p.ru !== undefined) next.ru = cleanText(p.ru) ?? current.ru;
-    for (const key of ["note", "example_fr", "example_ru"] as const) if (p[key] !== undefined) next[key] = cleanText(p[key]);
-    if (p.pos !== undefined) next.pos = p.pos;
-    if (p.gender !== undefined) next.gender = p.gender;
-    if (p.slang_level !== undefined) next.slang_level = p.slang_level as Word["slang_level"];
-    if (p.verlan !== undefined) next.verlan = p.verlan;
-    // The same level again keeps who set it (a user's B1 stays the user's).
-    if (p.cefr !== undefined && p.cefr !== (current.cefr ?? null)) {
-      next.cefr = p.cefr;
-      next.cefr_source = p.cefr === null ? null : "chat";
-    }
-    if (p.tags !== undefined) next.tags = [...new Set(p.tags.map((t) => t.trim()).filter(Boolean))];
-    if (p.both_directions !== undefined) next.both_directions = p.both_directions;
-    if (p.muted !== undefined) next.muted = p.muted;
-    if (p.origin !== undefined) next.origin = cleanOrigin(p.origin);
-    const conjugation = conjugationOf(p.conjugation);
-    if (conjugation !== undefined) next.conjugation = conjugation;
-    let newOneOff: string[] = [];
-    if (p.custom_fields !== undefined) {
-      const fields = applyCustomFields(current.custom_fields, p.custom_fields, defs);
-      newOneOff = fields.newOneOff;
-      // Rewritten only when the values really change (a missing column reads as no fields).
-      if (JSON.stringify(fields.values) !== JSON.stringify(cleanCustomFields(current.custom_fields))) next.custom_fields = fields.values;
-    }
-    if (next.pos !== "noun") next.gender = "none";
-    if (!next.example_fr) next.example_ru = null;
-    if (p.conjugation && next.pos !== "verb" && next.pos !== "expression") {
-      throw new ToolError("conjugation is for verbs (pos verb or expression); set pos first or leave conjugation out.");
-    }
-    // Columns missing on older rows read as no value, so «not set» never counts as a change.
-    if ((next.origin ?? null) === (current.origin ?? null)) next.origin = current.origin;
-    if (!!next.muted === !!current.muted) next.muted = current.muted;
-    if ((next.cefr ?? null) === (current.cefr ?? null)) {
-      next.cefr = current.cefr;
-      next.cefr_source = current.cefr_source;
-    }
-    if (JSON.stringify(next.conjugation ?? null) === JSON.stringify(current.conjugation ?? null)) next.conjugation = current.conjugation;
-
+    const { next, newOneOff } = patchWord(current, p, defs);
     const changed = JSON.stringify(next) !== JSON.stringify(current);
     let conflict = false;
     if (changed) {
@@ -1314,6 +1369,113 @@ export const updateWord = tool({
       status: changed || cards > 0 ? "updated" : "unchanged",
       word: wordView(changed ? next : current, viewContext(folders, states, defs, deps)),
       ...(newOneOff.length > 0 ? { new_one_off_fields: newOneOff, fields_note: ONE_OFF_NOTE } : {}),
+      note: SYNC_NOTE,
+    };
+  },
+});
+
+export const UPDATE_WORDS_MAX = 50;
+
+/**
+ * The patch that puts back what `patch` changed on `before`: each patched field's earlier value
+ * (custom fields by the names the patch used; a level comes back as set by you).
+ */
+function reversePatch(before: Word, patch: WordPatch, defs: readonly FieldDef[]): Record<string, unknown> {
+  const back: Record<string, unknown> = {};
+  for (const key of Object.keys(patch) as (keyof WordPatch)[]) {
+    if (patch[key] === undefined) continue;
+    switch (key) {
+      case "cefr":
+        back.cefr = before.cefr ?? null;
+        break;
+      case "origin":
+        back.origin = before.origin ?? null;
+        break;
+      case "muted":
+        back.muted = !!before.muted;
+        break;
+      case "conjugation":
+        back.conjugation = (conjugationView(before).conjugation as unknown) ?? null;
+        break;
+      case "custom_fields": {
+        const shown = customFieldsView(before, defs);
+        const byName = new Map(Object.entries(shown).map(([name, value]) => [name.toLowerCase(), value]));
+        back.custom_fields = Object.fromEntries(Object.keys(patch.custom_fields ?? {}).map((name) => [name, byName.get(name.toLowerCase()) ?? null]));
+        break;
+      }
+      default:
+        back[key] = before[key as keyof Word] ?? null;
+    }
+  }
+  return back;
+}
+
+export const updateWords = tool({
+  name: "update_words",
+  title: "Edit several words",
+  description: `Edit up to ${UPDATE_WORDS_MAX} words in one call, each with its own \`patch\` (the same fields as update_word: French, Russian, note, example, tags, part of speech, gender, slang level, verlan, cefr, both_directions, custom fields, origin, conjugation, muted). Use it instead of calling update_word word by word, e.g. «заполни происхождение / спряжение / примеры для темы X»: one call per batch of up to ${UPDATE_WORDS_MAX}. Words are checked first and nothing is written if one patch is invalid (the refusal names it by path). The result is compact: counts, each word's status (updated / unchanged / conflict / missing) and an \`undo\` (update_words with each changed word's earlier values; a level comes back as set by you). For levels alone set_word_levels is simpler. Use move_words to change themes.`,
+  input: z.object({
+    items: z
+      .array(
+        z.object({
+          id: z.string().trim().min(1).max(64).describe("Word id from search_words."),
+          patch: wordPatchSchema,
+        }),
+      )
+      .min(1)
+      .max(UPDATE_WORDS_MAX),
+  }),
+  write: true,
+  annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
+  async run(deps, args) {
+    const ids = [...new Set(args.items.map((i) => i.id))];
+    if (ids.length !== args.items.length) throw new ToolError("Each word may appear only once in items: merge its patches into one.");
+    const [found, defs] = await Promise.all([deps.repo.wordsByIds(ids), deps.repo.fieldDefs()]);
+    const byId = new Map(found.filter((w) => w.deleted_at === null).map((w) => [w.id, w]));
+    const now = deps.now();
+    const missing: string[] = [];
+    const planned: { current: Word; next: Word; patch: WordPatch }[] = [];
+    const newOneOff = new Set<string>();
+    // Every patch is checked before anything is written: one bad patch stops the whole batch.
+    args.items.forEach((item, i) => {
+      const current = byId.get(item.id);
+      if (!current) {
+        missing.push(item.id);
+        return;
+      }
+      try {
+        const out = patchWord(current, item.patch, defs);
+        out.newOneOff.forEach((name) => newOneOff.add(name));
+        planned.push({ current, next: out.next, patch: item.patch });
+      } catch (error) {
+        if (error instanceof ToolError) throw new ToolError(`Nothing was changed. items[${i}] (${current.fr}): ${error.message}`);
+        throw error;
+      }
+    });
+    const changed = planned.filter((c) => JSON.stringify(c.next) !== JSON.stringify(c.current));
+    for (const c of changed) c.next.updated_at = stampAfter(now, c.current.updated_at);
+    const outcome = await writeWords(deps.repo, changed.map((c) => change(c.current, c.next)));
+    const written = changed.filter((c) => !outcome.conflicts.has(c.next.id) && !outcome.failed.has(c.next.id));
+    // both_directions: the RU→FR cards follow, in one write.
+    const cardWords = written.filter((c) => c.patch.both_directions !== undefined).map((c) => c.next);
+    if (cardWords.length > 0) {
+      const states = await deps.repo.states(cardWords.map((w) => w.id));
+      const rows = cardWords.flatMap((w) => syncStates(w, states.filter((s) => s.word_id === w.id), now));
+      if (rows.length > 0) await deps.repo.upsert("review_state", rows);
+    }
+    const status = (id: string) =>
+      outcome.conflicts.has(id) ? "conflict" : outcome.failed.has(id) ? "unknown" : written.some((c) => c.next.id === id) ? "updated" : "unchanged";
+    return {
+      updated: written.length,
+      unchanged: planned.length - changed.length,
+      words: planned.map((c) => ({ id: c.current.id, fr: c.next.fr, status: status(c.current.id) })),
+      ...(missing.length > 0 ? { missing, missing_note: "No such live word: find the ids again with search_words." } : {}),
+      ...(outcome.conflicts.size > 0 ? { conflict_note: "The app saved a newer version of these words meanwhile, so they were left as they were: read them again and retry." } : {}),
+      ...failedPart(outcome),
+      ...(newOneOff.size > 0 ? { new_one_off_fields: [...newOneOff], fields_note: ONE_OFF_NOTE } : {}),
+      ...(written.length > 0
+        ? { undo: { tool: "update_words", items: written.map((c) => ({ id: c.current.id, patch: reversePatch(c.current, c.patch, defs) })) } }
+        : {}),
       note: SYNC_NOTE,
     };
   },
@@ -3138,6 +3300,7 @@ export const TOOL_NAMES = [
   addWords.name,
   proposeWords.name,
   updateWord.name,
+  updateWords.name,
   setWordLevels.name,
   proposeLevels.name,
   moveWords.name,
@@ -3192,6 +3355,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   register(server, deps, addWords);
   register(server, deps, proposeWords);
   register(server, deps, updateWord);
+  register(server, deps, updateWords);
   register(server, deps, setWordLevels);
   register(server, deps, proposeLevels);
   register(server, deps, moveWords);
@@ -3218,7 +3382,7 @@ export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard
 - Before adding, search_words for the word; add_words also skips French forms that are already saved.
 - For each new word give the dictionary form, one to three Russian equivalents in the same register, slang_level (0 neutral, 1 familier, 2 argot, 3 vulgaire), verlan (true for verlan forms such as meuf, relou, chelou), pos, gender for nouns, and a short everyday example_fr with its example_ru. Vulgar words are legitimate vocabulary: translate them with the same strength and mark them 3.
 - Set folder_chosen_by_user to true only when the user named the theme; otherwise pick a fitting theme yourself, or leave the word in the inbox.
-- A word can carry origin («Происхождение»: one Russian line, e.g. «верлан от lourd», «от volonté „воля“ + -aire») and, for verbs, a conjugation (présent, passé composé, imparfait, futur; six forms each with pronouns). The app builds most conjugations itself from Lexique: search_words shows conjugation_builtin false where it cannot. Fill them with update_word when the user asks (e.g. «заполни происхождение для слов из темы X»), checking forms you are not sure of; never overwrite an existing origin or conjugation unless asked.
+- A word can carry origin («Происхождение»: one Russian line, e.g. «верлан от lourd», «от volonté „воля“ + -aire») and, for verbs, a conjugation (présent, passé composé, imparfait, futur; six forms each with pronouns). The app builds most conjugations itself from Lexique: search_words shows conjugation_builtin false where it cannot. Fill them when the user asks (e.g. «заполни происхождение для слов из темы X») with update_words, up to 50 words per call, checking forms you are not sure of; never overwrite an existing origin or conjugation unless asked.
 - Cards can carry the user's custom fields («Свои поля»): list_fields shows the shared ones and what to write in each. Set them by name with custom_fields in add_words or update_word (null clears one); search_words shows them. Use a name not in list_fields only when the user asks for a field on that one word. create_field, update_field and delete_field manage the shared fields; ask the user before creating or deleting one.
 - «Уровень языка» (CEFR A1…C2): search_words shows each word's \`level\` and \`level_source\`; most are estimates the app computes from its dictionary (flelex, freq), which you leave alone. To fill the missing ones («проставь уровни»; search_words level "none"), rate a batch of 15 and show it with propose_levels: a card where the user checks your levels and saves them; don't list them in text. Its «Следующие 15» asks for the next batch. If the user says they see no card, list the words with your levels in text, wait for the OK, then set_word_levels in batches of 10–15. Rate a word as a textbook or DELF / TCF list would, against words of known level; skip argot, vulgar words and verlan unless asked. Never change a level the user set (level_source user) unless they ask.
 - «План повторения» (how many new words a day, the review cap, the order of new words, when RU→FR starts): study_summary's \`plan.settings\` shows it; change it with update_study_plan only when the user asks (e.g. «давай 15 новых слов в день», «новые по темам»), then say what changed and what today looks like (study_summary).
@@ -3227,7 +3391,8 @@ export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard
 - New words from a text, a screenshot, a song or a conversation («добавь слова из …»): propose_words with every field filled (a card where the user unchecks words, changes themes and adds them; duplicates are marked), never a text list as well. If the user says they see no card, list the words in text and wait for the OK, then add_words.
 - Before adding more than 5 words (unless through propose_words' card), and before any move, delete, or renaming, pausing or deleting a theme (update_folder, delete_folder), list what will change and wait for the user's OK.
 - «На паузе»: a theme (update_folder \`muted\`) or a word (update_word \`muted\`) stays in the library with its progress but never comes up in review or practice; \`false\` brings it back. When list_folders shows many themes with words still \`new\` and some of them look like later steps of a sequence (levels, lessons, chapters, a course or book order) or like topics the user said can wait, suggest pausing those so only the current ones reach review: name the themes to pause and the ones that stay, and wait for the OK. When the user moves on, suggest bringing the next ones back. Never pause or unpause on your own.
-- After a change, say what changed and how to undo it with the result's \`undo\` (delete_words, restore_words, restore_moves, set_word_levels, update_study_plan, restore_folder, delete_field, restore_field, delete_exercise_set or restore_exercise_set).
+- Edits to several words (origins, examples, notes, fields, fixes): one update_words call per batch of up to 50, never update_word word by word; it checks every patch first and writes nothing if one is invalid. For big lookups pass search_words \`fields\` (e.g. ["ru"] or ["ru", "origin"]) to get compact rows.
+- After a change, say what changed and how to undo it with the result's \`undo\` (delete_words, restore_words, restore_moves, set_word_levels, update_words, update_study_plan, restore_folder, delete_field, restore_field, delete_exercise_set or restore_exercise_set).
 - Exercises («Упражнения»: «сделай упражнение / тест / квиз по теме …»): call exercise_material first, then send the whole set in one call; where it is played decides which. «В приложении», a request pasted from the app, or no place named → create_exercise_set (the app plays it offline). «В чате», «здесь», «прямо тут» → play_exercises, which shows a player in the chat; «ещё раз» for a saved set → play_exercises with its set_id. Never write the questions, options or answers in the chat yourself, not even when play_exercises is missing from your tools (an old copy of this connector): then ask the user to reconnect «Карточки» in the connector settings and open a new chat, and offer create_exercise_set meanwhile. If the user says they don't see a player, or the host shows no apps (e.g. Claude Code), call exercise_artifact with the same input and publish its HTML as an HTML artifact verbatim. Exercises never change the review schedule.
 - A round played in the chat reaches the app only if the user agrees: the player's «Сохранить в Карточки» saves it itself; from an artifact the user pastes its «Скопировать результат» line (KARTOCHKI_RUN …): ask before saving, then call save_exercise_result with it as run_line and the set input you played (or set_id). Never save one unasked.
 - An exercise artifact the user already has: rebuild it only when they ask to change it (more questions, another topic): exercise_material, then exercise_artifact keeping its title and topic, and publish the new HTML.

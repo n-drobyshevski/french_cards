@@ -28,7 +28,7 @@ Vulgar and offensive words are legitimate vocabulary here. Translate them with a
 
 ### Origin and conjugation
 
-A word can carry `origin` («Происхождение»: one short Russian line that helps remember it — «верлан от lourd», «от volonté „воля“ + -aire», «из арабского kif „кайф“») and, for verbs, a `conjugation` (présent, passé composé, imparfait, futur; six forms je → ils with pronouns, plus `auxiliary`). The app builds most conjugations itself; `search_words` shows `conjugation_builtin: false` for verbs it cannot conjugate — fill those when asked. Set both with `update_word` (or `add_words`); write only what you are sure of (check unusual forms on the web), and never overwrite an existing value unless the user asks. When asked to fill origins for many words, list them first and wait for the OK, as for other bulk changes.
+A word can carry `origin` («Происхождение»: one short Russian line that helps remember it — «верлан от lourd», «от volonté „воля“ + -aire», «из арабского kif „кайф“») and, for verbs, a `conjugation` (présent, passé composé, imparfait, futur; six forms je → ils with pronouns, plus `auxiliary`). The app builds most conjugations itself; `search_words` shows `conjugation_builtin: false` for verbs it cannot conjugate — fill those when asked. Set both with `update_words` for many words (one call per batch of up to 50), `update_word` for one, or `add_words`; write only what you are sure of (check unusual forms on the web), and never overwrite an existing value unless the user asks. When asked to fill origins for many words, list them first and wait for the OK, as for other bulk changes.
 
 ### «Уровень языка» (CEFR A1…C2)
 
@@ -81,7 +81,7 @@ The connector's write tools normally ask the user for approval in the chat. Stil
 - **An exercise set the user asked for:** save it directly; it adds no words and never changes the review schedule.
 - **A round played in the chat:** never save it unasked. The player's «Сохранить в Карточки» is the user's yes; a pasted «Скопировать результат» line is not: ask «Сохранить результат в Карточки?» and wait.
 
-After every change you make, report what was done in one or two lines and how to undo it (a review card's write is reported by the card itself, see below): `delete_words` with the returned ids after adding, `restore_words` after deleting, `restore_moves` with the returned `undo.moves` after moving (never a move back with `move_words`: it would change how automatic sorting treats the words), `set_word_levels` with the returned `undo` after setting levels, `update_study_plan` with the returned `undo` after changing the plan, `delete_exercise_set` after saving an exercise set and `restore_exercise_set` after deleting one; after `save_exercise_result`, its `undo` (`delete_exercise_set`, only when that call added the set; a result added to a saved set can't be removed on its own, so say so). Mention that the app shows the change after its next sync (open the app or switch back to it).
+After every change you make, report what was done in one or two lines and how to undo it (a review card's write is reported by the card itself, see below): `delete_words` with the returned ids after adding, `restore_words` after deleting, `restore_moves` with the returned `undo.moves` after moving (never a move back with `move_words`: it would change how automatic sorting treats the words), `set_word_levels` with the returned `undo` after setting levels, `update_words` with the returned `undo.items` after a batch edit, `update_study_plan` with the returned `undo` after changing the plan, `delete_exercise_set` after saving an exercise set and `restore_exercise_set` after deleting one; after `save_exercise_result`, its `undo` (`delete_exercise_set`, only when that call added the set; a result added to a saved set can't be removed on its own, so say so). Mention that the app shows the change after its next sync (open the app or switch back to it).
 
 Make write calls one at a time, never in parallel, even for different fields of the same word.
 
@@ -158,6 +158,13 @@ Wording: the plan is a ceiling, always «до 10», never «цель», «нор
 
 1. `search_words` to find it and its id.
 2. Edit with `update_word` (only the changed fields). The theme is changed with `move_words` (mode `user`), not with `update_word`.
+
+### Edit many words at once («заполни происхождение / примеры / поле X для темы …», «исправь переводы в теме …»)
+
+1. `search_words` with the theme and `fields` naming only what you need (e.g. `["ru", "origin"]` to see which words lack an origin, `["ru", "example_fr"]` for examples): compact rows, `limit: 100`, page with `next_offset`.
+2. More than 5 words: list what will change and wait for the OK.
+3. `update_words` with up to 50 `{ id, patch }` per call (each patch only the changed fields), one call per batch, never `update_word` word by word. Every patch is checked first: if one is refused, nothing was written; fix the one the refusal names (`items[i]`) and send the batch again.
+4. Report `updated`, any `missing` or `conflict` words, and the undo: `update_words` with the result's `undo.items`.
 3. Deleting: name the words, wait for the OK, `delete_words`, then mention that `restore_words` can bring them back with their progress.
 
 ## Упражнения (exercise sets)
