@@ -84,7 +84,9 @@ import type {
   ExerciseFocus,
   ExerciseFocusShare,
   ExerciseFocusTarget,
+  ExerciseItem,
   ExerciseItemType,
+  ExerciseNewWord,
   ExercisePerson,
   ExerciseRun,
   ExerciseScope,
@@ -2495,13 +2497,14 @@ const answerSchema = z.object({
   new_ref: z.string().trim().min(1).max(REF_MAX).nullable().optional(),
   attempt: z.number().int().min(1).max(MAX_ATTEMPTS),
   outcome: z.enum(["correct", "wrong", "dont_know"]),
-  chosen: z.string().max(ANSWER_MAX).nullable().optional(),
+  // TEXT_MAX, not ANSWER_MAX: a pairs mismatch picks a tile's Russian, the word's whole `ru` (≤300).
+  chosen: z.string().max(TEXT_MAX).nullable().optional(),
   ms: z.number().int().min(0).nullable().optional(),
   at: isoTime,
 });
 
 /** The round to save: the pasted run line, else the player's fields. */
-function chatRunOf(args: { client_ref?: string | null; run_line?: string | null; started_at?: string | null; finished_at?: string | null; answers?: unknown[] | null }): Omit<ChatRunResult, "client_ref"> & { answers: ExerciseAnswer[] } {
+function chatRunOf(args: { client_ref?: string | null; run_line?: string | null; started_at?: string | null; finished_at?: string | null; answers?: unknown[] | null }): Omit<ChatRunResult, "client_ref"> & { client_ref: string | null } {
   let raw: { started_at?: string | null; finished_at?: string | null; answers?: unknown };
   if (args.run_line) {
     const parsed = parseRunLine(args.run_line);
@@ -2511,6 +2514,7 @@ function chatRunOf(args: { client_ref?: string | null; run_line?: string | null;
     }
     raw = parsed;
   } else raw = args;
+  const lineRef = args.run_line ? (raw as ChatRunResult).client_ref : null;
   const started = isoTime.safeParse(raw.started_at);
   if (!started.success) throw new ToolError("started_at is missing or not a date-time: send the result line (run_line), or started_at and answers.");
   const finished = raw.finished_at == null ? null : isoTime.safeParse(raw.finished_at);
@@ -2519,6 +2523,7 @@ function chatRunOf(args: { client_ref?: string | null; run_line?: string | null;
     throw new ToolError(`The answers are not a result: ${answers.error.issues.slice(0, 5).map((i) => `answers.${i.path.join(".")}: ${i.message}`).join("; ")}.`);
   }
   return {
+    client_ref: lineRef,
     started_at: toIso(started.data),
     finished_at: finished?.success ? toIso(finished.data) : null,
     answers: answers.data.map((a) => ({
@@ -2532,6 +2537,32 @@ function chatRunOf(args: { client_ref?: string | null; run_line?: string | null;
       at: toIso(a.at),
     })),
   };
+}
+
+/**
+ * An answer row checked against its item, so a result can only say what the player could have
+ * recorded: the item's own word (a pairs row: one of the board's, else none = the whole board), a
+ * `chosen` among the item's options, and for a 4-option item the outcome that pick means (a «correct»
+ * without the answer picked is dropped). Words and confusions feed exercise_material's signals.
+ */
+function ownAnswer(a: ExerciseAnswer, item: ExerciseItem, newWords: readonly ExerciseNewWord[]): ExerciseAnswer | null {
+  if (item.type === "pairs") {
+    const key = a.word_id ?? a.new_ref;
+    const onBoard = key !== null && (item.pairs ?? []).includes(key);
+    const fresh = onBoard && newWords.some((w) => w.ref === key);
+    const ru = new Set(item.tiles.map((t) => t.ru));
+    return {
+      ...a,
+      word_id: onBoard && !fresh ? key : null,
+      new_ref: fresh ? key : null,
+      chosen: a.chosen !== null && ru.has(a.chosen) ? a.chosen : null,
+    };
+  }
+  const options = item.answer ? [item.answer, ...(item.distractors ?? [])] : [];
+  const chosen = a.chosen !== null && options.includes(a.chosen) ? a.chosen : null;
+  const outcome = chosen !== null ? (chosen === item.answer ? "correct" : "wrong") : a.outcome === "correct" ? null : "dont_know";
+  if (outcome === null) return null;
+  return { ...a, word_id: item.word_id, new_ref: item.word_id ? null : item.new_ref, chosen, outcome };
 }
 
 /** The words a run missed, as list_exercise_sets shows them. */
@@ -2570,6 +2601,10 @@ export const saveExerciseResult = tool({
       throw new ToolError(`The set «${stored.title}» was deleted, so nothing was saved. Bring it back with restore_exercise_set (id ${stored.id}) and save again, if the user wants.`);
     }
     if (!stored && setId !== ownId) throw new ToolError(`No exercise set with id "${setId}". Call list_exercise_sets for the sets.`);
+    // Item ids are q1…qN in every set: a pasted line of another set would fit this one's questions.
+    if (result.client_ref !== null && result.client_ref !== setId && exerciseSetId(result.client_ref) !== setId) {
+      throw new ToolError(`run_line is the result of another set (client_ref "${result.client_ref}"): send that set's input, or its set_id, with it.`);
+    }
     let set: ExerciseSet;
     let words: Word[];
     if (stored) {
@@ -2588,7 +2623,12 @@ export const saveExerciseResult = tool({
     const played = chatItemIds(set, words);
     const itemIds = played.length === set.items.length ? [] : played;
     const inRun = new Set(played);
-    const answers = result.answers.filter((a) => inRun.has(a.item_id));
+    const byId = new Map(set.items.map((i) => [i.id, i]));
+    const answers = result.answers.flatMap((a) => {
+      const item = inRun.has(a.item_id) ? byId.get(a.item_id) : undefined;
+      const own = item && ownAnswer(a, item, set.new_words);
+      return own ? [own] : [];
+    });
     if (answers.length === 0) throw new ToolError("The result has no answers to this set's questions, so nothing was saved.");
     const runId = chatRunId(set.id, result.started_at);
     const done = (await deps.repo.exerciseRunsSince(result.started_at)).find((r) => r.id === runId);

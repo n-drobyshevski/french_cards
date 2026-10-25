@@ -261,8 +261,10 @@ export const DEFAULT_SETTINGS: Settings = {
  * server-written parts and the defaults; `validateSet` then checks the rules below.
  *
  *   id           "q1".."qN", unique in the set (the server assigns them in order).
- *   type         "choice" | "cloze" | "register" | "pairs" | "conjugate". Later: typed, cloze_typed,
- *                order, odd_one_out, listen.
+ *   type         "choice" | "cloze" | "pairs" | "conjugate". "register" (pick the word's slang level)
+ *                is no longer made or played (2026-10-25): it stays only in older stored sets, whose
+ *                register items are skipped like an unknown type. Later: typed, cloze_typed, order,
+ *                odd_one_out, listen.
  *   skill        choice only, the card header label: meaning | form | neutral | verlan | situation.
  *                null for the other types.
  *   ask          choice + meaning only: "fr" = the prompt is the French word and the options are
@@ -272,30 +274,27 @@ export const DEFAULT_SETTINGS: Settings = {
  *   person       conjugate only: je | tu | il | nous | vous | ils (il = il / elle / on). null otherwise.
  *                Older rows have neither: read as null.
  *   word_id      the library word the item is about (live, not paused). Exactly one of word_id /
- *   new_ref      new_ref (→ new_words[].ref) is set for choice, cloze, register and conjugate; both
+ *   new_ref      new_ref (→ new_words[].ref) is set for choice, cloze and conjugate; both
  *                null for pairs.
  *                Word ids are UUIDs and refs are short ("n1"), so the two never collide.
  *   prompt       the stem on the card (≤300). Required for choice. cloze: an optional instruction
- *                (null → «Какое слово пропущено?»). register: an optional instruction (null →
- *                «Насколько это разговорно?»; the card shows word.fr). conjugate: the infinitive
+ *                (null → «Какое слово пропущено?»). conjugate: the infinitive
  *                (server-filled from word.fr). pairs: null (→ «Соедини слово и перевод»).
  *   sentence     cloze only (≤300): a French sentence with exactly one [[answer]] span, e.g.
  *                "J'ai trop [[kiffé]] ce concert." The span equals `answer` under normalizeLemma.
  *                conjugate: server-built from the verb's conjugation, the pronouns and the verb part
  *                as the span: "tu [[as kiffé]]", "j'[[ai kiffé]]", "je me [[suis cassé]]".
  *   sentence_ru  cloze only, optional (≤300): the Russian hint. It must not translate the gap.
- *   answer       choice / cloze: the right option (≤120). register: the word's level label
- *                (REGISTER_LEVELS[slang_level], server-filled). conjugate: the verb part of the form
+ *   answer       choice / cloze: the right option (≤120). conjugate: the verb part of the form
  *                (server-filled). pairs: null.
  *   distractors  choice / cloze / conjugate: exactly 3 wrong options (4 options in the 2×2 grid),
  *                distinct after searchKey and never equal to the answer (conjugate: other forms of the
- *                same verb without pronouns, server-built when left out). register (the 4 levels are
- *                the options) and pairs: [].
+ *                same verb without pronouns, server-built when left out). pairs: [].
  *   pairs        pairs only: 4–6 unique word_ids or new_refs. [] otherwise.
  *   tiles        pairs only, server-built from the words: [{key, fr, ru}] in the order of `pairs`
  *                (key = the word_id or new_ref). [] otherwise.
  *   explain_ru   optional (≤200), shown after the answer.
- *   word         server-written snapshot of the item's word (choice, cloze, register, conjugate);
+ *   word         server-written snapshot of the item's word (choice, cloze, conjugate);
  *                null for pairs.
  *
  * Options are shuffled at play time (`optionsFor(item, random)`); nothing stores the answer's index.

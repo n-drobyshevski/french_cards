@@ -99,7 +99,9 @@ export function parseRunLine(text: string): ChatRunResult | null {
   const at = text.indexOf(RUN_LINE_PREFIX);
   if (at < 0) return null;
   try {
-    const value = JSON.parse(text.slice(at + RUN_LINE_PREFIX.length).trim()) as Partial<ChatRunResult>;
+    // The JSON is one line (JSON.stringify): whatever the user typed after it is not part of it.
+    const json = text.slice(at + RUN_LINE_PREFIX.length).split("\n", 1)[0].trim();
+    const value = JSON.parse(json) as Partial<ChatRunResult>;
     if (typeof value.client_ref !== "string" || typeof value.started_at !== "string" || !Array.isArray(value.answers)) return null;
     return { client_ref: value.client_ref, started_at: value.started_at, finished_at: typeof value.finished_at === "string" ? value.finished_at : null, answers: value.answers };
   } catch {

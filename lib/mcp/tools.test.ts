@@ -2119,6 +2119,22 @@ describe("exercises («Упражнения»)", () => {
       expect(await refused(saveExerciseResult, fake, { client_ref: "new-1", started_at: at, answers: [answer("q1", "correct", null, at)] })).toMatch(/not saved yet: send it/);
       expect(fake.writes).toHaveLength(1);
     });
+
+    it("save_exercise_result keeps only what the player could have recorded, and no other set's line", async () => {
+      const fake = fakeLib({ exercise_sets: [SET] });
+      const at = "2026-10-22T10:00:00.000Z";
+      const other = runLine({ client_ref: "fete-1", started_at: at, finished_at: at, answers: [answer("q1", "correct", "девушка", at)] });
+      expect(await refused(saveExerciseResult, fake, { set_id: "x-old", run_line: other })).toMatch(/result of another set/);
+      const answers = [
+        // A «correct» with a wrong pick, another word's id, and a «correct» with nothing picked.
+        { ...answer("q1", "correct", "a", at), word_id: "w-thune" },
+        answer("q2", "correct", null, at),
+      ];
+      const out = await ok(saveExerciseResult, fake, { set_id: "x-old", started_at: at, finished_at: at, answers });
+      expect(out.run).toMatchObject({ first_try: 0, total: 2, missed: [{ word_id: "w-meuf", chosen: ["a"] }] });
+      const [row] = [...fake.tables.exercise_runs.values()];
+      expect(row.answers).toEqual([expect.objectContaining({ item_id: "q1", word_id: "w-meuf", outcome: "wrong", chosen: "a" })]);
+    });
   });
 
   it("takes a rate-limit token for create_exercise_set but not for the read tools", async () => {

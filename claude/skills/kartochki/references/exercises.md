@@ -1,15 +1,15 @@
 # Упражнения: the full rubric
 
-How to write an exercise set for `create_exercise_set`. The app plays it offline as a 2×2 grid of options (pairs and register have their own boards), one question at a time; a wrong answer or «Не знаю» brings the question back later. Results come back through `list_exercise_sets` (`last_run`) and `exercise_material` (`signals`).
+How to write an exercise set for `create_exercise_set` (the app) or `play_exercises` / `exercise_artifact` (the chat): the same set, the same rules. It plays as a 2×2 grid of options (pairs have their own board), one question at a time; a wrong answer or «Не знаю» brings the question back later. Results come back through `list_exercise_sets` (`last_run`) and `exercise_material` (`signals`); a chat round only once it is saved (see «В чате» below).
 
 ## The set
 
 - **Size:** 10–15 items (the server takes 6–20). Match the size the user asked for («12 вопросов»). A verb set is shorter: see «Спряжение глаголов» below.
-- **Types:** at least 3 of `choice`, `cloze`, `register`, `pairs`. A good mix for 12: 6–7 choice (several skills), 2–3 cloze, 1 register, 1 pairs. `conjugate` belongs to verb sets.
+- **Types:** at least 3 of `choice`, `cloze`, `pairs`, `conjugate`. A good mix for 12: 7–8 choice (several skills), 2–3 cloze, 1 pairs; `conjugate` belongs mostly to verb sets. There is no `register` type any more: the server refuses it.
 - **Words:** 8–12 different words. Each new word (from the web) has at least one recognition item before any production item, and new words stay under a third of the set's words.
-- **Order** (the app keeps it):
+- **Order** (the player keeps it, in the app and in the chat):
   1. Recognise first: `choice` meaning with `ask: "fr"` (French shown, Russian options) and `pairs`.
-  2. Then judge: `register`, `situation`, `verlan`, `neutral`.
+  2. Then judge: `situation`, `verlan`, `neutral`.
   3. Produce last: `choice` meaning with `ask: "ru"`, `form`, `cloze`, `conjugate`.
   4. The weakest words (the top of `exercise_material`'s list, or last run's `missed`) appear late **and twice**, in two different types, with at least two other items between them.
 - **Focus («Чаще в упражнениях»):** see the next section.
@@ -35,7 +35,7 @@ A set made **only** of the user's difficult words, the words due today, or both,
 
 - `exercise_material` with `only: "difficult" | "due" | "both"`: `words` are just those words (live, not «на паузе», from every theme; `folders` still narrows when the user named themes), weakest first. `topic` is ignored, and there is no `focus` block (every word is a focus word already). `scope` adds `{ only, available, suggested_items, note }`.
 - **Size:** `suggested_items` = available × 3, at least 6 and at most 12 (scale the 12 for another asked size). With few words make the **shorter** set: 3 difficult words → 9 questions, not 12 padded with other words.
-- **Each word in 2–3 different types:** e.g. meaning FR→RU, then register or cloze, then meaning RU→FR. `pairs` needs at least 4 words. The same word is never in two items in a row; the weakest come back late.
+- **Each word in 2–3 different types:** e.g. meaning FR→RU, then neutral or cloze, then meaning RU→FR. `pairs` needs at least 4 words. The same word is never in two items in a row; the weakest come back late.
 - **Nothing else:** no other library words and no `new_words` (`create_exercise_set` refuses `new_words` with a `scope`).
 - **None available** (`available: 0`): don't save a set; tell the user there are no such words now (e.g. «Сейчас нет слов к повторению»).
 - **Saving:** `create_exercise_set` with `scope` = the same value (the app shows the set as «Трудные · все темы», «К повторению · все темы» or «Трудные и к повторению»). The warning `scope_words` lists items about words that are not difficult / due; the set is saved anyway. The saved «Чаще в упражнениях» share is not checked for a scoped set.
@@ -48,7 +48,7 @@ The level shapes **the questions, not the words**: the library words from `exerc
 
 | | Sentences (cloze, situation) | Distractors | Mix | New words |
 |---|---|---|---|---|
-| A2 | 5–8 words, présent and passé composé, concrete everyday scenes | same part of speech, clearly different meaning | mostly recognition (meaning fr→ru, pairs, register); at most a quarter production | A1–A2 |
+| A2 | 5–8 words, présent and passé composé, concrete everyday scenes | same part of speech, clearly different meaning | mostly recognition (meaning fr→ru, pairs, verlan); at most a quarter production | A1–A2 |
 | B1 | 8–12 words, the common tenses, life in France (housing, work, administration, health) | from the same theme | about half recognition, half production | up to B1 |
 | B2 | 12–18 words with a subordinate clause or connector (bien que, alors que, pourtant), opinions and society | close in meaning: near-synonyms, false friends, a wrong collocation or register | mostly production (cloze, meaning ru→fr, situation) | B1–B2 |
 | C1 | longer, with nuance (subjonctif, concession, nominalisation), abstract or idiomatic | differ by nuance, collocation or register only | mostly production and situation | B2–C1 |
@@ -109,7 +109,6 @@ The server turns `{ "word_id": "w-aller", "tense": "passe_compose", "person": "n
 | `choice` + `meaning` | `word_id` or `new_ref`, `ask` (`fr` default, or `ru`), 3 `distractors` in the options' language (Russian for `fr`, French for `ru`: the server refuses a mix), each a single equivalent like the answer | `prompt` (the word), `answer` (the first of its comma-separated Russian equivalents, or the French for `ask: "ru"`) |
 | `choice` + `form` / `neutral` / `verlan` / `situation` | `word_id` or `new_ref`, `prompt`, `answer`, 3 `distractors` | the word snapshot |
 | `cloze` | `word_id` or `new_ref`, `sentence` with exactly one `[[gap]]`, optional `sentence_ru`, 3 `distractors` | `answer` (the gap, when left out) |
-| `register` | `word_id` or `new_ref` | `answer` (the word's level: нейтр. / fam. / arg. / vulg.) |
 | `pairs` | `pairs`: 4–6 `word_id`s / `new_ref`s | the tiles |
 | `conjugate` | `word_id` (or `new_ref`) of a verb, `tense` (`present`, `passe_compose`, `imparfait`, `futur`), `person` (`je`, `tu`, `il`, `nous`, `vous`, `ils`); optionally 3 `distractors` (forms of the same verb without the pronoun) | `prompt` (the infinitive), `sentence` (the pronouns and the gap: «tu [[as kiffé]]»), `answer`, and 3 `distractors` from the verb's other forms when left out |
 
@@ -175,7 +174,15 @@ Only when the user allowed them («можно новые слова») or asked 
     { "type": "choice", "skill": "meaning", "ask": "fr", "word_id": "w-meuf", "distractors": ["тачка", "засада", "хата"] },
     { "type": "choice", "skill": "meaning", "ask": "fr", "new_ref": "n1", "distractors": ["засада", "тачка", "хата"] },
     { "type": "pairs", "pairs": ["w-bagnole", "w-keuf", "w-thune", "w-galere"] },
-    { "type": "register", "word_id": "w-relou", "explain_ru": "Разговорное, но не грубое: так говорят все." },
+    {
+      "type": "choice",
+      "skill": "neutral",
+      "word_id": "w-relou",
+      "prompt": "Как сказать «relou» нейтрально?",
+      "answer": "pénible",
+      "distractors": ["facile", "agréable", "rapide"],
+      "explain_ru": "relou — верлан от lourd: «тяжёлый, занудный»."
+    },
     {
       "type": "choice",
       "skill": "situation",
@@ -235,7 +242,7 @@ Only when the user allowed them («можно новые слова») or asked 
 }
 ```
 
-Why it works: recognition first (items 1–3), judgement next (4–8), production last (9–12); `la meuf` and `la teuf` come back as cloze near the end; every distractor has the answer's part of speech, gender and register; the `meaning` items send no prompt or answer; the cloze hints describe the scene without the missing word; 4 types, 11 words, 1 new.
+Why it works: recognition first (items 1–3), judgement next (4–8), production last (9–12); `la meuf` and `la teuf` come back as cloze near the end; every distractor has the answer's part of speech, gender and register; the `meaning` items send no prompt or answer; the cloze hints describe the scene without the missing word; 3 types (choice with five skills), 11 words, 1 new.
 
 ## Good and bad items
 
@@ -251,6 +258,14 @@ Why it works: recognition first (items 1–3), judgement next (4–8), productio
 
 **A cloze where two options fit** — bad: `Je te présente ma [[meuf]], Sarah.` with the distractor `daronne` («моя мама, Сара» fits too). Good: `teuf`, `thune`, `caisse`.
 
-**Register misread** — a `register` item for `la thune` expects «arg.», not «fam.»: rate the word by the SKILL.md rubric in the sense you give, and check its `slang_level` in `exercise_material` (the server takes the answer from it).
-
 **The same word twice in a row** — bad: items 4 and 5 both about `relou`. Good: at least two other items between them.
+
+## В чате
+
+The same set, played right in the chat («давай здесь», «в чате», «прямо тут»): `play_exercises` takes exactly the fields of `create_exercise_set`, checks them the same way and writes nothing; the player shows in the chat with the app's rules and look (the question card, 4 options, «Не знаю», a miss back up to 3 times, intro cards for new words, «ИТОГ НАБОРА» at the end). Everything above applies: size, mix, order, distractors, leak checks.
+
+- **Never** write the questions, options or answers in the chat: the player shows them. A line or two that it is ready is enough.
+- No player (Claude Code, or the user doesn't see one): `exercise_artifact` with the same input, and publish its HTML verbatim as an HTML artifact.
+- Replay a saved set with `play_exercises` `{ set_id }` alone; a `client_ref` that is saved already is refused.
+- Saving is the user's choice: the player's «Сохранить в Карточки» saves the set (if new) and the round by itself; a pasted «Скопировать результат» line (`KARTOCHKI_RUN …`) is saved with `save_exercise_result` (`run_line` + the set input you played, or `set_id`) only after you asked and the user said yes. The server recomputes the score and ignores answers to questions that are not in the set.
+- An exercise artifact the user already has is rebuilt only when they ask to change it (more questions, another topic): `exercise_material` for the app's words, then `exercise_artifact` keeping its title and topic.

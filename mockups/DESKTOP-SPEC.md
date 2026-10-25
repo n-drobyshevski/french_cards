@@ -315,7 +315,7 @@ side); `Z` undo last answer. **Practice** (новое key): `Esc` «Законч
 **Упражнения** (новое, 2026-10-23; `exerciseKeyAction` in `keys.ts`, bound by `code`, same scope, typing and
 400 ms input-guard rules as Review). List (D-Exercise-List): `J`/`K` move the selected tile, `↵` «Начать».
 Player (D-Exercise-Player): `1` `2` `3` `4` pick an option — the tap equivalent, it answers at once (`Digit1–4`
-and `Numpad1–4`; on a `register` item they pick нейтр. / fam. / arg. / vulg.); `0` «Не знаю»; `↵` «Дальше»
+and `Numpad1–4`); `0` «Не знаю»; `↵` «Дальше»
 after any answer (right ones wait too; nothing moves on by itself); `Esc` «Выйти» (the run is saved, no confirm). Keys pressed before the result line
 is in are ignored (no queueing). Shown as Kbd caps `1`–`4` on the tiles, `↵` on «Дальше», and the HintLine
 «1–4 ВЫБРАТЬ · 0 НЕ ЗНАЮ · ENTER ДАЛЬШЕ · ESC ВЫЙТИ»; the «Клавиши» overlay gets an «Упражнения» group and the
