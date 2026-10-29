@@ -7,38 +7,18 @@
 // question, the slips (A–D rows when an option is long). Every function builds fresh DOM from the
 // round's state. The exam («Мини-TCF») has its own screens in exam-ui.ts.
 import { counterLabel, formatCounter, isRussian, resultTone, tileVerdict, type PairsState, type PlayerResult } from "@/components/exercises/player-state";
-import type { StripMark } from "@/components/ui/SessionStrip";
 import { CLOZE_PROMPT, CONJ_PROMPT, PAIRS_PROMPT, clozeParts, passageLines, type ExerciseOptions } from "@/lib/core/exercises";
 import { seriesLine } from "@/lib/core/chat-player";
-import { SLANG_LABELS, type ExerciseItem, type ExerciseNewWord, type ExercisePairTile, type SlangLevel } from "@/lib/types";
-import { cardLabel, conjSize, deckEdges, explainParts, frSize, isParagraph, optionRows, posAbbr, selfEvident, showsMeter, skillQuestion, sourceDomain, stampPlace } from "./card";
+import type { ExerciseItem, ExerciseNewWord, ExercisePairTile } from "@/lib/types";
+import { cardLabel, conjSize, explainParts, frSize, isParagraph, optionRows, posAbbr, selfEvident, showsMeter, skillQuestion, sourceDomain, stampPlace } from "./card";
 import { h, icon, type Child } from "./dom";
 import { questionLine, type ExamMiss } from "./exam";
+import { cardHead, cls, deck, meter, tally } from "./parts";
 import type { Round } from "./round";
-import { plural } from "./texts";
 
-export const cls = (...names: (string | false | null | undefined)[]) => names.filter(Boolean).join(" ");
+// --- Parts (the index card's shared ones are in parts.ts) ----------------------------------------
 
-// --- Parts ---------------------------------------------------------------------------------------
-
-const SLANG_NAMES_RU = ["нейтральный", "фамильярный", "арго", "вульгарный"] as const;
-
-/** The 4-segment slang meter (components/ui/SlangMeter): vulg. in red ink, the italic abbreviation after it. */
-export function meter(level: SlangLevel, verlan: boolean, row = false): HTMLElement {
-  const segs = h("span", { class: cls("segs", row && "sm", level === 3 && "vulg"), "aria-hidden": "true" }, [0, 1, 2, 3].map((i) => h("i", { class: i <= level ? "on" : null })));
-  const label = verlan ? `${SLANG_LABELS[level]} · verl.` : SLANG_LABELS[level];
-  return h(
-    "span",
-    { class: "meter", role: "img", "aria-label": `Сленг: ${SLANG_NAMES_RU[level]}, ${level + 1} из 4${verlan ? ", верлан" : ""}` },
-    segs,
-    !row && h("span", { class: "abbr", "aria-hidden": "true", lang: level === 0 ? null : "fr" }, label),
-  );
-}
-
-/** The index card's 46px header over the red rule: the mono label left, the meter (or nothing) right. */
-function cardHead(label: Child[], right: Child = null): HTMLElement {
-  return h("div", { class: "head" }, h("span", { class: "label" }, label), right);
-}
+export { cls, meter };
 
 /** «≈B1»: a question's level, mono, at the header's end (a reading item, Ex-Reading-App). */
 const levelMark = (level: string) => h("span", { class: "lvl", "aria-label": `Уровень ${level}` }, `≈${level}`);
@@ -63,13 +43,6 @@ export function passageBlock(text: string, label: string | null): HTMLElement {
 
 /** «A»…«D» in front of option rows. */
 export const LETTERS = ["A", "B", "C", "D", "E", "F"] as const;
-
-/** Deck edges under the card (1–3 by the questions left), deepest first. */
-function deck(left: number, card: HTMLElement): HTMLElement {
-  const n = deckEdges(left);
-  const edges = ["e3", "e2", "e1"].filter((_, i) => n >= 3 - i).map((e) => h("span", { class: `edge ${e}`, "aria-hidden": "true" }));
-  return h("div", { class: "deck" }, edges, card);
-}
 
 function prompt(text: string): HTMLElement {
   if (isRussian(text)) return isParagraph(text) ? h("p", { lang: "ru", class: "ru-para" }, text) : h("h2", { lang: "ru", class: "ru-word" }, text);
@@ -391,37 +364,6 @@ export function waitView(title: string | null, text = "Готовим набор
       { class: "stage" },
       deck(busy ? 5 : 1, h("article", { class: "card" }, cardHead([h("b", null, "Упражнение")]), h("div", { class: "body" }, h("p", { class: busy ? "wait" : "q", role: "status" }, text)))),
       busy && h("div", { class: "grid", "aria-hidden": "true" }, [0, 1, 2, 3].map(() => h("span", { class: "opt ghost" }))),
-    ),
-  );
-}
-
-const QUESTION_NOUN = ["вопрос", "вопроса", "вопросов"] as const;
-
-/** «ИТОГ НАБОРА», the title, the strip (one cell per attempt) and «3 из 5 с первого раза». */
-function tally(title: string, marks: readonly StripMark[], total: number, note: string | null): HTMLElement {
-  const c = { first: 0, miss: 0, requeued: 0 };
-  for (const m of marks) if (m === "first" || m === "miss" || m === "requeued") c[m]++;
-  const parts = [
-    `${c.first} с первого раза`,
-    c.miss > 0 && `${c.miss} ${plural(c.miss, ["ошибка", "ошибки", "ошибок"])}`,
-    c.requeued > 0 && `${c.requeued} ${plural(c.requeued, ["повтор", "повтора", "повторов"])}`,
-  ].filter(Boolean);
-  const group = Math.max(1, Math.ceil(marks.length / 4));
-  return h(
-    "article",
-    { class: "tally", "aria-label": `Итог набора «${title}»` },
-    h("div", { class: "th" }, h("span", null, "Итог набора"), note && h("span", null, `· ${note}`)),
-    h(
-      "div",
-      { class: "tb" },
-      h("p", { class: "tt" }, title),
-      marks.length > 0 &&
-        h(
-          "span",
-          { class: "cells", role: "img", "aria-label": `${total} ${plural(total, QUESTION_NOUN)}: ${parts.join(", ")}` },
-          marks.map((m, i) => h("span", { class: `cell ${m}`, style: `--g:${Math.floor(i / group)}` })),
-        ),
-      h("p", { class: "score", "aria-hidden": marks.length > 0 ? "true" : null }, h("b", null, `${c.first} из ${total}`), " с первого раза"),
     ),
   );
 }

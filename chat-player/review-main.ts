@@ -4,15 +4,18 @@
 // Only the user's tap writes: «Сохранить N» calls set_word_levels, «Добавить N» add_words (MCP App
 // tools/call), then «Отменить» calls the tool's own undo (set_word_levels with the returned undo,
 // delete_words with the returned ids). What was written is told to Claude (ui/update-model-context).
-// «Настроить упражнение» (setup_exercise) writes nothing: its «Начать ›» sends the request to Claude
-// as the user's message (ui/message). An MCP App only: no artifact mode.
-import { asChatReview, reviewFolderUrl, type ChatReview, type ExerciseSetup, type LevelsReview, type ReviewFolder } from "@/lib/core/chat-review";
+// «Настроить упражнение» (setup_exercise) and «Повторить слова» (setup_review) write nothing: their
+// «Начать ›» sends the request to Claude as the user's message (ui/message). An MCP App only: no
+// artifact mode.
+import { CARDS_SETUP_CHOICES, asChatReview, reviewFolderUrl, type CardsSetup, type ChatReview, type ExerciseSetup, type LevelsReview, type ReviewFolder } from "@/lib/core/chat-review";
 import { EXERCISE_LEVELS, EXERCISE_TENSES } from "@/lib/core/exercises";
 import { isCefr } from "@/lib/core/level";
 import { applyHostContext, callTool, connectHost, reportSize, resultText, type Bridge, type HostContext } from "./bridge";
 import { h } from "./dom";
 import {
   addWordsArguments,
+  cardsSetupRequest,
+  cardsSetupState,
   levelRows,
   levelsContext,
   nextLevelsMessage,
@@ -24,11 +27,13 @@ import {
   toggled,
   wordRows,
   wordsContext,
+  DUE_EXERCISE_SIZES,
+  type CardsSetupState,
   type LevelRow,
   type SetupState,
   type WordRow,
 } from "./review/model";
-import { levelsView, setupView, waitView, wordsView, type LevelsPhase, type WordsPhase } from "./review/views";
+import { cardsSetupView, levelsView, setupView, waitView, wordsView, type LevelsPhase, type WordsPhase } from "./review/views";
 
 const root = document.getElementById("app") ?? document.body.appendChild(h("div", { id: "app" }));
 
@@ -38,6 +43,7 @@ let wait: { text: string; busy: boolean } = { text: "Готовим список
 let levels: { rows: LevelRow[]; phase: LevelsPhase; asked: boolean } | null = null;
 let words: { rows: WordRow[]; phase: WordsPhase; picker: string | null } | null = null;
 let setup: { state: SetupState; allThemes: boolean } | null = null;
+let cardsSetup: { state: CardsSetupState; allThemes: boolean } | null = null;
 let error: string | null = null;
 let notice: string | null = null;
 let expanded = false;
@@ -68,6 +74,8 @@ function render() {
     placePicker();
   } else if (review?.kind === "kartochki-setup" && setup) {
     root.replaceChildren(setupView({ setup: review, state: setup.state, allThemes: setup.allThemes, error, on: setupOn }));
+  } else if (review?.kind === "kartochki-cards-setup" && cardsSetup) {
+    root.replaceChildren(cardsSetupView({ setup: review, state: cardsSetup.state, allThemes: cardsSetup.allThemes, error, on: cardsSetupOn }));
   } else {
     root.replaceChildren(waitView(wait.text, wait.busy));
   }
@@ -85,6 +93,7 @@ function show(next: ChatReview) {
   levels = next.kind === "kartochki-levels" ? { rows: levelRows(next), phase: { kind: "edit" }, asked: false } : null;
   words = next.kind === "kartochki-words" ? { rows: wordRows(next), phase: { kind: "edit" }, picker: null } : null;
   setup = next.kind === "kartochki-setup" ? { state: setupState(next), allThemes: false } : null;
+  cardsSetup = next.kind === "kartochki-cards-setup" ? { state: cardsSetupState(next), allThemes: false } : null;
   render();
 }
 
@@ -350,6 +359,61 @@ const setupOn = {
     render();
     bridge.request("ui/message", { role: "user", content: [{ type: "text", text }] }).catch(() => {
       if (setup) setup.state.sent = false;
+      error = "Не отправилось в чат — попробуйте ещё раз или напишите запрос сами.";
+      render();
+    });
+  },
+};
+
+// --- «Повторить слова» ---------------------------------------------------------------------------
+
+/** Changes a pick while the request is not sent yet, and keeps focus on the control tapped. */
+function editCardsSetup(focus: string | null, change: (state: CardsSetupState, review: CardsSetup) => void) {
+  if (!cardsSetup || cardsSetup.state.sent || review?.kind !== "kartochki-cards-setup") return;
+  change(cardsSetup.state, review);
+  error = null;
+  refocus = focus;
+  render();
+}
+
+const cardsSetupOn = {
+  choice: (choice: string) =>
+    editCardsSetup(`[data-choice="${CSS.escape(choice)}"]`, (s) => {
+      const c = CARDS_SETUP_CHOICES.find((x) => x === choice);
+      if (c) s.choice = c;
+    }),
+  theme: (id: string | null) =>
+    editCardsSetup(`[data-theme="${CSS.escape(id ?? "inbox")}"]`, (s, r) => {
+      s.folders = toggled(r.themes.map((t) => t.id), s.folders, id);
+    }),
+  allThemes() {
+    if (!cardsSetup) return;
+    cardsSetup.allThemes = true;
+    render();
+  },
+  clearThemes: () =>
+    editCardsSetup('[data-theme="all"]', (s) => {
+      s.folders = [];
+    }),
+  scope: (scope: string) =>
+    editCardsSetup(`[data-scope="${CSS.escape(scope)}"]`, (s, r) => {
+      const found = r.scopes.find((x) => x.scope === scope);
+      if (found) s.scope = found.scope;
+    }),
+  size: (n: number) =>
+    editCardsSetup(`[data-size="${n}"]`, (s) => {
+      if (s.choice === "exercise") {
+        if (DUE_EXERCISE_SIZES.includes(n)) s.exerciseSize = n;
+      } else s.size = n;
+    }),
+  start() {
+    if (!bridge || !cardsSetup || cardsSetup.state.sent || review?.kind !== "kartochki-cards-setup") return;
+    const text = cardsSetupRequest(review, cardsSetup.state);
+    cardsSetup.state.sent = true;
+    error = null;
+    render();
+    bridge.request("ui/message", { role: "user", content: [{ type: "text", text }] }).catch(() => {
+      if (cardsSetup) cardsSetup.state.sent = false;
       error = "Не отправилось в чат — попробуйте ещё раз или напишите запрос сами.";
       render();
     });

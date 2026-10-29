@@ -19,6 +19,7 @@ export interface TableRows {
   folders: Folder;
   words: Word;
   review_state: ReviewState;
+  /** Written by the devices; the connector inserts or soft-deletes only a grade made in the chat (grade_cards, undo_grades). */
   review_log: ReviewLog;
   /** Read-only here: the definitions of «Свои поля» are edited in the app. */
   field_defs: FieldDef;
@@ -32,7 +33,7 @@ export interface TableRows {
   progress_days: ProgressDay;
 }
 
-export type WritableTable = "folders" | "words" | "review_state" | "field_defs" | "exercise_sets" | "exercise_runs" | "user_prefs";
+export type WritableTable = "folders" | "words" | "review_state" | "review_log" | "field_defs" | "exercise_sets" | "exercise_runs" | "user_prefs";
 
 export interface McpRepo {
   /** Every folder, tombstones included. */
@@ -47,6 +48,8 @@ export interface McpRepo {
   states(wordIds?: readonly string[]): Promise<ReviewState[]>;
   /** Review-log rows with `review >= from`. Tombstones (undone reviews) included. */
   logsSince(from: string): Promise<ReviewLog[]>;
+  /** Review-log rows by id (tombstones included; unknown ids are left out). */
+  logsByIds(ids: readonly string[]): Promise<ReviewLog[]>;
   /** Every exercise set, tombstones included. */
   exerciseSets(): Promise<ExerciseSet[]>;
   /** Exercise runs with `started_at >= from`, tombstones included. */
@@ -140,6 +143,7 @@ export function createSupabaseRepo(client: SupabaseClient, userId: string): McpR
     wordsByIds: (ids) => (ids.length ? fetchIn("words", "id", ids) : Promise.resolve([])),
     states: (wordIds) => (wordIds === undefined ? fetchAll("review_state") : wordIds.length ? fetchIn("review_state", "word_id", wordIds) : Promise.resolve([])),
     logsSince: (from) => fetchAll("review_log", { column: "review", op: "gte", value: from }),
+    logsByIds: (ids) => (ids.length ? fetchIn("review_log", "id", ids) : Promise.resolve([])),
     exerciseSets: () => fetchAll("exercise_sets"),
     exerciseRunsSince: (from) => fetchAll("exercise_runs", { column: "started_at", op: "gte", value: from }),
     userPrefs: () => fetchAll("user_prefs"),

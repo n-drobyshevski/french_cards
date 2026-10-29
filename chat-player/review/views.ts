@@ -1,8 +1,9 @@
 // The review page's screens (pick A of each, mockups Chat-Levels-A / Chat-Levels-Saved and
 // Chat-Words-A / Chat-Words-Theme / Chat-Words-Added): one sheet with the red rule, a row per word,
 // the first few in the chat and the rest behind «Показать все» (fullscreen), the write button at the
-// foot; once written, the receipt with «Отменить». Every function builds fresh DOM from the state.
-import type { ExerciseSetup, LevelsReview, ReviewFolder, WordsReview } from "@/lib/core/chat-review";
+// foot; once written, the receipt with «Отменить». «Настроить упражнение» and «Повторить слова»: blocks
+// of chips, the request preview, «Начать ›». Every function builds fresh DOM from the state.
+import type { CardsSetup, CardsSetupChoice, ExerciseSetup, LevelsReview, ReviewFolder, WordsReview } from "@/lib/core/chat-review";
 import { TENSE_NAMES, TENSE_WHEN } from "@/lib/core/conj-display";
 import { EXERCISE_LEVELS, EXERCISE_TENSES } from "@/lib/core/exercises";
 import { CEFR_LEVELS, type Cefr } from "@/lib/core/level";
@@ -21,6 +22,11 @@ import {
   setupAvailable,
   setupRequest,
   WORDS,
+  DUE_EXERCISE_SIZES,
+  cardsSetupAvailable,
+  cardsSetupRequest,
+  todayLine,
+  type CardsSetupState,
   type SetupState,
   type LevelRow,
   type LevelsSaved,
@@ -516,6 +522,140 @@ export function setupView(p: SetupProps): HTMLElement {
             { type: "button", class: "btn", disabled: available === 0, onclick: () => on.start() },
             available === 0 ? (state.verbs ? "Нет глаголов в этих темах" : "Нет слов в этих темах") : "Начать ›",
           ),
+      errorLine(p.error),
+    ),
+  );
+}
+
+// --- «Повторить слова» ---------------------------------------------------------------------------
+
+export interface CardsSetupProps {
+  setup: CardsSetup;
+  state: CardsSetupState;
+  /** Every theme shown («ещё N» tapped). */
+  allThemes: boolean;
+  error: string | null;
+  on: {
+    choice(choice: CardsSetupChoice): void;
+    theme(id: string | null): void;
+    allThemes(): void;
+    clearThemes(): void;
+    scope(scope: string): void;
+    size(n: number): void;
+    start(): void;
+  };
+}
+
+/** The four ways, with what each does: the user picks one. */
+const CHOICES: { choice: CardsSetupChoice; title: string; caption: string }[] = [
+  { choice: "cards", title: "Карточки", caption: "По расписанию, оценки сохраняются" },
+  { choice: "cards_then_exercise", title: "Карточки, потом упражнение", caption: "Затем упражнение по ошибкам" },
+  { choice: "exercise", title: "Упражнение", caption: "По словам к повторению" },
+  { choice: "practice", title: "Тренировка", caption: "Без расписания, ничего не меняет" },
+];
+
+const CARD_FORMS = ["карточка", "карточки", "карточек"] as const;
+
+/** What «Начать ›» says when there is nothing to start. */
+function nothingLabel(choice: CardsSetupChoice): string {
+  if (choice === "practice") return "Тренировать нечего";
+  if (choice === "exercise") return "Нет слов к повторению";
+  return "Сегодня повторять нечего";
+}
+
+export function cardsSetupView(p: CardsSetupProps): HTMLElement {
+  const { setup, state, on } = p;
+  const sent = state.sent;
+  const available = cardsSetupAvailable(setup, state);
+  const picked = new Set(state.folders);
+  const hidden = p.allThemes ? [] : setup.themes.slice(INLINE_THEMES).filter((t) => !picked.has(t.id));
+  const themes = setup.themes.filter((t) => !hidden.includes(t));
+  const exercise = state.choice === "exercise";
+  const sizes = exercise ? DUE_EXERCISE_SIZES : setup.sizes;
+  const size = exercise ? state.exerciseSize : state.size;
+  const request = cardsSetupRequest(setup, state);
+  // A theme's number: its cards due (and new, for a round by the schedule).
+  const themeCount = (t: CardsSetup["themes"][number]) => (state.choice === "cards" || state.choice === "cards_then_exercise" ? t.due + t.new : t.due);
+  return h(
+    "section",
+    { class: cls("sheet setup", sent && "written"), "aria-label": "Повторить слова" },
+    h("div", { class: "rhead" }, h("h1", { class: "sl strong" }, "Повторить слова"), h("span", { class: "rnote" }, sent ? "Запрос отправлен" : "Выберите и начните")),
+    h("div", { class: "today" }, h("p", { class: "sl" }, "Сегодня"), h("p", { class: "tline" }, todayLine(setup.today))),
+    h(
+      "fieldset",
+      { class: "sform", disabled: sent },
+      block(
+        "Как",
+        "cs-choice",
+        h(
+          "div",
+          { class: "choices", role: "radiogroup", "aria-labelledby": "cs-choice" },
+          CHOICES.map((c) =>
+            h(
+              "button",
+              { type: "button", role: "radio", "aria-checked": String(state.choice === c.choice), class: cls("choice", state.choice === c.choice && "on"), "data-choice": c.choice, onclick: () => on.choice(c.choice) },
+              h("span", { class: "ct" }, c.title),
+              h("span", { class: "cc" }, c.caption),
+            ),
+          ),
+        ),
+      ),
+      state.choice === "practice" &&
+        setup.scopes.length > 0 &&
+        block(
+          "Что тренировать",
+          "cs-scope",
+          h(
+            "div",
+            { class: "opts", role: "radiogroup", "aria-labelledby": "cs-scope" },
+            setup.scopes.map((s) =>
+              h(
+                "button",
+                { type: "button", role: "radio", "aria-checked": String(s.scope === state.scope), class: cls("opt", s.scope === state.scope && "on"), "data-scope": s.scope, onclick: () => on.scope(s.scope) },
+                h("span", null, s.label),
+                h("span", { class: "n" }, String(s.count)),
+              ),
+            ),
+          ),
+        ),
+      setup.themes.length > 0 &&
+        block(
+          "Темы",
+          "cs-themes",
+          h(
+            "div",
+            { class: "opts", role: "group", "aria-labelledby": "cs-themes" },
+            opt("Все темы", picked.size === 0, { "data-theme": "all" }, () => on.clearThemes()),
+            themes.map((t) =>
+              opt(
+                [h("span", null, t.name), h("span", { class: "n" }, String(themeCount(t)))],
+                picked.has(t.id),
+                { "data-theme": t.id ?? "inbox", "aria-label": `${t.name}: ${themeCount(t)} ${plural(themeCount(t), CARD_FORMS)}` },
+                () => on.theme(t.id),
+                true,
+              ),
+            ),
+            hidden.length > 0 && h("button", { type: "button", class: "opt more-opt", onclick: () => on.allThemes() }, `ещё ${hidden.length}`),
+          ),
+        ),
+      sizes.length > 0 &&
+        block(
+          exercise ? "Вопросов" : "Карточек",
+          "cs-size",
+          h(
+            "div",
+            { class: "seg wide", role: "radiogroup", "aria-labelledby": "cs-size" },
+            sizes.map((n) => h("button", { type: "button", role: "radio", "aria-checked": String(n === size), class: cls(n === size && "on"), "data-size": String(n), onclick: () => on.size(n) }, String(n))),
+          ),
+        ),
+    ),
+    h("p", { class: "sreq", "aria-label": `Запрос: ${request}` }, request),
+    h(
+      "div",
+      { class: "rfoot col" },
+      sent
+        ? h("div", { class: "receipt", role: "status" }, icon("check", 18, 2), h("span", { class: "grow" }, "Запрос отправлен — Claude готовит раунд"))
+        : h("button", { type: "button", class: "btn", disabled: available === 0, onclick: () => on.start() }, available === 0 ? nothingLabel(state.choice) : "Начать ›"),
       errorLine(p.error),
     ),
   );

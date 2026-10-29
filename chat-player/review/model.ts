@@ -2,11 +2,14 @@
 // them, what the page sends to the connector's write tools (set_word_levels, add_words, and their
 // undos set_word_levels / delete_words, in the shapes lib/mcp/tools.ts takes), how it reads their
 // results back, and the lines it shows and tells Claude; «Настроить упражнение»'s picks and the request
-// it sends. Pure: views.ts draws it, review-main.ts runs it.
-import type { ExerciseSetup, LevelReviewRow, LevelsReview, ReviewFolder, SetupTheme, WordReviewRow, WordsReview } from "@/lib/core/chat-review";
+// it sends; «Повторить слова»'s picks and its request (the cards page's wording, cards/requests.ts).
+// Pure: views.ts draws it, review-main.ts runs it.
+import { CARDS_ROUND_DEFAULT, type ChatPracticeScope } from "@/lib/core/chat-cards";
+import type { CardsSetup, CardsSetupChoice, CardsSetupTheme, ExerciseSetup, LevelReviewRow, LevelsReview, ReviewFolder, SetupTheme, WordReviewRow, WordsReview } from "@/lib/core/chat-review";
 import { buildChatRequestText, EXERCISE_LEVELS, EXERCISE_TENSES, type ExerciseLevel } from "@/lib/core/exercises";
 import { isCefr, type Cefr } from "@/lib/core/level";
 import type { ExerciseTense } from "@/lib/types";
+import { cardsRequest, practiceRequest, quoted } from "../cards/requests";
 import { plural } from "../texts";
 
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
@@ -261,4 +264,84 @@ export function setupRequest(setup: ExerciseSetup, state: SetupState): string {
     levels: state.levels,
     tenses: state.verbs ? state.tenses : null,
   });
+}
+
+// --- «Повторить слова» ---------------------------------------------------------------------------
+
+/** «Упражнение»'s «Вопросов» choices (the app's set sizes; the setup card names none for it). */
+export const DUE_EXERCISE_SIZES: readonly number[] = [8, 12, 16];
+
+export interface CardsSetupState {
+  choice: CardsSetupChoice;
+  /** Theme ids (null = «Входящие»); none = every theme. */
+  folders: (string | null)[];
+  /** Cards in the round («Карточки», «Тренировка») and questions in «Упражнение», kept apart. */
+  size: number;
+  exerciseSize: number;
+  /** «Тренировка»: what the round takes. */
+  scope: ChatPracticeScope;
+  /** «Начать ›» was sent to the chat. */
+  sent: boolean;
+}
+
+export function cardsSetupState(setup: CardsSetup): CardsSetupState {
+  const p = setup.preset;
+  const scopes = setup.scopes.map((s) => s.scope);
+  return {
+    choice: p.choice,
+    folders: p.folders.filter((id) => setup.themes.some((t) => t.id === id)),
+    size: nearest(setup.sizes, p.choice === "exercise" ? null : p.size, CARDS_ROUND_DEFAULT),
+    exerciseSize: nearest(DUE_EXERCISE_SIZES, p.choice === "exercise" ? p.size : null, 12),
+    scope: p.scope && (scopes.length === 0 || scopes.includes(p.scope)) ? p.scope : (scopes[0] ?? "recent"),
+    sent: false,
+  };
+}
+
+/** The themes the request names (none = every theme), in the card's order. */
+export const cardsSetupThemes = (setup: CardsSetup, state: CardsSetupState): CardsSetupTheme[] => setup.themes.filter((t) => state.folders.includes(t.id));
+
+/**
+ * What the pick has to play now: the cards due and new of the themes (every theme: today's
+ * numbers), the words due for «Упражнение», the chosen option's count for «Тренировка».
+ */
+export function cardsSetupAvailable(setup: CardsSetup, state: CardsSetupState): number {
+  const themes = state.folders.length ? cardsSetupThemes(setup, state) : null;
+  switch (state.choice) {
+    case "practice":
+      return setup.scopes.find((s) => s.scope === state.scope)?.count ?? 0;
+    case "exercise":
+      return themes ? themes.reduce((n, t) => n + t.due, 0) : setup.today.due;
+    default:
+      return themes ? themes.reduce((n, t) => n + t.due + t.new, 0) : setup.today.due + setup.today.new;
+  }
+}
+
+/**
+ * «Начать ›»'s message: «Повтори карточки здесь в чате, 20 карточек[, по темам …][, потом упражнение
+ * по ошибкам].», the app's due-words exercise played here («Сделай упражнение здесь в чате по словам
+ * к повторению из всех тем, 12 вопросов.»), or «Потренируй карточки здесь в чате без расписания: …».
+ */
+export function cardsSetupRequest(setup: CardsSetup, state: CardsSetupState): string {
+  const names = cardsSetupThemes(setup, state).map((t) => t.name);
+  switch (state.choice) {
+    case "practice":
+      return practiceRequest({ scope: state.scope, size: state.size, themes: names });
+    case "exercise": {
+      const all = buildChatRequestText({ folders: [], topic: null, size: state.exerciseSize, allowNew: false, scope: "due" });
+      if (names.length === 0) return all;
+      return all.replace("из всех тем", names.length === 1 ? `из темы ${quoted(names[0])}` : `из тем ${names.map(quoted).join(", ")}`);
+    }
+    default:
+      return cardsRequest({ size: state.size, themes: names, thenExercise: state.choice === "cards_then_exercise" });
+  }
+}
+
+/** «12 к повторению · 4 новых · 1 ждёт» (a part at 0 left out; nothing at all: «Сегодня повторять нечего»). */
+export function todayLine(today: CardsSetup["today"]): string {
+  const parts = [
+    today.due > 0 && `${today.due} к повторению`,
+    today.new > 0 && `${today.new} ${plural(today.new, ["новая", "новых", "новых"])}`,
+    today.waiting > 0 && `${today.waiting} ${plural(today.waiting, ["ждёт", "ждут", "ждут"])}`,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "Сегодня повторять нечего";
 }

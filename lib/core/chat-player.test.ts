@@ -14,7 +14,7 @@ import {
   type ChatPlayerSet,
   type ChatRunResult,
 } from "./chat-player";
-import { CHAT_PLAYER_ARTIFACT, CHAT_PLAYER_HTML, CHAT_REVIEW_HTML } from "../mcp/chat-player-html";
+import { CHAT_CARDS_HTML, CHAT_PLAYER_ARTIFACT, CHAT_PLAYER_HTML, CHAT_REVIEW_HTML } from "../mcp/chat-player-html";
 
 const item = (over: Partial<ExerciseItem>): ExerciseItem => ({
   id: "i", type: "choice", skill: null, ask: null, tense: null, person: null, word_id: null, new_ref: null,
@@ -91,6 +91,23 @@ describe("chat player contract", () => {
     expect(page).toContain("<title>Argot &lt;/script&gt; &amp; co</title>");
     expect(fillArtifact(CHAT_PLAYER_ARTIFACT, { ...set, title: "" })).toContain(`<title>${ARTIFACT_TITLE}</title>`);
     expect(() => fillArtifact("<html></html>", set)).toThrow(/slot/);
+  });
+
+  it("builds the cards page as an MCP App page of its own, with its title and the review card's look", () => {
+    expect(CHAT_CARDS_HTML).not.toContain(ARTIFACT_SET_SLOT);
+    expect(CHAT_CARDS_HTML).toMatch(/^<!doctype html><html lang="ru" data-mode="app">/);
+    expect(CHAT_CARDS_HTML).toContain("<title>Карточки</title>");
+    // The shared index card (deck.css) and the grades, the tools it calls and its fallback line.
+    expect(CHAT_CARDS_HTML).toContain(".deck{");
+    expect(CHAT_CARDS_HTML).toContain(".gbtn");
+    expect(CHAT_CARDS_HTML).toContain("grade_cards");
+    expect(CHAT_CARDS_HTML).toContain("undo_grades");
+    expect(CHAT_CARDS_HTML).toContain("Эта страница открывается в чате с Claude.");
+    expect(CHAT_CARDS_HTML).not.toContain("save_exercise_result");
+    // The review page shows «Повторить слова»; the player keeps the deck it shares.
+    expect(CHAT_REVIEW_HTML).toContain("kartochki-cards-setup");
+    expect(CHAT_REVIEW_HTML).toContain("Повтори карточки здесь в чате");
+    expect(CHAT_PLAYER_HTML).toContain(".deck{");
   });
 });
 

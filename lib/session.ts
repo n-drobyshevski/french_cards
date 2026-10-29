@@ -2,6 +2,7 @@
 // lib/core/plan.ts `planDay` from the synced «План повторения»), the end-of-session summary and
 // practice rounds that never touch scheduling.
 import { daySnapshot, folderOrderOf, planDay, type DayPlan, type DayPlanSnapshot, type PlanCounts, type PlanItem } from "./core/plan";
+import { PRACTICE_DAYS, practiceQueue, type PracticeScope } from "./core/practice";
 import { dayKey } from "./core/progress";
 import { isPaused, pausedFolderIds } from "./core/words";
 import { db, liveRows } from "./db";
@@ -350,7 +351,7 @@ export interface PracticeOptions extends SessionFilter {
    * topped up with the weakest cards («Ещё практика»). "all": every card of the filtered words in
    * random order, new ones included («Тренировка всей темы»).
    */
-  scope?: "today" | "recent" | "all";
+  scope?: PracticeScope;
   days?: number;
   /** Default 20; "all" defaults to PRACTICE_ALL_MAX. */
   limit?: number;
@@ -358,56 +359,20 @@ export interface PracticeOptions extends SessionFilter {
   random?: () => number;
 }
 
-/** Cap for «Тренировка всей темы»: a round should stay finishable. */
-export const PRACTICE_ALL_MAX = 200;
+/** Cap for «Тренировка всей темы» (lib/core/practice.ts). */
+export { PRACTICE_ALL_MAX } from "./core/practice";
 
 /**
- * Practice queue. Grading in practice must NOT call gradeCard — keep the queue in memory and
- * advance it with `advancePractice`.
+ * Practice queue (the pure lib/core/practice.ts `practiceQueue` over the device's data). Grading
+ * in practice must NOT call gradeCard — keep the queue in memory and advance it with `advancePractice`.
  */
 export async function buildPracticeQueue(opts: PracticeOptions = {}, now: Date = new Date(), pre?: SessionData): Promise<QueueItem[]> {
   const scope = opts.scope ?? "recent";
-  if (scope === "all") return allCardsQueue(opts, pre);
-  const limit = opts.limit ?? 20;
-  const days = opts.days ?? 7;
-  const from = scope === "today" ? startOfStudyDay(now) : new Date(now.getTime() - days * 86_400_000);
+  const base = { scope, limit: opts.limit, direction: opts.direction, random: opts.random };
+  if (scope === "all") return practiceQueue({ ...base, ...(await wordsWithStates(opts, pre)), logs: [] });
+  const from = scope === "today" ? startOfStudyDay(now) : new Date(now.getTime() - (opts.days ?? PRACTICE_DAYS) * 86_400_000);
   const [{ words, states }, logs] = await Promise.all([wordsWithStates(opts, pre), logsBetween(from, new Date(now.getTime() + 1))]);
-  const byKey = new Map(states.map((s) => [s.id, s]));
-  const items: QueueItem[] = [];
-  const seen = new Set<string>();
-  const push = (state: ReviewState | undefined) => {
-    if (!state || seen.has(state.id) || items.length >= limit) return;
-    const word = words.get(state.word_id);
-    if (!word || (opts.direction && state.direction !== opts.direction)) return;
-    seen.add(state.id);
-    items.push({ key: state.id, word, state, direction: state.direction, isNew: state.state === 0 });
-  };
-
-  const maxRating = scope === "today" ? 1 : 2;
-  const misses = logs.filter((l) => l.rating <= maxRating).sort((a, b) => b.review.localeCompare(a.review));
-  for (const l of misses) push(byKey.get(reviewStateId(l.word_id, l.direction)));
-
-  if (scope === "recent") {
-    const weakest = states
-      .filter((s) => s.state !== 0 && !seen.has(s.id))
-      .sort((a, b) => b.lapses - a.lapses || a.stability - b.stability || b.difficulty - a.difficulty);
-    for (const s of weakest) push(s);
-  }
-  return items;
-}
-
-/** Every card of the filtered words, shuffled (Fisher–Yates), capped. */
-async function allCardsQueue(opts: PracticeOptions, pre?: SessionData): Promise<QueueItem[]> {
-  const { words, states } = await wordsWithStates(opts, pre);
-  const items: QueueItem[] = states
-    .filter((s) => words.has(s.word_id) && (!opts.direction || s.direction === opts.direction))
-    .map((state) => ({ key: state.id, word: words.get(state.word_id)!, state, direction: state.direction, isNew: state.state === 0 }));
-  const random = opts.random ?? Math.random;
-  for (let i = items.length - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1));
-    [items[i], items[j]] = [items[j], items[i]];
-  }
-  return items.slice(0, opts.limit ?? PRACTICE_ALL_MAX);
+  return practiceQueue({ ...base, words, states, logs, from });
 }
 
 /** Next practice queue after answering its head (lib/core/practice.ts). */

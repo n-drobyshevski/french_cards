@@ -114,6 +114,51 @@ describe("createSupabaseRepo", () => {
     expect(calls).toHaveLength(5);
   });
 
+  it("reads review-log rows by id for the user, tombstones included, chunking long id lists", async () => {
+    const log = (id: string, deleted_at: string | null) => ({
+      id,
+      word_id: "w1",
+      direction: "fr_ru",
+      rating: 3,
+      state: 2,
+      due: "2026-10-25T10:00:00+00:00",
+      stability: 3,
+      difficulty: 5,
+      elapsed_days: 1,
+      scheduled_days: 3,
+      review: "2026-10-22T10:00:00+00:00",
+      prev: null,
+      updated_at: "2026-10-22T10:00:00+00:00",
+      deleted_at,
+      user_id: "user-1",
+      synced_at: "x",
+    });
+    const { client, calls } = fakeClient((call) => {
+      const asked = (call.ops.find(([op]) => op === "in")?.[2] ?? []) as string[];
+      const pageAfter = call.ops.some(([op]) => op === "gt");
+      return { data: pageAfter ? [] : asked.filter((id) => id === "cr-1" || id === "cr-2").map((id) => log(id, id === "cr-2" ? "2026-10-22T11:00:00+00:00" : null)), error: null };
+    });
+    const repo = createSupabaseRepo(client, "user-1");
+    const asked = ["cr-1", "cr-2", "cr-1", ...Array.from({ length: 120 }, (_, i) => `cr-x${i}`)];
+    const rows = await repo.logsByIds(asked);
+    expect(rows.map((r) => [r.id, r.deleted_at])).toEqual([
+      ["cr-1", null],
+      ["cr-2", "2026-10-22T11:00:00.000Z"],
+    ]);
+    expect(rows[0]).toMatchObject({ review: "2026-10-22T10:00:00.000Z", updated_at: "2026-10-22T10:00:00.000Z" });
+    expect(rows[0]).not.toHaveProperty("user_id");
+    for (const call of calls) {
+      expect(call.table).toBe("review_log");
+      expect(call.ops).toContainEqual(["eq", "user_id", "user-1"]);
+    }
+    const lists = calls.filter((c) => !c.ops.some(([op]) => op === "gt")).map((c) => (c.ops.find(([op]) => op === "in") as unknown[])[2] as string[]);
+    expect(lists.map((l) => l.length)).toEqual([100, 22]);
+    expect(calls[0].ops).toContainEqual(["in", "id", expect.arrayContaining(["cr-1", "cr-2"])]);
+    const before = calls.length;
+    expect(await repo.logsByIds([])).toEqual([]);
+    expect(calls).toHaveLength(before);
+  });
+
   it("writes the user id on every row, upserts on (user_id, id) and returns rows as stored", async () => {
     const { client, calls } = fakeClient(() => ({
       data: [{ id: "f1", slug: "x", name: "X", updated_at: "2026-10-22T10:00:00.5+00:00", user_id: "user-1", synced_at: "2026-10-22T10:00:01+00:00" }],
