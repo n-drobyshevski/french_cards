@@ -10,7 +10,7 @@ import { grade, newReviewState, previewIntervals, retrievability, snapshot } fro
 import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ProgressDay, ReviewLog, ReviewState, UserPref, Word } from "@/lib/types";
 import { ARTIFACT_SET_SLOT, CHAT_PLAYER_URI, EXAM_SECONDS_PER_ITEM, runLine, type ChatPlayerSet } from "@/lib/core/chat-player";
 import { asChatReview, CHAT_REVIEW_URI, type CardsSetup, type ExerciseSetup, type LevelsReview, type WordsReview } from "@/lib/core/chat-review";
-import { asChatCardsSession, asGradeCardsResult, asUndoGradesResult, CHAT_CARDS_URI, LEARN_AHEAD_MS, returnsInRound } from "@/lib/core/chat-cards";
+import { asChatCardsSession, asGradeCardsResult, asUndoGradesResult, CHAT_CARDS_URI, LEARN_AHEAD_MS, returnsInRound, type GradeCardsResult } from "@/lib/core/chat-cards";
 import { addWordsArguments, wordRows } from "@/chat-player/review/model";
 import { createFakeRepo, type FakeRepo } from "./fake-repo";
 import { planFitLogsFrom } from "./plan-fit";
@@ -2941,6 +2941,41 @@ describe("«Карточки в чате»", () => {
     expect((await ok(studySummary, fake, {})).reviewed_today).toBe(0);
   });
 
+  it("grade_cards: the same answer sent twice at once (a resend while the first call runs) saves one review, live and undoable", async () => {
+    for (const sameMs of [false, true]) {
+      const fake = lib();
+      let t = NOW.getTime();
+      const d = { ...deps(fake), now: () => new Date(sameMs ? NOW.getTime() : t++) };
+      const a = answer(fake, "m0", 3);
+      const [r1, r2] = (await Promise.all([callTool(gradeCards, d, { answers: [a] }), callTool(gradeCards, d, { answers: [a] })])).map(
+        (r) => r.structuredContent as unknown as GradeCardsResult,
+      );
+      expect([r1, r2].map((r) => r.results[0].status).sort()).toEqual(["already_saved", "saved"]);
+      const id = logId("m0:fr_ru", OLD.toISOString());
+      const log = fake.tables.review_log.get(id)!;
+      expect(log.deleted_at).toBeNull();
+      expect([...fake.tables.review_log.values()]).toHaveLength(1);
+      expect(stateOf(fake, "m0:fr_ru").reps).toBe(4);
+      expect(r1.undo).toEqual(r2.undo);
+      expect((await ok(undoGrades, fake, { items: r1.undo!.items })).results[0].status).toBe("undone");
+      expect(stateOf(fake, "m0:fr_ru").reps).toBe(3);
+    }
+  });
+
+  it("grade_cards: a tap timed before the card's last review (a page clock behind) is kept just after it", async () => {
+    const fake = lib();
+    // The phone graded m0 at 09:30; the page's clock says the tap was at 09:00.
+    const m0 = stateOf(fake, "m0:fr_ru");
+    fake.tables.review_state.set(m0.id, { ...m0, last_review: "2026-10-22T09:30:00.000Z", updated_at: "2026-10-22T09:30:00.000Z" });
+    const out = await ok(gradeCards, fake, { answers: [answer(fake, "m0", 3, { answered_at: "2026-10-22T09:00:00.000Z" })] });
+    expect(fake.tables.review_log.get(out.results[0].log_id!)!.review).toBe("2026-10-22T09:30:00.001Z");
+    // Never later than now.
+    const m1 = stateOf(fake, "m1:fr_ru");
+    fake.tables.review_state.set(m1.id, { ...m1, last_review: "2026-10-22T11:00:00.000Z", updated_at: "2026-10-22T09:30:00.000Z" });
+    const ahead = await ok(gradeCards, fake, { answers: [answer(fake, "m1", 3)] });
+    expect(fake.tables.review_log.get(ahead.results[0].log_id!)!.review).toBe(NOW.toISOString());
+  });
+
   it("grade_cards: a card write that fails after the log is a database error; the log is soft-deleted and sending the answers again saves them", async () => {
     const fake = lib();
     const a = [answer(fake, "m0", 3), answer(fake, "m1", 1)];
@@ -3038,18 +3073,19 @@ describe("«Карточки в чате»", () => {
       version: 1,
       today: { due: 8, new: 2, waiting: 0, deferred: 0 },
       // «Замок» has no words: not on the card, so not preselected.
+      // «Тренировка»'s counts in each theme, for the card to add up the themes picked.
       themes: [
-        { id: null, name: "Входящие", due: 0, new: inbox },
-        { id: "f-dengi", name: "Деньги", due: 5, new: 0 },
-        { id: "f-emotsii", name: "Эмоции", due: 3, new: 0 },
+        { id: null, name: "Входящие", due: 0, new: inbox, practice: { all: 6 } },
+        { id: "f-dengi", name: "Деньги", due: 5, new: 0, practice: { recent: 5, due: 5, all: 5 } },
+        { id: "f-emotsii", name: "Эмоции", due: 3, new: 0, practice: { recent: 3, due: 3, all: 3 } },
       ],
       preset: { choice: "cards_then_exercise", size: 20, folders: ["f-dengi"], scope: null },
       sizes: [10, 20, 30],
-      // Counted over the preselected themes: nothing missed yet, five cards due.
+      // Counted over every theme: nothing missed yet, eight cards due.
       scopes: [
-        { scope: "recent", label: "Ошибки за неделю", count: 5 },
-        { scope: "due", label: "К повторению сегодня", count: 5 },
-        { scope: "all", label: "Все карточки", count: 5 },
+        { scope: "recent", label: "Ошибки за неделю", count: 8 },
+        { scope: "due", label: "К повторению сегодня", count: 8 },
+        { scope: "all", label: "Все карточки", count: 14 },
       ],
     });
     expect((res.content[0] as { text: string }).text).toMatch(/«Повторить слова»: сегодня 8 к повторению, 2 новых.*«Начать ›» пришлёт запрос.*не видно/);
@@ -3062,5 +3098,16 @@ describe("«Карточки в чате»", () => {
     expect(paused.preset).toEqual({ choice: "practice", size: null, folders: [], scope: "difficult" });
     const empty = await callTool(setupReview, deps(createFakeRepo({ folders: FOLDERS })), {});
     expect((empty.content[0] as { text: string }).text).toMatch(/нечего/);
+
+    // A theme with a miss today and nothing due is on the card, for «Тренировка».
+    const missed = lib();
+    const z = dated(word("z0", "zarbi", "странный", { folder_id: "f-zamok", both_directions: false }), 20);
+    missed.tables.words.set(z.id, z);
+    const later = review("z0", { due: "2026-10-25T08:00:00.000Z" });
+    missed.tables.review_state.set(later.id, later);
+    missed.tables.review_log.set("lz", { ...grade(review("z0"), 1, new Date("2026-10-22T08:00:00.000Z")).log, id: "lz" });
+    const withMiss = asChatReview((await callTool(setupReview, deps(missed), {})).structuredContent) as CardsSetup;
+    expect(withMiss.themes.find((t) => t.id === "f-zamok")).toEqual({ id: "f-zamok", name: "Замок", due: 0, new: 0, practice: { today: 1, recent: 1, all: 1 } });
+    expect(withMiss.scopes.find((sc) => sc.scope === "today")).toEqual({ scope: "today", label: "Ошибки сегодня", count: 1 });
   });
 });

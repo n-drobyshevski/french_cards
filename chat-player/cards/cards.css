@@ -173,6 +173,12 @@
   font: 400 11px/1 var(--mono);
   color: var(--ink);
 }
+/* A keyboard hint: on touch screens the whole card is the tap target (the app's footer is desktop-only). */
+@media (hover: none), (pointer: coarse) {
+  .qfoot {
+    display: none;
+  }
+}
 /* The answer side */
 .abody {
   flex: 1;

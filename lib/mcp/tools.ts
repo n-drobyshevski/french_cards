@@ -3578,10 +3578,11 @@ function chatCard(item: PlanItem, faces: CardFaces, scheduled: boolean): ChatCar
 }
 
 /** Themes named for a round: their ids (null = «Входящие») and the label («Еда, Жильё»); null = every theme. */
-function roundThemes(selectors: readonly string[] | null | undefined, folders: readonly Folder[]): { ids: Set<string | null>; label: string } | null {
+function roundThemes(selectors: readonly string[] | null | undefined, folders: readonly Folder[]): { ids: Set<string | null>; names: string[]; label: string } | null {
   if (!selectors?.length) return null;
   const picked = [...new Map(selectors.map((s) => resolveFolder(s, folders)).map((f) => [f?.id ?? null, f])).values()];
-  return { ids: new Set(picked.map((f) => f?.id ?? null)), label: picked.map((f) => folderRef(f).name).join(", ") };
+  const names = picked.map((f) => folderRef(f).name);
+  return { ids: new Set(picked.map((f) => f?.id ?? null)), names, label: names.join(", ") };
 }
 
 /**
@@ -3620,7 +3621,7 @@ const appUrlOf = (deps: ToolDeps) => (deps.appUrl ? deps.appUrl.replace(/\/+$/, 
 export const playCards = tool({
   name: "play_cards",
   title: "Review cards in the chat",
-  description: `Show a round of the user's flashcards in the chat («Карточки»: the app's review card, flip, «Не знаю / Сложно / Знаю» with the next intervals). mode "schedule" (default, «По расписанию»): the next ${CARDS_ROUND_DEFAULT} cards (\`limit\` ${CARDS_ROUND_MIN}–${CARDS_ROUND_MAX}) of today's queue exactly as the app plans it (study_summary's numbers), and the card itself saves each grade on the user's tap and offers undo; a card answered «Не знаю» comes back in the round. mode "practice" («Тренировка», nothing saved) with \`scope\`: ${PRACTICE_SCOPE_VALUES.map((s) => `${s} «${PRACTICE_SCOPE_LABELS[s]}»`).join(", ")}. \`folders\` narrows to themes, \`direction\` to one side. \`next: "exercise"\` when the user chose «Карточки, потом упражнение»: the done screen then offers «Упражнение по ошибкам ›», which sends you a message with the missed words. Writes nothing itself. Never grade, save or undo cards yourself, and never play_exercises in the same reply. Use it when the request already says to review cards here («повтори карточки здесь», the message of setup_review's «Начать ›»); for a bare «повтори слова» call setup_review first. If the user says they see no cards, or the host shows no apps, offer to review in the app (app_url).`,
+  description: `Show a round of the user's flashcards in the chat («Карточки»: the app's review card, flip, «Не знаю / Сложно / Знаю» with the next intervals). mode "schedule" (default, «По расписанию»): the next ${CARDS_ROUND_DEFAULT} cards (\`limit\` ${CARDS_ROUND_MIN}–${CARDS_ROUND_MAX}) of today's queue exactly as the app plans it (study_summary's numbers), and the card itself saves each grade on the user's tap and offers undo; a card answered «Не знаю» comes back in the round. mode "practice" («Тренировка», nothing saved) with \`scope\`: ${PRACTICE_SCOPE_VALUES.map((s) => `${s} «${PRACTICE_SCOPE_LABELS[s]}»`).join(", ")}. \`folders\` narrows to themes, \`direction\` to one side. \`next: "exercise"\` when the user chose «Карточки, потом упражнение»: the done screen then offers «Упражнение по ошибкам ›», which sends you a message with the missed words. Writes nothing itself. Never grade, save or undo cards yourself, and never play_exercises in the same reply. Use it when the request already says to review cards here («повтори карточки здесь», the message of setup_review's «Начать ›»; «потренируй ошибки» → mode "practice"); for a bare «повтори слова» call setup_review first. If the user says they see no cards, or the host shows no apps, offer to review in the app (app_url).`,
   input: z.object({
     mode: z.enum(["schedule", "practice"]).nullable().optional().describe('"schedule" (default): real grades by the plan; "practice": «Тренировка», nothing saved (default when `scope` is given).'),
     folders: jsonArray(z.array(folderSelector).max(10)).nullable().optional().describe(`Themes of the round (id, slug, name or "${INBOX_SELECTOR}"); default every theme not «на паузе».`),
@@ -3674,6 +3675,7 @@ export const playCards = tool({
       day_end: lib.day.end.toISOString(),
       title: (scope ? "Тренировка" : "Повторение") + (themes ? ` · ${folderLabel}` : ""),
       folder_label: folderLabel,
+      folder_names: themes?.names ?? [],
       direction: args.direction ?? "both",
       direction_label: directionLabel(args.direction ?? "both"),
       scope,
@@ -3713,6 +3715,8 @@ export const cardLogId = (cardId: string, expected: string): string =>
 const gradedBy = (state: ReviewState, log: ReviewLog) =>
   !!log.prev && state.deleted_at === null && state.reps === log.prev.reps + 1 && state.stability === log.stability && state.difficulty === log.difficulty;
 
+const sameTime = (a: string | null, b: string | null) => (a === null || b === null ? a === b : Date.parse(a) === Date.parse(b));
+
 /** The card is back as it was before `log` (an undo that restored it but did not get to soft-delete the log). */
 const restoredTo = (state: ReviewState, prev: NonNullable<ReviewLog["prev"]>) =>
   Date.parse(state.due) === Date.parse(prev.due) &&
@@ -3722,19 +3726,18 @@ const restoredTo = (state: ReviewState, prev: NonNullable<ReviewLog["prev"]>) =>
   state.stability === prev.stability &&
   state.difficulty === prev.difficulty &&
   state.learning_steps === prev.learning_steps &&
-  (state.last_review === null || prev.last_review === null ? state.last_review === prev.last_review : Date.parse(state.last_review) === Date.parse(prev.last_review));
+  sameTime(state.last_review, prev.last_review);
 
-/** Soft-deletes review_log rows (an orphan of a lost compare-and-set, or an undone grade). */
-async function tombstoneLogs(deps: ToolDeps, logs: readonly ReviewLog[]): Promise<void> {
+/** Soft-deletes review_log rows (an undone grade; `onlyAsWritten`: an orphan of a lost compare-and-set, only while the row is still the one written). */
+async function tombstoneLogs(deps: ToolDeps, logs: readonly ReviewLog[], onlyAsWritten = false): Promise<void> {
   if (logs.length === 0) return;
   const now = deps.now();
-  await deps.repo.upsert(
-    "review_log",
-    logs.map((l) => {
-      const stamp = stampAfter(now, l.updated_at);
-      return { ...l, deleted_at: stamp, updated_at: stamp };
-    }),
-  );
+  const rows = logs.map((l) => {
+    const stamp = stampAfter(now, l.updated_at);
+    return { ...l, deleted_at: stamp, updated_at: stamp };
+  });
+  if (onlyAsWritten) await deps.repo.replace("review_log", rows.map((row, i) => ({ row, expected: logs[i].updated_at })));
+  else await deps.repo.upsert("review_log", rows);
 }
 
 type CardRef = Pick<GradeAnswerResult, "word_id" | "direction" | "key">;
@@ -3828,7 +3831,9 @@ export const gradeCards = tool({
         continue;
       }
       // Still as expected: grade it, also over a row of an earlier try whose card write did not land.
-      const at = new Date(Math.min(now.getTime(), Math.max(Date.parse(a.answered_at), earliest)));
+      // Never before the review the card was graded from (a page clock behind), so the logs keep their order.
+      const after = stored.last_review ? Date.parse(stored.last_review) + 1 : -Infinity;
+      const at = new Date(Math.min(now.getTime(), Math.max(Date.parse(a.answered_at), earliest, after)));
       const graded = grade(stored, a.rating, at);
       pending.push({
         at: results.length,
@@ -3858,17 +3863,27 @@ export const gradeCards = tool({
         unsure = confirmed.unsure;
         if (unsure || confirmed.failed.size > 0) failure = error;
       }
-      // The card was not written: soft-delete the log just written, so it counts nowhere (a retry revives it).
-      const orphans = toWrite.filter((p) => !written.has(p.change.row.id));
-      if (!unsure) await tombstoneLogs(deps, orphans.map((p) => p.log)).catch((e: unknown) => console.error("[mcp] grade_cards: orphan logs left", e));
-      if (failure) throw failure;
       const lost = pending.filter((p) => !written.has(p.change.row.id));
-      const moved = new Map(lost.length ? (await deps.repo.states(uniqueIds(lost.map((p) => p.card.word_id))).catch(() => [])).map((s) => [s.id, s]) : []);
+      const moved = new Map(lost.length && !unsure ? (await deps.repo.states(uniqueIds(lost.map((p) => p.card.word_id))).catch(() => [])).map((s) => [s.id, s]) : []);
+      // The same answer sent again while this call ran (a resend after a timeout) won the card: its
+      // grade is this one (same log id, same tap), so the shared log is saved, not an orphan.
+      const twin = (p: (typeof pending)[number]) => {
+        const s = moved.get(p.card.key);
+        return !!s && Date.parse(s.updated_at) !== Date.parse(p.change.expected) && gradedBy(s, p.log) && sameTime(s.last_review, p.change.row.last_review);
+      };
+      // The card was not written: soft-delete the log just written, so it counts nowhere (a retry revives it).
+      const orphans = toWrite.filter((p) => !written.has(p.change.row.id) && !twin(p));
+      if (!unsure) await tombstoneLogs(deps, orphans.map((p) => p.log), true).catch((e: unknown) => console.error("[mcp] grade_cards: orphan logs left", e));
+      if (failure) throw failure;
       for (const p of pending) {
+        const s = moved.get(p.card.key);
         if (written.has(p.change.row.id)) {
           results[p.at] = cardOutcome(p.card, "saved", p.log.id, p.change.row, now);
           undo.push({ log_id: p.log.id, expected: p.change.row.updated_at });
-        } else results[p.at] = cardOutcome(p.card, "conflict", null, moved.get(p.card.key) ?? null, now);
+        } else if (s && twin(p)) {
+          results[p.at] = cardOutcome(p.card, "already_saved", p.log.id, s, now);
+          undo.push({ log_id: p.log.id, expected: s.updated_at });
+        } else results[p.at] = cardOutcome(p.card, "conflict", null, s ?? null, now);
       }
     }
     return { results, undo: undo.length ? { tool: UNDO_GRADES_TOOL, items: undo } : null };
@@ -3957,7 +3972,7 @@ const setupChoice = z.enum(CARDS_SETUP_CHOICES as readonly [CardsSetupChoice, ..
 export const setupReview = tool({
   name: "setup_review",
   title: "Choose how to review",
-  description: `Show «Повторить слова» in the chat: a card with today's numbers (due, new, waiting), the themes with cards due or new, and a choice: «Карточки» (a round by the schedule, grades saved by the card), «Карточки, потом упражнение» (then an exercise on the misses), «Упражнение» (an exercise on the words due, nothing graded) or «Тренировка» (cards that change nothing: missed today, this week, difficult, due, every card), and the number of cards. Its «Начать ›» sends the choice to you as the user's message («Повтори карточки здесь в чате, 20 карточек…»); then do what it says: play_cards, or exercise_material and play_exercises. Use it for «повтори слова», «давай повторим», «что повторить?», «повторение карточек» when the request doesn't say how; a request that does is played directly. Preselect what the request did say. Writes nothing; don't ask the same questions in text.`,
+  description: `Show «Повторить слова» in the chat: a card with today's numbers (due, new, waiting), the themes with cards due or new, and a choice: «Карточки» (a round by the schedule, grades saved by the card), «Карточки, потом упражнение» (then an exercise on the misses), «Упражнение» (an exercise on the words due, nothing graded) or «Тренировка» (cards that change nothing: missed today, this week, difficult, due, every card), and the number of cards. Its «Начать ›» sends the choice to you as the user's message («Повтори карточки здесь в чате, 20 карточек…»); then do what it says: play_cards, or exercise_material and play_exercises. Use it for «повтори слова», «давай повторим», «что повторить?», «карточки», «повторение карточек» when the request doesn't say how; a request that does is played directly. Preselect what the request did say. Writes nothing; don't ask the same questions in text.`,
   input: z.object({
     choice: setupChoice.nullable().optional().describe('Preselect: "cards" (default), "cards_then_exercise", "exercise" or "practice".'),
     size: z.number().int().min(CARDS_ROUND_MIN).max(CARDS_ROUND_MAX).nullable().optional().describe("Cards to preselect (rounded to the card's nearest choice)."),
@@ -3974,21 +3989,36 @@ export const setupReview = tool({
     const today: ChatCardsCounts = { due: c.due, new: c.new, waiting: c.waiting, deferred: c.deferred };
     // Each theme as a round of it alone would plan it (new words from it alone, as in the app).
     const themeOf = (w: Word) => placeOf(w, lib.live)?.id ?? null;
+    // «Тренировка» over every theme, and in each theme (the card adds up the themes picked).
+    const practiceOf = new Map<string | null, Partial<Record<ChatPracticeScope, number>>>();
+    const scopes: CardsSetupScope[] = PRACTICE_SCOPE_VALUES.flatMap((scope) => {
+      const items = practiceItems(deps, t, scope, null, undefined, scope === "recent" ? PRACTICE_LIMIT : Number.MAX_SAFE_INTEGER);
+      // «recent» is a capped round topped up with the weakest cards: counted per theme below.
+      if (scope !== "recent") {
+        for (const item of items) {
+          const id = themeOf(item.word);
+          const m = practiceOf.get(id) ?? {};
+          m[scope] = (m[scope] ?? 0) + 1;
+          practiceOf.set(id, m);
+        }
+      }
+      return items.length > 0 ? [{ scope, label: PRACTICE_SCOPE_LABELS[scope], count: items.length }] : [];
+    });
     const themes: CardsSetupTheme[] = [
       { id: null, name: INBOX_NAME },
       ...[...lib.live.values()].filter((f) => !lib.paused.has(f.id)).map((f) => ({ id: f.id as string | null, name: f.name })),
     ].flatMap((theme) => {
       if (![...lib.inReview.values()].some((w) => themeOf(w) === theme.id)) return [];
       const { counts } = planToday(lib, t.plan, { match: (w) => themeOf(w) === theme.id, spreadThemes: false });
-      return counts.due + counts.new > 0 ? [{ ...theme, due: counts.due, new: counts.new }] : [];
+      const practice = { ...practiceOf.get(theme.id) };
+      if (scopes.some((sc) => sc.scope === "recent")) {
+        const recent = practiceItems(deps, t, "recent", new Set([theme.id]), undefined, PRACTICE_LIMIT).length;
+        if (recent > 0) practice.recent = recent;
+      }
+      return counts.due + counts.new > 0 || Object.keys(practice).length > 0 ? [{ ...theme, due: counts.due, new: counts.new, practice }] : [];
     });
     const shown = new Set(themes.map((th) => th.id));
     const picked = [...new Set((args.folders ?? []).map((sel) => resolveFolder(sel, t.folders)?.id ?? null))].filter((id) => shown.has(id));
-    const targetIds = picked.length ? new Set(picked) : null;
-    const scopes: CardsSetupScope[] = PRACTICE_SCOPE_VALUES.flatMap((scope) => {
-      const count = practiceItems(deps, t, scope, targetIds, undefined, scope === "recent" ? PRACTICE_LIMIT : Number.MAX_SAFE_INTEGER).length;
-      return count > 0 ? [{ scope, label: PRACTICE_SCOPE_LABELS[scope], count }] : [];
-    });
     const size = args.size ? CARDS_SETUP_SIZES.reduce<number>((best, n) => (Math.abs(n - args.size!) < Math.abs(best - args.size!) ? n : best), CARDS_SETUP_SIZES[0]) : null;
     const setup: CardsSetup = {
       kind: "kartochki-cards-setup",
@@ -4168,7 +4198,7 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
 
 export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard app for colloquial French; the user is a Russian speaker. A card is a French word or phrase (fr) with its Russian translation (ru). Words are grouped into themes («темы»); «${INBOX_NAME}» (inbox) holds words without a theme.
 - «Настроить упражнение»: when the user wants to choose or set up a round in the chat («настрой упражнение», «хочу выбрать времена»), or asks for a verb drill in the chat naming neither themes nor tenses, call setup_exercise (a card with themes, «Спряжение глаголов» and its tenses, size, level) and wait: its «Начать ›» sends the request as the user's message; then play it as below. A request that already says what to play is played directly.
-- «Повторить слова» («повтори слова», «давай повторим», «что повторить?», «повторение карточек»): call setup_review (a card with today's numbers and «Карточки» / «Карточки, потом упражнение» / «Упражнение» / «Тренировка») and wait: its «Начать ›» sends the choice as the user's message. A request that already asks for cards in the chat (that message, «повтори карточки здесь») → play_cards directly; «погоняй меня», «тест», «квиз» stay exercises (below). Grades are only the user's taps on the card, which saves them itself: never grade, save or undo cards from what is written in the chat. Never call play_cards and play_exercises in one reply; the card's «Упражнение по ошибкам» message → exercise_material \`word_ids\`, then play_exercises. If the host shows no apps, offer to review in the app (play_cards' app_url).
+- «Повторить слова» («повтори слова», «давай повторим», «что повторить?», «карточки», «повторение карточек»): call setup_review (a card with today's numbers and «Карточки» / «Карточки, потом упражнение» / «Упражнение» / «Тренировка») and wait: its «Начать ›» sends the choice as the user's message. A request that already asks for cards in the chat (that message, «повтори карточки здесь») → play_cards directly; «потренируй ошибки / трудные слова / карточки» (here or in the chat, no exercise named) → play_cards mode "practice" at once, with the scope it names (today «ошибки сегодня», recent «ошибки» or «за неделю», difficult, due, all), not an exercise; «погоняй меня», «тест», «квиз» stay exercises (below). Grades are only the user's taps on the card, which saves them itself: never grade, save or undo cards from what is written in the chat. Never call play_cards and play_exercises in one reply; the card's «Упражнение по ошибкам» message → exercise_material \`word_ids\`, then play_exercises. If the host shows no apps, offer to review in the app (play_cards' app_url).
 - Exercises in the conversation: always call play_exercises (after exercise_material). This includes «в чате», «здесь», «прямо тут», «в диалоге», «на отдельной вкладке», «тест», «квиз», «погоняй меня». Do not build an HTML page and do not open or reuse an existing exercise artifact instead, even if one exists from an earlier chat. A request larger than one round (more than 20 questions or 8 new words) is a series: say how many rounds, play round 1 now with play_exercises \`series\`, and the next round only when the user asks («Следующий раунд»); never several rounds in one reply. exercise_artifact only for hosts that show no apps, or when the user explicitly asks for a page.
 - Before adding, search_words for the word; add_words also skips French forms that are already saved.
 - For each new word give the dictionary form, one to three Russian equivalents in the same register, slang_level (0 neutral, 1 familier, 2 argot, 3 vulgaire), verlan (true for verlan forms such as meuf, relou, chelou), pos, gender for nouns, and a short everyday example_fr with its example_ru. Vulgar words are legitimate vocabulary: translate them with the same strength and mark them 3.

@@ -6,8 +6,8 @@ const cardsSetup = (over: Partial<CardsSetup> = {}): CardsSetup => ({
   version: 1,
   today: { due: 12, new: 4, waiting: 1, deferred: 2 },
   themes: [
-    { id: null, name: "Входящие", due: 3, new: 1 },
-    { id: "f-food", name: "Еда", due: 9, new: 3 },
+    { id: null, name: "Входящие", due: 3, new: 1, practice: { all: 4 } },
+    { id: "f-food", name: "Еда", due: 9, new: 3, practice: { today: 4, all: 36 } },
   ],
   preset: { choice: "cards_then_exercise", size: 20, folders: ["f-food"], scope: null },
   sizes: [10, 20, 30, 50],
@@ -43,13 +43,13 @@ describe("chat review contract", () => {
       kind: "kartochki-cards-setup",
       version: 1,
       today: { due: 5, new: "3" },
-      themes: [{ id: "f1", name: "Жильё", due: 2 }, { id: 4, name: "x" }, null],
+      themes: [{ id: "f1", name: "Жильё", due: 2, practice: { today: 2, all: "3", due: 0 } }, { id: 4, name: "x" }, null],
       preset: { choice: "practice", folders: ["f1", 7, null] },
       sizes: [20, "30", 0],
     }) as CardsSetup;
     expect(review).toMatchObject({
       today: { due: 5, new: 0, waiting: 0, deferred: 0 },
-      themes: [{ id: "f1", name: "Жильё", due: 2, new: 0 }],
+      themes: [{ id: "f1", name: "Жильё", due: 2, new: 0, practice: { today: 2 } }],
       preset: { choice: "practice", size: null, folders: ["f1", null], scope: null },
       sizes: [20],
       scopes: [],

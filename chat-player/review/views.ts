@@ -23,7 +23,9 @@ import {
   setupRequest,
   WORDS,
   DUE_EXERCISE_SIZES,
+  cardsScopeCount,
   cardsSetupAvailable,
+  cardsThemeCount,
   cardsSetupRequest,
   todayLine,
   type CardsSetupState,
@@ -549,7 +551,7 @@ export interface CardsSetupProps {
 /** The four ways, with what each does: the user picks one. */
 const CHOICES: { choice: CardsSetupChoice; title: string; caption: string }[] = [
   { choice: "cards", title: "Карточки", caption: "По расписанию, оценки сохраняются" },
-  { choice: "cards_then_exercise", title: "Карточки, потом упражнение", caption: "Затем упражнение по ошибкам" },
+  { choice: "cards_then_exercise", title: "Карточки, потом упражнение", caption: "Затем по ошибкам" },
   { choice: "exercise", title: "Упражнение", caption: "По словам к повторению" },
   { choice: "practice", title: "Тренировка", caption: "Без расписания, ничего не меняет" },
 ];
@@ -568,17 +570,19 @@ export function cardsSetupView(p: CardsSetupProps): HTMLElement {
   const sent = state.sent;
   const available = cardsSetupAvailable(setup, state);
   const picked = new Set(state.folders);
-  const hidden = p.allThemes ? [] : setup.themes.slice(INLINE_THEMES).filter((t) => !picked.has(t.id));
-  const themes = setup.themes.filter((t) => !hidden.includes(t));
+  // A theme's number: its cards due (and new, for a round by the schedule), or what it has to practise.
+  const themeCount = (t: CardsSetup["themes"][number]) => cardsThemeCount(t, state);
+  // The themes with something for this choice (a picked one stays).
+  const listed = setup.themes.filter((t) => themeCount(t) > 0 || picked.has(t.id));
+  const hidden = p.allThemes ? [] : listed.slice(INLINE_THEMES).filter((t) => !picked.has(t.id));
+  const themes = listed.filter((t) => !hidden.includes(t));
   const exercise = state.choice === "exercise";
   const sizes = exercise ? DUE_EXERCISE_SIZES : setup.sizes;
   const size = exercise ? state.exerciseSize : state.size;
   const request = cardsSetupRequest(setup, state);
-  // A theme's number: its cards due (and new, for a round by the schedule).
-  const themeCount = (t: CardsSetup["themes"][number]) => (state.choice === "cards" || state.choice === "cards_then_exercise" ? t.due + t.new : t.due);
   return h(
     "section",
-    { class: cls("sheet setup", sent && "written"), "aria-label": "Повторить слова" },
+    { class: cls("sheet setup cards-setup", sent && "written"), "aria-label": "Повторить слова" },
     h("div", { class: "rhead" }, h("h1", { class: "sl strong" }, "Повторить слова"), h("span", { class: "rnote" }, sent ? "Запрос отправлен" : "Выберите и начните")),
     h("div", { class: "today" }, h("p", { class: "sl" }, "Сегодня"), h("p", { class: "tline" }, todayLine(setup.today))),
     h(
@@ -594,8 +598,8 @@ export function cardsSetupView(p: CardsSetupProps): HTMLElement {
             h(
               "button",
               { type: "button", role: "radio", "aria-checked": String(state.choice === c.choice), class: cls("choice", state.choice === c.choice && "on"), "data-choice": c.choice, onclick: () => on.choice(c.choice) },
-              h("span", { class: "ct" }, c.title),
-              h("span", { class: "cc" }, c.caption),
+              h("span", { class: "cl" }, h("span", { class: "ct" }, c.title), h("span", { class: "cc" }, c.caption)),
+              h("span", { class: "ck", "aria-hidden": "true" }, state.choice === c.choice && icon("check", 16, 2)),
             ),
           ),
         ),
@@ -613,12 +617,12 @@ export function cardsSetupView(p: CardsSetupProps): HTMLElement {
                 "button",
                 { type: "button", role: "radio", "aria-checked": String(s.scope === state.scope), class: cls("opt", s.scope === state.scope && "on"), "data-scope": s.scope, onclick: () => on.scope(s.scope) },
                 h("span", null, s.label),
-                h("span", { class: "n" }, String(s.count)),
+                h("span", { class: "n" }, String(cardsScopeCount(setup, state, s.scope))),
               ),
             ),
           ),
         ),
-      setup.themes.length > 0 &&
+      listed.length > 0 &&
         block(
           "Темы",
           "cs-themes",

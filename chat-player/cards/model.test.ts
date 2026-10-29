@@ -43,6 +43,7 @@ const session = (cards: ChatCard[], over: Partial<ChatCardsSession> = {}): ChatC
   day_end: at(18 * 60 * MIN),
   title: "Повторение",
   folder_label: "Все темы",
+  folder_names: [],
   direction: "both",
   direction_label: "FR ↔ RU",
   scope: null,
@@ -168,6 +169,34 @@ describe("a round «По расписанию»", () => {
     expect(round.nextCall(T0)?.kind).toBe("grade");
   });
 
+  it("a late result that saves what a lost call carried clears «нет ответа» and lets the outbox go on", () => {
+    const round = new CardsRound(session([card("a")]));
+    answer(round, 3);
+    const c1 = round.nextCall(T0)!;
+    round.callLost(c1);
+    expect(saveLine(round, T0)?.text).toBe("Не сохранилось (1): нет ответа");
+    round.callDone(c1, graded(c1), T0 + 50_000);
+    expect(round.trouble).toBeNull();
+    expect(saveLine(round, T0)).toBeNull();
+    // Z on the done screen goes at once.
+    expect(round.undo()).toBe(true);
+    const u = round.nextCall(T0)!;
+    expect(u.kind).toBe("undo");
+    round.callLost(u);
+    round.callDone(u, { ok: true, data: { results: [{ log_id: "cr-a-e0-a", status: "undone", word_id: "a", direction: "fr_ru", key: "a:fr_ru", expected: "e2-a", intervals: null, due: null, state: 2 }] } }, T0);
+    expect(round.trouble).toBeNull();
+    // A newer call's error stays.
+    const other = new CardsRound(session([card("a"), card("b")]));
+    answer(other, 3);
+    const o1 = other.nextCall(T0)!;
+    other.callLost(o1);
+    answer(other, 3);
+    const o2 = other.nextCall(T0)!;
+    other.callDone(o2, { ok: false, error: "нет связи с Карточками" }, T0);
+    other.callDone(o1, graded(o1), T0);
+    expect(other.trouble).toEqual({ kind: "error", text: "нет связи с Карточками" });
+  });
+
   it("skips a card graded elsewhere («уже повторена») or deleted, and doesn't count it", () => {
     const round = new CardsRound(session([card("a"), card("b"), card("c")]));
     answer(round, 3);
@@ -192,7 +221,7 @@ describe("a round «По расписанию»", () => {
   });
 
   it("is stale after the study day: no more grades, «Обновить» asks for a new round", () => {
-    const round = new CardsRound(session([card("a"), card("b")], { folder_label: "Еда, Жильё", direction: "fr_ru" }));
+    const round = new CardsRound(session([card("a"), card("b")], { folder_label: "Еда, Жильё", folder_names: ["Еда", "Жильё"], direction: "fr_ru" }));
     const end = Date.parse(round.session.day_end);
     expect(round.stale(end - 1)).toBe(false);
     expect(round.stale(end)).toBe(true);
@@ -263,6 +292,28 @@ describe("undo («Отменить последний ответ», Z)", () => {
     expect(round.nextCall(T0)?.kind).toBe("undo");
   });
 
+  it("takes the undo from the server only: an already_saved answer graded over since can't be undone", () => {
+    const round = new CardsRound(session([card("a"), card("b")]));
+    answer(round, 3);
+    const c1 = round.nextCall(T0)!;
+    const over = (call: Call): CallOutcome => {
+      const out = graded(call, { a: { status: "already_saved" } }) as { ok: true; data: Record<string, unknown> };
+      return { ok: true, data: { ...out.data, undo: null } };
+    };
+    round.callDone(c1, over(c1), T0);
+    expect(round.answers[0].status).toBe("saved");
+    expect(round.canUndo()).toBe(false);
+    expect(round.undo()).toBe(false);
+    // Z while it was sending: «не отменилась», the card is not shown again.
+    answer(round, 1);
+    const c2 = round.nextCall(T0)!;
+    round.undo();
+    round.callDone(c2, over(c2), T0);
+    expect(round.nextCall(T0)).toBeNull();
+    expect(round.notices.map((n) => n.text)).toEqual(["не отменилась"]);
+    expect(round.queue).toEqual([]);
+  });
+
   it("keeps the answer when the card changed since (changed_since), and doesn't show it again", () => {
     const round = new CardsRound(session([card("a"), card("b")]));
     answer(round, 3);
@@ -314,11 +365,18 @@ describe("what the page tells and sends", () => {
   });
 
   it("asks for the next round, and the exercise on the hard words with their ids", () => {
-    const round = new CardsRound(session([card("a", { fr: "chelou" }), card("b", { fr: "la galère" }), card("c")], { folder_label: "Еда" }));
+    const round = new CardsRound(session([card("a", { fr: "chelou" }), card("b", { fr: "la galère" }), card("c")], { folder_label: "Еда", folder_names: ["Еда"] }));
     answer(round, 1);
     answer(round, 2);
     answer(round, 3);
     expect(round.continueMessage()).toBe("Повтори карточки здесь в чате, ещё 5 карточек, по теме «Еда».");
+    // A theme whose name holds a comma stays one theme.
+    const comma = new CardsRound(session([card("a")], { folder_label: "Еда, напитки, Жильё", folder_names: ["Еда, напитки", "Жильё"] }));
+    expect(comma.refreshMessage()).toBe("Повтори карточки здесь в чате, 5 карточек, по темам «Еда, напитки», «Жильё».");
+    // Never fewer than play_cards takes (5): it plays the 3 that are left.
+    const few = new CardsRound(session(Array.from({ length: 20 }, (_, i) => card(`w${i}`)), { remaining: 3 }));
+    expect(few.continueMessage()).toBe("Повтори карточки здесь в чате, ещё 5 карточек.");
+    expect(new CardsRound(session(Array.from({ length: 20 }, (_, i) => card(`w${i}`)), { remaining: 14 })).continueMessage()).toBe("Повтори карточки здесь в чате, ещё 14 карточек.");
     expect(round.mistakesMessage()).toBe("Сделай упражнение здесь в чате по ошибкам из карточек: la galère, chelou (word_ids: b, a).");
     expect(planLine(round.session, null)).toBe("12 к повт. · 4 новых");
   });

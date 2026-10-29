@@ -87,7 +87,7 @@ export type Call = { id: number; kind: "grade"; seqs: number[]; args: GradeArgum
 export type CallOutcome = { ok: true; data: Record<string, unknown> } | { ok: false; error: string };
 
 /** Why the outbox is stuck: the rate limit (sent again at `until`), or an error (sent again on «Повторить» or the next answer). */
-export type SaveTrouble = { kind: "wait"; until: number; text: string } | { kind: "error"; text: string } | null;
+export type SaveTrouble = { kind: "wait"; until: number; text: string } | { kind: "error"; text: string; call?: number } | null;
 
 /** «chelou — уже повторена»: a card skipped by the server's answer, or an undo that could not happen. */
 export interface Notice {
@@ -291,7 +291,12 @@ export class CardsRound {
     if (this.inFlight?.id !== call.id) return;
     this.inFlight = null;
     this.requeue(call);
-    this.trouble = { kind: "error", text: "нет ответа" };
+    this.trouble = { kind: "error", text: "нет ответа", call: call.id };
+  }
+
+  /** A late result of the call given up on («нет ответа») that settled all it carried: nothing is lost any more. */
+  private clearLost(call: Call) {
+    if (this.trouble?.kind === "error" && this.trouble.call === call.id) this.trouble = null;
   }
 
   private requeue(call: Call) {
@@ -352,6 +357,7 @@ export class CardsRound {
         this.applyGrade(a, r, parsed!.undo);
       }
       if (current) this.trouble = missing > 0 ? { kind: "error", text: parsed ? "ответ без этих карточек" : "непонятный ответ" } : null;
+      else if (missing === 0 && call.seqs.every((seq) => this.answer(seq)?.status !== "queued")) this.clearLost(call);
       return;
     }
     const r = asUndoGradesResult(outcome.data)?.results[0];
@@ -362,6 +368,7 @@ export class CardsRound {
     }
     this.dropOp("undo", call.seq);
     if (current) this.trouble = null;
+    else this.clearLost(call);
     if (r.status === "changed_since") {
       // Graded or changed elsewhere since: the answer stays, the card isn't shown again.
       this.skip(a, "не отменилась: карточку уже изменили");
@@ -384,7 +391,8 @@ export class CardsRound {
       return;
     }
     a.status = "saved";
-    if (r.log_id && r.expected) a.undoItem = undo?.items.find((i) => i.log_id === r.log_id) ?? { log_id: r.log_id, expected: r.expected };
+    // Only the server's undo: an already_saved answer without one was graded over since (another device).
+    a.undoItem = (r.log_id && undo?.items.find((i) => i.log_id === r.log_id)) || null;
     const was = this.known.get(a.key);
     if (r.expected) this.known.set(a.key, { expected: r.expected, intervals: r.intervals ?? was?.intervals ?? null });
     if (a.undoWanted) {
@@ -467,13 +475,12 @@ export class CardsRound {
 
   /** The themes the round took, as play_cards' request names them (none = every theme). */
   themes(): string[] {
-    const label = this.session.folder_label.trim();
-    return !label || label === "Все темы" ? [] : label.split(", ");
+    return this.session.folder_names;
   }
 
-  /** «Ещё 12 к повторению · Продолжить ›»: the next round of the day. */
+  /** «Ещё 12 к повторению · Продолжить ›»: the next round of the day (never fewer than play_cards takes; it plays what is left). */
   continueMessage(): string {
-    return cardsRequest({ size: Math.min(this.remaining, this.roundSize()), themes: this.themes(), direction: this.session.direction, more: true });
+    return cardsRequest({ size: Math.max(CARDS_ROUND_MIN, Math.min(this.remaining, this.roundSize())), themes: this.themes(), direction: this.session.direction, more: true });
   }
 
   /** «Раунд устарел · Обновить ›»: a new round for the new day. */

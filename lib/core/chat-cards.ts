@@ -128,6 +128,8 @@ export interface ChatCardsSession {
   title: string;
   /** Which themes: «Все темы», a theme's name, or «Еда, Жильё». */
   folder_label: string;
+  /** The themes' names, as play_cards' `folders` takes them back (a name may hold a comma); none = every theme. */
+  folder_names: string[];
   direction: ChatCardsDirection;
   /** «FR → RU», «RU → FR», «FR ↔ RU». */
   direction_label: string;
@@ -189,6 +191,9 @@ function asCard(value: unknown): ChatCard | null {
   };
 }
 
+/** An older connector's round names its themes only in the label («Еда, Жильё»; «Все темы» = every theme). */
+const namesOfLabel = (label: unknown): string[] => (typeof label !== "string" || !label.trim() || label.trim() === "Все темы" ? [] : label.trim().split(", "));
+
 /**
  * A round from a tool result's structuredContent; null when it isn't one. Fields an older
  * connector left out are filled; a card the page could not show or grade is dropped, and a card
@@ -218,6 +223,7 @@ export function asChatCardsSession(value: unknown): ChatCardsSession | null {
     mode,
     title: typeof v.title === "string" ? v.title : "",
     folder_label: typeof v.folder_label === "string" ? v.folder_label : "Все темы",
+    folder_names: Array.isArray(v.folder_names) ? v.folder_names.filter((n): n is string => typeof n === "string" && n.trim() !== "") : namesOfLabel(v.folder_label),
     direction,
     direction_label: typeof v.direction_label === "string" ? v.direction_label : directionLabel(direction),
     scope: mode === "practice" ? (v.scope ?? "recent") : null,

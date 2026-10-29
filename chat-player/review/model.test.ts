@@ -4,7 +4,9 @@ import { reviewFolderUrl } from "@/lib/core/chat-review";
 import {
   addWordsArguments,
   addedHeadline,
+  cardsScopeCount,
   cardsSetupAvailable,
+  cardsThemeCount,
   cardsSetupRequest,
   cardsSetupState,
   commonFolder,
@@ -148,9 +150,9 @@ describe("«Повторить слова»", () => {
     version: 1,
     today: { due: 12, new: 4, waiting: 1, deferred: 0 },
     themes: [
-      { id: null, name: "Входящие", due: 2, new: 0 },
-      { id: "f1", name: "Еда", due: 6, new: 3 },
-      { id: "f2", name: "Жильё", due: 4, new: 1 },
+      { id: null, name: "Входящие", due: 2, new: 0, practice: { today: 1 } },
+      { id: "f1", name: "Еда", due: 6, new: 3, practice: {} },
+      { id: "f2", name: "Жильё", due: 4, new: 1, practice: { today: 3 } },
     ],
     preset: { choice: "cards", size: null, folders: [], scope: null, ...preset },
     sizes: [10, 20, 30],
@@ -195,5 +197,22 @@ describe("«Повторить слова»", () => {
     expect(cardsSetupRequest(s, state)).toBe("Потренируй карточки здесь в чате без расписания: ошибки сегодня, 20 карточек.");
     state.scope = "all";
     expect(cardsSetupAvailable(s, state)).toBe(0);
+  });
+
+  it("counts «Тренировка» over the themes picked, and gives each theme its own number", () => {
+    const s = setup({ choice: "practice" });
+    const state = cardsSetupState(s);
+    expect(cardsScopeCount(s, state, "today")).toBe(4);
+    expect(s.themes.map((t) => cardsThemeCount(t, state))).toEqual([1, 0, 3]);
+    // «Еда» has no misses today: nothing to start there.
+    state.folders = ["f1"];
+    expect(cardsScopeCount(s, state, "today")).toBe(0);
+    expect(cardsSetupAvailable(s, state)).toBe(0);
+    state.folders = ["f1", "f2"];
+    expect(cardsSetupAvailable(s, state)).toBe(3);
+    state.choice = "exercise";
+    expect(s.themes.map((t) => cardsThemeCount(t, state))).toEqual([2, 6, 4]);
+    state.choice = "cards";
+    expect(s.themes.map((t) => cardsThemeCount(t, state))).toEqual([2, 9, 5]);
   });
 });

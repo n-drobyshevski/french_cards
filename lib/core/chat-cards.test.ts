@@ -57,6 +57,7 @@ const session = (over: Partial<ChatCardsSession> = {}): ChatCardsSession => ({
   day_end: "2026-10-29T03:00:00.000Z",
   title: "Повторение",
   folder_label: "Все темы",
+  folder_names: [],
   direction: "both",
   direction_label: "FR ↔ RU",
   scope: null,
@@ -109,6 +110,7 @@ describe("chat cards contract", () => {
       mode: "schedule",
       title: "",
       folder_label: "Все темы",
+      folder_names: [],
       direction: "both",
       direction_label: "FR ↔ RU",
       scope: null,
@@ -142,6 +144,14 @@ describe("chat cards contract", () => {
       level_estimated: false,
       folder_name: "",
     });
+  });
+
+  it("names the round's themes as play_cards takes them; an older connector's only from the label", () => {
+    expect(asChatCardsSession(session({ folder_label: "Еда, напитки", folder_names: ["Еда, напитки", " ", 4 as unknown as string] }))!.folder_names).toEqual(["Еда, напитки"]);
+    const old: Partial<ChatCardsSession> = session({ folder_label: "Еда, Жильё" });
+    delete old.folder_names;
+    expect(asChatCardsSession(old)!.folder_names).toEqual(["Еда", "Жильё"]);
+    expect(asChatCardsSession({ ...old, folder_label: "Все темы" })!.folder_names).toEqual([]);
   });
 
   it("drops cards it can't show or grade, and a card sent twice", () => {

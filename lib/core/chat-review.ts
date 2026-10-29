@@ -141,6 +141,8 @@ export interface CardsSetupTheme {
   name: string;
   due: number;
   new: number;
+  /** «Тренировка»'s count in this theme, by scope (a scope left out: none), so the card adds up the picked themes. */
+  practice: Partial<Record<ChatPracticeScope, number>>;
 }
 
 /** A «Тренировка» option («Ошибки сегодня · 4»): what the round takes and how many cards that is now. */
@@ -156,7 +158,7 @@ export interface CardsSetup {
   version: 1;
   /** Today's numbers («12 к повторению · 4 новых · 1 ждёт»), as study_summary counts them. */
   today: ChatCardsCounts;
-  /** Themes with cards due or new today, «Входящие» first; themes «на паузе» left out. */
+  /** Themes with cards due or new today, or something to practise, «Входящие» first; themes «на паузе» left out. */
   themes: CardsSetupTheme[];
   preset: {
     choice: CardsSetupChoice;
@@ -169,11 +171,17 @@ export interface CardsSetup {
   };
   /** The «Карточек» choices. */
   sizes: number[];
-  /** «Тренировка»'s options, in order; empty when there is nothing to practise. */
+  /** «Тренировка»'s options, in order, counted over every theme; empty when there is nothing to practise. */
   scopes: CardsSetupScope[];
 }
 
 export type ChatReview = LevelsReview | WordsReview | ExerciseSetup | CardsSetup;
+
+/** A theme's «Тренировка» counts, the positive numbers only. */
+function practiceCounts(v: unknown): Partial<Record<ChatPracticeScope, number>> {
+  if (!v || typeof v !== "object") return {};
+  return Object.fromEntries(Object.entries(v).filter(([, x]) => typeof x === "number" && Number.isFinite(x) && x > 0)) as Partial<Record<ChatPracticeScope, number>>;
+}
 
 /** «Повторить слова» from structuredContent, with what an older connector left out filled; null when it isn't one. */
 function asCardsSetup(v: Partial<CardsSetup>): CardsSetup | null {
@@ -185,7 +193,7 @@ function asCardsSetup(v: Partial<CardsSetup>): CardsSetup | null {
   return {
     ...(v as CardsSetup),
     today: { due: n(today.due), new: n(today.new), waiting: n(today.waiting), deferred: n(today.deferred) },
-    themes: v.themes.filter((t): t is CardsSetupTheme => !!t && typeof t === "object" && (t.id === null || typeof t.id === "string") && typeof t.name === "string").map((t) => ({ ...t, due: n(t.due), new: n(t.new) })),
+    themes: v.themes.filter((t): t is CardsSetupTheme => !!t && typeof t === "object" && (t.id === null || typeof t.id === "string") && typeof t.name === "string").map((t) => ({ ...t, due: n(t.due), new: n(t.new), practice: practiceCounts(t.practice) })),
     preset: {
       choice: preset.choice as CardsSetupChoice,
       size: typeof preset.size === "number" && preset.size > 0 ? preset.size : null,

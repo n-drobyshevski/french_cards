@@ -15,6 +15,9 @@ import { CARD_NOUN, PRACTICE_SCOPE_TEXT } from "./requests";
 
 const POS_ABBR: Record<string, string> = { adj: "adj.", adv: "adv.", expression: "expr." };
 
+/** «Тренировка» says it in the accessible names only (SPEC rule 3; the dashed rule shows it). */
+const PRACTICE_NOTE = "Тренировка, не влияет на расписание";
+
 /** «n. f.», «v. pron.» (components/review/format posAbbr, as chat-player/card.ts copies it). */
 function posAbbr(card: Pick<ChatCard, "fr" | "pos" | "gender">): string | null {
   if (card.pos === "noun") return card.gender === "m" ? "n. m." : card.gender === "f" ? "n. f." : card.gender === "mf" ? "n. m. et f." : "n.";
@@ -73,7 +76,7 @@ function topBar(round: CardsRound, on: PlayHandlers): HTMLElement[] {
       "div",
       { class: "prog" },
       h("span", { class: "plan" }, plan),
-      h("span", { class: "count", "aria-label": `Карточка ${position} из ${total}` }, progressText(position, total)),
+      h("span", { class: "count", "aria-label": `${round.practice ? `${PRACTICE_NOTE}${scope ? `: ${scope}` : ""}. ` : ""}Карточка ${position} из ${total}` }, progressText(position, total)),
     ),
     h("div", { class: "pline", "aria-hidden": "true" }, h("span", { class: "fill", style: `width:${total ? ((position - 1) / total) * 100 : 0}%` })),
   ];
@@ -90,7 +93,7 @@ function questionCard(round: CardsRound, card: ChatCard, on: PlayHandlers): HTML
       "data-card": "",
       "data-focus": "",
       tabindex: "-1",
-      "aria-label": `${prompt}${card.is_new ? ", новая карточка" : ""}. Нажмите или Пробел — показать ответ`,
+      "aria-label": `${prompt}${card.is_new ? ", новая карточка" : ""}. Нажмите или Пробел — показать ответ${round.practice ? `. ${PRACTICE_NOTE}` : ""}`,
       onclick: () => on.flip(),
     },
     cardHead([callNumber(card.direction, card.number, round.practice)], card.is_new && h("span", { class: "ntag", "aria-hidden": "true" }, "Новое")),
@@ -119,7 +122,7 @@ function answerCard(round: CardsRound, card: ChatCard, open: boolean, on: PlayHa
   const showMeter = card.slang_level > 0 || card.verlan;
   return h(
     "article",
-    { class: cls("card rcard", round.practice && "practice"), "data-card": "", "data-focus": "", tabindex: "-1", "aria-label": `Ответ: ${card.fr} — ${card.ru}` },
+    { class: cls("card rcard", round.practice && "practice"), "data-card": "", "data-focus": "", tabindex: "-1", "aria-label": `Ответ: ${card.fr} — ${card.ru}${round.practice ? `. ${PRACTICE_NOTE}` : ""}` },
     cardHead([callNumber(card.direction, card.number, round.practice)], showMeter && meter(card.slang_level, card.verlan)),
     h(
       "div",
@@ -176,9 +179,9 @@ function gradeBar(card: ChatCard, practice: boolean, flash: ChatCardRating | nul
   );
 }
 
-/** «Сохраняем…», «Не сохранилось: … · Повторить», or the practice note. */
+/** «Сохраняем…», «Не сохранилось: … · Повторить»; empty in «Тренировка» (no status line). */
 function saveRow(round: CardsRound, now: number, on: PlayHandlers): HTMLElement {
-  if (round.practice) return h("p", { class: "save" }, "Тренировка — расписание не меняется");
+  if (round.practice) return h("p", { class: "save" });
   const line = saveLine(round, now);
   return h(
     "p",
@@ -214,7 +217,7 @@ export function playView(p: PlayProps): HTMLElement {
   return h(
     "div",
     { class: "play" },
-    h("h1", { class: "sr" }, `Карточки: ${round.session.title || "повторение"}`),
+    h("h1", { class: "sr" }, `Карточки: ${round.session.title || "повторение"}${round.practice ? ", не влияет на расписание" : ""}`),
     topBar(round, on),
     h("div", { class: cls("stage", p.animate && "enter") }, deck(round.queue.length - 1, face)),
     !stale &&

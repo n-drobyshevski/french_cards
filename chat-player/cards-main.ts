@@ -27,8 +27,8 @@ let fold = false;
 let animatedStep = -1;
 let doneDrawn = false;
 const asked = new Set<"continue" | "exercise" | "refresh">();
-/** Where focus goes after the next render: the card after a grade or an undo, the grades after a flip. */
-let refocus: "card" | "grades" | null = null;
+/** Where focus goes after the next render: the card (after a flip, a grade or an undo; as the app's ReviewScreen). */
+let refocus: "card" | null = null;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
 /** Wall clock (the model takes it as an argument). */
@@ -36,26 +36,48 @@ const now = () => Date.now();
 /** Reduced motion: no flash hold. */
 const motion = () => !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 
-function render() {
-  if (!round) {
-    root.replaceChildren(waitView(wait.text, wait.busy));
-  } else if (round.head) {
+function screen(): HTMLElement {
+  if (!round) return waitView(wait.text, wait.busy);
+  if (round.head) {
     if (doneDrawn) doneDrawn = false;
     const animate = round.step !== animatedStep;
     animatedStep = round.step;
-    root.replaceChildren(playView({ round, now: now(), flash, animate, fold, refreshAsked: asked.has("refresh"), on: play }));
-  } else if (round.answers.length === 0) {
-    root.replaceChildren(emptyView(round));
-  } else if (round.saving && !round.trouble) {
-    root.replaceChildren(waitView("Сохраняем последние ответы…"));
-  } else {
-    root.replaceChildren(doneView({ round, now: now(), animate: !doneDrawn, asked, on: done }));
-    doneDrawn = true;
+    return playView({ round, now: now(), flash, animate, fold, refreshAsked: asked.has("refresh"), on: play });
   }
+  if (round.answers.length === 0) return emptyView(round);
+  if (round.saving && !round.trouble) return waitView("Сохраняем последние ответы…");
+  const view = doneView({ round, now: now(), animate: !doneDrawn, asked, on: done });
+  doneDrawn = true;
+  return view;
+}
+
+/** A selector for the focused control's counterpart in a rebuilt screen; null when focus is not on one. */
+function focusKey(el: Element | null): string | null {
+  if (!(el instanceof HTMLElement) || el === root || !root.contains(el)) return null;
+  for (const attr of ["data-grade", "data-flip", "data-focus"]) if (el.hasAttribute(attr)) return `[${attr}="${el.getAttribute(attr)}"]`;
+  const classes = [...el.classList].map((c) => `.${CSS.escape(c)}`).join("");
+  return `${el.tagName.toLowerCase()}${classes}`;
+}
+
+function render() {
+  const next = screen();
   const target = refocus;
   refocus = null;
-  if (!target || !document.hasFocus()) return;
-  const el = target === "grades" ? root.querySelector<HTMLElement>("[data-grade]") : root.querySelector<HTMLElement>("[data-focus]");
+  const current = root.firstElementChild;
+  // Nothing changed (the clock's tick): the screen stays, focus and all.
+  if (!target && current && root.childElementCount === 1 && current.isEqualNode(next)) return;
+  const active = document.activeElement;
+  const kept = focusKey(active);
+  const label = active instanceof HTMLElement ? active.textContent : null;
+  root.replaceChildren(next);
+  if (!document.hasFocus()) return;
+  let el: HTMLElement | null = null;
+  if (target) el = root.querySelector<HTMLElement>("[data-focus]");
+  else if (kept) {
+    // Focus stays on the same control: a grade, the card, or the button with the same name.
+    const all = [...root.querySelectorAll<HTMLElement>(kept)];
+    el = all.find((e) => e.textContent === label) ?? (all.length === 1 ? all[0] : null);
+  }
   el?.focus({ preventScroll: true });
 }
 
@@ -146,7 +168,8 @@ const play = {
     const inside = focusInside();
     if (!round.flip()) return;
     fold = false;
-    if (inside) refocus = "grades";
+    // The answer card, not «Не знаю»: Space / Enter on it flips back, and never grades by accident.
+    if (inside) refocus = "card";
     const card = round.head?.card;
     if (card) live.textContent = `${card.fr} — ${card.ru}`;
     render();

@@ -300,6 +300,19 @@ export function cardsSetupState(setup: CardsSetup): CardsSetupState {
 /** The themes the request names (none = every theme), in the card's order. */
 export const cardsSetupThemes = (setup: CardsSetup, state: CardsSetupState): CardsSetupTheme[] => setup.themes.filter((t) => state.folders.includes(t.id));
 
+/** «Тренировка»'s count of `scope` («Ошибки сегодня · 4»): over the picked themes, else every theme. */
+export function cardsScopeCount(setup: CardsSetup, state: CardsSetupState, scope: ChatPracticeScope): number {
+  const all = setup.scopes.find((s) => s.scope === scope)?.count ?? 0;
+  if (state.folders.length === 0) return all;
+  return Math.min(all, cardsSetupThemes(setup, state).reduce((n, t) => n + (t.practice[scope] ?? 0), 0));
+}
+
+/** A theme's number on its chip: its cards due and new for a round by the schedule, due for «Упражнение», the option's count for «Тренировка». */
+export function cardsThemeCount(theme: CardsSetupTheme, state: CardsSetupState): number {
+  if (state.choice === "practice") return theme.practice[state.scope] ?? 0;
+  return state.choice === "exercise" ? theme.due : theme.due + theme.new;
+}
+
 /**
  * What the pick has to play now: the cards due and new of the themes (every theme: today's
  * numbers), the words due for «Упражнение», the chosen option's count for «Тренировка».
@@ -308,7 +321,7 @@ export function cardsSetupAvailable(setup: CardsSetup, state: CardsSetupState): 
   const themes = state.folders.length ? cardsSetupThemes(setup, state) : null;
   switch (state.choice) {
     case "practice":
-      return setup.scopes.find((s) => s.scope === state.scope)?.count ?? 0;
+      return cardsScopeCount(setup, state, state.scope);
     case "exercise":
       return themes ? themes.reduce((n, t) => n + t.due, 0) : setup.today.due;
     default:
