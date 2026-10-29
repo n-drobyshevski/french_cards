@@ -63,6 +63,7 @@ export function createFakeRepo(
       states: async (wordIds) =>
         clone([...tables.review_state.values()].filter((s) => wordIds === undefined || wordIds.includes(s.word_id))),
       logsSince: async (from) => clone([...tables.review_log.values()].filter((l) => Date.parse(l.review) >= Date.parse(from))),
+      logsByIds: async (ids) => clone([...new Set(ids)].map((id) => tables.review_log.get(id)).filter((l): l is ReviewLog => !!l)),
       exerciseSets: async () => clone([...tables.exercise_sets.values()]),
       exerciseRunsSince: async (from) => clone([...tables.exercise_runs.values()].filter((r) => Date.parse(r.started_at) >= Date.parse(from))),
       userPrefs: async () => clone([...tables.user_prefs.values()]),

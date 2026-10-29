@@ -1,0 +1,485 @@
+/* «Карточки в чате» (ui://kartochki/cards.html): the app's phone review card (L-Review-Q-A card,
+   L-Review-Q-B chrome, L-Review-Ans-B answer, the GradeBar) and its done screen (L-Done-B), over the
+   shared tokens and the index card of deck.css. */
+@import "../base.css";
+@import "../deck.css";
+
+/* --- The chrome: direction and themes, undo, the plan and «07 / 20» over the 1px line ------------ */
+.bar {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.meta {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 400 11px/16px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.meta b {
+  font-weight: 500;
+  color: var(--ink);
+}
+.undo {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  margin-right: -12px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--ink);
+}
+.undo:not(:disabled):hover {
+  background: var(--hover);
+}
+.undo:disabled {
+  color: var(--boundary);
+}
+.prog {
+  margin-top: 4px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font: 400 11px/16px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.plan {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.count {
+  flex-shrink: 0;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pline {
+  position: relative;
+  height: 5px;
+  margin-top: 8px;
+}
+.pline::before,
+.pline .fill {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 2px;
+  height: 1px;
+}
+.pline::before {
+  right: 0;
+  background: var(--rule);
+}
+.pline .fill {
+  background: var(--ink);
+  transition: width 200ms var(--ease-standard);
+}
+
+/* --- The card ----------------------------------------------------------------------------------- */
+.stage {
+  margin-top: 16px;
+}
+.rcard {
+  min-height: 320px;
+}
+/* «Тренировка»: the header's rule turns dashed ink (spec change §4). */
+.rcard.practice .head {
+  border-bottom-style: dashed;
+  border-bottom-color: var(--ink);
+}
+.ntag {
+  height: 20px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 6px;
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  font: 500 11px/1 var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.rcard[data-card] {
+  cursor: default;
+}
+.qbody {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 24px;
+  cursor: pointer;
+}
+.prompt {
+  font-family: var(--serif);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  overflow-wrap: break-word;
+}
+.q40 {
+  font-size: 40px;
+  line-height: 1.1;
+}
+.q32 {
+  font-size: 32px;
+  line-height: 1.15;
+}
+.q26 {
+  font-size: 26px;
+  line-height: 1.2;
+}
+.pos {
+  margin-top: 8px;
+  font: italic 15px/20px var(--serif);
+  color: var(--muted);
+}
+.qfoot {
+  height: 44px;
+  flex-shrink: 0;
+  margin: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border-top: 1px solid var(--rule);
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.kbd {
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 5px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  font: 400 11px/1 var(--mono);
+  color: var(--ink);
+}
+/* A keyboard hint: on touch screens the whole card is the tap target (the app's footer is desktop-only). */
+@media (hover: none), (pointer: coarse) {
+  .qfoot {
+    display: none;
+  }
+}
+/* The answer side */
+.abody {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 32px 24px 24px;
+}
+.hw {
+  margin: 0;
+  font-family: var(--serif);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  overflow-wrap: break-word;
+}
+.a32 {
+  font-size: 32px;
+  line-height: 40px;
+}
+.a28 {
+  font-size: 28px;
+  line-height: 34px;
+}
+.a24 {
+  font-size: 24px;
+  line-height: 30px;
+}
+.abody .pos {
+  margin-top: 2px;
+}
+.tr {
+  margin-top: 24px;
+  font-size: 24px;
+  line-height: 32px;
+  font-weight: 500;
+  overflow-wrap: break-word;
+}
+.exs {
+  margin-top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.exfr {
+  font: italic 19px/28px var(--serif);
+}
+/* The headword in its example, under a 1.5px red ink line. */
+.ink {
+  text-decoration: underline;
+  text-decoration-color: var(--red);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 5px;
+}
+.exru {
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--muted);
+}
+/* «Ещё · заметка, происхождение ⌄» at the card's foot */
+.fold {
+  margin: 0 24px;
+  border-top: 1px solid var(--rule);
+}
+.fold-btn {
+  width: 100%;
+  height: 48px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-size: 13px;
+  line-height: 20px;
+}
+.fs {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.fs b {
+  font-weight: 500;
+}
+.fs span {
+  color: var(--muted);
+}
+.fold-btn svg {
+  flex-shrink: 0;
+  color: var(--muted);
+}
+.fold-btn svg.up {
+  transform: rotate(180deg);
+}
+.fold-list {
+  margin: 0;
+  padding: 4px 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.fl dt {
+  font: 400 11px/16px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.fl dd {
+  margin: 2px 0 0;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--muted);
+  overflow-wrap: break-word;
+  white-space: pre-line;
+}
+.fl dd.fv {
+  font: 16px/22px var(--serif);
+}
+.fmore {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+.note-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 20px;
+  padding: 24px;
+  font-size: 15px;
+  line-height: 22px;
+}
+.wait {
+  color: var(--muted);
+  animation: pulse 1.2s var(--ease-standard) infinite alternate;
+}
+
+/* --- Under the card: «Показать ответ», then the grades in its place ------------------------------ */
+.act {
+  margin-top: 16px;
+}
+.act .btn {
+  height: 56px;
+}
+.grades {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 8px;
+}
+.gbtn {
+  height: 56px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 4px;
+  border: 1px solid;
+  border-radius: 6px;
+  background: var(--surface);
+  transition:
+    background-color calc(80ms * var(--ms)) var(--ease-press),
+    scale 110ms var(--ease-press);
+}
+.gbtn.g1 {
+  border-color: var(--again);
+  color: var(--again);
+}
+.gbtn.g2 {
+  border-color: var(--rule);
+  color: var(--ink);
+}
+.gbtn.g3 {
+  border-color: var(--good);
+  color: var(--good);
+}
+.gbtn:not(:disabled):hover {
+  box-shadow: inset 0 0 0 1px currentColor;
+}
+.gbtn.g2:not(:disabled):hover {
+  box-shadow: inset 0 0 0 1px var(--boundary);
+}
+.gbtn:not(:disabled):active {
+  scale: 0.98;
+  background: var(--surface-2);
+}
+.gbtn:disabled {
+  cursor: default;
+}
+/* The grade just chosen fills with its tone («Сложно» with ink) and holds before the card moves on. */
+.gbtn.on {
+  color: var(--on-ink);
+}
+.gbtn.g1.on {
+  background: var(--again);
+}
+.gbtn.g2.on {
+  border-color: var(--ink);
+  background: var(--ink);
+}
+.gbtn.g3.on {
+  background: var(--good);
+}
+.gl {
+  font-size: 15px;
+  line-height: 20px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.gi {
+  font: 400 11px/16px var(--mono);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+.gbtn.g2 .gi {
+  color: var(--muted);
+}
+.gbtn.on .gi {
+  color: var(--on-ink);
+}
+.save {
+  min-height: 20px;
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 20px;
+  text-align: center;
+  color: var(--muted);
+}
+.save.err {
+  color: var(--again);
+}
+.link {
+  height: 20px;
+  padding: 0 2px;
+  border: 0;
+  background: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* --- Done (L-Done-B): the strip, «20 КАРТОЧЕК · 80 % · 4 НОВЫХ», the hard words, what comes next --- */
+.done h1 {
+  margin-top: 4px;
+  font: 500 34px/40px var(--serif);
+  letter-spacing: -0.015em;
+}
+.anim h1 {
+  animation: fade 240ms linear both;
+}
+.sum {
+  font: 400 11px/16px var(--mono);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+.hard {
+  margin-top: 20px;
+  font: 17px/24px var(--serif);
+}
+.hl {
+  font: 15px/24px var(--sans);
+  color: var(--muted);
+}
+.next {
+  margin-top: 8px;
+  color: var(--muted);
+}
+.notes {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--muted);
+}
+.notes [lang="fr"] {
+  font-family: var(--serif);
+  font-size: 15px;
+  color: var(--ink);
+}
+.done .save {
+  text-align: left;
+}
+.actions {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.actions .text-act {
+  align-self: center;
+}
+.hint {
+  font-size: 13px;
+  line-height: 18px;
+  text-align: center;
+  color: var(--muted);
+}

@@ -1,6 +1,7 @@
 /* The chat player's look: the phone player (X-Player-B), the done screen (X-Done-B) and «Мини-TCF»
    (Chat-TCF-*) measures, over the shared tokens. */
 @import "./base.css";
+@import "./deck.css";
 
 /* --- Head: «набор: …» and the tick row ------------------------------------------------------- */
 .meta {
@@ -72,121 +73,13 @@
   color: var(--muted);
 }
 
-/* --- The card on its deck -------------------------------------------------------------------- */
+/* --- The card on its deck (the deck, the card and its header are in deck.css) ------------------ */
 .stage {
   margin-top: 12px;
-}
-.enter {
-  animation: enter 240ms var(--ease-enter) both;
-}
-.fade {
-  animation: fade 110ms var(--ease-enter) both;
-}
-.deck {
-  position: relative;
-  padding-bottom: 12px;
-}
-.edge {
-  position: absolute;
-  height: calc(100% - 12px);
-  border: 1px solid var(--edge);
-  border-radius: 6px;
-  background: var(--surface);
-}
-.edge.e3 {
-  left: 15px;
-  right: 15px;
-  top: 12px;
-}
-.edge.e2 {
-  left: 10px;
-  right: 10px;
-  top: 8px;
-}
-.edge.e1 {
-  left: 5px;
-  right: 5px;
-  top: 4px;
-}
-.card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid var(--rule);
-  border-radius: 6px;
-  background: var(--surface);
-  color: var(--ink);
 }
 .card.new {
   border-style: dashed;
   border-color: var(--boundary);
-}
-.head {
-  height: 46px;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 20px;
-  border-bottom: 2px solid var(--red);
-}
-.label {
-  min-width: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font: 400 11px/16px var(--mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-  white-space: nowrap;
-}
-.label b {
-  font-weight: 500;
-  color: var(--ink);
-}
-.tag {
-  height: 18px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 5px;
-  border: 1px solid var(--ink);
-  border-radius: 3px;
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--ink);
-}
-.meter {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-}
-.segs {
-  display: inline-flex;
-  gap: 2px;
-}
-.segs i {
-  width: 10px;
-  height: 3px;
-  background: var(--rule);
-}
-.segs i.on {
-  background: var(--ink);
-}
-.segs.vulg i.on {
-  background: var(--red);
-}
-.segs.sm i {
-  width: 8px;
-  height: 2px;
-}
-.abbr {
-  font: italic 15px/20px var(--serif);
-  color: var(--muted);
-  white-space: nowrap;
 }
 .body {
   display: flex;
@@ -362,33 +255,7 @@
   color: var(--muted);
 }
 
-/* The stamp */
-.stamp {
-  position: absolute;
-  right: 18px;
-  z-index: 1;
-  height: 40px;
-  display: inline-flex;
-  align-items: center;
-  padding: 0 14px;
-  border: 2px solid;
-  border-radius: 4px;
-  background: var(--surface);
-  font: 500 17px/1 var(--mono);
-  letter-spacing: 0.14em;
-  white-space: nowrap;
-  pointer-events: none;
-  transform: rotate(-4deg);
-  animation: stamp 160ms var(--ease-enter) 70ms both;
-}
-.stamp.ok {
-  color: var(--good);
-  border-color: var(--good);
-}
-.stamp.no {
-  color: var(--again);
-  border-color: var(--again);
-}
+/* Where the stamp lands (its look is in deck.css) */
 .stamp.line1 {
   top: 72px;
 }
@@ -1191,73 +1058,6 @@
 }
 .anim h1 {
   animation: fade 240ms linear both;
-}
-.tally {
-  margin-top: 16px;
-  overflow: hidden;
-  border: 1px solid var(--rule);
-  border-radius: 6px;
-  background: var(--surface);
-}
-.th {
-  height: 40px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 16px;
-  border-bottom: 2px solid var(--red);
-  font: 400 11px/16px var(--mono);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.tb {
-  padding: 14px 16px 18px;
-}
-.tt {
-  font: 500 26px/32px var(--serif);
-  letter-spacing: -0.01em;
-  overflow-wrap: anywhere;
-}
-.cells {
-  margin-top: 18px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-.cell {
-  position: relative;
-  flex-shrink: 0;
-  width: 8px;
-  height: 20px;
-  border-radius: 1px;
-  background: var(--ink);
-}
-.anim .cells .cell {
-  animation: write 240ms var(--ease-enter) calc(240ms + var(--g, 0) * 40ms) both;
-}
-.cell.miss {
-  border: 1.5px solid var(--again);
-  background: var(--surface);
-}
-.cell.miss::after {
-  content: "";
-  position: absolute;
-  inset: 5px 1.5px;
-  background: var(--again);
-}
-.cell.requeued {
-  border: 1px solid var(--ink);
-  background: var(--surface);
-}
-.score {
-  margin-top: 12px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-.score b {
-  font-weight: 500;
-  color: var(--ink);
 }
 .sec {
   margin-top: 28px;

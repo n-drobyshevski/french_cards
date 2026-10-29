@@ -723,3 +723,89 @@ html[data-display="fullscreen"] #app {
 .sform:disabled .seg button.on {
   background: var(--boundary);
 }
+
+/* «Повторить слова» (setup_review): today's numbers, the four ways as radio rows, then the setup's blocks */
+.today {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--rule);
+}
+.tline {
+  font-size: 15px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.choices {
+  display: flex;
+  flex-direction: column;
+}
+/* «Как»: four radio rows, title + muted caption, a check on the picked one (Chat-Cards-Setup). */
+.choice {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  border: 0;
+  border-bottom: 1px solid var(--surface-2);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+.choice:last-child {
+  border-bottom: 0;
+}
+.choice:not(:disabled):hover .ct {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.cl {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.ct {
+  flex-shrink: 0;
+  font-size: 15px;
+  line-height: 20px;
+}
+.choice.on .ct {
+  font-weight: 500;
+}
+.cc {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--muted);
+}
+.ck {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Its theme and scope chips are the board's 4px chips (setup_exercise keeps the round ones). */
+.cards-setup .opt {
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+.sform:disabled .choice {
+  cursor: default;
+}
+.sform:disabled .choice.on {
+  color: var(--boundary);
+}

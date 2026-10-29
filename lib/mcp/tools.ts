@@ -72,16 +72,57 @@ import {
   parseExerciseFocus,
 } from "@/lib/core/exercise-focus";
 import { CHAT_ITEM_TYPES, CHAT_PLAYER_URI, EXAM_SECONDS_PER_ITEM, fillArtifact, MCP_APP_MIME, parseRunLine, RUN_LINE_PREFIX, SAVE_RESULT_TOOL, type ChatPlayerSet, type ChatRunResult } from "@/lib/core/chat-player";
-import { CHAT_REVIEW_URI, type ExerciseSetup, type LevelReviewRow, type LevelsReview, type ReviewFolder, type SetupTheme, type WordReviewRow, type WordsReview } from "@/lib/core/chat-review";
+import {
+  CARDS_SETUP_CHOICES,
+  CHAT_REVIEW_URI,
+  type CardsSetup,
+  type CardsSetupChoice,
+  type CardsSetupScope,
+  type CardsSetupTheme,
+  type ExerciseSetup,
+  type LevelReviewRow,
+  type LevelsReview,
+  type ReviewFolder,
+  type SetupTheme,
+  type WordReviewRow,
+  type WordsReview,
+} from "@/lib/core/chat-review";
+import {
+  ANSWER_MAX_AGE_MS,
+  CARD_FIELDS_MAX,
+  CARD_LOG_PREFIX,
+  CARDS_ROUND_DEFAULT,
+  CARDS_ROUND_MAX,
+  CARDS_ROUND_MIN,
+  CHAT_CARDS_URI,
+  directionLabel,
+  GRADE_BATCH_MAX,
+  GRADE_TOOL,
+  UNDO_GRADES_TOOL,
+  type ChatCard,
+  type ChatCardRating,
+  type ChatCardsCounts,
+  type ChatCardsDirection,
+  type ChatCardsMode,
+  type ChatCardsSession,
+  type ChatIntervals,
+  type ChatPracticeScope,
+  type GradeAnswerResult,
+  type GradeStatus,
+  type UndoGradeItem,
+  type UndoGradeResult,
+  type UndoStatus,
+} from "@/lib/core/chat-cards";
 import { matchesSearch, normalizeLemma, searchHaystack, searchKey } from "@/lib/core/text";
 import { buildWord, cleanText, directionsOf, isMovable, isPaused, pausedFolderIds } from "@/lib/core/words";
 import { cleanConjugation, cleanOrigin, conjugate, ORIGIN_MAX, type ConjData } from "@/lib/core/conjugate";
 import conjTable from "@/public/lexique/fr-conj.json";
 import { newId } from "@/lib/id";
-import { folderOrderOf, planDay } from "@/lib/core/plan";
+import { fnv1a, folderOrderOf, planDay, type PlanItem, type PlanResult } from "@/lib/core/plan";
+import { PRACTICE_DAYS, PRACTICE_LIMIT, practiceQueue } from "@/lib/core/practice";
 import { CEFR_LEVELS, STORED_LEVEL_SOURCES, storedLevel, type Cefr, type LevelResolver, type StoredLevelSource } from "@/lib/core/level";
 import { migrateStudyPlan, NEW_WORDS_MAX as PLAN_NEW_WORDS_MAX, NEW_WORDS_MIN as PLAN_NEW_WORDS_MIN, parseStudyPlan, REVIEW_CAP_MAX, REVIEW_CAP_MIN, sameStudyPlan, STUDY_PLAN_PREF, type StudyPlan } from "@/lib/core/study-plan";
-import { cardStatus, newReviewState, retrievability, reviewStateId, wordStatus, type CardStatus } from "@/lib/scheduler";
+import { cardStatus, fromSnapshot, grade, newReviewState, previewIntervals, retrievability, reviewStateId, wordStatus, type CardStatus } from "@/lib/scheduler";
 import type {
   Confidence,
   Conjugation,
@@ -102,6 +143,7 @@ import type {
   ExerciseTense,
   FieldDef,
   Folder,
+  ReviewLog,
   ReviewState,
   SlangLevel,
   UserPref,
@@ -110,9 +152,9 @@ import type {
 import { PartialWriteError, RepoError, type McpRepo, type Replacement } from "./repo";
 import { lemmaLevel, serverLevels } from "./levels";
 import { HISTORY_DAYS_MAX, historyRange, progressHistory } from "./history";
-import { studyDay, studyDayStartBefore } from "./study-day";
+import { studyDay, studyDayStartBefore, type StudyDay } from "./study-day";
 import { planFitLogsFrom, planFitView, serverPlanFit } from "./plan-fit";
-import { CHAT_PLAYER_ARTIFACT, CHAT_PLAYER_HTML, CHAT_REVIEW_HTML } from "./chat-player-html";
+import { CHAT_CARDS_HTML, CHAT_PLAYER_ARTIFACT, CHAT_PLAYER_HTML, CHAT_REVIEW_HTML } from "./chat-player-html";
 
 export interface ToolDeps {
   repo: McpRepo;
@@ -829,7 +871,7 @@ export const studySummary = tool({
   name: "study_summary",
   title: "Today's study summary",
   description:
-    "Today's review numbers, planned exactly as the app plans the day (the user's «План повторения», user_prefs `study_plan`): cards due, new cards in today's queue, reviews done today, words by learning status, the themes «на паузе» (`muted_themes`, left out of review), the words due soonest, and `plan`: today's new-word budget (`new_words_today`, at most the `ceiling`; lower when the coming reviews are heavy (`reason` \"load\"), when recent answers are weak (\"accuracy\") or over the review cap (\"backlog\", with `deferred` reviews held for tomorrow)), reverse sides unlocked (`ru_unlocks`), and the mean reviews a day over the next week (`forecast_7d`). The one-day «Всё равно добавить новые» is a device setting this tool can't see. Reviewing happens in the app. update_study_plan changes the plan. With `history_days` («Прогресс», e.g. 30 for «как у меня с прогрессом за месяц?») it adds `history`: the app's saved end-of-day numbers per study day as compact rows (`columns` + `days`: known «знаю», learning «учу», fresh «новых», paused «на паузе», difficult «трудных» (part of learning), memorized «помню ≈», reviews, again, new_introduced, added, source), `today` (now, never stored), `active_days`, `streak` {current, best} and «Верно» (`retention`: true retention for the range and per month, vs `target`). Talk about trends; never push the streak. Always `plan_fit` («План и прогресс», the numbers Settings shows): the saved plan against her last ≤ 14 study days within 3 weeks (`active_days`; days without study are not data, never zeros). `new_words`: the plan's ceiling, the `typical` (median) and `max` new words a study day in plan units (`unit`), `full_days` that took all of them out of `plan_days` under the current plan (since `plan_since`), `held_days` by reason when known; `reviews`: the `cap`, `typical` interday reviews (what the cap counts; `all_answers_typical` counts every answer), `forecast_7d`, `backlog_days`, `cap_hit_days`; `retention` over 28 days vs `target`; `fit`: \"warming_up\" (not enough data yet), \"fits\", \"room\" (the whole plan taken, load low) or \"heavy\"; `suggestion` (null = nothing to offer): `new_words` to propose, maybe `or_review_cap` as the other option, `forecast_30d` {now, then [lo, hi]} reviews a day, `why`, `confidence` (\"low\" = пока мало данных); `dismissed_until` when she tapped «Не сейчас». Taking fewer new words than allowed is never a reason to lower the plan.",
+    "Today's review numbers, planned exactly as the app plans the day (the user's «План повторения», user_prefs `study_plan`): cards due, new cards in today's queue, reviews done today, words by learning status, the themes «на паузе» (`muted_themes`, left out of review), the words due soonest, and `plan`: today's new-word budget (`new_words_today`, at most the `ceiling`; lower when the coming reviews are heavy (`reason` \"load\"), when recent answers are weak (\"accuracy\") or over the review cap (\"backlog\", with `deferred` reviews held for tomorrow)), reverse sides unlocked (`ru_unlocks`), and the mean reviews a day over the next week (`forecast_7d`). The one-day «Всё равно добавить новые» is a device setting this tool can't see. To review in the chat use setup_review / play_cards, not this. update_study_plan changes the plan. With `history_days` («Прогресс», e.g. 30 for «как у меня с прогрессом за месяц?») it adds `history`: the app's saved end-of-day numbers per study day as compact rows (`columns` + `days`: known «знаю», learning «учу», fresh «новых», paused «на паузе», difficult «трудных» (part of learning), memorized «помню ≈», reviews, again, new_introduced, added, source), `today` (now, never stored), `active_days`, `streak` {current, best} and «Верно» (`retention`: true retention for the range and per month, vs `target`). Talk about trends; never push the streak. Always `plan_fit` («План и прогресс», the numbers Settings shows): the saved plan against her last ≤ 14 study days within 3 weeks (`active_days`; days without study are not data, never zeros). `new_words`: the plan's ceiling, the `typical` (median) and `max` new words a study day in plan units (`unit`), `full_days` that took all of them out of `plan_days` under the current plan (since `plan_since`), `held_days` by reason when known; `reviews`: the `cap`, `typical` interday reviews (what the cap counts; `all_answers_typical` counts every answer), `forecast_7d`, `backlog_days`, `cap_hit_days`; `retention` over 28 days vs `target`; `fit`: \"warming_up\" (not enough data yet), \"fits\", \"room\" (the whole plan taken, load low) or \"heavy\"; `suggestion` (null = nothing to offer): `new_words` to propose, maybe `or_review_cap` as the other option, `forecast_30d` {now, then [lo, hi]} reviews a day, `why`, `confidence` (\"low\" = пока мало данных); `dismissed_until` when she tapped «Не сейчас». Taking fewer new words than allowed is never a reason to lower the plan.",
   input: z.object({
     new_per_day: z
       .number()
@@ -850,11 +892,7 @@ export const studySummary = tool({
   annotations: READ,
   async run(deps, args) {
     const now = deps.now();
-    const day = studyDay(now, deps.timeZone);
-    const dayStart = day.start.getTime();
-    const dayEnd = day.end.getTime();
-    // Seven calendar days back, as the device counts them (lib/session.ts `loadSession`).
-    const weekAgo = studyDayStartBefore(day.start, 7, deps.timeZone);
+    const { day, weekAgo } = studyWindow(now, deps.timeZone);
     const range = args.history_days === undefined ? null : historyRange(now, args.history_days, deps.timeZone);
     // The stored «Прогресс» rows first: they tell how far back plan_fit reads the log (28 or 56 days).
     const rowsAndLogs = deps.repo.progressDays().then(async (rows) => {
@@ -871,40 +909,16 @@ export const studySummary = tool({
       deps.repo.userPrefs(),
       range ? deps.repo.exerciseRunsSince(new Date(0).toISOString()) : Promise.resolve([]),
     ]);
-    const logs = allLogs.filter((l) => Date.parse(l.review) >= weekAgo.getTime());
-    const live = new Map(liveFolders(folders).map((f) => [f.id, f]));
-    const wordsById = new Map(words.filter((w) => w.deleted_at === null).map((w) => [w.id, w]));
-    const cards = states.filter((s) => s.deleted_at === null && wordsById.has(s.word_id));
-    // Words «на паузе» (themselves or their theme) are never shown in review: not due, not new.
-    const paused = pausedFolderIds(folders);
-    const inReview = new Map([...wordsById].filter(([, w]) => !isPaused(w, paused)));
-    // As in the app: the day's budgets count every review of the day, also of words deleted since;
-    // «reviewed today» counts only live words' reviews.
-    const liveLogs = logs.filter((l) => l.deleted_at === null);
-    const dayLogs = liveLogs.filter((l) => Date.parse(l.review) >= dayStart && Date.parse(l.review) < dayEnd);
-    const today = dayLogs.filter((l) => wordsById.has(l.word_id));
+    const lib = todayLibrary({ now, day, weekAgo, folders, words, states, logs: allLogs });
+    const { live, wordsById, cards, paused } = lib;
+    // «Reviewed today» counts only live words' reviews (the day's budgets count every one).
+    const today = lib.dayLogs.filter((l) => wordsById.has(l.word_id));
 
     const { row, plan: saved } = savedStudyPlan(prefs);
     const plan = args.new_per_day === undefined ? saved : { ...saved, new_words: args.new_per_day };
-    const planWith = (p: StudyPlan) =>
-      planDay({
-        now,
-        dayStart: day.start,
-        dayEnd: day.end,
-        states: cards,
-        words: inReview,
-        todayLogs: dayLogs,
-        logs7d: liveLogs.filter((l) => Date.parse(l.review) < dayStart),
-        plan: p,
-        overrideNewToday: false,
-        r: retrievability,
-        // The same level and frequency signals as the app's (lib/session.ts), so the orders agree.
-        ...(p.new_order === "added" ? {} : levelSignals(serverLevels())),
-        folderOrder: folderOrderOf([...live.values()]),
-      });
-    const result = planWith(plan);
+    const result = planToday(lib, plan);
     // plan_fit always reads the saved plan, never a «what if».
-    const savedDay = plan === saved ? result.day : planWith(saved).day;
+    const savedDay = plan === saved ? result.day : planToday(lib, saved).day;
     const fit = serverPlanFit({
       now,
       timeZone: deps.timeZone,
@@ -958,6 +972,121 @@ export const studySummary = tool({
     };
   },
 });
+
+/** The study day of `now`, and the start of the study day seven calendar days back, as the device counts it (lib/session.ts `loadSession`). */
+function studyWindow(now: Date, timeZone: string): { day: StudyDay; weekAgo: Date } {
+  const day = studyDay(now, timeZone);
+  return { day, weekAgo: studyDayStartBefore(day.start, 7, timeZone) };
+}
+
+/** The library as today's plan reads it (study_summary, play_cards, setup_review). */
+interface TodayLibrary {
+  now: Date;
+  day: StudyDay;
+  live: Map<string, Folder>;
+  /** Live words. */
+  wordsById: Map<string, Word>;
+  /** Live cards of live words. */
+  cards: ReviewState[];
+  /** Live themes «на паузе». */
+  paused: Set<string>;
+  /** Live words not «на паузе» (themselves or their theme): the only ones review shows, due or new. */
+  inReview: Map<string, Word>;
+  /** Live review logs since `weekAgo`, of any word (deleted ones too). */
+  liveLogs: ReviewLog[];
+  /** Live review logs of the study day: the day's budgets count every one, also of words deleted since. */
+  dayLogs: ReviewLog[];
+}
+
+function todayLibrary(input: {
+  now: Date;
+  day: StudyDay;
+  weekAgo: Date;
+  folders: readonly Folder[];
+  words: readonly Word[];
+  states: readonly ReviewState[];
+  /** Review logs reaching back to `weekAgo` at least (tombstones included). */
+  logs: readonly ReviewLog[];
+}): TodayLibrary {
+  const { day } = input;
+  const dayStart = day.start.getTime();
+  const dayEnd = day.end.getTime();
+  const wordsById = new Map(input.words.filter((w) => w.deleted_at === null).map((w) => [w.id, w]));
+  const paused = pausedFolderIds(input.folders);
+  const liveLogs = input.logs.filter((l) => l.deleted_at === null && Date.parse(l.review) >= input.weekAgo.getTime());
+  return {
+    now: input.now,
+    day,
+    live: new Map(liveFolders(input.folders).map((f) => [f.id, f])),
+    wordsById,
+    cards: input.states.filter((s) => s.deleted_at === null && wordsById.has(s.word_id)),
+    paused,
+    inReview: new Map([...wordsById].filter(([, w]) => !isPaused(w, paused))),
+    liveLogs,
+    dayLogs: liveLogs.filter((l) => Date.parse(l.review) >= dayStart && Date.parse(l.review) < dayEnd),
+  };
+}
+
+interface PlanTodayOptions {
+  /** Narrows which cards are picked (a round's themes); the day's numbers stay global, as in the app. */
+  match?: (w: Word) => boolean;
+  /** One side only; undefined = both, with burying and sibling spacing (as study_summary plans). */
+  direction?: Direction;
+  /** Spread new words over themes; off for a round of one theme (lib/session.ts `isOneTheme`). */
+  spreadThemes?: boolean;
+}
+
+/** Today's queue and numbers exactly as the app plans them (lib/core/plan.ts `planDay`). */
+function planToday(lib: TodayLibrary, plan: StudyPlan, opts: PlanTodayOptions = {}): PlanResult {
+  return planDay({
+    now: lib.now,
+    dayStart: lib.day.start,
+    dayEnd: lib.day.end,
+    states: lib.cards,
+    words: lib.inReview,
+    ...(opts.match ? { match: opts.match } : {}),
+    ...(opts.direction ? { direction: opts.direction } : {}),
+    todayLogs: lib.dayLogs,
+    logs7d: lib.liveLogs.filter((l) => Date.parse(l.review) < lib.day.start.getTime()),
+    plan,
+    // «Всё равно добавить новые» is a device setting the connector can't see.
+    overrideNewToday: false,
+    r: retrievability,
+    // The same level and frequency signals as the app's (lib/session.ts), so the orders agree.
+    ...(plan.new_order === "added" ? {} : levelSignals(serverLevels())),
+    folderOrder: folderOrderOf([...lib.live.values()]),
+    ...(opts.spreadThemes === false ? { spreadThemes: false } : {}),
+  });
+}
+
+interface Today {
+  lib: TodayLibrary;
+  /** The saved «План повторения». */
+  plan: StudyPlan;
+  folders: Folder[];
+  states: ReviewState[];
+  /** Review logs since a week back at least (tombstones included), for «Тренировка». */
+  logs: ReviewLog[];
+  /** Custom-field definitions, for the cards' «Свои поля». */
+  defs: FieldDef[];
+}
+
+/** Reads what today's plan needs (play_cards, setup_review): the library, a week of logs and the saved plan. */
+async function loadToday(deps: ToolDeps): Promise<Today> {
+  const now = deps.now();
+  const { day, weekAgo } = studyWindow(now, deps.timeZone);
+  // «Тренировка» looks back PRACTICE_DAYS × 24 h, which a DST change can put before weekAgo.
+  const from = new Date(Math.min(weekAgo.getTime(), now.getTime() - PRACTICE_DAYS * DAY_MS));
+  const [folders, words, states, logs, prefs, defs] = await Promise.all([
+    deps.repo.folders(),
+    deps.repo.words(),
+    deps.repo.states(),
+    deps.repo.logsSince(from.toISOString()),
+    deps.repo.userPrefs(),
+    deps.repo.fieldDefs(),
+  ]);
+  return { lib: todayLibrary({ now, day, weekAgo, folders, words, states, logs }), plan: savedStudyPlan(prefs).plan, folders, states, logs, defs };
+}
 
 /** The saved «План повторения» row, and the plan it holds (the migrated default without one). */
 function savedStudyPlan(prefs: readonly UserPref[]): { row: UserPref | undefined; plan: StudyPlan } {
@@ -2183,6 +2312,22 @@ function onlyBlock(only: ExerciseScope, available: number, themes: boolean, verb
   return { only, available, suggested_items: suggested, note };
 }
 
+/** exercise_material `word_ids` takes at most this many words (a round of cards' misses). */
+const WORD_IDS_MAX = 30;
+
+/** exercise_material's `scope` additions for `word_ids`: how many of them are usable and what to build. */
+function wordIdsBlock(asked: readonly string[], usable: readonly Word[], withOnly: boolean) {
+  const ids = new Set(usable.map((w) => w.id));
+  const left = uniqueIds(asked).filter((id) => !ids.has(id));
+  const available = usable.length;
+  const suggested = scopeSuggestedItems(available);
+  const note =
+    available === 0
+      ? "None of these words can be used now (deleted, «на паузе» or outside the themes): don't make a set; tell the user (in Russian) in one line."
+      : `Use only these ${available} words (words[]): no other library words and no new_words. Make ${suggested} questions (at most ${available}×3, at least ${ITEMS_MIN}): each word in 2–3 different question types (pairs need at least 4 words), the same word never twice in a row${withOnly ? `, and pass scope with the set` : ""}.`;
+  return { word_ids: available, ...(left.length ? { left_out: left } : {}), suggested_items: suggested, note };
+}
+
 /**
  * How many of a set's items are about focus words: an item with a word_id counts when that word is
  * one; a pairs item counts when at least half of its words are (an item is one question either
@@ -2400,7 +2545,7 @@ export const exerciseMaterial = tool({
   name: "exercise_material",
   title: "Material for an exercise",
   description:
-    `Read what an exercise set («Упражнения») should practise, before create_exercise_set (a set for the app) or play_exercises / exercise_artifact (a round in the chat). \`words\`: the live words of the given themes (all themes without \`folders\`), weakest first, each with \`signals\` merged from the last \`days\`: exercise answers (ex_attempts, ex_misses, confusions = wrong options the user picked), reviews graded «Снова»/«Трудно» (review_misses), lapses, due today and difficult cards. Words «на паузе» and deleted words are left out, and so are themes «на паузе» unless named in \`folders\`. With \`topic\` (a free-text subject like «вечеринка»), \`topic_matches\` lists saved words that fit it: use them by word_id and never put them in new_words (a muted one can't be used at all). \`recent_sets\` are the latest sets with their words, so the next one doesn't repeat them. \`focus\` is the user's «Чаще в упражнениях» (from Settings, or \`focus\` in the input when the user asks otherwise in this chat): when it is on, the matching words (difficult and/or due today) come first and carry \`focus: true\`, and its \`note\` says how many of the questions must be about them; honour it. With \`only\` («по трудным словам», «по словам к повторению», «без тем»), \`words\` are only the user's difficult and/or due words from every theme (\`folders\` still narrows), \`topic\` and \`focus\` are left out, and \`scope\` says how many there are (\`available\`), how many questions to make (\`suggested_items\`: fewer words → a shorter set, at least ${ITEMS_MIN}) and what to do when there are none. With \`verbs\` («упражнение на спряжение глаголов»), \`words\` are only the verbs conjugate items can ask about (\`conjugable: true\`: a saved conjugation or one the app builds). Each word carries its «Уровень языка» (\`level\`). \`level\` says the levels to write the questions at: the ones asked (\`levels\` in the input, «уровня B1» or «уровня B1–B2» in the request) or, without them, the median level of the words (\`from: "auto"\`); follow \`guide\` for the sentences, distractors, item mix and new words.`,
+    `Read what an exercise set («Упражнения») should practise, before create_exercise_set (a set for the app) or play_exercises / exercise_artifact (a round in the chat). \`words\`: the live words of the given themes (all themes without \`folders\`), weakest first, each with \`signals\` merged from the last \`days\`: exercise answers (ex_attempts, ex_misses, confusions = wrong options the user picked), reviews graded «Снова»/«Трудно» (review_misses), lapses, due today and difficult cards. Words «на паузе» and deleted words are left out, and so are themes «на паузе» unless named in \`folders\`. With \`topic\` (a free-text subject like «вечеринка»), \`topic_matches\` lists saved words that fit it: use them by word_id and never put them in new_words (a muted one can't be used at all). \`recent_sets\` are the latest sets with their words, so the next one doesn't repeat them. \`focus\` is the user's «Чаще в упражнениях» (from Settings, or \`focus\` in the input when the user asks otherwise in this chat): when it is on, the matching words (difficult and/or due today) come first and carry \`focus: true\`, and its \`note\` says how many of the questions must be about them; honour it. With \`only\` («по трудным словам», «по словам к повторению», «без тем»), \`words\` are only the user's difficult and/or due words from every theme (\`folders\` still narrows), \`topic\` and \`focus\` are left out, and \`scope\` says how many there are (\`available\`), how many questions to make (\`suggested_items\`: fewer words → a shorter set, at least ${ITEMS_MIN}) and what to do when there are none. With \`word_ids\` («Упражнение по ошибкам» after a round of cards), \`words\` are only those words, \`topic\` and \`focus\` are left out, and \`scope\` says how many can be used and how many questions to make. With \`verbs\` («упражнение на спряжение глаголов»), \`words\` are only the verbs conjugate items can ask about (\`conjugable: true\`: a saved conjugation or one the app builds). Each word carries its «Уровень языка» (\`level\`). \`level\` says the levels to write the questions at: the ones asked (\`levels\` in the input, «уровня B1» or «уровня B1–B2» in the request) or, without them, the median level of the words (\`from: "auto"\`); follow \`guide\` for the sentences, distractors, item mix and new words.`,
   input: z.object({
     folders: jsonArray(z.array(folderSelector).max(10)).nullable().optional().describe(`Themes to draw words from (id, slug, name or "${INBOX_SELECTOR}"); default every theme.`),
     topic: z.string().trim().max(TOPIC_MAX).nullable().optional().describe("A free-text topic («вечеринка», «в баре»), when the user asked for one."),
@@ -2420,6 +2565,12 @@ export const exerciseMaterial = tool({
       .optional()
       .describe(
         "A set made ONLY of the user's own words, from every theme: difficult (cards rated «трудное»), due (due today) or both. For «упражнение по трудным словам / по словам к повторению» (the app's request says «из всех тем»). Leave it out for an ordinary set.",
+      ),
+    word_ids: jsonArray(z.array(z.string().trim().min(1).max(64)).min(1).max(WORD_IDS_MAX))
+      .nullable()
+      .optional()
+      .describe(
+        `Only these words (at most ${WORD_IDS_MAX}): «Упражнение по ошибкам» after a round of cards in the chat (its message names them). Like \`only\`, \`topic\` and \`focus\` are left out; \`folders\` and \`only\` still narrow.`,
       ),
     verbs: z
       .boolean()
@@ -2456,7 +2607,8 @@ export const exerciseMaterial = tool({
     const only = args.only ?? null;
     // A paused theme («на паузе») is left out of «all themes», but a theme named in `folders` is used as asked
     // (not with `only`: a scoped set takes the words the app counts, never paused ones).
-    const scoped = only ? scopeWords(words, ctx, only, targetIds) : exerciseScope(words, ctx, targetIds);
+    const picked = args.word_ids?.length ? new Set(args.word_ids) : null;
+    const scoped = (only ? scopeWords(words, ctx, only, targetIds) : exerciseScope(words, ctx, targetIds)).filter((w) => !picked || picked.has(w.id));
     const verbs = args.verbs === true;
     if (args.tenses?.length && !verbs) throw new ToolError("tenses is for a verb set: pass verbs: true with it, or leave tenses out.");
     const tenses = verbs ? pickedTenses(args.tenses) : null;
@@ -2466,7 +2618,7 @@ export const exerciseMaterial = tool({
     // «Чаще в упражнениях»: the focus words first, then the weakness order.
     const ranked = inScope
       .map((w) => ({ w, s: signals.get(w.id)! }))
-      .map((r) => ({ ...r, focus: !only && matchesFocus(focus.target, r.s) }))
+      .map((r) => ({ ...r, focus: !only && !picked && matchesFocus(focus.target, r.s) }))
       .sort(
         (a, b) =>
           Number(b.focus) - Number(a.focus) ||
@@ -2476,18 +2628,20 @@ export const exerciseMaterial = tool({
           a.w.id.localeCompare(b.w.id),
       );
     // A scoped set ignores the topic and the focus: every word in it is a focus word already.
-    const topic = only ? undefined : cleanText(args.topic ?? undefined);
+    const narrowed = !!only || !!picked;
+    const topic = narrowed ? undefined : cleanText(args.topic ?? undefined);
     return {
       scope: {
         folders: targets ? targets.map(folderRef) : "all",
         ...(topic ? { topic } : {}),
         days: args.days,
         ...(only ? onlyBlock(only, inScope.length, !!targets, verbs) : {}),
+        ...(picked ? wordIdsBlock(args.word_ids!, inScope, !!only) : {}),
       },
       total: inScope.length,
       ...(tenses ? { tenses } : {}),
       level: levelBlock(args.levels ?? [], inScope),
-      ...(only ? {} : { focus: focusBlock(focus, args.focus ? "request" : "settings", ranked.filter((r) => r.focus).length) }),
+      ...(narrowed ? {} : { focus: focusBlock(focus, args.focus ? "request" : "settings", ranked.filter((r) => r.focus).length) }),
       words: ranked.slice(0, args.limit).map(({ w, s, focus: on }) => ({
         ...materialWord(w, ctx.live),
         status: wordStatus(ctx.statesByWord.get(w.id) ?? []),
@@ -2503,6 +2657,8 @@ export const exerciseMaterial = tool({
         ? `A verb set is a short test: ${VERB_SET_SIZE} items (6–10, at most ${CONJUGATE_MAX} conjugate), mostly conjugate items (word_id, tense, person; the server writes the form and the options) ${verbTenseRecipe(tenses)}; the same verb at most twice and never back to back. Send it in one create_exercise_set call (in the chat: play_exercises)${tenses ? ` with tenses: ${JSON.stringify(tenses)}` : ""}${only ? ` with scope: "${only}" (scope.note)` : ""}.`
         : only
           ? "Follow scope.note: only these words, each in 2–3 types, the weakest late; send them in one create_exercise_set call with scope (in the chat: play_exercises)."
+          : picked
+            ? "Follow scope.note: only these words, each in 2–3 types, the weakest late; send them in one call (in the chat: play_exercises)."
           : "Build 10–15 items of at least 3 types, put the weakest words late and twice, and send them in one create_exercise_set call (in the chat: play_exercises).",
     };
   },
@@ -3332,6 +3488,561 @@ export const restoreExerciseSet = tool({
 });
 
 // ---------------------------------------------------------------------------------------------
+// «Карточки в чате» (lib/core/chat-cards.ts): play_cards shows a round of cards on their own page
+// (an MCP App, CHAT_CARDS_URI) and writes nothing. In «По расписанию» the page grades each card on
+// the user's tap with grade_cards, by the app's FSRS rules (lib/scheduler.ts `grade`, the same
+// review_log shape, so the day's plan and «Прогресс» count it), and takes the last answer back with
+// undo_grades; both are hidden from the model (`visibility: ["app"]`): a grade is a tap, never
+// Claude's reading of the chat. «Тренировка» writes nothing. setup_review shows «Повторить слова»
+// on the review page; its «Начать ›» sends the chosen request as the user's message.
+
+const CARDS_META = { ui: { resourceUri: CHAT_CARDS_URI }, "ui/resourceUri": CHAT_CARDS_URI };
+/** Tools only the cards page calls: the host keeps them out of the model's tool list. */
+const APP_ONLY_META = { ui: { visibility: ["app"] } };
+
+const CARDS_RU = ["карточка", "карточки", "карточек"] as const;
+const DIRECTION_VALUES = ["fr_ru", "ru_fr", "both"] as const satisfies readonly ChatCardsDirection[];
+const PRACTICE_SCOPE_VALUES = ["today", "recent", "difficult", "due", "all"] as const satisfies readonly ChatPracticeScope[];
+const PRACTICE_SCOPE_LABELS: Record<ChatPracticeScope, string> = {
+  today: "Ошибки сегодня",
+  recent: "Ошибки за неделю",
+  difficult: "Трудные слова",
+  due: "К повторению сегодня",
+  all: "Все карточки",
+};
+/** The «Карточек» choices of «Повторить слова». */
+const CARDS_SETUP_SIZES = [10, 20, 30] as const;
+const NO_COUNTS: ChatCardsCounts = { due: 0, new: 0, waiting: 0, deferred: 0 };
+
+/**
+ * Catalog numbers («FR · № 007»): position by created_at among live words, 1-based, the same
+ * timestamp sharing a number, as the app counts them (components/review/data.ts `wordOrdinals`,
+ * not importable here).
+ */
+function catalogNumbers(words: Iterable<Pick<Word, "id" | "created_at">>): Map<string, number> {
+  const sorted = [...words].sort((a, b) => (a.created_at < b.created_at ? -1 : a.created_at > b.created_at ? 1 : 0));
+  const out = new Map<string, number>();
+  let rank = 0;
+  let previous: string | null = null;
+  sorted.forEach((w, i) => {
+    if (w.created_at !== previous) rank = i + 1;
+    previous = w.created_at;
+    out.set(w.id, rank);
+  });
+  return out;
+}
+
+/** The three sub-labels under «Не знаю / Сложно / Знаю» for the card's next answer at `now`. */
+function chatIntervals(state: ReviewState, now: Date): ChatIntervals {
+  const all = previewIntervals(state, now);
+  return { 1: all[1], 2: all[2], 3: all[3] };
+}
+
+interface CardFaces {
+  live: ReadonlyMap<string, Folder>;
+  defs: readonly FieldDef[];
+  levels: LevelResolver;
+  numbers: ReadonlyMap<string, number>;
+  now: Date;
+}
+
+/** A queue item as the page shows it: both faces, and in «По расписанию» the interval labels. */
+function chatCard(item: PlanItem, faces: CardFaces, scheduled: boolean): ChatCard {
+  const w = item.word;
+  const fields = fieldsForDisplay(w, faces.defs).filter((f) => f.value);
+  const level = faces.levels.level(w);
+  return {
+    key: item.key,
+    word_id: w.id,
+    direction: item.direction,
+    is_new: item.isNew,
+    expected: item.state.updated_at,
+    intervals: scheduled ? chatIntervals(item.state, faces.now) : null,
+    number: faces.numbers.get(w.id) ?? null,
+    fr: w.fr,
+    ru: w.ru,
+    pos: w.pos,
+    gender: w.gender,
+    slang_level: w.slang_level,
+    verlan: w.verlan,
+    example_fr: w.example_fr,
+    example_ru: w.example_fr ? w.example_ru : null,
+    note: w.note,
+    origin: w.origin ?? null,
+    fields: fields.slice(0, CARD_FIELDS_MAX).map(({ label, value }) => ({ label, value })),
+    fields_more: Math.max(0, fields.length - CARD_FIELDS_MAX),
+    level: level?.level ?? null,
+    level_estimated: level?.estimated ?? false,
+    folder_name: folderRef(placeOf(w, faces.live)).name,
+  };
+}
+
+/** Themes named for a round: their ids (null = «Входящие») and the label («Еда, Жильё»); null = every theme. */
+function roundThemes(selectors: readonly string[] | null | undefined, folders: readonly Folder[]): { ids: Set<string | null>; names: string[]; label: string } | null {
+  if (!selectors?.length) return null;
+  const picked = [...new Map(selectors.map((s) => resolveFolder(s, folders)).map((f) => [f?.id ?? null, f])).values()];
+  const names = picked.map((f) => folderRef(f).name);
+  return { ids: new Set(picked.map((f) => f?.id ?? null)), names, label: names.join(", ") };
+}
+
+/**
+ * A «Тренировка» round's cards, nothing written: today / recent / all as the app's practice rounds
+ * (lib/core/practice.ts `practiceQueue`); difficult / due the cards the app rates «трудное» or due
+ * today, of the words exercise_material's `only` takes (scopeWords): the most lapses first, or in an
+ * order fixed for the day.
+ */
+function practiceItems(deps: ToolDeps, t: Today, scope: ChatPracticeScope, targetIds: ReadonlySet<string | null> | null, direction: Direction | undefined, limit: number): PlanItem[] {
+  const { lib } = t;
+  if (scope === "difficult" || scope === "due") {
+    const ctx = viewContext(t.folders, t.states, [], deps);
+    const items: PlanItem[] = [];
+    for (const w of scopeWords([...lib.wordsById.values()], ctx, scope, targetIds)) {
+      for (const card of ctx.statesByWord.get(w.id) ?? []) {
+        if (direction && card.direction !== direction) continue;
+        if (scope === "difficult" ? cardStatus(card) !== "difficult" : !isDueToday(card, ctx.dayEnd)) continue;
+        items.push({ key: card.id, word: w, state: card, direction: card.direction, isNew: card.state === 0 });
+      }
+    }
+    const seed = lib.day.start.toISOString();
+    items.sort((a, b) =>
+      scope === "difficult"
+        ? b.state.lapses - a.state.lapses || a.state.stability - b.state.stability || b.state.difficulty - a.state.difficulty || a.key.localeCompare(b.key)
+        : fnv1a(seed + a.key) - fnv1a(seed + b.key) || a.key.localeCompare(b.key),
+    );
+    return items.slice(0, limit);
+  }
+  const words = new Map([...lib.inReview].filter(([, w]) => !targetIds || targetIds.has(placeOf(w, lib.live)?.id ?? null)));
+  const from = scope === "today" ? lib.day.start : new Date(lib.now.getTime() - PRACTICE_DAYS * DAY_MS);
+  return practiceQueue({ scope, words, states: lib.cards, logs: scope === "all" ? [] : t.logs, from, limit, ...(direction ? { direction } : {}) });
+}
+
+const appUrlOf = (deps: ToolDeps) => (deps.appUrl ? deps.appUrl.replace(/\/+$/, "") : null);
+
+export const playCards = tool({
+  name: "play_cards",
+  title: "Review cards in the chat",
+  description: `Show a round of the user's flashcards in the chat («Карточки»: the app's review card, flip, «Не знаю / Сложно / Знаю» with the next intervals). mode "schedule" (default, «По расписанию»): the next ${CARDS_ROUND_DEFAULT} cards (\`limit\` ${CARDS_ROUND_MIN}–${CARDS_ROUND_MAX}) of today's queue exactly as the app plans it (study_summary's numbers), and the card itself saves each grade on the user's tap and offers undo; a card answered «Не знаю» comes back in the round. mode "practice" («Тренировка», nothing saved) with \`scope\`: ${PRACTICE_SCOPE_VALUES.map((s) => `${s} «${PRACTICE_SCOPE_LABELS[s]}»`).join(", ")}. \`folders\` narrows to themes, \`direction\` to one side. \`next: "exercise"\` when the user chose «Карточки, потом упражнение»: the done screen then offers «Упражнение по ошибкам ›», which sends you a message with the missed words. Writes nothing itself. Never grade, save or undo cards yourself, and never play_exercises in the same reply. Use it when the request already says to review cards here («повтори карточки здесь», the message of setup_review's «Начать ›»; «потренируй ошибки» → mode "practice"); for a bare «повтори слова» call setup_review first. If the user says they see no cards, or the host shows no apps, offer to review in the app (app_url).`,
+  input: z.object({
+    mode: z.enum(["schedule", "practice"]).nullable().optional().describe('"schedule" (default): real grades by the plan; "practice": «Тренировка», nothing saved (default when `scope` is given).'),
+    folders: jsonArray(z.array(folderSelector).max(10)).nullable().optional().describe(`Themes of the round (id, slug, name or "${INBOX_SELECTOR}"); default every theme not «на паузе».`),
+    direction: z.enum(DIRECTION_VALUES).nullable().optional().describe('"fr_ru", "ru_fr" or "both" (default: both sides, as the app plans the day).'),
+    scope: z
+      .enum(PRACTICE_SCOPE_VALUES)
+      .nullable()
+      .optional()
+      .describe("«Тренировка» only: today = missed today, recent = missed or hard this week plus the weakest (default), difficult = cards rated «трудное», due = due today, all = every card of the themes."),
+    limit: z.number().int().min(CARDS_ROUND_MIN).max(CARDS_ROUND_MAX).nullable().optional().describe(`Cards in the round (default ${CARDS_ROUND_DEFAULT}).`),
+    next: z.enum(["exercise"]).nullable().optional().describe("«Карточки, потом упражнение»: the done screen offers the exercise on the misses first."),
+  }),
+  write: false,
+  meta: CARDS_META,
+  annotations: READ,
+  async run(deps, args) {
+    const t = await loadToday(deps);
+    const { lib } = t;
+    const now = lib.now;
+    const mode: ChatCardsMode = args.mode ?? (args.scope ? "practice" : "schedule");
+    const themes = roundThemes(args.folders, t.folders);
+    const direction = args.direction === "fr_ru" || args.direction === "ru_fr" ? args.direction : undefined;
+    const limit = args.limit ?? CARDS_ROUND_DEFAULT;
+    const scope: ChatPracticeScope | null = mode === "practice" ? (args.scope ?? "recent") : null;
+    let items: PlanItem[];
+    let counts = NO_COUNTS;
+    let remaining = 0;
+    let nextDue: string | null = null;
+    if (scope) items = practiceItems(deps, t, scope, themes?.ids ?? null, direction, limit);
+    else {
+      const ids = themes?.ids;
+      const result = planToday(lib, t.plan, {
+        ...(ids ? { match: (w: Word) => ids.has(placeOf(w, lib.live)?.id ?? null), spreadThemes: ids.size !== 1 } : {}),
+        direction,
+      });
+      items = result.queue.slice(0, limit);
+      counts = { due: result.counts.due, new: result.counts.new, waiting: result.counts.waiting, deferred: result.counts.deferred };
+      remaining = result.queue.length - items.length;
+      nextDue = result.nextDue;
+    }
+    const faces: CardFaces = { live: lib.live, defs: t.defs, levels: serverLevels(), numbers: catalogNumbers(lib.wordsById.values()), now };
+    const cards = items.map((item) => chatCard(item, faces, mode === "schedule"));
+    const builtAt = now.toISOString();
+    const folderLabel = themes?.label ?? "Все темы";
+    const session: ChatCardsSession = {
+      kind: "kartochki-cards",
+      version: 1,
+      mode,
+      round_id: createHash("sha256").update(`${mode}\n${builtAt}\n${cards.map((c) => c.key).join(",")}`).digest("hex").slice(0, 16),
+      built_at: builtAt,
+      day_end: lib.day.end.toISOString(),
+      title: (scope ? "Тренировка" : "Повторение") + (themes ? ` · ${folderLabel}` : ""),
+      folder_label: folderLabel,
+      folder_names: themes?.names ?? [],
+      direction: args.direction ?? "both",
+      direction_label: directionLabel(args.direction ?? "both"),
+      scope,
+      cards,
+      counts,
+      remaining,
+      next_due: nextDue,
+      next: args.next ?? null,
+      app_url: appUrlOf(deps),
+    };
+    const fresh = cards.filter((c) => c.is_new).length;
+    const noApps = `Если пользователь скажет, что карточек не видно (или хост не показывает приложения), предложи повторить в приложении${session.app_url ? `: ${session.app_url}` : ""}.`;
+    let message: string;
+    if (cards.length === 0) {
+      message = scope
+        ? `Для тренировки «${PRACTICE_SCOPE_LABELS[scope]}» (${folderLabel}) сейчас нет карточек: скажи об этом одной строкой и предложи другую тренировку или повторение по расписанию.`
+        : `Сейчас нечего повторять (${folderLabel})${nextDue ? `; следующие карточки вернутся в ${nextDue} (ISO, скажи по-человечески, «через N мин»)` : ""}: скажи об этом одной строкой; можно предложить тренировку (play_cards mode "practice") или упражнение.`;
+    } else {
+      message =
+        (scope
+          ? `Показал тренировку «${PRACTICE_SCOPE_LABELS[scope]}» в чате: ${ruCount(cards.length, CARDS_RU)} (${folderLabel}); оценки в тренировке ничего не меняют в расписании.`
+          : `Показал повторение в чате: ${ruCount(cards.length, CARDS_RU)}${fresh ? `, из них ${fresh} новых` : ""} (${folderLabel})${remaining ? `; после раунда ещё ${remaining} к повторению` : ""}. Оценки ставит и сохраняет сама карточка по нажатиям пользователя: не оценивай, не сохраняй и не отменяй их сам.`) +
+        ` Не пиши слова, переводы и ответы в чате; скажи одной строкой, что карточки готовы выше.` +
+        (session.next === "exercise" ? ` В конце карточка предложит «Упражнение по ошибкам ›»: упражнение только по этому сообщению пользователя, не вызывай play_exercises сейчас.` : "") +
+        ` ${noApps}`;
+    }
+    return { session, message };
+  },
+  reply: (out) => ({ content: [{ type: "text", text: out.message }], structuredContent: out.session as unknown as Record<string, unknown> }),
+});
+
+/** The review_log id of a chat grade: "cr-" + sha256(card id, `expected`), so a retried answer lands on the same row. */
+export const cardLogId = (cardId: string, expected: string): string =>
+  CARD_LOG_PREFIX + createHash("sha256").update(`${cardId}\n${toIso(expected)}`).digest("hex").slice(0, 24);
+
+/** The card is the one `log` graded into (nothing changed it since): what an already_saved answer may still undo. */
+const gradedBy = (state: ReviewState, log: ReviewLog) =>
+  !!log.prev && state.deleted_at === null && state.reps === log.prev.reps + 1 && state.stability === log.stability && state.difficulty === log.difficulty;
+
+const sameTime = (a: string | null, b: string | null) => (a === null || b === null ? a === b : Date.parse(a) === Date.parse(b));
+
+/** The card is back as it was before `log` (an undo that restored it but did not get to soft-delete the log). */
+const restoredTo = (state: ReviewState, prev: NonNullable<ReviewLog["prev"]>) =>
+  Date.parse(state.due) === Date.parse(prev.due) &&
+  state.state === prev.state &&
+  state.reps === prev.reps &&
+  state.lapses === prev.lapses &&
+  state.stability === prev.stability &&
+  state.difficulty === prev.difficulty &&
+  state.learning_steps === prev.learning_steps &&
+  sameTime(state.last_review, prev.last_review);
+
+/** Soft-deletes review_log rows (an undone grade; `onlyAsWritten`: an orphan of a lost compare-and-set, only while the row is still the one written). */
+async function tombstoneLogs(deps: ToolDeps, logs: readonly ReviewLog[], onlyAsWritten = false): Promise<void> {
+  if (logs.length === 0) return;
+  const now = deps.now();
+  const rows = logs.map((l) => {
+    const stamp = stampAfter(now, l.updated_at);
+    return { ...l, deleted_at: stamp, updated_at: stamp };
+  });
+  if (onlyAsWritten) await deps.repo.replace("review_log", rows.map((row, i) => ({ row, expected: logs[i].updated_at })));
+  else await deps.repo.upsert("review_log", rows);
+}
+
+type CardRef = Pick<GradeAnswerResult, "word_id" | "direction" | "key">;
+
+/** One answer's result with the card as stored now (null fields when it is gone). */
+function cardOutcome(card: CardRef, status: GradeStatus, logId: string | null, state: ReviewState | null, now: Date): GradeAnswerResult {
+  return {
+    ...card,
+    status,
+    log_id: logId,
+    expected: state?.updated_at ?? null,
+    due: state?.due ?? null,
+    state: state?.state ?? null,
+    intervals: state ? chatIntervals(state, now) : null,
+    returns_in_ms: state ? Date.parse(state.due) - now.getTime() : null,
+  };
+}
+
+/**
+ * After a card write that failed part-way: which cards are stored as written (the ones the database
+ * confirmed, else the ones a fresh read shows with the new updated_at) and which are still as
+ * expected (`failed`: not written, safe to send again); the rest changed meanwhile. `unsure` when
+ * the read failed too.
+ */
+async function confirmWritten(deps: ToolDeps, rows: readonly { row: ReviewState; expected: string }[], error: unknown): Promise<{ written: Set<string>; failed: Set<string>; unsure: boolean }> {
+  const written = new Set(error instanceof PartialWriteError ? error.written : []);
+  const failed = new Set<string>();
+  const rest = rows.filter((r) => !written.has(r.row.id));
+  if (rest.length === 0) return { written, failed, unsure: false };
+  const stored = await deps.repo.states(uniqueIds(rest.map((r) => r.row.word_id))).catch(() => null);
+  if (!stored) return { written, failed, unsure: true };
+  const byId = new Map(stored.map((s) => [s.id, s]));
+  for (const r of rest) {
+    const at = byId.get(r.row.id)?.updated_at;
+    if (at !== undefined && Date.parse(at) === Date.parse(r.row.updated_at)) written.add(r.row.id);
+    else if (at !== undefined && Date.parse(at) === Date.parse(r.expected)) failed.add(r.row.id);
+  }
+  return { written, failed, unsure: false };
+}
+
+const RETRY_SAME = "Sending the same answers again is safe: answers already saved come back already_saved.";
+
+const gradeAnswerSchema = z.object({
+  word_id: z.string().trim().min(1).max(64),
+  direction: z.enum(["fr_ru", "ru_fr"]),
+  rating: z.number().int().min(1).max(3).describe("1 «Не знаю», 2 «Сложно», 3 «Знаю»."),
+  expected: isoTime.describe("The card's updated_at the answer was given on (the round's, or the card's last grade / undo result)."),
+  answered_at: isoTime.describe("When the user tapped."),
+});
+
+export const gradeCards = tool({
+  name: GRADE_TOOL,
+  title: "Save card grades",
+  description: `Called by the cards page only (play_cards), on the user's taps: saves 1–${GRADE_BATCH_MAX} answers of «По расписанию» in order, each graded by the app's FSRS rules at the time it was tapped (at most ${ANSWER_MAX_AGE_MS / 3_600_000} h back, never before the study day began), and only while the card is still as \`expected\`. Per answer: saved, already_saved (the same answer again), conflict (the card changed meanwhile, e.g. on the phone: nothing written) or gone (the word or the card was deleted). The result has each card as stored now (the next \`expected\`, due, fresh intervals, returns_in_ms) and the \`undo\` for undo_grades.`,
+  input: z.object({ answers: jsonArray(z.array(gradeAnswerSchema).min(1).max(GRADE_BATCH_MAX)) }),
+  write: true,
+  retryHint: RETRY_SAME,
+  meta: APP_ONLY_META,
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  async run(deps, args) {
+    const now = deps.now();
+    const answers = args.answers.map((a) => ({ ...a, key: reviewStateId(a.word_id, a.direction), rating: a.rating as ChatCardRating, logId: cardLogId(reviewStateId(a.word_id, a.direction), a.expected) }));
+    const twice = answers.find((a, i) => answers.findIndex((b) => b.key === a.key) !== i);
+    if (twice) throw new ToolError(`answers: the card ${twice.key} comes twice. Send one answer per card; the next one goes with the \`expected\` of this one's result.`);
+    const wordIds = uniqueIds(answers.map((a) => a.word_id));
+    const [words, states, logs] = await Promise.all([deps.repo.wordsByIds(wordIds), deps.repo.states(wordIds), deps.repo.logsByIds(answers.map((a) => a.logId))]);
+    const wordById = new Map(words.map((w) => [w.id, w]));
+    const stateById = new Map(states.map((s) => [s.id, s]));
+    const logById = new Map(logs.map((l) => [l.id, l]));
+    const day = studyDay(now, deps.timeZone);
+    const earliest = Math.max(now.getTime() - ANSWER_MAX_AGE_MS, day.start.getTime());
+
+    const results: GradeAnswerResult[] = [];
+    const undo: UndoGradeItem[] = [];
+    const pending: { at: number; card: CardRef; log: ReviewLog; change: { row: ReviewState; expected: string } }[] = [];
+    for (const a of answers) {
+      const card: CardRef = { word_id: a.word_id, direction: a.direction, key: a.key };
+      const word = wordById.get(a.word_id);
+      const stored = stateById.get(a.key);
+      // «На паузе» doesn't stop a grade: the card was shown before the pause.
+      if (!word || word.deleted_at !== null || !stored || stored.deleted_at !== null) {
+        results.push(cardOutcome(card, "gone", null, null, now));
+        continue;
+      }
+      const prior = logById.get(a.logId);
+      if (Date.parse(stored.updated_at) !== Date.parse(a.expected)) {
+        // The card moved on: by this very answer before (a retry, a remount), or by something else.
+        const again = prior && prior.deleted_at === null && prior.rating === a.rating;
+        results.push(cardOutcome(card, again ? "already_saved" : "conflict", again ? a.logId : null, stored, now));
+        if (again && gradedBy(stored, prior)) undo.push({ log_id: a.logId, expected: stored.updated_at });
+        continue;
+      }
+      // Still as expected: grade it, also over a row of an earlier try whose card write did not land.
+      // Never before the review the card was graded from (a page clock behind), so the logs keep their order.
+      const after = stored.last_review ? Date.parse(stored.last_review) + 1 : -Infinity;
+      const at = new Date(Math.min(now.getTime(), Math.max(Date.parse(a.answered_at), earliest, after)));
+      const graded = grade(stored, a.rating, at);
+      pending.push({
+        at: results.length,
+        card,
+        log: { ...graded.log, id: a.logId, updated_at: stampAfter(now, prior?.updated_at) },
+        change: { row: { ...graded.state, updated_at: stampAfter(now, stored.updated_at) }, expected: stored.updated_at },
+      });
+      results.push(cardOutcome(card, "gone", null, null, now)); // placeholder, set below
+    }
+
+    if (pending.length > 0) {
+      // The log first: a card graded without its log would be a review the day's plan never counts.
+      const logged = new Map((await deps.repo.upsert("review_log", pending.map((p) => p.log))).map((r) => [r.id, r]));
+      const toWrite = pending.filter((p) => {
+        const row = logged.get(p.log.id);
+        return !!row && Date.parse(row.updated_at) === Date.parse(p.log.updated_at);
+      });
+      let written: Set<string>;
+      // A write that failed for some cards (not "changed meanwhile"): the page sends the answers again.
+      let failure: unknown = null;
+      let unsure = false;
+      try {
+        written = new Set((await deps.repo.replace("review_state", toWrite.map((p) => p.change))).map((r) => r.id));
+      } catch (error) {
+        const confirmed = await confirmWritten(deps, toWrite.map((p) => p.change), error);
+        written = confirmed.written;
+        unsure = confirmed.unsure;
+        if (unsure || confirmed.failed.size > 0) failure = error;
+      }
+      const lost = pending.filter((p) => !written.has(p.change.row.id));
+      const moved = new Map(lost.length && !unsure ? (await deps.repo.states(uniqueIds(lost.map((p) => p.card.word_id))).catch(() => [])).map((s) => [s.id, s]) : []);
+      // The same answer sent again while this call ran (a resend after a timeout) won the card: its
+      // grade is this one (same log id, same tap), so the shared log is saved, not an orphan.
+      const twin = (p: (typeof pending)[number]) => {
+        const s = moved.get(p.card.key);
+        return !!s && Date.parse(s.updated_at) !== Date.parse(p.change.expected) && gradedBy(s, p.log) && sameTime(s.last_review, p.change.row.last_review);
+      };
+      // The card was not written: soft-delete the log just written, so it counts nowhere (a retry revives it).
+      const orphans = toWrite.filter((p) => !written.has(p.change.row.id) && !twin(p));
+      if (!unsure) await tombstoneLogs(deps, orphans.map((p) => p.log), true).catch((e: unknown) => console.error("[mcp] grade_cards: orphan logs left", e));
+      if (failure) throw failure;
+      for (const p of pending) {
+        const s = moved.get(p.card.key);
+        if (written.has(p.change.row.id)) {
+          results[p.at] = cardOutcome(p.card, "saved", p.log.id, p.change.row, now);
+          undo.push({ log_id: p.log.id, expected: p.change.row.updated_at });
+        } else if (s && twin(p)) {
+          results[p.at] = cardOutcome(p.card, "already_saved", p.log.id, s, now);
+          undo.push({ log_id: p.log.id, expected: s.updated_at });
+        } else results[p.at] = cardOutcome(p.card, "conflict", null, s ?? null, now);
+      }
+    }
+    return { results, undo: undo.length ? { tool: UNDO_GRADES_TOOL, items: undo } : null };
+  },
+});
+
+const undoItemSchema = z.object({
+  log_id: z.string().trim().min(1).max(64).describe("A grade_cards result's log_id (its `undo` items)."),
+  expected: isoTime.describe("The card's updated_at after that grade."),
+});
+
+export const undoGrades = tool({
+  name: UNDO_GRADES_TOOL,
+  title: "Undo card grades",
+  description: `Called by the cards page only: takes back 1–${GRADE_BATCH_MAX} answers saved by grade_cards (its \`undo\` items). Each card is put back exactly as it was before the answer, only while it is still as \`expected\`, and the review is soft-deleted, as the app's «Отменить» does. Per item: undone, already_undone, changed_since (graded or changed again since: nothing changed) or missing.`,
+  input: z.object({ items: jsonArray(z.array(undoItemSchema).min(1).max(GRADE_BATCH_MAX)) }),
+  write: true,
+  retryHint: "Sending the same items again is safe: undone ones come back already_undone.",
+  meta: APP_ONLY_META,
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  async run(deps, args) {
+    const now = deps.now();
+    const items = args.items.map((i) => ({ log_id: i.log_id, expected: toIso(i.expected) }));
+    const twice = items.find((it, i) => items.findIndex((b) => b.log_id === it.log_id) !== i);
+    if (twice) throw new ToolError(`items: the log ${twice.log_id} comes twice.`);
+    // Only the connector's own grades: a review made on a device is undone there.
+    const logs = await deps.repo.logsByIds(items.map((i) => i.log_id).filter((id) => id.startsWith(CARD_LOG_PREFIX)));
+    const logById = new Map(logs.map((l) => [l.id, l]));
+    const wordIds = uniqueIds(logs.map((l) => l.word_id));
+    const [states, words]: [ReviewState[], Word[]] = wordIds.length ? await Promise.all([deps.repo.states(wordIds), deps.repo.wordsByIds(wordIds)]) : [[], []];
+    const stateById = new Map(states.map((s) => [s.id, s]));
+    const wordById = new Map(words.map((w) => [w.id, w]));
+
+    const view = (log: ReviewLog | null, logId: string, status: UndoStatus, state: ReviewState | null): UndoGradeResult => ({
+      log_id: logId,
+      status,
+      word_id: log?.word_id ?? null,
+      direction: log?.direction ?? null,
+      key: log ? reviewStateId(log.word_id, log.direction) : null,
+      expected: state?.updated_at ?? null,
+      intervals: state ? chatIntervals(state, now) : null,
+      due: state?.due ?? null,
+      state: state?.state ?? null,
+    });
+    const results: UndoGradeResult[] = [];
+    const restores: { at: number; log: ReviewLog; change: { row: ReviewState; expected: string } }[] = [];
+    /** Restored already by an earlier try: only the log is left to soft-delete. */
+    const finish: { at: number; log: ReviewLog; state: ReviewState }[] = [];
+    for (const item of items) {
+      const log = logById.get(item.log_id);
+      if (!log || !log.prev) {
+        results.push(view(null, item.log_id, "missing", null));
+        continue;
+      }
+      const stored = stateById.get(reviewStateId(log.word_id, log.direction)) ?? null;
+      if (log.deleted_at !== null) {
+        results.push(view(log, item.log_id, "already_undone", stored));
+        continue;
+      }
+      if (stored && Date.parse(stored.updated_at) === Date.parse(item.expected)) {
+        const row = { ...fromSnapshot(log.prev, now), updated_at: stampAfter(now, stored.updated_at) };
+        // As the app's undo: the card of a word deleted since stays deleted.
+        const word = wordById.get(log.word_id);
+        if (!word || word.deleted_at !== null) row.deleted_at = word?.deleted_at ?? row.updated_at;
+        restores.push({ at: results.length, log, change: { row, expected: stored.updated_at } });
+      } else if (stored && restoredTo(stored, log.prev)) finish.push({ at: results.length, log, state: stored });
+      else {
+        results.push(view(log, item.log_id, "changed_since", stored));
+        continue;
+      }
+      results.push(view(log, item.log_id, "missing", null)); // placeholder, set below
+    }
+
+    // A failed write throws before any log is soft-deleted: the retry finishes the cards that did land (restoredTo).
+    const written = new Set(restores.length ? (await deps.repo.replace("review_state", restores.map((r) => r.change))).map((r) => r.id) : []);
+    const done = [...restores.filter((r) => written.has(r.change.row.id)).map((r) => ({ at: r.at, log: r.log, state: r.change.row })), ...finish];
+    await tombstoneLogs(deps, done.map((d) => d.log));
+    for (const d of done) results[d.at] = view(d.log, d.log.id, "undone", d.state);
+    for (const r of restores) if (!written.has(r.change.row.id)) results[r.at] = view(r.log, r.log.id, "changed_since", stateById.get(r.change.row.id) ?? null);
+    return { results };
+  },
+});
+
+const setupChoice = z.enum(CARDS_SETUP_CHOICES as readonly [CardsSetupChoice, ...CardsSetupChoice[]]);
+
+export const setupReview = tool({
+  name: "setup_review",
+  title: "Choose how to review",
+  description: `Show «Повторить слова» in the chat: a card with today's numbers (due, new, waiting), the themes with cards due or new, and a choice: «Карточки» (a round by the schedule, grades saved by the card), «Карточки, потом упражнение» (then an exercise on the misses), «Упражнение» (an exercise on the words due, nothing graded) or «Тренировка» (cards that change nothing: missed today, this week, difficult, due, every card), and the number of cards. Its «Начать ›» sends the choice to you as the user's message («Повтори карточки здесь в чате, 20 карточек…»); then do what it says: play_cards, or exercise_material and play_exercises. Use it for «повтори слова», «давай повторим», «что повторить?», «карточки», «повторение карточек» when the request doesn't say how; a request that does is played directly. Preselect what the request did say. Writes nothing; don't ask the same questions in text.`,
+  input: z.object({
+    choice: setupChoice.nullable().optional().describe('Preselect: "cards" (default), "cards_then_exercise", "exercise" or "practice".'),
+    size: z.number().int().min(CARDS_ROUND_MIN).max(CARDS_ROUND_MAX).nullable().optional().describe("Cards to preselect (rounded to the card's nearest choice)."),
+    folders: jsonArray(z.array(folderSelector).max(10)).nullable().optional().describe(`Themes to preselect (id, slug, name or "${INBOX_SELECTOR}"); none = every theme.`),
+    scope: z.enum(PRACTICE_SCOPE_VALUES).nullable().optional().describe("«Тренировка»: what to preselect."),
+  }),
+  write: false,
+  meta: REVIEW_META,
+  annotations: READ,
+  async run(deps, args) {
+    const t = await loadToday(deps);
+    const { lib } = t;
+    const { counts: c } = planToday(lib, t.plan);
+    const today: ChatCardsCounts = { due: c.due, new: c.new, waiting: c.waiting, deferred: c.deferred };
+    // Each theme as a round of it alone would plan it (new words from it alone, as in the app).
+    const themeOf = (w: Word) => placeOf(w, lib.live)?.id ?? null;
+    // «Тренировка» over every theme, and in each theme (the card adds up the themes picked).
+    const practiceOf = new Map<string | null, Partial<Record<ChatPracticeScope, number>>>();
+    const scopes: CardsSetupScope[] = PRACTICE_SCOPE_VALUES.flatMap((scope) => {
+      const items = practiceItems(deps, t, scope, null, undefined, scope === "recent" ? PRACTICE_LIMIT : Number.MAX_SAFE_INTEGER);
+      // «recent» is a capped round topped up with the weakest cards: counted per theme below.
+      if (scope !== "recent") {
+        for (const item of items) {
+          const id = themeOf(item.word);
+          const m = practiceOf.get(id) ?? {};
+          m[scope] = (m[scope] ?? 0) + 1;
+          practiceOf.set(id, m);
+        }
+      }
+      return items.length > 0 ? [{ scope, label: PRACTICE_SCOPE_LABELS[scope], count: items.length }] : [];
+    });
+    const themes: CardsSetupTheme[] = [
+      { id: null, name: INBOX_NAME },
+      ...[...lib.live.values()].filter((f) => !lib.paused.has(f.id)).map((f) => ({ id: f.id as string | null, name: f.name })),
+    ].flatMap((theme) => {
+      if (![...lib.inReview.values()].some((w) => themeOf(w) === theme.id)) return [];
+      const { counts } = planToday(lib, t.plan, { match: (w) => themeOf(w) === theme.id, spreadThemes: false });
+      const practice = { ...practiceOf.get(theme.id) };
+      if (scopes.some((sc) => sc.scope === "recent")) {
+        const recent = practiceItems(deps, t, "recent", new Set([theme.id]), undefined, PRACTICE_LIMIT).length;
+        if (recent > 0) practice.recent = recent;
+      }
+      return counts.due + counts.new > 0 || Object.keys(practice).length > 0 ? [{ ...theme, due: counts.due, new: counts.new, practice }] : [];
+    });
+    const shown = new Set(themes.map((th) => th.id));
+    const picked = [...new Set((args.folders ?? []).map((sel) => resolveFolder(sel, t.folders)?.id ?? null))].filter((id) => shown.has(id));
+    const size = args.size ? CARDS_SETUP_SIZES.reduce<number>((best, n) => (Math.abs(n - args.size!) < Math.abs(best - args.size!) ? n : best), CARDS_SETUP_SIZES[0]) : null;
+    const setup: CardsSetup = {
+      kind: "kartochki-cards-setup",
+      version: 1,
+      today,
+      themes,
+      preset: { choice: args.choice ?? (args.scope ? "practice" : "cards"), size, folders: picked, scope: args.scope ?? null },
+      sizes: [...CARDS_SETUP_SIZES],
+      scopes,
+    };
+    const appUrl = appUrlOf(deps);
+    const options = "карточки здесь в чате; карточки, потом упражнение по ошибкам; упражнение по словам к повторению; тренировка без оценок";
+    const message =
+      today.due + today.new === 0 && scopes.length === 0
+        ? "Сегодня повторять нечего и тренировать пока нечего: скажи об этом одной строкой (можно добавить новые слова)."
+        : `Показал карточку «Повторить слова»: сегодня ${today.due} к повторению, ${today.new} новых${today.waiting ? `, ${today.waiting} ждут` : ""}. ` +
+          `Не спрашивай текстом и не начинай сам: пользователь выберет в карточке, и её «Начать ›» пришлёт запрос сообщением; тогда сделай, что в нём сказано (play_cards, или exercise_material и play_exercises). ` +
+          `Если пользователь скажет, что карточки не видно, предложи одной строкой: ${options}${appUrl ? `; или повторить в приложении: ${appUrl}` : ""}.`;
+    return { setup, message };
+  },
+  reply: (out) => ({ content: [{ type: "text", text: out.message }], structuredContent: out.setup as unknown as Record<string, unknown> }),
+});
+
+// ---------------------------------------------------------------------------------------------
 // Execution and registration
 
 const errorResult = (message: string): CallToolResult => ({ content: [{ type: "text", text: message }], isError: true });
@@ -3412,11 +4123,15 @@ export const TOOL_NAMES = [
   playExercises.name,
   exerciseArtifact.name,
   saveExerciseResult.name,
+  setupReview.name,
+  playCards.name,
+  gradeCards.name,
+  undoGrades.name,
 ] as const;
 
 /**
- * The chat's MCP Apps: the exercise player play_exercises points at, and the review page of
- * propose_levels / propose_words. Self-contained: inline scripts and styles, system fonts, no
+ * The chat's MCP Apps: the exercise player play_exercises points at, the review page of
+ * propose_levels / propose_words / setup_exercise / setup_review, and the cards page of play_cards. Self-contained: inline scripts and styles, system fonts, no
  * network, so they need no CSP domains. No `_meta.ui.domain`: a host derives the sandbox origin
  * from the server URL, and ours carries the secret.
  */
@@ -3430,8 +4145,14 @@ function registerChatApps(server: McpServer): void {
   server.registerResource(
     "review_page",
     CHAT_REVIEW_URI,
-    { title: "Проверка", description: "The «Карточки» review card shown by propose_levels and propose_words.", mimeType: MCP_APP_MIME },
+    { title: "Проверка", description: "The «Карточки» review card shown by propose_levels, propose_words, setup_exercise and setup_review.", mimeType: MCP_APP_MIME },
     async () => ({ contents: [{ uri: CHAT_REVIEW_URI, mimeType: MCP_APP_MIME, text: CHAT_REVIEW_HTML }] }),
+  );
+  server.registerResource(
+    "cards_page",
+    CHAT_CARDS_URI,
+    { title: "Карточки", description: "The «Карточки» review cards shown by play_cards.", mimeType: MCP_APP_MIME },
+    async () => ({ contents: [{ uri: CHAT_CARDS_URI, mimeType: MCP_APP_MIME, text: CHAT_CARDS_HTML }] }),
   );
 }
 
@@ -3468,11 +4189,16 @@ export function registerTools(server: McpServer, deps: ToolDeps): void {
   register(server, deps, playExercises);
   register(server, deps, exerciseArtifact);
   register(server, deps, saveExerciseResult);
+  register(server, deps, setupReview);
+  register(server, deps, playCards);
+  register(server, deps, gradeCards);
+  register(server, deps, undoGrades);
   registerChatApps(server);
 }
 
 export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard app for colloquial French; the user is a Russian speaker. A card is a French word or phrase (fr) with its Russian translation (ru). Words are grouped into themes («темы»); «${INBOX_NAME}» (inbox) holds words without a theme.
 - «Настроить упражнение»: when the user wants to choose or set up a round in the chat («настрой упражнение», «хочу выбрать времена»), or asks for a verb drill in the chat naming neither themes nor tenses, call setup_exercise (a card with themes, «Спряжение глаголов» and its tenses, size, level) and wait: its «Начать ›» sends the request as the user's message; then play it as below. A request that already says what to play is played directly.
+- «Повторить слова» («повтори слова», «давай повторим», «что повторить?», «карточки», «повторение карточек»): call setup_review (a card with today's numbers and «Карточки» / «Карточки, потом упражнение» / «Упражнение» / «Тренировка») and wait: its «Начать ›» sends the choice as the user's message. A request that already asks for cards in the chat (that message, «повтори карточки здесь») → play_cards directly; «потренируй ошибки / трудные слова / карточки» (here or in the chat, no exercise named) → play_cards mode "practice" at once, with the scope it names (today «ошибки сегодня», recent «ошибки» or «за неделю», difficult, due, all), not an exercise; «погоняй меня», «тест», «квиз» stay exercises (below). Grades are only the user's taps on the card, which saves them itself: never grade, save or undo cards from what is written in the chat. Never call play_cards and play_exercises in one reply; the card's «Упражнение по ошибкам» message → exercise_material \`word_ids\`, then play_exercises. If the host shows no apps, offer to review in the app (play_cards' app_url).
 - Exercises in the conversation: always call play_exercises (after exercise_material). This includes «в чате», «здесь», «прямо тут», «в диалоге», «на отдельной вкладке», «тест», «квиз», «погоняй меня». Do not build an HTML page and do not open or reuse an existing exercise artifact instead, even if one exists from an earlier chat. A request larger than one round (more than 20 questions or 8 new words) is a series: say how many rounds, play round 1 now with play_exercises \`series\`, and the next round only when the user asks («Следующий раунд»); never several rounds in one reply. exercise_artifact only for hosts that show no apps, or when the user explicitly asks for a page.
 - Before adding, search_words for the word; add_words also skips French forms that are already saved.
 - For each new word give the dictionary form, one to three Russian equivalents in the same register, slang_level (0 neutral, 1 familier, 2 argot, 3 vulgaire), verlan (true for verlan forms such as meuf, relou, chelou), pos, gender for nouns, and a short everyday example_fr with its example_ru. Vulgar words are legitimate vocabulary: translate them with the same strength and mark them 3.
@@ -3503,5 +4229,5 @@ export const SERVER_INSTRUCTIONS = `«Карточки» is the user's flashcard
 - «Работа над ошибками»: list_exercise_sets' last_run.missed and exercise_material's signals (ex_misses, confusions) say what to drill; reuse a confused option as a distractor only where it is in the item's options' language (a Russian one for meaning fr→ru, a French one for cloze and ru→fr).
 - After create_exercise_set or save_exercise_result, give the set's title and number of questions and how to undo it; it shows in «Упражнения» after the app's next sync.
 - Make write calls one at a time, never in parallel: each reads the current rows first, and parallel writes to the same words conflict or slip past the duplicate check.
-- Changes reach the app on its next sync (when it is opened or focused). Reviewing and grading cards happen in the app only.
+- Changes reach the app on its next sync (when it is opened or focused).
 - Talk about the app's features plainly; never call them "AI".`;

@@ -1,9 +1,14 @@
 import { describe, expect, it } from "vitest";
-import type { ExerciseSetup, LevelReviewRow, LevelsReview, ReviewFolder, WordReviewRow, WordsReview } from "@/lib/core/chat-review";
+import type { CardsSetup, ExerciseSetup, LevelReviewRow, LevelsReview, ReviewFolder, WordReviewRow, WordsReview } from "@/lib/core/chat-review";
 import { reviewFolderUrl } from "@/lib/core/chat-review";
 import {
   addWordsArguments,
   addedHeadline,
+  cardsScopeCount,
+  cardsSetupAvailable,
+  cardsThemeCount,
+  cardsSetupRequest,
+  cardsSetupState,
   commonFolder,
   inlineCount,
   levelRows,
@@ -15,6 +20,7 @@ import {
   setupAvailable,
   setupRequest,
   setupState,
+  todayLine,
   toggled,
   wordRows,
 } from "./model";
@@ -135,5 +141,78 @@ describe("«Настроить упражнение»", () => {
     expect(setupRequest(s, state)).toBe("Сделай упражнение на спряжение глаголов здесь в чате по теме «01 · Люди», 8 вопросов, только imparfait.");
     state.folders = toggled(s.themes.map((t) => t.id), state.folders, null);
     expect(state.folders).toEqual([null, "f1"]);
+  });
+});
+
+describe("«Повторить слова»", () => {
+  const setup = (preset: Partial<CardsSetup["preset"]> = {}): CardsSetup => ({
+    kind: "kartochki-cards-setup",
+    version: 1,
+    today: { due: 12, new: 4, waiting: 1, deferred: 0 },
+    themes: [
+      { id: null, name: "Входящие", due: 2, new: 0, practice: { today: 1 } },
+      { id: "f1", name: "Еда", due: 6, new: 3, practice: {} },
+      { id: "f2", name: "Жильё", due: 4, new: 1, practice: { today: 3 } },
+    ],
+    preset: { choice: "cards", size: null, folders: [], scope: null, ...preset },
+    sizes: [10, 20, 30],
+    scopes: [
+      { scope: "today", label: "Ошибки сегодня", count: 4 },
+      { scope: "all", label: "Вся тема", count: 0 },
+    ],
+  });
+
+  it("starts from Claude's presets: unknown themes dropped, sizes snapped, the first «Тренировка» option", () => {
+    expect(cardsSetupState(setup())).toEqual({ choice: "cards", folders: [], size: 20, exerciseSize: 12, scope: "today", sent: false });
+    expect(cardsSetupState(setup({ choice: "exercise", size: 15, folders: ["f2", "gone"], scope: "difficult" }))).toEqual({
+      choice: "exercise",
+      folders: ["f2"],
+      size: 20,
+      exerciseSize: 16,
+      scope: "today",
+      sent: false,
+    });
+    expect(cardsSetupState(setup({ choice: "practice", size: 28, scope: "all" }))).toMatchObject({ size: 30, scope: "all" });
+  });
+
+  it("sends the request the connector routes for each way", () => {
+    const s = setup();
+    const state = cardsSetupState(s);
+    expect(todayLine(s.today)).toBe("12 к повторению · 4 новых · 1 ждёт");
+    expect(todayLine({ due: 0, new: 0, waiting: 0, deferred: 0 })).toBe("Сегодня повторять нечего");
+    expect(cardsSetupAvailable(s, state)).toBe(16);
+    expect(cardsSetupRequest(s, state)).toBe("Повтори карточки здесь в чате, 20 карточек.");
+    state.folders = toggled(s.themes.map((t) => t.id), state.folders, "f2");
+    state.folders = toggled(s.themes.map((t) => t.id), state.folders, "f1");
+    state.choice = "cards_then_exercise";
+    expect(cardsSetupAvailable(s, state)).toBe(14);
+    expect(cardsSetupRequest(s, state)).toBe("Повтори карточки здесь в чате, 20 карточек, по темам «Еда», «Жильё», потом упражнение по ошибкам.");
+    state.choice = "exercise";
+    expect(cardsSetupAvailable(s, state)).toBe(10);
+    expect(cardsSetupRequest(s, state)).toBe("Сделай упражнение здесь в чате по словам к повторению из тем «Еда», «Жильё», 12 вопросов.");
+    state.folders = [];
+    expect(cardsSetupRequest(s, state)).toBe("Сделай упражнение здесь в чате по словам к повторению из всех тем, 12 вопросов.");
+    state.choice = "practice";
+    expect(cardsSetupAvailable(s, state)).toBe(4);
+    expect(cardsSetupRequest(s, state)).toBe("Потренируй карточки здесь в чате без расписания: ошибки сегодня, 20 карточек.");
+    state.scope = "all";
+    expect(cardsSetupAvailable(s, state)).toBe(0);
+  });
+
+  it("counts «Тренировка» over the themes picked, and gives each theme its own number", () => {
+    const s = setup({ choice: "practice" });
+    const state = cardsSetupState(s);
+    expect(cardsScopeCount(s, state, "today")).toBe(4);
+    expect(s.themes.map((t) => cardsThemeCount(t, state))).toEqual([1, 0, 3]);
+    // «Еда» has no misses today: nothing to start there.
+    state.folders = ["f1"];
+    expect(cardsScopeCount(s, state, "today")).toBe(0);
+    expect(cardsSetupAvailable(s, state)).toBe(0);
+    state.folders = ["f1", "f2"];
+    expect(cardsSetupAvailable(s, state)).toBe(3);
+    state.choice = "exercise";
+    expect(s.themes.map((t) => cardsThemeCount(t, state))).toEqual([2, 6, 4]);
+    state.choice = "cards";
+    expect(s.themes.map((t) => cardsThemeCount(t, state))).toEqual([2, 9, 5]);
   });
 });

@@ -5,7 +5,11 @@
 // (MCP App tools/call) only on the user's tap, then offers «Отменить» with the tool's own undo.
 // The same page shows «Настроить упражнение» (setup_exercise): themes, «Спряжение глаголов» with its
 // «Времена», the size and the level; «Начать ›» sends the request to Claude in the chat.
+// And «Повторить слова» (setup_review): today's numbers, the themes with cards due, and a choice of
+// «Карточки» / «Карточки, потом упражнение» / «Упражнение» / «Тренировка»; «Начать ›» sends that
+// request too, and the cards themselves play on their own page (lib/core/chat-cards.ts).
 // Pure types and helpers, shared by the server (lib/mcp/tools.ts) and the page (chat-player/).
+import type { ChatCardsCounts, ChatPracticeScope } from "./chat-cards";
 import type { Cefr } from "./level";
 import type { ExerciseLevel } from "./exercises";
 import type { ExerciseTense, Gender, PartOfSpeech, SlangLevel } from "../types";
@@ -123,11 +127,88 @@ export interface ExerciseSetup {
   verb_sizes: number[];
 }
 
-export type ChatReview = LevelsReview | WordsReview | ExerciseSetup;
+/**
+ * What «Повторить слова» offers: «Карточки» (a round by the schedule, grades saved), «Карточки,
+ * потом упражнение» (the same, then an exercise on the misses), «Упражнение» (an exercise on the
+ * words due, nothing graded), «Тренировка» (cards that change nothing).
+ */
+export type CardsSetupChoice = "cards" | "cards_then_exercise" | "exercise" | "practice";
+export const CARDS_SETUP_CHOICES: readonly CardsSetupChoice[] = ["cards", "cards_then_exercise", "exercise", "practice"];
+
+/** A theme in «Повторить слова»: id null = «Входящие»; its cards due today and the new ones it would bring. */
+export interface CardsSetupTheme {
+  id: string | null;
+  name: string;
+  due: number;
+  new: number;
+  /** «Тренировка»'s count in this theme, by scope (a scope left out: none), so the card adds up the picked themes. */
+  practice: Partial<Record<ChatPracticeScope, number>>;
+}
+
+/** A «Тренировка» option («Ошибки сегодня · 4»): what the round takes and how many cards that is now. */
+export interface CardsSetupScope {
+  scope: ChatPracticeScope;
+  label: string;
+  count: number;
+}
+
+/** «Повторить слова» (setup_review): today's numbers, what the card offers, and what Claude preselected from the request. */
+export interface CardsSetup {
+  kind: "kartochki-cards-setup";
+  version: 1;
+  /** Today's numbers («12 к повторению · 4 новых · 1 ждёт»), as study_summary counts them. */
+  today: ChatCardsCounts;
+  /** Themes with cards due or new today, or something to practise, «Входящие» first; themes «на паузе» left out. */
+  themes: CardsSetupTheme[];
+  preset: {
+    choice: CardsSetupChoice;
+    /** Cards in the round; null = the default (CARDS_ROUND_DEFAULT). */
+    size: number | null;
+    /** Theme ids (null = «Входящие»); none = every theme. */
+    folders: (string | null)[];
+    /** «Тренировка»: what the round takes; null = the first of `scopes`. */
+    scope: ChatPracticeScope | null;
+  };
+  /** The «Карточек» choices. */
+  sizes: number[];
+  /** «Тренировка»'s options, in order, counted over every theme; empty when there is nothing to practise. */
+  scopes: CardsSetupScope[];
+}
+
+export type ChatReview = LevelsReview | WordsReview | ExerciseSetup | CardsSetup;
+
+/** A theme's «Тренировка» counts, the positive numbers only. */
+function practiceCounts(v: unknown): Partial<Record<ChatPracticeScope, number>> {
+  if (!v || typeof v !== "object") return {};
+  return Object.fromEntries(Object.entries(v).filter(([, x]) => typeof x === "number" && Number.isFinite(x) && x > 0)) as Partial<Record<ChatPracticeScope, number>>;
+}
+
+/** «Повторить слова» from structuredContent, with what an older connector left out filled; null when it isn't one. */
+function asCardsSetup(v: Partial<CardsSetup>): CardsSetup | null {
+  const today = v.today as Partial<ChatCardsCounts> | undefined;
+  if (!today || typeof today !== "object" || !Array.isArray(v.themes) || !v.preset || typeof v.preset !== "object" || !Array.isArray(v.sizes)) return null;
+  const preset = v.preset as Partial<CardsSetup["preset"]>;
+  if (!CARDS_SETUP_CHOICES.includes(preset.choice as CardsSetupChoice)) return null;
+  const n = (x: unknown) => (typeof x === "number" && Number.isFinite(x) && x >= 0 ? x : 0);
+  return {
+    ...(v as CardsSetup),
+    today: { due: n(today.due), new: n(today.new), waiting: n(today.waiting), deferred: n(today.deferred) },
+    themes: v.themes.filter((t): t is CardsSetupTheme => !!t && typeof t === "object" && (t.id === null || typeof t.id === "string") && typeof t.name === "string").map((t) => ({ ...t, due: n(t.due), new: n(t.new), practice: practiceCounts(t.practice) })),
+    preset: {
+      choice: preset.choice as CardsSetupChoice,
+      size: typeof preset.size === "number" && preset.size > 0 ? preset.size : null,
+      folders: Array.isArray(preset.folders) ? preset.folders.filter((f) => f === null || typeof f === "string") : [],
+      scope: preset.scope ?? null,
+    },
+    sizes: v.sizes.filter((x) => typeof x === "number" && x > 0),
+    scopes: Array.isArray(v.scopes) ? v.scopes.filter((s) => !!s && typeof s.scope === "string" && typeof s.label === "string").map((s) => ({ ...s, count: n(s.count) })) : [],
+  };
+}
 
 /** A review from a tool result's structuredContent; null when it isn't one. */
 export function asChatReview(value: unknown): ChatReview | null {
   if (!value || typeof value !== "object") return null;
+  if ((value as { kind?: unknown }).kind === "kartochki-cards-setup") return asCardsSetup(value as Partial<CardsSetup>);
   const v = value as Partial<LevelsReview | WordsReview> & Partial<ExerciseSetup>;
   if (v.kind === "kartochki-setup") return Array.isArray(v.themes) && v.preset && Array.isArray(v.sizes) ? (v as ExerciseSetup) : null;
   if (v.kind !== "kartochki-levels" && v.kind !== "kartochki-words") return null;

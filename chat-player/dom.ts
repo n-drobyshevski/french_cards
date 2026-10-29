@@ -33,6 +33,8 @@ const PATHS = {
   collapse: "M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7",
   external: "M7 17 17 7M8 7h9v9",
   dash: "M7 12h10",
+  /** «Отменить последний ответ» (the review screen's undo, mockups L-Review-Q-A). */
+  undo: "M9 14 4 9l5-5M4 9h10.5a5.5 5.5 0 0 1 0 11H11",
 } as const;
 
 export type IconName = keyof typeof PATHS;

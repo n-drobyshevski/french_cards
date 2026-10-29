@@ -1957,6 +1957,51 @@
    "title": "Плеер — текст, неверно",
    "is_interactive": true,
    "radius": 28
+  },
+  "Chat-Cards-Setup.dc.html": {
+   "x": 0,
+   "y": 49356,
+   "w": 390,
+   "h": 844,
+   "title": "Карточки в чате — выбор",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Chat-Cards-Q.dc.html": {
+   "x": 470,
+   "y": 49356,
+   "w": 390,
+   "h": 844,
+   "title": "Карточки в чате — вопрос",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Chat-Cards-Ans.dc.html": {
+   "x": 940,
+   "y": 49356,
+   "w": 390,
+   "h": 844,
+   "title": "Карточки в чате — ответ",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Chat-Cards-Done.dc.html": {
+   "x": 1410,
+   "y": 49356,
+   "w": 390,
+   "h": 844,
+   "title": "Карточки в чате — итог",
+   "is_interactive": true,
+   "radius": 28
+  },
+  "Chat-Cards-Practice.dc.html": {
+   "x": 1880,
+   "y": 49356,
+   "w": 390,
+   "h": 844,
+   "title": "Карточки в чате — тренировка",
+   "is_interactive": true,
+   "radius": 28
   }
  },
  "order": [
@@ -2182,7 +2227,12 @@
   "Chat-TCF-Reading-A.dc.html",
   "Chat-TCF-Reading-B.dc.html",
   "Chat-TCF-Done.dc.html",
-  "Ex-Reading-App.dc.html"
+  "Ex-Reading-App.dc.html",
+  "Chat-Cards-Setup.dc.html",
+  "Chat-Cards-Q.dc.html",
+  "Chat-Cards-Ans.dc.html",
+  "Chat-Cards-Done.dc.html",
+  "Chat-Cards-Practice.dc.html"
  ],
  "notes": {
   "row1": {
@@ -2455,6 +2505,13 @@
    "x": 0,
    "y": 48072,
    "text": "39 · Чат-приложения · уровни слов, новые слова, мини-TCF",
+   "kind": "title1",
+   "maxW": 1800
+  },
+  "row40": {
+   "x": 0,
+   "y": 49236,
+   "text": "40 · Карточки в чате",
    "kind": "title1",
    "maxW": 1800
   }

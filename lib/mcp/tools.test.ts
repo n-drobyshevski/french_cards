@@ -6,10 +6,11 @@ import { defaultFolderId } from "@/lib/core/folders";
 import { buildWord, type NewWordInput } from "@/lib/core/words";
 import { folderOrderOf, planDay } from "@/lib/core/plan";
 import { LEGACY_STUDY_PLAN, parseStudyPlan, type StudyPlan } from "@/lib/core/study-plan";
-import { newReviewState, retrievability } from "@/lib/scheduler";
+import { grade, newReviewState, previewIntervals, retrievability, snapshot } from "@/lib/scheduler";
 import type { ExerciseRun, ExerciseSet, FieldDef, Folder, ProgressDay, ReviewLog, ReviewState, UserPref, Word } from "@/lib/types";
 import { ARTIFACT_SET_SLOT, CHAT_PLAYER_URI, EXAM_SECONDS_PER_ITEM, runLine, type ChatPlayerSet } from "@/lib/core/chat-player";
-import { asChatReview, CHAT_REVIEW_URI, type ExerciseSetup, type LevelsReview, type WordsReview } from "@/lib/core/chat-review";
+import { asChatReview, CHAT_REVIEW_URI, type CardsSetup, type ExerciseSetup, type LevelsReview, type WordsReview } from "@/lib/core/chat-review";
+import { asChatCardsSession, asGradeCardsResult, asUndoGradesResult, CHAT_CARDS_URI, LEARN_AHEAD_MS, returnsInRound, type GradeCardsResult } from "@/lib/core/chat-cards";
 import { addWordsArguments, wordRows } from "@/chat-player/review/model";
 import { createFakeRepo, type FakeRepo } from "./fake-repo";
 import { planFitLogsFrom } from "./plan-fit";
@@ -17,6 +18,7 @@ import { RepoError } from "./repo";
 import {
   addWords,
   callTool,
+  cardLogId,
   chatRunId,
   createExerciseSet,
   createField,
@@ -29,14 +31,17 @@ import {
   exerciseMaterial,
   exerciseSetId,
   focusItemCount,
+  gradeCards,
   listExerciseSets,
   listFields,
   scopeSuggestedItems,
   listFolders,
   moveWords,
+  playCards,
   playExercises,
   proposeLevels,
   setupExercise,
+  setupReview,
   proposeWords,
   resolveFolder,
   restoreExerciseSet,
@@ -49,11 +54,13 @@ import {
   setWordLevels,
   stampAfter,
   studySummary,
+  undoGrades,
   updateStudyPlan,
   updateField,
   updateFolder,
   updateWord,
   updateWords,
+  type ToolDeps,
   type ToolSpec,
 } from "./tools";
 
@@ -1738,6 +1745,30 @@ describe("exercises («Упражнения»)", () => {
     expect(await refused(exerciseMaterial, fake, { folders: ["Старое"] })).toMatch(/deleted/);
   });
 
+  it("exercise_material `word_ids` takes only those words (a round of cards' misses), without the topic or the focus", async () => {
+    const focusPref: UserPref = { id: "exercise_focus", value: { target: "both", share: "most" }, updated_at: OLD.toISOString(), deleted_at: null };
+    const fake = fakeLib({ user_prefs: [focusPref] });
+    const out = await ok(exerciseMaterial, fake, { word_ids: '["w-chelou", "w-keuf", "w-fric", "w-thune", "nope"]', topic: "вечеринка" });
+    expect(out.words.map((w) => w.id).sort()).toEqual(["w-chelou", "w-keuf"]);
+    expect(out.scope).toEqual({
+      folders: "all",
+      days: 14,
+      word_ids: 2,
+      // Deleted, muted and unknown words can't be drilled.
+      left_out: ["w-fric", "w-thune", "nope"],
+      suggested_items: 6,
+      note: expect.stringMatching(/only these 2 words.*no new_words.*2–3 different question types/),
+    });
+    expect(out).not.toHaveProperty("focus");
+    expect(out).not.toHaveProperty("topic_matches");
+    expect(out.words.some((w: { focus?: boolean }) => w.focus)).toBe(false);
+    // `folders` still narrows; more than 30 ids are refused.
+    expect((await ok(exerciseMaterial, fake, { word_ids: ["w-chelou", "w-keuf"], folders: ["Эмоции"] })).words.map((w) => w.id)).toEqual(["w-chelou"]);
+    const none = await ok(exerciseMaterial, fake, { word_ids: ["w-fric"] });
+    expect(none.scope).toMatchObject({ word_ids: 0, suggested_items: 0, note: expect.stringMatching(/don't make a set/) });
+    expect(await refused(exerciseMaterial, fake, { word_ids: Array.from({ length: 31 }, (_, i) => `w${i}`) })).toMatch(/word_ids/);
+  });
+
   it("exercise_material leaves a paused theme out of «all themes» but uses it when named", async () => {
     const fake = fakeLib();
     const all = await ok(exerciseMaterial, fake, {});
@@ -2617,5 +2648,466 @@ describe("propose_words («Новые слова»)", () => {
     expect(await refused(proposeWords, fake, { words: [{ fr: "le loyer", ru: "квартплата" }], folder: "Жильё", folder_chosen_by_user: true })).toMatch(/Unknown theme "Жильё"/);
     const res = await callTool(proposeWords, deps(fake), { words: [{ fr: "le loyer", ru: "квартплата" }], folder_chosen_by_user: false });
     expect((res.structuredContent as unknown as WordsReview).app_url).toBeNull();
+  });
+});
+
+describe("«Карточки в чате»", () => {
+  const DAY = { start: new Date("2026-10-22T02:00:00.000Z"), end: new Date("2026-10-23T02:00:00.000Z") };
+  const PLAN: StudyPlan = { new_words: 2, review_cap: 200, new_order: "added", mix: "after", ru_fr: "after" };
+  const review = (wordId: string, extra: Partial<ReviewState> = {}): ReviewState => ({
+    ...newReviewState(wordId, "fr_ru", OLD),
+    state: 2,
+    reps: 3,
+    stability: 5,
+    difficulty: 5,
+    scheduled_days: 5,
+    due: "2026-10-22T08:00:00.000Z",
+    last_review: "2026-10-17T08:00:00.000Z",
+    ...extra,
+  });
+  const dated = (w: Word, i: number): Word => ({ ...w, created_at: new Date(OLD.getTime() + i * 1000).toISOString() });
+  /** Five review cards due in Деньги (m0…m4), three in Эмоции (e0…e2), three new words in the inbox (n0…n2). */
+  function lib(seed: Parameters<typeof createFakeRepo>[0] = {}) {
+    const money = Array.from({ length: 5 }, (_, i) => dated(word(`m${i}`, `fric${i}`, `бабки${i}`, { folder_id: "f-dengi", both_directions: false }), i));
+    const feel = Array.from({ length: 3 }, (_, i) => dated(word(`e${i}`, `ouf${i}`, `офигенно${i}`, { folder_id: "f-emotsii", both_directions: false }), 5 + i));
+    const fresh = Array.from({ length: 3 }, (_, i) => dated(word(`n${i}`, `nouveau${i}`, `новое${i}`, { example_fr: `Un mot nouveau${i}.`, example_ru: "Новое слово." }), 8 + i));
+    return createFakeRepo({
+      folders: FOLDERS,
+      words: [...money, ...feel, ...fresh],
+      review_state: [...money.map((w, i) => review(w.id, { stability: 5 + i })), ...feel.map((w) => review(w.id)), ...fresh.flatMap((w) => cards(w.id))],
+      user_prefs: [planRow(PLAN)],
+      ...seed,
+    });
+  }
+  const session = async (fake: FakeRepo, args: unknown, d: ToolDeps = deps(fake)) => {
+    const res = await callTool(playCards, d, args);
+    if (res.isError) throw new Error(JSON.stringify(res.content));
+    const out = asChatCardsSession(res.structuredContent)!;
+    // The page reads exactly what the server sent.
+    expect(out).toEqual(res.structuredContent);
+    return { out, text: (res.content[0] as { text: string }).text };
+  };
+  const stateOf = (fake: FakeRepo, key: string) => fake.tables.review_state.get(key)!;
+  const answer = (fake: FakeRepo, wordId: string, rating: number, extra: Record<string, unknown> = {}) => ({
+    word_id: wordId,
+    direction: "fr_ru",
+    rating,
+    expected: stateOf(fake, `${wordId}:fr_ru`).updated_at,
+    answered_at: NOW.toISOString(),
+    ...extra,
+  });
+  const logId = (key: string, expected: string) => "cr-" + createHash("sha256").update(`${key}\n${expected}`).digest("hex").slice(0, 24);
+
+  it("play_cards: the next cards of today's queue exactly as the app plans it, with both faces and the intervals; writes nothing", async () => {
+    const fake = lib({ field_defs: [{ id: "fd-syn", name: "Синонимы", hint: null, ai_fill: false, sort: 1, updated_at: OLD.toISOString(), deleted_at: null }] });
+    const m0 = fake.tables.words.get("m0")!;
+    fake.tables.words.set("m0", { ...m0, origin: "от fricot", custom_fields: [{ field_id: "fd-syn", label: "Синонимы", value: "la thune" }] });
+    expect(playCards.meta).toEqual({ ui: { resourceUri: CHAT_CARDS_URI }, "ui/resourceUri": CHAT_CARDS_URI });
+    const { out, text } = await session(fake, {});
+    const direct = planDay({
+      now: NOW,
+      dayStart: DAY.start,
+      dayEnd: DAY.end,
+      states: [...fake.tables.review_state.values()],
+      words: new Map([...fake.tables.words.values()].map((w) => [w.id, w])),
+      todayLogs: [],
+      logs7d: [],
+      plan: PLAN,
+      r: retrievability,
+      folderOrder: folderOrderOf(FOLDERS.filter((f) => f.deleted_at === null)),
+    });
+    expect(out.cards.map((c) => c.key)).toEqual(direct.queue.map((i) => i.key));
+    expect(out).toMatchObject({
+      kind: "kartochki-cards",
+      mode: "schedule",
+      scope: null,
+      title: "Повторение",
+      folder_label: "Все темы",
+      direction: "both",
+      direction_label: "FR ↔ RU",
+      day_end: DAY.end.toISOString(),
+      built_at: NOW.toISOString(),
+      counts: { due: direct.counts.due, new: direct.counts.new, waiting: 0, deferred: 0 },
+      remaining: 0,
+      next: null,
+      app_url: null,
+    });
+    expect(out.counts).toMatchObject({ due: 8, new: 2 });
+    const card = out.cards.find((c) => c.key === "m0:fr_ru")!;
+    const intervals = previewIntervals(stateOf(fake, "m0:fr_ru"), NOW);
+    expect(card).toEqual({
+      key: "m0:fr_ru",
+      word_id: "m0",
+      direction: "fr_ru",
+      is_new: false,
+      expected: OLD.toISOString(),
+      intervals: { 1: intervals[1], 2: intervals[2], 3: intervals[3] },
+      number: 1,
+      fr: "fric0",
+      ru: "бабки0",
+      pos: "other",
+      gender: "none",
+      slang_level: 0,
+      verlan: false,
+      example_fr: null,
+      example_ru: null,
+      note: null,
+      origin: "от fricot",
+      fields: [{ label: "Синонимы", value: "la thune" }],
+      fields_more: 0,
+      level: null,
+      level_estimated: false,
+      folder_name: "Деньги",
+    });
+    expect(out.cards.find((c) => c.is_new)).toMatchObject({ folder_name: "Входящие", example_fr: expect.stringMatching(/^Un mot/), number: expect.any(Number) });
+    expect(text).toMatch(/Показал повторение в чате: 10 карточек, из них 2 новых.*не оценивай, не сохраняй и не отменяй/);
+    expect(fake.writes).toEqual([]);
+    // A new call is a new round.
+    const later = await session(fake, {}, { ...deps(fake), now: () => new Date(NOW.getTime() + 1000) });
+    expect(later.out.round_id).not.toBe(out.round_id);
+  });
+
+  it("play_cards: `limit`, `folders` and `direction` narrow the round; the day's numbers stay the app's", async () => {
+    const fake = lib();
+    const full = (await session(fake, {})).out;
+    const five = (await session(fake, { limit: 5 })).out;
+    expect(five.cards.map((c) => c.key)).toEqual(full.cards.slice(0, 5).map((c) => c.key));
+    expect(five.remaining).toBe(full.cards.length - 5);
+    const money = (await session(fake, { folders: '["Деньги"]' })).out;
+    expect(money.cards.map((c) => c.word_id).sort()).toEqual(["m0", "m1", "m2", "m3", "m4"]);
+    expect(money).toMatchObject({ title: "Повторение · Деньги", folder_label: "Деньги", counts: { due: 5, new: 0 } });
+    const inbox = (await session(fake, { folders: ["inbox", "Эмоции"], direction: "fr_ru" })).out;
+    expect(inbox.cards.every((c) => c.direction === "fr_ru" && /^[en]/.test(c.word_id))).toBe(true);
+    expect(inbox).toMatchObject({ folder_label: "Входящие, Эмоции", direction: "fr_ru", direction_label: "FR → RU" });
+    expect(await refused(playCards, fake, { limit: 4 })).toMatch(/limit/);
+    expect(await refused(playCards, fake, { folders: ["Старое"] })).toMatch(/deleted/);
+  });
+
+  it("play_cards «Тренировка»: today's misses, difficult and due cards, every card of a theme; no intervals, nothing written", async () => {
+    const miss = (id: string, wordId: string, rating: 1 | 3, at: string): ReviewLog => ({ ...grade(newReviewState(wordId, "fr_ru", OLD), rating, new Date(at)).log, id });
+    const fake = lib({
+      review_log: [miss("l1", "m0", 1, "2026-10-22T08:00:00.000Z"), miss("l2", "m1", 3, "2026-10-22T08:30:00.000Z"), miss("l3", "m2", 1, "2026-10-21T08:00:00.000Z")],
+    });
+    fake.tables.review_state.set("e0:fr_ru", review("e0", { lapses: 3, due: "2026-10-30T00:00:00.000Z" }));
+    const today = await session(fake, { scope: "today" });
+    expect(today.out.cards.map((c) => c.key)).toEqual(["m0:fr_ru"]);
+    expect(today.out).toMatchObject({ mode: "practice", scope: "today", title: "Тренировка", counts: { due: 0, new: 0, waiting: 0, deferred: 0 }, remaining: 0, next_due: null });
+    expect(today.out.cards[0].intervals).toBeNull();
+    expect(today.text).toMatch(/тренировку «Ошибки сегодня».*ничего не меняют/);
+    expect((await session(fake, { mode: "practice", scope: "recent", limit: 5 })).out.cards.slice(0, 2).map((c) => c.key)).toEqual(["m0:fr_ru", "m2:fr_ru"]);
+    expect((await session(fake, { scope: "difficult" })).out.cards.map((c) => c.key)).toEqual(["e0:fr_ru"]);
+    const due = (await session(fake, { scope: "due" })).out.cards.map((c) => c.key);
+    expect(due.sort()).toEqual(["e1:fr_ru", "e2:fr_ru", "m0:fr_ru", "m1:fr_ru", "m2:fr_ru", "m3:fr_ru", "m4:fr_ru"]);
+    const all = (await session(fake, { scope: "all", folders: ["inbox"], limit: 5 })).out;
+    expect(all.cards).toHaveLength(5);
+    expect(all.cards.every((c) => c.word_id.startsWith("n") && c.intervals === null)).toBe(true);
+    expect(all.title).toBe("Тренировка · Входящие");
+    const empty = await session(fake, { scope: "today", folders: ["Эмоции"] });
+    expect(empty.out.cards).toEqual([]);
+    expect(empty.text).toMatch(/нет карточек/);
+    expect(fake.writes).toEqual([]);
+  });
+
+  it("play_cards: «Карточки, потом упражнение» and the app link for hosts without apps", async () => {
+    const fake = lib();
+    const { out, text } = await session(fake, { next: "exercise", limit: 5 }, { ...deps(fake), appUrl: "https://frenchcards.vercel.app/" });
+    expect(out).toMatchObject({ next: "exercise", app_url: "https://frenchcards.vercel.app" });
+    expect(text).toMatch(/«Упражнение по ошибкам ›».*не вызывай play_exercises сейчас.*https:\/\/frenchcards\.vercel\.app/);
+    const nothing = await session(createFakeRepo({ folders: FOLDERS }), {});
+    expect(nothing.out.cards).toEqual([]);
+    expect(nothing.text).toMatch(/нечего повторять/);
+  });
+
+  it("grade_cards: grades by the app's FSRS rules under a cr- id, the log first, then the card past `expected`", async () => {
+    const fake = lib();
+    expect(gradeCards.meta).toEqual({ ui: { visibility: ["app"] } });
+    const before = stateOf(fake, "m0:fr_ru");
+    const at = "2026-10-22T09:59:00.000Z";
+    const out = await ok(gradeCards, fake, { answers: [answer(fake, "m0", 3, { answered_at: at })] });
+    const id = logId("m0:fr_ru", before.updated_at);
+    expect(cardLogId("m0:fr_ru", before.updated_at)).toBe(id);
+    const direct = grade(before, 3, new Date(at));
+    const after = { ...direct.state, updated_at: NOW.toISOString() };
+    const intervals = previewIntervals(after, NOW);
+    expect(out).toEqual({
+      results: [
+        {
+          word_id: "m0",
+          direction: "fr_ru",
+          key: "m0:fr_ru",
+          status: "saved",
+          log_id: id,
+          expected: NOW.toISOString(),
+          due: after.due,
+          state: 2,
+          intervals: { 1: intervals[1], 2: intervals[2], 3: intervals[3] },
+          returns_in_ms: Date.parse(after.due) - NOW.getTime(),
+        },
+      ],
+      undo: { tool: "undo_grades", items: [{ log_id: id, expected: NOW.toISOString() }] },
+    });
+    expect(asGradeCardsResult(out)).toEqual(out);
+    expect(fake.writes.map((w) => w.table)).toEqual(["review_log", "review_state"]);
+    // The app's log shape: the state before the answer, its snapshot for undo, the tap's time.
+    expect(fake.tables.review_log.get(id)).toEqual({ ...direct.log, id, updated_at: NOW.toISOString() });
+    expect(fake.tables.review_log.get(id)).toMatchObject({ state: 2, rating: 3, review: at, prev: snapshot(before) });
+    expect(stateOf(fake, "m0:fr_ru")).toEqual(after);
+    // The day's numbers count it, as a review made in the app.
+    const summary = await ok(studySummary, fake, {});
+    expect(summary.reviewed_today).toBe(1);
+    expect(summary.due_cards).toBe(7);
+  });
+
+  it("grade_cards: «Не знаю» comes back within minutes (returns in the round), «Знаю» on a review card does not; a batch is one log write and one card write", async () => {
+    const fake = lib();
+    const out = await ok(gradeCards, fake, { answers: [answer(fake, "n0", 1), answer(fake, "m1", 3)] });
+    expect(out.results.map((r) => r.status)).toEqual(["saved", "saved"]);
+    expect(out.results[0]).toMatchObject({ key: "n0:fr_ru", state: 1 });
+    expect(out.results[0].returns_in_ms!).toBeLessThanOrEqual(LEARN_AHEAD_MS);
+    expect(returnsInRound(out.results[0])).toBe(true);
+    expect(returnsInRound(out.results[1])).toBe(false);
+    expect(out.undo!.items.map((i) => i.log_id)).toEqual(out.results.map((r) => r.log_id));
+    expect(fake.writes.map((w) => [w.table, w.rows.length])).toEqual([
+      ["review_log", 2],
+      ["review_state", 2],
+    ]);
+    // A new card's first log has state 0 (the new-word budget counts it).
+    expect(fake.tables.review_log.get(out.results[0].log_id!)!.state).toBe(0);
+  });
+
+  it("grade_cards: the same answer again is already_saved with its undo; another rating, or a card changed elsewhere, a conflict; deleted cards are gone", async () => {
+    const fake = lib();
+    const a = answer(fake, "m0", 1);
+    const first = await ok(gradeCards, fake, { answers: [a] });
+    const writes = fake.writes.length;
+    const again = await ok(gradeCards, fake, { answers: [a] });
+    expect(again.results[0]).toMatchObject({ status: "already_saved", log_id: first.results[0].log_id, expected: first.results[0].expected });
+    expect(again.undo).toEqual(first.undo);
+    const other = await ok(gradeCards, fake, { answers: [{ ...a, rating: 3 }] });
+    expect(other.results[0]).toMatchObject({ status: "conflict", log_id: null, expected: first.results[0].expected });
+    expect(other.undo).toBeNull();
+    // The phone graded m1 meanwhile.
+    const m1 = stateOf(fake, "m1:fr_ru");
+    fake.tables.review_state.set(m1.id, { ...m1, updated_at: "2026-10-22T09:30:00.000Z" });
+    const stale = await ok(gradeCards, fake, { answers: [{ ...a, word_id: "m1", expected: m1.updated_at }] });
+    expect(stale.results[0]).toMatchObject({ status: "conflict", expected: "2026-10-22T09:30:00.000Z" });
+    // A deleted word, a deleted card, an unknown word. A paused one still counts.
+    fake.tables.words.set("m2", { ...fake.tables.words.get("m2")!, deleted_at: NOW.toISOString() });
+    fake.tables.review_state.set("m3:fr_ru", { ...stateOf(fake, "m3:fr_ru"), deleted_at: OLD.toISOString() });
+    fake.tables.words.set("m4", { ...fake.tables.words.get("m4")!, muted: true });
+    const mixed = await ok(gradeCards, fake, {
+      answers: [answer(fake, "m2", 3), answer(fake, "m3", 3), { ...answer(fake, "m4", 3), word_id: "zz" }],
+    });
+    expect(mixed.results.map((r) => r.status)).toEqual(["gone", "gone", "gone"]);
+    expect(mixed.results[0]).toMatchObject({ log_id: null, expected: null, due: null, state: null, intervals: null, returns_in_ms: null });
+    expect(mixed.undo).toBeNull();
+    expect(fake.writes.length).toBe(writes);
+    expect((await ok(gradeCards, fake, { answers: [answer(fake, "m4", 3)] })).results[0].status).toBe("saved");
+    // One answer per card and call; 1–3 only.
+    const b = answer(fake, "e0", 3);
+    expect(await refused(gradeCards, fake, { answers: [b, { ...b, rating: 2 }] })).toMatch(/e0:fr_ru comes twice/);
+    expect(await refused(gradeCards, fake, { answers: [{ ...b, rating: 4 }] })).toMatch(/rating/);
+    expect(await refused(gradeCards, fake, { answers: [] })).toMatch(/answers/);
+  });
+
+  it("grade_cards: the tap's time is kept up to 2 h back, never before the study day began, never in the future", async () => {
+    const fake = lib();
+    const review = async (wordId: string, answeredAt: string) => {
+      const out = await ok(gradeCards, fake, { answers: [answer(fake, wordId, 3, { answered_at: answeredAt })] });
+      return fake.tables.review_log.get(out.results[0].log_id!)!.review;
+    };
+    expect(await review("m0", "2026-10-22T05:00:00.000Z")).toBe("2026-10-22T08:00:00.000Z");
+    expect(await review("m1", "2026-10-22T11:00:00.000Z")).toBe(NOW.toISOString());
+    // 05:00 in Paris: the day began at 02:00Z, an hour ago.
+    const early = new Date("2026-10-22T03:00:00.000Z");
+    const res = await callTool(gradeCards, { ...deps(fake), now: () => early }, { answers: [answer(fake, "m2", 3, { answered_at: "2026-10-22T01:30:00.000Z" })] });
+    const id = (res.structuredContent as { results: { log_id: string }[] }).results[0].log_id;
+    expect(fake.tables.review_log.get(id)!.review).toBe(DAY.start.toISOString());
+  });
+
+  it("grade_cards: a card changed between the log and the card write leaves no live log behind", async () => {
+    const fake = lib();
+    fake.beforeUpsert = (table) => {
+      if (table !== "review_state") return;
+      const s = stateOf(fake, "m0:fr_ru");
+      fake.tables.review_state.set(s.id, { ...s, updated_at: "2026-10-22T09:59:30.000Z" });
+    };
+    const out = await ok(gradeCards, fake, { answers: [answer(fake, "m0", 3)] });
+    expect(out.results[0]).toMatchObject({ status: "conflict", log_id: null, expected: "2026-10-22T09:59:30.000Z" });
+    expect(out.undo).toBeNull();
+    const id = logId("m0:fr_ru", OLD.toISOString());
+    expect(fake.tables.review_log.get(id)!.deleted_at).not.toBeNull();
+    expect(fake.writes.map((w) => w.table)).toEqual(["review_log", "review_state", "review_log"]);
+    expect((await ok(studySummary, fake, {})).reviewed_today).toBe(0);
+  });
+
+  it("grade_cards: the same answer sent twice at once (a resend while the first call runs) saves one review, live and undoable", async () => {
+    for (const sameMs of [false, true]) {
+      const fake = lib();
+      let t = NOW.getTime();
+      const d = { ...deps(fake), now: () => new Date(sameMs ? NOW.getTime() : t++) };
+      const a = answer(fake, "m0", 3);
+      const [r1, r2] = (await Promise.all([callTool(gradeCards, d, { answers: [a] }), callTool(gradeCards, d, { answers: [a] })])).map(
+        (r) => r.structuredContent as unknown as GradeCardsResult,
+      );
+      expect([r1, r2].map((r) => r.results[0].status).sort()).toEqual(["already_saved", "saved"]);
+      const id = logId("m0:fr_ru", OLD.toISOString());
+      const log = fake.tables.review_log.get(id)!;
+      expect(log.deleted_at).toBeNull();
+      expect([...fake.tables.review_log.values()]).toHaveLength(1);
+      expect(stateOf(fake, "m0:fr_ru").reps).toBe(4);
+      expect(r1.undo).toEqual(r2.undo);
+      expect((await ok(undoGrades, fake, { items: r1.undo!.items })).results[0].status).toBe("undone");
+      expect(stateOf(fake, "m0:fr_ru").reps).toBe(3);
+    }
+  });
+
+  it("grade_cards: a tap timed before the card's last review (a page clock behind) is kept just after it", async () => {
+    const fake = lib();
+    // The phone graded m0 at 09:30; the page's clock says the tap was at 09:00.
+    const m0 = stateOf(fake, "m0:fr_ru");
+    fake.tables.review_state.set(m0.id, { ...m0, last_review: "2026-10-22T09:30:00.000Z", updated_at: "2026-10-22T09:30:00.000Z" });
+    const out = await ok(gradeCards, fake, { answers: [answer(fake, "m0", 3, { answered_at: "2026-10-22T09:00:00.000Z" })] });
+    expect(fake.tables.review_log.get(out.results[0].log_id!)!.review).toBe("2026-10-22T09:30:00.001Z");
+    // Never later than now.
+    const m1 = stateOf(fake, "m1:fr_ru");
+    fake.tables.review_state.set(m1.id, { ...m1, last_review: "2026-10-22T11:00:00.000Z", updated_at: "2026-10-22T09:30:00.000Z" });
+    const ahead = await ok(gradeCards, fake, { answers: [answer(fake, "m1", 3)] });
+    expect(fake.tables.review_log.get(ahead.results[0].log_id!)!.review).toBe(NOW.toISOString());
+  });
+
+  it("grade_cards: a card write that fails after the log is a database error; the log is soft-deleted and sending the answers again saves them", async () => {
+    const fake = lib();
+    const a = [answer(fake, "m0", 3), answer(fake, "m1", 1)];
+    fake.failNextReplace("review_state", { after: 1 });
+    const res = await callTool(gradeCards, deps(fake), { answers: a });
+    expect(res.isError).toBe(true);
+    expect((res.content[0] as { text: string }).text).toMatch(/database.*Sending the same answers again is safe/);
+    const m1Log = logId("m1:fr_ru", OLD.toISOString());
+    expect(fake.tables.review_log.get(m1Log)!.deleted_at).not.toBeNull();
+    expect(stateOf(fake, "m1:fr_ru").updated_at).toBe(OLD.toISOString());
+    const retry = await ok(gradeCards, fake, { answers: a });
+    expect(retry.results.map((r) => r.status)).toEqual(["already_saved", "saved"]);
+    expect(retry.results[1].log_id).toBe(m1Log);
+    expect(fake.tables.review_log.get(m1Log)!.deleted_at).toBeNull();
+    expect(retry.undo!.items).toHaveLength(2);
+
+    // The card write landed but its answer was lost: a fresh read shows it saved.
+    const lost = lib();
+    lost.failNextReplace("review_state", { after: 0, lostAnswers: true });
+    const saved = await ok(gradeCards, lost, { answers: [answer(lost, "m0", 3)] });
+    expect(saved.results[0].status).toBe("saved");
+    expect(lost.tables.review_log.get(saved.results[0].log_id!)!.deleted_at).toBeNull();
+  });
+
+  it("grade_cards and undo_grades take a rate-limit token per call", async () => {
+    const fake = lib();
+    const gone = { answers: [{ ...answer(fake, "m0", 3), word_id: "zz" }] };
+    for (let i = 0; i < 20; i++) expect((await callTool(gradeCards, deps(fake), gone)).isError).toBeFalsy();
+    expect(await refused(gradeCards, fake, gone)).toMatch(/Too many changes/);
+    expect(await refused(undoGrades, fake, { items: [{ log_id: "cr-x", expected: NOW.toISOString() }] })).toMatch(/Too many changes/);
+    expect((await callTool(playCards, deps(fake), {})).isError).toBeFalsy();
+  });
+
+  it("undo_grades puts the card back as it was and soft-deletes the review; again: already_undone; a card graded since: changed_since", async () => {
+    const fake = lib();
+    expect(undoGrades.meta).toEqual({ ui: { visibility: ["app"] } });
+    const before = stateOf(fake, "m0:fr_ru");
+    const graded = await ok(gradeCards, fake, { answers: [answer(fake, "m0", 1)] });
+    const id = graded.results[0].log_id!;
+    const undone = await ok(undoGrades, fake, { items: graded.undo!.items });
+    const restored = { ...before, updated_at: new Date(NOW.getTime() + 1).toISOString() };
+    const intervals = previewIntervals(restored, NOW);
+    expect(undone).toEqual({
+      results: [
+        { log_id: id, status: "undone", word_id: "m0", direction: "fr_ru", key: "m0:fr_ru", expected: restored.updated_at, intervals: { 1: intervals[1], 2: intervals[2], 3: intervals[3] }, due: before.due, state: 2 },
+      ],
+    });
+    expect(asUndoGradesResult(undone)).toEqual(undone);
+    expect(stateOf(fake, "m0:fr_ru")).toEqual(restored);
+    expect(fake.tables.review_log.get(id)!.deleted_at).not.toBeNull();
+    expect((await ok(studySummary, fake, {})).reviewed_today).toBe(0);
+    const writes = fake.writes.length;
+    expect((await ok(undoGrades, fake, { items: graded.undo!.items })).results[0]).toMatchObject({ status: "already_undone", expected: restored.updated_at });
+    expect(fake.writes.length).toBe(writes);
+
+    // Graded again, then once more when it came back: the first of the two can't be undone any more.
+    const g2 = await ok(gradeCards, fake, { answers: [answer(fake, "m0", 1)] });
+    const g3 = await ok(gradeCards, fake, { answers: [answer(fake, "m0", 3)] });
+    expect([g2.results[0].status, g3.results[0].status]).toEqual(["saved", "saved"]);
+    const afterG3 = stateOf(fake, "m0:fr_ru");
+    expect((await ok(undoGrades, fake, { items: g2.undo!.items })).results[0]).toMatchObject({ status: "changed_since", expected: afterG3.updated_at });
+    expect(stateOf(fake, "m0:fr_ru")).toEqual(afterG3);
+    expect((await ok(undoGrades, fake, { items: g3.undo!.items })).results[0]).toMatchObject({ status: "undone", state: 3 });
+    expect(fake.tables.review_log.get(g2.results[0].log_id!)!.deleted_at).toBeNull();
+
+    // Unknown ids, and reviews made on a device (not cr-), are missing.
+    const missing = await ok(undoGrades, fake, { items: [{ log_id: "cr-nope", expected: NOW.toISOString() }, { log_id: "device-log", expected: NOW.toISOString() }] });
+    expect(missing.results.map((r) => r.status)).toEqual(["missing", "missing"]);
+    expect(await refused(undoGrades, fake, { items: [graded.undo!.items[0], graded.undo!.items[0]] })).toMatch(/comes twice/);
+  });
+
+  it("undo_grades: a card put back whose review could not be soft-deleted is finished by the retry", async () => {
+    const fake = lib();
+    const graded = await ok(gradeCards, fake, { answers: [answer(fake, "m0", 3)] });
+    fake.failNextUpsert("review_log");
+    expect((await callTool(undoGrades, deps(fake), { items: graded.undo!.items })).isError).toBe(true);
+    expect(stateOf(fake, "m0:fr_ru").reps).toBe(3);
+    expect(fake.tables.review_log.get(graded.results[0].log_id!)!.deleted_at).toBeNull();
+    const retry = await ok(undoGrades, fake, { items: graded.undo!.items });
+    expect(retry.results[0].status).toBe("undone");
+    expect(fake.tables.review_log.get(graded.results[0].log_id!)!.deleted_at).not.toBeNull();
+  });
+
+  it("setup_review shows «Повторить слова»: today's numbers, the themes with cards due or new, «Тренировка»'s options and the presets; writes nothing", async () => {
+    const fake = lib();
+    expect(setupReview.meta).toEqual({ ui: { resourceUri: CHAT_REVIEW_URI }, "ui/resourceUri": CHAT_REVIEW_URI });
+    const res = await callTool(setupReview, deps(fake), { choice: "cards_then_exercise", size: 25, folders: ["Деньги", "Замок"] });
+    expect(res.isError).toBeFalsy();
+    const setup = asChatReview(res.structuredContent) as CardsSetup;
+    expect(setup).toEqual(res.structuredContent);
+    const inbox = (await session(fake, { folders: ["inbox"] })).out.counts.new;
+    expect(inbox).toBeGreaterThan(0);
+    expect(setup).toEqual({
+      kind: "kartochki-cards-setup",
+      version: 1,
+      today: { due: 8, new: 2, waiting: 0, deferred: 0 },
+      // «Замок» has no words: not on the card, so not preselected.
+      // «Тренировка»'s counts in each theme, for the card to add up the themes picked.
+      themes: [
+        { id: null, name: "Входящие", due: 0, new: inbox, practice: { all: 6 } },
+        { id: "f-dengi", name: "Деньги", due: 5, new: 0, practice: { recent: 5, due: 5, all: 5 } },
+        { id: "f-emotsii", name: "Эмоции", due: 3, new: 0, practice: { recent: 3, due: 3, all: 3 } },
+      ],
+      preset: { choice: "cards_then_exercise", size: 20, folders: ["f-dengi"], scope: null },
+      sizes: [10, 20, 30],
+      // Counted over every theme: nothing missed yet, eight cards due.
+      scopes: [
+        { scope: "recent", label: "Ошибки за неделю", count: 8 },
+        { scope: "due", label: "К повторению сегодня", count: 8 },
+        { scope: "all", label: "Все карточки", count: 14 },
+      ],
+    });
+    expect((res.content[0] as { text: string }).text).toMatch(/«Повторить слова»: сегодня 8 к повторению, 2 новых.*«Начать ›» пришлёт запрос.*не видно/);
+    expect(fake.writes).toEqual([]);
+
+    // A theme «на паузе» is left out; `scope` alone preselects «Тренировка».
+    fake.tables.folders.set("f-emotsii", { ...fake.tables.folders.get("f-emotsii")!, muted: true });
+    const paused = asChatReview((await callTool(setupReview, deps(fake), { scope: "difficult" })).structuredContent) as CardsSetup;
+    expect(paused.themes.map((t) => t.name)).toEqual(["Входящие", "Деньги"]);
+    expect(paused.preset).toEqual({ choice: "practice", size: null, folders: [], scope: "difficult" });
+    const empty = await callTool(setupReview, deps(createFakeRepo({ folders: FOLDERS })), {});
+    expect((empty.content[0] as { text: string }).text).toMatch(/нечего/);
+
+    // A theme with a miss today and nothing due is on the card, for «Тренировка».
+    const missed = lib();
+    const z = dated(word("z0", "zarbi", "странный", { folder_id: "f-zamok", both_directions: false }), 20);
+    missed.tables.words.set(z.id, z);
+    const later = review("z0", { due: "2026-10-25T08:00:00.000Z" });
+    missed.tables.review_state.set(later.id, later);
+    missed.tables.review_log.set("lz", { ...grade(review("z0"), 1, new Date("2026-10-22T08:00:00.000Z")).log, id: "lz" });
+    const withMiss = asChatReview((await callTool(setupReview, deps(missed), {})).structuredContent) as CardsSetup;
+    expect(withMiss.themes.find((t) => t.id === "f-zamok")).toEqual({ id: "f-zamok", name: "Замок", due: 0, new: 0, practice: { today: 1, recent: 1, all: 1 } });
+    expect(withMiss.scopes.find((sc) => sc.scope === "today")).toEqual({ scope: "today", label: "Ошибки сегодня", count: 1 });
   });
 });
