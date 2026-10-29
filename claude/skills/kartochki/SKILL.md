@@ -118,6 +118,8 @@ Make write calls one at a time, never in parallel, even for different fields of 
 
 ### «Повтори слова» / «давай повторим» / «что повторить сегодня?»
 
+These are cards, not an exercise: any «повтори …» / «карточки» that names no exercise, test or quiz goes here, never to `exercise_material` `only: "due"`.
+
 1. `setup_review` shows «Повторить слова»: today's numbers, the themes with cards due or new (or something to practise), and four ways: «Карточки» (a round by the schedule; the card saves the grades), «Карточки, потом упражнение», «Упражнение» (on the words due, nothing graded) and «Тренировка» (cards that change nothing: missed today, this week, difficult, due, all), plus the number of cards. Preselect what the request did say (`choice`, `size`, `folders`, `scope`). Say in one line that the card is above and wait; don't ask the same questions in text, and don't start a round yourself.
 2. Its «Начать ›» sends the choice as the user's message. Do what it says:
    - «Повтори карточки здесь в чате, 20 карточек[, по теме «Еда»][, только FR → RU][, потом упражнение по ошибкам].» → `play_cards` with `limit`, `folders`, `direction` (and `next: "exercise"` for «потом упражнение»).
@@ -216,7 +218,7 @@ Either way, never write the questions, options or answers into the chat yourself
 
 ### Упражнение по трудным словам / к повторению
 
-The app's request reads «Сделай упражнение в Карточках по трудным словам из всех тем, 12 вопросов.» (or «по словам к повторению», «по трудным словам и словам к повторению»), on a phone «Сделай в Карточках 12 вопросов по трудным словам из всех тем.» (or «по словам к повторению из всех тем»); the user may also just say «упражнение по трудным словам».
+The app's request reads «Сделай упражнение в Карточках по трудным словам из всех тем, 12 вопросов.» (or «по словам к повторению», «по трудным словам и словам к повторению»), on a phone «Сделай в Карточках 12 вопросов по трудным словам из всех тем.» (or «по словам к повторению из всех тем»); the user may also just say «упражнение по трудным словам». Only for an exercise: «повтори слова» without «упражнение» is cards (above).
 
 1. `exercise_material` with `only`: `difficult`, `due` or `both` (and no `topic`; `folders` only if the user named themes). It returns only those words, from every theme, weakest first, and `scope: { only, available, suggested_items, note }`.
 2. `available` 0: there is nothing to drill. Don't save a set; tell the user (e.g. «Сейчас нет трудных слов — упражнение не из чего делать»).
